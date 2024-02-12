@@ -10,7 +10,7 @@ pip install -U langchain-google-vertexai
 
 ## Chat Models
 
-`ChatVertexAI` class exposes models such as `gemini-pro` and `chat-bison`.
+`ChatVertexAI` class exposes models such as `gemini-pro` (Gemini) and `chat-bison` (Palm 2).
 
 To use, you should have Google Cloud project with APIs enabled, and configured credentials. Initialize the model as:
 
