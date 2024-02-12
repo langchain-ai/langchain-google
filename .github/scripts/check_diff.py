@@ -3,10 +3,8 @@ import sys
 import os
 
 LANGCHAIN_DIRS = {
-    "libs/core",
-    "libs/langchain",
-    "libs/experimental",
-    "libs/community",
+    "libs/genai",
+    "libs/vertexai",
 }
 
 if __name__ == "__main__":
@@ -29,19 +27,6 @@ if __name__ == "__main__":
             )
         ):
             dirs_to_run.update(LANGCHAIN_DIRS)
-        elif "libs/community" in file:
-            dirs_to_run.update(
-                ("libs/community", "libs/langchain", "libs/experimental")
-            )
-        elif "libs/partners" in file:
-            partner_dir = file.split("/")[2]
-            if os.path.isdir(f"libs/partners/{partner_dir}"):
-                dirs_to_run.add(f"libs/partners/{partner_dir}")
-            # Skip if the directory was deleted
-        elif "libs/langchain" in file:
-            dirs_to_run.update(("libs/langchain", "libs/experimental"))
-        elif "libs/experimental" in file:
-            dirs_to_run.add("libs/experimental")
         elif file.startswith("libs/"):
             dirs_to_run.update(LANGCHAIN_DIRS)
         else:
