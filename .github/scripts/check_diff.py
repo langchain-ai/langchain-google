@@ -27,8 +27,10 @@ if __name__ == "__main__":
             )
         ):
             dirs_to_run.update(LANGCHAIN_DIRS)
-        elif file.startswith("libs/"):
-            dirs_to_run.update(LANGCHAIN_DIRS)
+        elif "libs/genai" in file:
+            dirs_to_run.update(("libs/genai"))
+        elif "libs/vertexai" in file:
+            dirs_to_run.update(("libs/vertexai"))
         else:
             pass
     json_output = json.dumps(list(dirs_to_run))
