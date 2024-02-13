@@ -22,15 +22,14 @@ if __name__ == "__main__":
                 ".github/workflows",
                 ".github/tools",
                 ".github/actions",
-                "libs/core",
                 ".github/scripts/check_diff.py",
             )
         ):
             dirs_to_run.update(LANGCHAIN_DIRS)
         elif "libs/genai" in file:
-            dirs_to_run.update(("libs/genai"))
+            dirs_to_run.update({"libs/genai"})
         elif "libs/vertexai" in file:
-            dirs_to_run.update(("libs/vertexai"))
+            dirs_to_run.update({"libs/vertexai"})
         else:
             pass
     json_output = json.dumps(list(dirs_to_run))
