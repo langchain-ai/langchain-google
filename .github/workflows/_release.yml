@@ -198,85 +198,85 @@ jobs:
           make tests
         working-directory: ${{ inputs.working-directory }}
 
-  # publish:
-  #   needs:
-  #     - build
-  #     - test-pypi-publish
-  #     - pre-release-checks
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     # This permission is used for trusted publishing:
-  #     # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
-  #     #
-  #     # Trusted publishing has to also be configured on PyPI for each package:
-  #     # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
-  #     id-token: write
+  publish:
+    needs:
+      - build
+      - test-pypi-publish
+      - pre-release-checks
+    runs-on: ubuntu-latest
+    permissions:
+      # This permission is used for trusted publishing:
+      # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
+      #
+      # Trusted publishing has to also be configured on PyPI for each package:
+      # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+      id-token: write
 
-  #   defaults:
-  #     run:
-  #       working-directory: ${{ inputs.working-directory }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
 
-  #   steps:
-  #     - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-  #     - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-  #       uses: "./.github/actions/poetry_setup"
-  #       with:
-  #         python-version: ${{ env.PYTHON_VERSION }}
-  #         poetry-version: ${{ env.POETRY_VERSION }}
-  #         working-directory: ${{ inputs.working-directory }}
-  #         cache-key: release
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
+          cache-key: release
 
-  #     - uses: actions/download-artifact@v3
-  #       with:
-  #         name: dist
-  #         path: ${{ inputs.working-directory }}/dist/
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: ${{ inputs.working-directory }}/dist/
 
-  #     - name: Publish package distributions to PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         packages-dir: ${{ inputs.working-directory }}/dist/
-  #         verbose: true
-  #         print-hash: true
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ inputs.working-directory }}/dist/
+          verbose: true
+          print-hash: true
 
-  # mark-release:
-  #   needs:
-  #     - build
-  #     - test-pypi-publish
-  #     - pre-release-checks
-  #     - publish
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     # This permission is needed by `ncipollo/release-action` to
-  #     # create the GitHub release.
-  #     contents: write
+  mark-release:
+    needs:
+      - build
+      - test-pypi-publish
+      - pre-release-checks
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      # This permission is needed by `ncipollo/release-action` to
+      # create the GitHub release.
+      contents: write
 
-  #   defaults:
-  #     run:
-  #       working-directory: ${{ inputs.working-directory }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
 
-  #   steps:
-  #     - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-  #     - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-  #       uses: "./.github/actions/poetry_setup"
-  #       with:
-  #         python-version: ${{ env.PYTHON_VERSION }}
-  #         poetry-version: ${{ env.POETRY_VERSION }}
-  #         working-directory: ${{ inputs.working-directory }}
-  #         cache-key: release
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
+          cache-key: release
 
-  #     - uses: actions/download-artifact@v3
-  #       with:
-  #         name: dist
-  #         path: ${{ inputs.working-directory }}/dist/
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: ${{ inputs.working-directory }}/dist/
 
-  #     - name: Create Release
-  #       uses: ncipollo/release-action@v1
-  #       with:
-  #         artifacts: "dist/*"
-  #         token: ${{ secrets.GITHUB_TOKEN }}
-  #         draft: false
-  #         generateReleaseNotes: true
-  #         tag: ${{ inputs.working-directory }}/v${{ needs.build.outputs.version }}
-  #         commit: master
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "dist/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          generateReleaseNotes: true
+          tag: ${{ inputs.working-directory }}/v${{ needs.build.outputs.version }}
+          commit: master
