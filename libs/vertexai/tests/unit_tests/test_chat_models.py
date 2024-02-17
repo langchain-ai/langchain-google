@@ -111,7 +111,7 @@ def test_vertexai_args_passed(stop: Optional[str]) -> None:
 
 def test_parse_chat_history_correct() -> None:
     text_context = (
-        "My name is Ned. You are my personal assistant. My "
+        "My name is Peter. You are my personal assistant. My "
         "favorite movies are Lord of the Rings and Hobbit."
     )
     context = SystemMessage(content=text_context)
