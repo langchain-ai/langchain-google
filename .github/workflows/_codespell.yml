@@ -1,11 +1,13 @@
 ---
-name: CI / cd . / make spell_check
+name: make spell_check
 
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        description: "From which folder this pipeline executes"
 
 permissions:
   contents: read
@@ -24,9 +26,10 @@ jobs:
           pip install toml
 
       - name: Extract Ignore Words List
+        working-directory: ${{ inputs.working-directory }}
         run: |
           # Use a Python script to extract the ignore words list from pyproject.toml
-          python .github/workflows/extract_ignored_words_list.py
+          python ../../.github/workflows/extract_ignored_words_list.py
         id: extract_ignore_words
 
       - name: Codespell
