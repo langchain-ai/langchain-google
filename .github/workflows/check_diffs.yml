@@ -31,6 +31,16 @@ jobs:
           python .github/scripts/check_diff.py ${{ steps.files.outputs.all }} >> $GITHUB_OUTPUT
     outputs:
       dirs-to-run: ${{ steps.set-matrix.outputs.dirs-to-run }}
+  codespell:
+    name: cd ${{ matrix.working-directory }}
+    needs: [build]
+    strategy:
+      matrix:
+        working-directory: ${{ fromJson(needs.build.outputs.dirs-to-run) }}
+    uses: ./.github/workflows/_codespell.yml
+    with:
+      working-directory: ${{ matrix.working-directory }}
+
   ci:
     name: cd ${{ matrix.working-directory }}
     needs: [ build ]
@@ -40,5 +50,3 @@ jobs:
     uses: ./.github/workflows/_all_ci.yml
     with:
       working-directory: ${{ matrix.working-directory }}
-
-
