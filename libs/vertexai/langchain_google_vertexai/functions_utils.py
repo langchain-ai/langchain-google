@@ -54,7 +54,7 @@ def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
                     }
                     for k, v in schema["properties"].items()
                 },
-                "required": schema["required"],
+                "required": schema.get("required", []),
                 "type": schema["type"],
             },
         }
