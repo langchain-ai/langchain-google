@@ -2,6 +2,7 @@ from langchain_core.tools import tool
 
 from langchain_google_vertexai.functions_utils import _format_tool_to_vertex_function
 
+
 def test_format_tool_to_vertex_function():
 
     @tool
