@@ -31,6 +31,13 @@ from langchain_core.messages import (
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import root_validator
+from vertexai.generative_models import (  # type: ignore
+    Candidate,
+    Content,
+    GenerativeModel,
+    Image,
+    Part,
+)
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     ChatModel,
@@ -38,13 +45,6 @@ from vertexai.language_models import (  # type: ignore
     CodeChatModel,
     CodeChatSession,
     InputOutputTextPair,
-)
-from vertexai.preview.generative_models import (  # type: ignore
-    Candidate,
-    Content,
-    GenerativeModel,
-    Image,
-    Part,
 )
 from vertexai.preview.language_models import (  # type: ignore
     ChatModel as PreviewChatModel,

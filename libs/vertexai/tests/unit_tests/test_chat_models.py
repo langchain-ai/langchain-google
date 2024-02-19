@@ -19,10 +19,10 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
 )
-from vertexai.language_models import ChatMessage, InputOutputTextPair  # type: ignore
-from vertexai.preview.generative_models import (  # type: ignore
+from vertexai.generative_models import (  # type: ignore
     Candidate,
 )
+from vertexai.language_models import ChatMessage, InputOutputTextPair  # type: ignore
 
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
