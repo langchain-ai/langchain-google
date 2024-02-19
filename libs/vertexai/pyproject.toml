@@ -12,8 +12,8 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain-core = ">=0.1.7,<0.2"
-google-cloud-aiplatform = "^1.39.0"
+langchain-core = ">=0.1.23,<0.2"
+google-cloud-aiplatform = "^1.42.1"
 google-cloud-storage = "^2.14.0"
 types-requests = "^2.31.0"
 types-protobuf = "^4.24.0.4"
