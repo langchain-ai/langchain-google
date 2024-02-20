@@ -165,6 +165,8 @@ jobs:
       - name: Run integration tests
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_SEARCH_API_KEY: ${{ secrets.GOOGLE_SEARCH_API_KEY }}
+          GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
         run: make integration_tests
         working-directory: ${{ inputs.working-directory }}
 
