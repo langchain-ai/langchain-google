@@ -20,6 +20,7 @@ from langchain_core.language_models.llms import BaseLLM
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from vertexai.generative_models import (  # type: ignore[import-untyped]
+    Candidate,
     GenerativeModel,
     Image,
 )
@@ -327,12 +328,19 @@ class VertexAI(_VertexAICommon, BaseLLM):
             raise ValueError("Only one candidate can be generated with streaming!")
         return values
 
-    def _response_to_generation(
-        self, response: TextGenerationResponse, *, stream: bool = False
+    def _candidate_to_generation(
+        self,
+        response: Union[Candidate, TextGenerationResponse],
+        *,
+        stream: bool = False,
+        usage_metadata: Optional[Dict] = None,
     ) -> GenerationChunk:
         """Converts a stream response to a generation chunk."""
         generation_info = get_generation_info(
-            response, self._is_gemini_model, stream=stream
+            response,
+            self._is_gemini_model,
+            stream=stream,
+            usage_metadata=usage_metadata,
         )
         try:
             text = response.text
@@ -373,8 +381,15 @@ class VertexAI(_VertexAICommon, BaseLLM):
                     run_manager=run_manager,
                     **params,
                 )
+                if self._is_gemini_model:
+                    usage_metadata = res.to_dict().get("usage_metadata")
+                else:
+                    usage_metadata = res.raw_prediction_response.metadata
                 generations.append(
-                    [self._response_to_generation(r) for r in res.candidates]
+                    [
+                        self._candidate_to_generation(r, usage_metadata=usage_metadata)
+                        for r in res.candidates
+                    ]
                 )
         return LLMResult(generations=generations)
 
@@ -395,8 +410,15 @@ class VertexAI(_VertexAICommon, BaseLLM):
                 run_manager=run_manager,
                 **params,
             )
+            if self._is_gemini_model:
+                usage_metadata = res.to_dict().get("usage_metadata")
+            else:
+                usage_metadata = res.raw_prediction_response.metadata
             generations.append(
-                [self._response_to_generation(r) for r in res.candidates]
+                [
+                    self._candidate_to_generation(r, usage_metadata=usage_metadata)
+                    for r in res.candidates
+                ]
             )
         return LLMResult(generations=generations)
 
@@ -416,14 +438,13 @@ class VertexAI(_VertexAICommon, BaseLLM):
             run_manager=run_manager,
             **params,
         ):
-            # Gemini models return GenerationResponse even when streaming, which has a
-            # candidates field.
-            stream_resp = (
-                stream_resp
-                if isinstance(stream_resp, TextGenerationResponse)
-                else stream_resp.candidates[0]
+            usage_metadata = None
+            if self._is_gemini_model:
+                usage_metadata = stream_resp.to_dict().get("usage_metadata")
+                stream_resp = stream_resp.candidates[0]
+            chunk = self._candidate_to_generation(
+                stream_resp, stream=True, usage_metadata=usage_metadata
             )
-            chunk = self._response_to_generation(stream_resp, stream=True)
             yield chunk
             if run_manager:
                 run_manager.on_llm_new_token(
