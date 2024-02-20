@@ -397,14 +397,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
             generations = [
                 ChatGeneration(
-                    message=_parse_response_candidate(c),
+                    message=_parse_response_candidate(candidate),
                     generation_info=get_generation_info(
-                        c,
+                        candidate,
                         self._is_gemini_model,
                         usage_metadata=response.to_dict().get("usage_metadata"),
                     ),
                 )
-                for c in response.candidates
+                for candidate in response.candidates
             ]
         else:
             question = _get_question(messages)
@@ -416,14 +416,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             response = chat.send_message(question.content, **msg_params)
             generations = [
                 ChatGeneration(
-                    message=AIMessage(content=r.text),
+                    message=AIMessage(content=candidate.text),
                     generation_info=get_generation_info(
-                        r,
+                        candidate,
                         self._is_gemini_model,
                         usage_metadata=response.raw_prediction_response.metadata,
                     ),
                 )
-                for r in response.candidates
+                for candidate in response.candidates
             ]
         return ChatResult(generations=generations)
 
