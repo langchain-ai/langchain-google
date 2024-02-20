@@ -11,7 +11,7 @@ def test_format_tool_to_vertex_function():
 
         return datetime.datetime.now().strftime("%Y-%m-%d")
 
-    schema = _format_tool_to_vertex_function(get_datetime)
+    schema = _format_tool_to_vertex_function(get_datetime)  # type: ignore
 
     assert schema["name"] == "get_datetime"
     assert schema["description"] == "get_datetime() -> str - Gets the current datetime"
@@ -27,7 +27,7 @@ def test_format_tool_to_vertex_function():
         """
         return str(a + b)
 
-    schema = _format_tool_to_vertex_function(sum_two_numbers)
+    schema = _format_tool_to_vertex_function(sum_two_numbers)  # type: ignore
 
     assert schema["name"] == "sum_two_numbers"
     assert "parameters" in schema
@@ -36,9 +36,9 @@ def test_format_tool_to_vertex_function():
     @tool
     def do_something_optional(a: float, b: float = 0) -> str:
         """Some description"""
-        return a + b
+        return str(a + b)
 
-    schema = _format_tool_to_vertex_function(do_something_optional)
+    schema = _format_tool_to_vertex_function(do_something_optional)  # type: ignore
 
     assert schema["name"] == "do_something_optional"
     assert "parameters" in schema
