@@ -91,7 +91,7 @@ def test_vertexai_stream(model_name: str) -> None:
 def test_vertexai_single_call_with_context() -> None:
     model = ChatVertexAI()
     raw_context = (
-        "My name is Ned. You are my personal assistant. My favorite movies "
+        "My name is Peter. You are my personal assistant. My favorite movies "
         "are Lord of the Rings and Hobbit."
     )
     question = (
@@ -154,7 +154,7 @@ def test_multimodal_history() -> None:
 
 def test_vertexai_single_call_with_examples() -> None:
     model = ChatVertexAI()
-    raw_context = "My name is Ned. You are my personal assistant."
+    raw_context = "My name is Peter. You are my personal assistant."
     question = "2+2"
     text_question, text_answer = "4+4", "8"
     inp = HumanMessage(content=text_question)

@@ -19,16 +19,16 @@ from langchain_core.callbacks.manager import (
 from langchain_core.language_models.llms import BaseLLM
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from vertexai.generative_models import (  # type: ignore[import-untyped]
+    GenerativeModel,
+    Image,
+)
 from vertexai.language_models import (  # type: ignore[import-untyped]
     CodeGenerationModel,
     TextGenerationModel,
 )
 from vertexai.language_models._language_models import (  # type: ignore[import-untyped]
     TextGenerationResponse,
-)
-from vertexai.preview.generative_models import (  # type: ignore[import-untyped]
-    GenerativeModel,
-    Image,
 )
 from vertexai.preview.language_models import (  # type: ignore[import-untyped]
     ChatModel as PreviewChatModel,

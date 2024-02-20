@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-vertexai"
-version = "0.0.5"
+version = "0.0.6rc0"
 description = "An integration package connecting GoogleVertexAI and LangChain"
 authors = []
 readme = "README.md"
@@ -12,8 +12,8 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain-core = ">=0.1.7,<0.2"
-google-cloud-aiplatform = "^1.39.0"
+langchain-core = ">=0.1.23,<0.2"
+google-cloud-aiplatform = "^1.42.1"
 google-cloud-storage = "^2.14.0"
 types-requests = "^2.31.0"
 types-protobuf = "^4.24.0.4"
@@ -24,7 +24,7 @@ optional = true
 [tool.poetry.group.test.dependencies]
 pytest = "^7.3.0"
 freezegun = "^1.2.2"
-pytest-mock  = "^3.10.0"
+pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
@@ -44,7 +44,7 @@ codespell = "^2.2.0"
 optional = true
 
 [tool.poetry.group.test_integration.dependencies]
-numexpr = {version = "^2.8.8", python = ">=3.9,<4.0"}
+numexpr = { version = "^2.8.8", python = ">=3.9,<4.0" }
 google-api-python-client = "^2.114.0"
 
 [tool.poetry.group.lint]
@@ -60,9 +60,9 @@ types-google-cloud-ndb = "^2.2.0.20240106"
 
 [tool.ruff]
 select = [
-  "E",  # pycodestyle
-  "F",  # pyflakes
-  "I",  # isort
+  "E", # pycodestyle
+  "F", # pyflakes
+  "I", # isort
 ]
 
 [tool.mypy]
@@ -78,9 +78,7 @@ warn_unused_configs = true
 warn_unused_ignores = true
 
 [tool.coverage.run]
-omit = [
-    "tests/*",
-]
+omit = ["tests/*"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
