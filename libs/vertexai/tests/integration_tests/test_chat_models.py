@@ -86,6 +86,14 @@ def test_vertexai_stream(model_name: str) -> None:
         assert isinstance(chunk, AIMessageChunk)
 
 
+async def test_vertexai_astream() -> None:
+    model = ChatVertexAI(temperature=0, model_name="gemini-pro")
+    message = HumanMessage(content="Hello")
+
+    async for chunk in model.astream([message]):
+        assert isinstance(chunk, AIMessageChunk)
+
+
 def test_vertexai_single_call_with_context() -> None:
     model = ChatVertexAI()
     raw_context = (

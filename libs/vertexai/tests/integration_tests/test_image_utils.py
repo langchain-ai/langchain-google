@@ -1,9 +1,11 @@
+import pytest
 from google.cloud import storage  # type: ignore[attr-defined]
 from google.cloud.exceptions import NotFound
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_image_utils():
     base64_image = (
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAA"
