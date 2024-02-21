@@ -9,8 +9,7 @@ from vertexai.preview.vision_models import ImageGenerationModel
 
 
 class VertexAIImageGenerator(BaseLLM):
-    """
-    """
+    """ """
 
     model_name: str = Field(default="imagegeneration@005")
     """ Name of the model that will be used."""
@@ -42,11 +41,11 @@ class VertexAIImageGenerator(BaseLLM):
     """
 
     def _generate(
-        self, 
-        prompts: List[str], 
-        stop: List[str] | None = None, 
-        run_manager: CallbackManagerForLLMRun | None = None, 
-    **kwargs: Any
+        self,
+        prompts: List[str],
+        stop: List[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
     ) -> LLMResult:
         """
 
@@ -61,28 +60,27 @@ class VertexAIImageGenerator(BaseLLM):
         generations: List[List[Generation]] = []
 
         for query in prompts:
-            
             candidates: List[Generation] = []
 
             model_response = model.generate_images(
-                query, 
-                negative_prompt=self.negative_prompt, 
+                query,
+                negative_prompt=self.negative_prompt,
                 number_of_images=self.number_of_images,
                 guidance_scale=self.guidance_scale,
                 language=self.language,
                 seed=self.seed,
-                **self.model_kwargs
+                **self.model_kwargs,
             )
 
             for image in model_response.images:
                 # Using a private method, we shouldn't
                 generation = Generation(text=image._as_base64_string())
                 candidates.append(generation)
-            
+
             generations.append(candidates)
 
         return LLMResult(generations=generations)
-    
+
     @property
     def _llm_type(self) -> str:
         """Return type of llm."""
@@ -90,7 +88,7 @@ class VertexAIImageGenerator(BaseLLM):
 
     @root_validator(pre=True)
     def _handle_extra_model_args(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """ Makes sure that there is no argument defined both in the fields and in the
+        """Makes sure that there is no argument defined both in the fields and in the
         model kwargs. If the model arg is a class field, it should be put as a field.
 
         Args:
@@ -114,5 +112,5 @@ class VertexAIImageGenerator(BaseLLM):
                 f" but should be specified as class fields"
             )
             ValueError(error_message)
-        
+
         return values

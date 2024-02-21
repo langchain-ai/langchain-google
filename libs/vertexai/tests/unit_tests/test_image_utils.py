@@ -9,7 +9,6 @@ from langchain_google_vertexai._image_utils import (
 
 
 def test_image_bytes_loader():
-
     loader = ImageBytesLoader()
 
     base64_image = (
@@ -33,7 +32,7 @@ def test_image_bytes_loader():
         "yuRj4Ik9is+hglfbkbfR3cnZm7chlUWLdwmprtCohX4HUtlOcQjLYCu+fzGJH2QRKvP3UN"
         "z8bWk1qMxjGTOMThZ3kvgLI5AzFfo379UAAAAASUVORK5CYII="
     )
-    
+
     # Check it loads from b64
     image_bytes = loader.load_bytes(base64_image)
     assert isinstance(image_bytes, bytes)
@@ -52,8 +51,7 @@ def test_image_bytes_loader():
 
     # Checks inverse conversion
     recovered_b64 = image_bytes_to_b64_string(
-        image_bytes, encoding="ascii", image_format="png")
-    
+        image_bytes, encoding="ascii", image_format="png"
+    )
+
     assert recovered_b64 == base64_image
-
-

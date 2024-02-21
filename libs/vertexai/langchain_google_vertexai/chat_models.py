@@ -103,12 +103,12 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
     chat_history = _ChatHistory(context=context, history=vertex_messages)
     return chat_history
 
+
 def _parse_chat_history_gemini(
     history: List[BaseMessage],
     project: Optional[str] = None,
     convert_system_message_to_human: Optional[bool] = False,
 ) -> List[Content]:
-    
     def _convert_to_prompt(part: Union[str, Dict]) -> Part:
         if isinstance(part, str):
             return Part.from_text(part)

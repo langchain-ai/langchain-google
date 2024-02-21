@@ -5,7 +5,6 @@ from langchain_google_vertexai._image_utils import ImageBytesLoader
 
 
 def test_image_utils():
-
     base64_image = (
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAA"
         "BHNCSVQICAgIfAhkiAAAAAlwSFlzAAAApgAAAKYB3X3/OAAAABl0RVh0U29mdHdhcmUAd3"
@@ -44,10 +43,10 @@ def test_image_utils():
     blob = bucket.blob(blob_name)
 
     try:
-        blob.upload_from_string(data = image_bytes)
+        blob.upload_from_string(data=image_bytes)
     except NotFound:
         client.create_bucket(bucket)
-        blob.upload_from_string(data = image_bytes)
+        blob.upload_from_string(data=image_bytes)
 
     gcs_uri = f"gs://{bucket.name}/{blob.name}"
 
@@ -63,8 +62,3 @@ def test_image_utils():
 
     image_bytes = loader.load_bytes(url)
     assert isinstance(image_bytes, bytes)
-
-
-
-
-
