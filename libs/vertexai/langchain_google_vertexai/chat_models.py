@@ -1,16 +1,12 @@
 """Wrapper around Google VertexAI chat-based models."""
 from __future__ import annotations
 
-import base64
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterator, List, Optional, Union, cast
-from urllib.parse import urlparse
 
 import proto  # type: ignore[import-untyped]
-import requests
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
 from google.cloud.aiplatform_v1beta1.types.tool import FunctionCall
 from langchain_core.callbacks import (
@@ -53,11 +49,11 @@ from vertexai.preview.language_models import (
     CodeChatModel as PreviewCodeChatModel,
 )
 
+from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import (
     get_generation_info,
     is_codey_model,
     is_gemini_model,
-    load_image_from_gcs,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tools_to_vertex_tool,
@@ -108,15 +104,6 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
     return chat_history
 
 
-def _is_url(s: str) -> bool:
-    try:
-        result = urlparse(s)
-        return all([result.scheme, result.netloc])
-    except Exception as e:
-        logger.debug(f"Unable to parse URL: {e}")
-        return False
-
-
 def _parse_chat_history_gemini(
     history: List[BaseMessage],
     project: Optional[str] = None,
@@ -134,25 +121,8 @@ def _parse_chat_history_gemini(
             return Part.from_text(part["text"])
         elif part["type"] == "image_url":
             path = part["image_url"]["url"]
-            if path.startswith("gs://"):
-                image = load_image_from_gcs(path=path, project=project)
-            elif path.startswith("data:image/"):
-                # extract base64 component from image uri
-                try:
-                    regexp = r"data:image/\w{2,4};base64,(.*)"
-                    encoded = re.search(regexp, path).group(1)  # type: ignore
-                except AttributeError:
-                    raise ValueError(
-                        "Invalid image uri. It should be in the format "
-                        "data:image/<image_type>;base64,<base64_encoded_image>."
-                    )
-                image = Image.from_bytes(base64.b64decode(encoded))
-            elif _is_url(path):
-                response = requests.get(path)
-                response.raise_for_status()
-                image = Image.from_bytes(response.content)
-            else:
-                image = Image.load_from_file(path)
+            image_bytes = ImageBytesLoader(project=project).load_bytes(path)
+            image = Image.from_bytes(image_bytes)
         else:
             raise ValueError("Only text and image_url types are supported!")
         return Part.from_image(image)
