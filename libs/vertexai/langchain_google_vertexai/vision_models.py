@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Dict, List
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -111,11 +113,11 @@ class VertexAIImageCaptioning(BaseVertexAIImageCaptioning, BaseLLM):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> LLMResult:
-        """Gnerates the captions.
+        """Generates the captions.
 
         Args:
             prompts: List of prompts to use. Each prompt must be a string
-                that represents an image. Currently suported are:
+                that represents an image. Currently supported are:
                 - Google Cloud Storage URI
                 - B64 encoded string
                 - Local file path
@@ -232,7 +234,7 @@ class VertexAIVisualQnAChat(BaseImageTextModel, BaseChatModel):
         Args:
             messages: List of text messages.
 
-        Retunrs:
+        Returns:
             Composed query.
         """
 
