@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional, Union, cast
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union, cast
 
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
@@ -538,6 +538,48 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                         usage_metadata=response.raw_prediction_response.metadata,
                     ),
                 )
+
+    async def _astream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        if not self._is_gemini_model:
+            raise NotImplementedError()
+        params = self._prepare_params(stop=stop, stream=True, **kwargs)
+        history_gemini = _parse_chat_history_gemini(
+            messages,
+            project=self.project,
+            convert_system_message_to_human=self.convert_system_message_to_human,
+        )
+        message = history_gemini.pop()
+        chat = self.client.start_chat(history=history_gemini)
+        raw_tools = params.pop("functions") if "functions" in params else None
+        tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
+        safety_settings = params.pop("safety_settings", None)
+        async for chunk in await chat.send_message_async(
+            message,
+            stream=True,
+            generation_config=params,
+            safety_settings=safety_settings,
+            tools=tools,
+        ):
+            message = _parse_response_candidate(chunk.candidates[0])
+            if run_manager:
+                await run_manager.on_llm_new_token(message.content)
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(
+                    content=message.content,
+                    additional_kwargs=message.additional_kwargs,
+                ),
+                generation_info=get_generation_info(
+                    chunk.candidates[0],
+                    self._is_gemini_model,
+                    usage_metadata=chunk.to_dict().get("usage_metadata"),
+                ),
+            )
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
