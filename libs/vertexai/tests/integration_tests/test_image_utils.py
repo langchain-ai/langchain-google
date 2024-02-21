@@ -1,5 +1,5 @@
 from google.cloud.exceptions import NotFound
-from google.cloud.storage import Client
+from google.cloud.storage import Client  # type: ignore[attr-defined]
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 

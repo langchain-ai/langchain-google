@@ -5,7 +5,7 @@ from typing import Union
 from urllib.parse import urlparse
 
 import requests
-from google.cloud.storage import Client as GCSClient
+from google.cloud.storage import Client as GCSClient  # type: ignore[attr-defined]
 
 
 class ImageBytesLoader:
