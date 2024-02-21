@@ -367,10 +367,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
             generations = [
                 ChatGeneration(
-                    message=_parse_response_candidate(c),
-                    generation_info=get_generation_info(c, self._is_gemini_model),
+                    message=_parse_response_candidate(candidate),
+                    generation_info=get_generation_info(
+                        candidate,
+                        self._is_gemini_model,
+                        usage_metadata=response.to_dict().get("usage_metadata"),
+                    ),
                 )
-                for c in response.candidates
+                for candidate in response.candidates
             ]
         else:
             question = _get_question(messages)
@@ -382,10 +386,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             response = chat.send_message(question.content, **msg_params)
             generations = [
                 ChatGeneration(
-                    message=AIMessage(content=r.text),
-                    generation_info=get_generation_info(r, self._is_gemini_model),
+                    message=AIMessage(content=candidate.text),
+                    generation_info=get_generation_info(
+                        candidate,
+                        self._is_gemini_model,
+                        usage_metadata=response.raw_prediction_response.metadata,
+                    ),
                 )
-                for r in response.candidates
+                for candidate in response.candidates
             ]
         return ChatResult(generations=generations)
 
@@ -440,7 +448,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generations = [
                 ChatGeneration(
                     message=_parse_response_candidate(c),
-                    generation_info=get_generation_info(c, self._is_gemini_model),
+                    generation_info=get_generation_info(
+                        c,
+                        self._is_gemini_model,
+                        usage_metadata=response.to_dict().get("usage_metadata"),
+                    ),
                 )
                 for c in response.candidates
             ]
@@ -455,7 +467,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generations = [
                 ChatGeneration(
                     message=AIMessage(content=r.text),
-                    generation_info=get_generation_info(r, self._is_gemini_model),
+                    generation_info=get_generation_info(
+                        r,
+                        self._is_gemini_model,
+                        usage_metadata=response.raw_prediction_response.metadata,
+                    ),
                 )
                 for r in response.candidates
             ]
@@ -496,7 +512,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     message=AIMessageChunk(
                         content=message.content,
                         additional_kwargs=message.additional_kwargs,
-                    )
+                    ),
+                    generation_info=get_generation_info(
+                        response.candidates[0],
+                        self._is_gemini_model,
+                        usage_metadata=response.to_dict().get("usage_metadata"),
+                    ),
                 )
         else:
             question = _get_question(messages)
@@ -506,13 +527,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 params["examples"] = _parse_examples(examples)
             chat = self._start_chat(history, **params)
             responses = chat.send_message_streaming(question.content, **params)
-        for response in responses:
-            if run_manager:
-                run_manager.on_llm_new_token(response.text)
-            yield ChatGenerationChunk(
-                message=AIMessageChunk(content=response.text),
-                generation_info=get_generation_info(response, self._is_gemini_model),
-            )
+            for response in responses:
+                if run_manager:
+                    run_manager.on_llm_new_token(response.text)
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(content=response.text),
+                    generation_info=get_generation_info(
+                        response,
+                        self._is_gemini_model,
+                        usage_metadata=response.raw_prediction_response.metadata,
+                    ),
+                )
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
