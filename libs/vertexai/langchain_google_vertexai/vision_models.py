@@ -14,7 +14,7 @@ from vertexai.vision_models import Image, ImageTextModel  # type: ignore[import-
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 
 
-class BaseImageTextModel(BaseModel):
+class _BaseImageTextModel(BaseModel):
     """Base class for all integrations that use ImageTextModel"""
 
     model_name: str = Field(default="imagetext@001")
@@ -82,7 +82,7 @@ class BaseImageTextModel(BaseModel):
         return "vertexai-vision"
 
 
-class BaseVertexAIImageCaptioning(BaseImageTextModel):
+class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
     """Base class for Image Captioning models."""
 
     def _get_captions(self, image: Image) -> List[str]:
@@ -103,7 +103,7 @@ class BaseVertexAIImageCaptioning(BaseImageTextModel):
         return captions
 
 
-class VertexAIImageCaptioning(BaseVertexAIImageCaptioning, BaseLLM):
+class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
     """Implementation of the Image Captioning model as an LLM."""
 
     def _generate(
@@ -147,7 +147,7 @@ class VertexAIImageCaptioning(BaseVertexAIImageCaptioning, BaseLLM):
         return [Generation(text=caption) for caption in caption_list]
 
 
-class VertexAIImageCaptioningChat(BaseVertexAIImageCaptioning, BaseChatModel):
+class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
     """Implementation of the Image Captioning model as a chat."""
 
     def _generate(
@@ -186,7 +186,7 @@ class VertexAIImageCaptioningChat(BaseVertexAIImageCaptioning, BaseChatModel):
         return ChatResult(generations=generations)
 
 
-class VertexAIVisualQnAChat(BaseImageTextModel, BaseChatModel):
+class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
     """Chat implementation of a visual QnA model"""
 
     def _generate(

@@ -2,12 +2,12 @@ import pytest
 from langchain_core.messages import HumanMessage
 from vertexai.vision_models import Image  # type: ignore[import-untyped]
 
-from langchain_google_vertexai.vision_models import BaseImageTextModel
+from langchain_google_vertexai.vision_models import _BaseImageTextModel
 
 
 def test_image_from_message(base64_image: str):
     message = HumanMessage(content=base64_image)
-    image = BaseImageTextModel._get_image_from_message(message)
+    image = _BaseImageTextModel._get_image_from_message(message)
     assert isinstance(image, Image)
 
     message = HumanMessage(
@@ -15,26 +15,26 @@ def test_image_from_message(base64_image: str):
             base64_image,
         ]
     )
-    image = BaseImageTextModel._get_image_from_message(message)
+    image = _BaseImageTextModel._get_image_from_message(message)
     assert isinstance(image, Image)
 
     message = HumanMessage(
         content=[{"type": "image_url", "image_url": {"url": base64_image}}]
     )
-    image = BaseImageTextModel._get_image_from_message(message)
+    image = _BaseImageTextModel._get_image_from_message(message)
     assert isinstance(image, Image)
 
     # Doesn't work with multiple message parts
     with pytest.raises(ValueError):
         message = HumanMessage(content=[base64_image, base64_image])
-        image = BaseImageTextModel._get_image_from_message(message)
+        image = _BaseImageTextModel._get_image_from_message(message)
 
     # Doesn't work with malformed dicts
     with pytest.raises(ValueError):
         message = HumanMessage(
             content=[{"bar": "image_url", "foo": {"url": base64_image}}]
         )
-        image = BaseImageTextModel._get_image_from_message(message)
+        image = _BaseImageTextModel._get_image_from_message(message)
 
 
 @pytest.fixture
