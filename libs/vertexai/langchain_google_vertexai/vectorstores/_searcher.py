@@ -4,6 +4,7 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple, Union
 
+from google.cloud import storage  # type: ignore[attr-defined]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
@@ -12,7 +13,6 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
     MatchNeighbor,
     Namespace,
 )
-from google.cloud.storage import Bucket
 
 
 class Searcher(ABC):
@@ -69,7 +69,7 @@ class VectorSearchSearcher(Searcher):
         self,
         endpoint: MatchingEngineIndexEndpoint,
         index: MatchingEngineIndex,
-        staging_bucket: Union[Bucket, None] = None,
+        staging_bucket: Union[storage.Bucket, None] = None,
     ) -> None:
         """Constructor.
         Args:

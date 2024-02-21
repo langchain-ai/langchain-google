@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List, Optional, Union
 
-from google.cloud import storage
+from google.cloud import storage  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
-    from google.cloud import datastore
+    from google.cloud import datastore  # type: ignore[attr-defined]
 
 
 class DocumentStorage(ABC):

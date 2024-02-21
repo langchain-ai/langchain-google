@@ -1,14 +1,14 @@
 from typing import TYPE_CHECKING, Any, Union
 
-from google.cloud import aiplatform, storage
+from google.cloud import aiplatform, storage  # type: ignore[attr-defined]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
 )
-from google.oauth2.service_account import Credentials
+from google.oauth2.service_account import Credentials  # type: ignore
 
 if TYPE_CHECKING:
-    from google.cloud import datastore
+    from google.cloud import datastore  # type: ignore[attr-defined]
 
 
 class VectorSearchSDKManager:
@@ -107,7 +107,7 @@ class VectorSearchSDKManager:
         Returns:
             datastore Client.
         """
-        from google.cloud import datastore
+        from google.cloud import datastore  # type: ignore[attr-defined]
 
         ds_client = datastore.Client(
             project=self._project_id, credentials=self._credentials, **kwargs

@@ -109,6 +109,11 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         for neighbor_id, distance in neighbors_list[0]:
             text = self._document_storage.get_by_id(neighbor_id)
+
+            if text is None:
+                raise ValueError(
+                    f"Document with id {neighbor_id} not found in document" "storage."
+                )
             # TODO: Handle metadata
             document = Document(page_content=text, metadata={})
             results.append((document, distance))

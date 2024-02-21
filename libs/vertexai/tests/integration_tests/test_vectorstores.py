@@ -14,7 +14,7 @@ If required to run slow tests, environment variable 'RUN_SLOW_TESTS' must be set
 import os
 
 import pytest
-from google.cloud import storage
+from google.cloud import storage  # type: ignore[attr-defined]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
@@ -109,9 +109,9 @@ def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
 
     texts = ["What's your favourite animal", "What's your favourite city"]
 
-    embeddings = embeddings.embed_documents(texts=texts)
+    embeddings_vector = embeddings.embed_documents(texts=texts)
 
-    matching_neighbors_list = searcher.find_neighbors(embeddings=embeddings, k=4)
+    matching_neighbors_list = searcher.find_neighbors(embeddings=embeddings_vector, k=4)
 
     assert len(matching_neighbors_list) == 2
 
