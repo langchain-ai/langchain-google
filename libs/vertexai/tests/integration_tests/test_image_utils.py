@@ -1,5 +1,5 @@
+from google.cloud import storage  # type: ignore[attr-defined]
 from google.cloud.exceptions import NotFound
-from google.cloud.storage import Client  # type: ignore[attr-defined]
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 
@@ -38,7 +38,7 @@ def test_image_utils():
     bucket_name = "test_image_utils"
     blob_name = "my_image.png"
 
-    client = Client()
+    client = storage.Client()
     bucket = client.bucket(bucket_name=bucket_name)
     blob = bucket.blob(blob_name)
 

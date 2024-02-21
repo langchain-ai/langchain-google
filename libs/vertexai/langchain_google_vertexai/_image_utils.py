@@ -5,7 +5,7 @@ from typing import Union
 from urllib.parse import urlparse
 
 import requests
-from google.cloud.storage import Client as GCSClient  # type: ignore[attr-defined]
+from google.cloud import storage  # type: ignore[attr-defined]
 
 
 class ImageBytesLoader:
@@ -130,7 +130,7 @@ class ImageBytesLoader:
             Image bytes
         """
 
-        gcs_client = GCSClient(project=self._project)
+        gcs_client = storage.Client(project=self._project)
 
         pieces = gcs_uri.split("/")
 
