@@ -74,12 +74,8 @@ class ImageBytesLoader:
         pattern = r"data:image/\w{2,4};base64,(.*)"
         match = re.search(pattern, base64_image)
 
-        if match is None:
-            raise ValueError()
-
-        encoded_string = match.group(1)
-
-        if match:
+        if match is not None:
+            encoded_string = match.group(1)
             return base64.b64decode(encoded_string)
 
         raise ValueError(f"Error in b64 encoded image. Must follow pattern: {pattern}")
