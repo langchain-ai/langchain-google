@@ -23,8 +23,7 @@ if TYPE_CHECKING:
 
 
 class _BaseVertexAIVectorStore(VectorStore):
-    """ Represents a base vector store based on VertexAI. 
-    """
+    """Represents a base vector store based on VertexAI."""
 
     def __init__(
         self,
@@ -207,8 +206,8 @@ class _BaseVertexAIVectorStore(VectorStore):
 
 
 class VectorSearchVectorStore(_BaseVertexAIVectorStore):
-    """ VertexAI VectorStore that handles the search and indexing using Vector Search
-    and stores the documents in Google Cloud Storage. 
+    """VertexAI VectorStore that handles the search and indexing using Vector Search
+    and stores the documents in Google Cloud Storage.
     """
 
     @classmethod
