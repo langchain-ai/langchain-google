@@ -20,7 +20,7 @@ from vertexai.language_models import (  # type: ignore
     TextEmbeddingModel,
 )
 
-from langchain_google_vertexai.llms import _VertexAICommon
+from langchain_google_vertexai._base import _VertexAICommon
 
 logger = logging.getLogger(__name__)
 
