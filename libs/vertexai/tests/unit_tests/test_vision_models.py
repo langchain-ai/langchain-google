@@ -1,40 +1,46 @@
 import pytest
-from langchain_core.messages import HumanMessage
 from vertexai.vision_models import Image  # type: ignore[import-untyped]
 
 from langchain_google_vertexai.vision_models import _BaseImageTextModel
 
 
-def test_image_from_message(base64_image: str):
-    message = HumanMessage(content=base64_image)
-    image = _BaseImageTextModel._get_image_from_message(message)
+def test_get_image_from_message_part(base64_image: str):
+    model = _BaseImageTextModel()
+
+    # Should work with a well formatted dictionary:
+    message = {"type": "image_url", "image_url": {"url": base64_image}}
+    image = model._get_image_from_message_part(message)
     assert isinstance(image, Image)
 
-    message = HumanMessage(
-        content=[
-            base64_image,
-        ]
-    )
-    image = _BaseImageTextModel._get_image_from_message(message)
-    assert isinstance(image, Image)
+    # Should not work with a simple string
+    simple_string = base64_image
+    image = model._get_image_from_message_part(simple_string)
+    assert image is None
 
-    message = HumanMessage(
-        content=[{"type": "image_url", "image_url": {"url": base64_image}}]
-    )
-    image = _BaseImageTextModel._get_image_from_message(message)
-    assert isinstance(image, Image)
+    # Should not work with a string message
+    message = {"type": "text", "text": "I'm a text message"}
+    image = model._get_image_from_message_part(message)
+    assert image is None
 
-    # Doesn't work with multiple message parts
-    with pytest.raises(ValueError):
-        message = HumanMessage(content=[base64_image, base64_image])
-        image = _BaseImageTextModel._get_image_from_message(message)
 
-    # Doesn't work with malformed dicts
-    with pytest.raises(ValueError):
-        message = HumanMessage(
-            content=[{"bar": "image_url", "foo": {"url": base64_image}}]
-        )
-        image = _BaseImageTextModel._get_image_from_message(message)
+def test_get_text_from_message_part():
+    DUMMY_MESSAGE = "Some message"
+    model = _BaseImageTextModel()
+
+    # Should not work with an image
+    message = {"type": "image_url", "image_url": {"url": base64_image}}
+    text = model._get_text_from_message_part(message)
+    assert text is None
+
+    # Should work with a simple string
+    simple_message = DUMMY_MESSAGE
+    text = model._get_text_from_message_part(simple_message)
+    assert text == DUMMY_MESSAGE
+
+    # Should work with a text message
+    message = {"type": "text", "text": DUMMY_MESSAGE}
+    text = model._get_text_from_message_part(message)
+    assert text == DUMMY_MESSAGE
 
 
 @pytest.fixture

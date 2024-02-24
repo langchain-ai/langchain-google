@@ -30,51 +30,53 @@ class _BaseImageTextModel(BaseModel):
         """Builds the model object from the class attributes."""
         return ImageTextModel.from_pretrained(model_name=self.model_name)
 
-    @staticmethod
-    def _get_image_from_message(message: BaseMessage) -> Image:
-        """Extracts an image from a message.
+    def _get_image_from_message_part(self, message_part: str | Dict) -> Image | None:
+        """Given a message part obtain a image if the part represents it.
 
         Args:
-            message: Message to extract the image from.
+            message_part: Item of a message content.
 
         Returns:
-            Image extracted from the message.
+            Image is successful otherwise None.
         """
 
-        loader = ImageBytesLoader()
+        if isinstance(message_part, str):
+            return None
 
-        if isinstance(message.content, str):
-            return Image(loader.load_bytes(image_string=message.content))
+        if message_part.get("type") != "image_url":
+            return None
 
-        if isinstance(message.content, List):
-            if len(message.content) > 1:
-                raise ValueError(
-                    "Expected message content to have only one part"
-                    f"but found {len(message.content)}."
-                )
+        image_str = message_part.get("image_url", {}).get("url")
 
-            content = message.content[0]
+        if not isinstance(image_str, str):
+            return None
 
-            if isinstance(content, str):
-                return Image(loader.load_bytes(content))
+        loader = ImageBytesLoader(project=self.project)
+        image_bytes = loader.load_bytes(image_str)
+        return Image(image_bytes=image_bytes)
 
-            if isinstance(content, Dict):
-                image_url = content.get("image_url", {}).get("url")
+    def _get_text_from_message_part(self, message_part: str | Dict) -> str | None:
+        """Given a message part obtain a text if the part represents it.
 
-                if image_url is not None:
-                    return Image(loader.load_bytes(image_url))
+        Args:
+            message_part: Item of a message content.
 
-                raise ValueError(f"Message content: {content} is not an image.")
+        Returns:
+            str is successful otherwise None.
+        """
 
-            raise ValueError(
-                "Expected message content part to be either a str or a "
-                f"list, but found a {content.__class__} instance"
-            )
+        if isinstance(message_part, str):
+            return message_part
 
-        raise ValueError(
-            "Message content must be either a str or a List, but found"
-            f"an instance of {message.content.__class__}."
-        )
+        if message_part.get("type") != "text":
+            return None
+
+        message_text = message_part.get("text")
+
+        if not isinstance(message_text, str):
+            return None
+
+        return message_text
 
     @property
     def _llm_type(self) -> str:
@@ -161,22 +163,41 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
 
         Args:
             messages: List of messages. Currently only one message is supported.
-                The message must contain a string representation of the image.
-                Currently supported are:
+                The message content must be a list with only one element with
+                a dict with format:
+                {
+                    'type': 'image_url',
+                    'image_url': {
+                        'url' <image_string>
+                    }
+                }
+                Currently supported image strings are:
                 - Google Cloud Storage URI
                 - B64 encoded string
                 - Local file path
                 - Remote url
         """
 
-        if len(messages) != 1:
+        image = None
+
+        is_valid = (
+            len(messages) == 1
+            and isinstance(messages[0].content, List)
+            and len(messages[0].content) == 1
+        )
+
+        if is_valid:
+            content = messages[0].content[0]
+            image = self._get_image_from_message_part(content)
+
+        if image is None:
             raise ValueError(
-                "Image captioning only works with one message: the image. "
-                f"instead got {len(messages)}"
+                f"{self.__class__.__name__} messages should be a list with "
+                "only one message. This message content must be a list with "
+                "one dictionary with the format: "
+                "{'type': 'image_url', 'image_url': {'image': <image_str>}}"
             )
 
-        message = messages[0]
-        image = self._get_image_from_message(message)
         captions = self._get_captions(image)
 
         generations = [
@@ -209,55 +230,39 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
                 There has to be at least other message with the first question.
         """
 
-        if len(messages) < 2:
+        image = None
+        user_question = None
+
+        is_valid = (
+            len(messages) == 1
+            and isinstance(messages[0].content, List)
+            and len(messages[0].content) == 2
+        )
+
+        if is_valid:
+            image_part = messages[0].content[0]
+            user_question_part = messages[0].content[1]
+            image = self._get_image_from_message_part(image_part)
+            user_question = self._get_text_from_message_part(user_question_part)
+
+        if (image is None) or (user_question is None):
             raise ValueError(
-                "Image QnA must have at least two messages: First the"
-                "image and then the question and answers. Instead got "
-                f"{len(messages)} messages."
+                f"{self.__class__.__name__} messages should be a list with "
+                "only one message. The message content should be a list with "
+                "two elements. The first element should be the image, a dictionary "
+                "with format"
+                "{'type': 'image_url', 'image_url': {'image': <image_str>}}."
+                "The second one should be the user question. Either a simple string"
+                "or a dictionary with format {'type': 'text', 'text': <message>}"
             )
 
-        image = self._get_image_from_message(messages[0])
-
-        query = self._build_query(messages=messages[1:])
-
-        answers = self._ask_questions(image=image, query=query)
+        answers = self._ask_questions(image=image, query=user_question)
 
         generations = [
             ChatGeneration(message=AIMessage(content=answer)) for answer in answers
         ]
 
         return ChatResult(generations=generations)
-
-    def _build_query(self, messages: List[BaseMessage]) -> str:
-        """Builds the query from the messages.
-
-        Args:
-            messages: List of text messages.
-
-        Returns:
-            Composed query.
-        """
-
-        query = ""
-
-        for message in messages:
-            content = message.content
-
-            if isinstance(content, str):
-                content = [
-                    content,
-                ]
-
-            full_message_content = ""
-            for content_part in content:
-                if isinstance(content_part, str):
-                    full_message_content += content_part
-                else:
-                    raise ValueError("All query message content parts must be str.")
-
-            query += f"{message.type}: {full_message_content}\n"
-
-        return query
 
     def _ask_questions(self, image: Image, query: str) -> List[str]:
         """Interfaces with the sdk to get the question.

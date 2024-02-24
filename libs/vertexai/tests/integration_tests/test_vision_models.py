@@ -9,13 +9,26 @@ from langchain_google_vertexai.vision_models import (
 
 
 def test_vertex_ai_image_captioning_chat(base64_image: str):
+    # This should work
     model = VertexAIImageCaptioningChat()
     response = model.invoke(
         input=[
-            HumanMessage(content=base64_image),
+            HumanMessage(
+                content=[{"type": "image_url", "image_url": {"url": base64_image}}]
+            ),
         ]
     )
+
     assert isinstance(response, AIMessage)
+
+    # Content should be an image
+    with pytest.raises(ValueError):
+        model = VertexAIImageCaptioningChat()
+        response = model.invoke(
+            input=[
+                HumanMessage(content="Text message"),
+            ]
+        )
 
     # Not more than one message allowed
     with pytest.raises(ValueError):
@@ -37,24 +50,64 @@ def test_vertex_ai_image_captioning(base64_image: str):
 def test_vertex_ai_visual_qna_chat(base64_image: str):
     model = VertexAIVisualQnAChat()
 
+    # This should work
     response = model.invoke(
         input=[
-            HumanMessage(content=base64_image),
-            HumanMessage(content="What color is the image?"),
-        ]
-    )
-
-    assert isinstance(response, AIMessage)
-
-    response = model.invoke(
-        input=[
-            HumanMessage(content=base64_image),
-            HumanMessage(content="What color is the image?"),
-            AIMessage(content="yellow"),
-            HumanMessage(content="And the eyes?"),
+            HumanMessage(
+                content=[
+                    {"type": "image_url", "image_url": {"url": base64_image}},
+                    "What color is the image?",
+                ]
+            )
         ]
     )
     assert isinstance(response, AIMessage)
+
+    response = model.invoke(
+        input=[
+            HumanMessage(
+                content=[
+                    {"type": "image_url", "image_url": {"url": base64_image}},
+                    {"type": "text", "text": "What color is the image?"},
+                ]
+            )
+        ]
+    )
+    assert isinstance(response, AIMessage)
+
+    # This should not work, the image must be first
+
+    with pytest.raises(ValueError):
+        response = model.invoke(
+            input=[
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "What color is the image?"},
+                        {"type": "image_url", "image_url": {"url": base64_image}},
+                    ]
+                )
+            ]
+        )
+
+    # This should not work, only one message with multiparts allowed
+    with pytest.raises(ValueError):
+        response = model.invoke(
+            input=[
+                HumanMessage(content=base64_image),
+                HumanMessage(content="What color is the image?"),
+            ]
+        )
+
+    # This should not work, only one message with multiparts allowed
+    with pytest.raises(ValueError):
+        response = model.invoke(
+            input=[
+                HumanMessage(content=base64_image),
+                HumanMessage(content="What color is the image?"),
+                AIMessage(content="yellow"),
+                HumanMessage(content="And the eyes?"),
+            ]
+        )
 
 
 @pytest.fixture
