@@ -41,6 +41,7 @@ def sdk_manager() -> VectorSearchSDKManager:
     return sdk_manager
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     gcs_client = sdk_manager.get_gcs_client()
     assert isinstance(gcs_client, storage.Client)
@@ -55,6 +56,7 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     assert isinstance(endpoint, MatchingEngineIndexEndpoint)
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_gcs_document_storage(sdk_manager: VectorSearchSDKManager):
     bucket = sdk_manager.get_gcs_bucket(os.environ["GCS_BUCKET_NAME"])
     prefix = "integration-test"
@@ -78,6 +80,7 @@ def test_gcs_document_storage(sdk_manager: VectorSearchSDKManager):
         assert original_text == retrieved_text
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_datastore_document_storage(sdk_manager: VectorSearchSDKManager):
     ds_client = sdk_manager.get_datastore_client(namespace="Foo")
 
@@ -100,6 +103,7 @@ def test_datastore_document_storage(sdk_manager: VectorSearchSDKManager):
         assert original_text == retrieved_text
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
     index = sdk_manager.get_index(os.environ["INDEX_ID"])
     endpoint = sdk_manager.get_endpoint(os.environ["ENDPOINT_ID"])
@@ -116,6 +120,7 @@ def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
     assert len(matching_neighbors_list) == 2
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_vector_store():
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
@@ -143,6 +148,7 @@ def test_vector_store():
         assert isinstance(doc, Document)
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_vector_store_update_index():
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
