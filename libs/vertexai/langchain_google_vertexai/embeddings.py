@@ -12,6 +12,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.cloud.aiplatform.telemetry import tool_context_manager
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from langchain_core.pydantic_v1 import root_validator
@@ -21,6 +22,7 @@ from vertexai.language_models import (  # type: ignore
 )
 
 from langchain_google_vertexai._base import _VertexAICommon
+from langchain_google_vertexai._utils import get_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "textembedding-gecko@001"
             )
             values["model_name"] = "textembedding-gecko@001"
-        values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
+        with tool_context_manager(get_user_agent("vertex-ai-embeddings")):
+            values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
         return values
 
     def __init__(
@@ -79,9 +82,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["task_executor"] = ThreadPoolExecutor(
             max_workers=request_parallelism
         )
-        self.instance[
-            "embeddings_task_type_supported"
-        ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+        self.instance["embeddings_task_type_supported"] = (
+            not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+        )
 
     @staticmethod
     def _split_by_punctuation(text: str) -> List[str]:

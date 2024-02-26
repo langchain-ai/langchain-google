@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Union
 
+from google.cloud.aiplatform.telemetry import tool_context_manager
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, BaseLLM
 from langchain_core.messages import AIMessage, BaseMessage
@@ -22,6 +23,7 @@ from langchain_google_vertexai._image_utils import (
     get_text_str_from_content_part,
     image_bytes_to_b64_string,
 )
+from langchain_google_vertexai._utils import get_user_agent
 
 
 class _BaseImageTextModel(BaseModel):
@@ -38,7 +40,8 @@ class _BaseImageTextModel(BaseModel):
 
     def _create_model(self) -> ImageTextModel:
         """Builds the model object from the class attributes."""
-        return ImageTextModel.from_pretrained(model_name=self.model_name)
+        with tool_context_manager(get_user_agent("vertex-ai-imagen")):
+            return ImageTextModel.from_pretrained(model_name=self.model_name)
 
     def _get_image_from_message_part(self, message_part: str | Dict) -> Image | None:
         """Given a message part obtain a image if the part represents it.

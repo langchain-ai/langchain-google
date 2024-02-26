@@ -1,4 +1,5 @@
 """Wrapper around Google VertexAI chat-based models."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +14,7 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from google.cloud.aiplatform.telemetry import tool_context_manager
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     generate_from_stream,
@@ -55,6 +57,7 @@ from langchain_google_vertexai._base import (
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import (
     get_generation_info,
+    get_user_agent,
     is_codey_model,
     is_gemini_model,
 )
@@ -291,24 +294,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             raise ValueError("Safety settings are only supported for Gemini models")
 
         cls._init_vertexai(values)
-        if is_gemini:
-            values["client"] = GenerativeModel(
-                model_name=values["model_name"], safety_settings=safety_settings
-            )
-            values["client_preview"] = GenerativeModel(
-                model_name=values["model_name"], safety_settings=safety_settings
-            )
-        else:
-            if is_codey_model(values["model_name"]):
-                model_cls = CodeChatModel
-                model_cls_preview = PreviewCodeChatModel
+        with tool_context_manager(get_user_agent("vertex-ai-llm")):
+            if is_gemini:
+                values["client"] = GenerativeModel(
+                    model_name=values["model_name"], safety_settings=safety_settings
+                )
+                values["client_preview"] = GenerativeModel(
+                    model_name=values["model_name"], safety_settings=safety_settings
+                )
             else:
-                model_cls = ChatModel
-                model_cls_preview = PreviewChatModel
-            values["client"] = model_cls.from_pretrained(values["model_name"])
-            values["client_preview"] = model_cls_preview.from_pretrained(
-                values["model_name"]
-            )
+                if is_codey_model(values["model_name"]):
+                    model_cls = CodeChatModel
+                    model_cls_preview = PreviewCodeChatModel
+                else:
+                    model_cls = ChatModel
+                    model_cls_preview = PreviewChatModel
+                values["client"] = model_cls.from_pretrained(values["model_name"])
+                values["client_preview"] = model_cls_preview.from_pretrained(
+                    values["model_name"]
+                )
         return values
 
     def _generate(

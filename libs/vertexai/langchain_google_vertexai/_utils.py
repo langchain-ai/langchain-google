@@ -2,7 +2,7 @@
 
 import dataclasses
 from importlib import metadata
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import google.api_core
 import proto  # type: ignore[import-untyped]
@@ -58,7 +58,7 @@ def raise_vertex_import_error(minimum_expected_version: str = "1.38.0") -> None:
     )
 
 
-def get_client_info(module: Optional[str] = None) -> "ClientInfo":
+def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     r"""Returns a custom user agent header.
 
     Args:
@@ -67,13 +67,29 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     Returns:
         google.api_core.gapic_v1.client_info.ClientInfo
     """
-    langchain_version = metadata.version("langchain")
+    try:
+        langchain_version = metadata.version("langchain")
+    except metadata.PackageNotFoundError:
+        langchain_version = "0.0.0"
     client_library_version = (
         f"{langchain_version}-{module}" if module else langchain_version
     )
+    return client_library_version, f"langchain/{client_library_version}"
+
+
+def get_client_info(module: Optional[str] = None) -> "ClientInfo":
+    r"""Returns a client info object with a custom user agent header.
+
+    Args:
+        module (Optional[str]):
+            Optional. The module for a custom user agent header.
+    Returns:
+        google.api_core.gapic_v1.client_info.ClientInfo
+    """
+    client_library_version, user_agent = get_user_agent(module)
     return ClientInfo(
         client_library_version=client_library_version,
-        user_agent=f"langchain/{client_library_version}",
+        user_agent=user_agent,
     )
 
 

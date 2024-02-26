@@ -10,6 +10,7 @@ from google.cloud.aiplatform.gapic import (
     PredictionServiceClient,
 )
 from google.cloud.aiplatform.models import Prediction
+from google.cloud.aiplatform.telemetry import tool_context_manager
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.callbacks.manager import (
@@ -55,6 +56,7 @@ from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_client_info,
     get_generation_info,
+    get_user_agent,
     is_codey_model,
     is_gemini_model,
 )
@@ -314,22 +316,25 @@ class VertexAI(_VertexAICommon, BaseLLM):
             model_cls = TextGenerationModel
             preview_model_cls = PreviewTextGenerationModel
 
-        if tuned_model_name:
-            values["client"] = model_cls.get_tuned_model(tuned_model_name)
-            values["client_preview"] = preview_model_cls.get_tuned_model(
-                tuned_model_name
-            )
-        else:
-            if is_gemini:
-                values["client"] = model_cls(
-                    model_name=model_name, safety_settings=safety_settings
-                )
-                values["client_preview"] = preview_model_cls(
-                    model_name=model_name, safety_settings=safety_settings
+        with tool_context_manager(get_user_agent("vertex-ai-llm")):
+            if tuned_model_name:
+                values["client"] = model_cls.get_tuned_model(tuned_model_name)
+                values["client_preview"] = preview_model_cls.get_tuned_model(
+                    tuned_model_name
                 )
             else:
-                values["client"] = model_cls.from_pretrained(model_name)
-                values["client_preview"] = preview_model_cls.from_pretrained(model_name)
+                if is_gemini:
+                    values["client"] = model_cls(
+                        model_name=model_name, safety_settings=safety_settings
+                    )
+                    values["client_preview"] = preview_model_cls(
+                        model_name=model_name, safety_settings=safety_settings
+                    )
+                else:
+                    values["client"] = model_cls.from_pretrained(model_name)
+                    values["client_preview"] = preview_model_cls.from_pretrained(
+                        model_name
+                    )
 
         if values["streaming"] and values["n"] > 1:
             raise ValueError("Only one candidate can be generated with streaming!")
