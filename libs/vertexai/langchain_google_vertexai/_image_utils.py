@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import base64
 import os
 import re
-from typing import Union
+from typing import Dict, Union
 from urllib.parse import urlparse
 
 import requests
@@ -168,3 +170,80 @@ def image_bytes_to_b64_string(
     """
     encoded_bytes = base64.b64encode(image_bytes).decode(encoding)
     return f"data:image/{image_format};base64,{encoded_bytes}"
+
+
+def create_text_content_part(message_str: str) -> Dict:
+    """Create a dictionary that can be part of a message content list.
+
+    Args:
+        message_str: Message as an string.
+
+    Returns:
+        Dictionary that can be part of a message content list.
+    """
+    return {"type": "text", "text": message_str}
+
+
+def create_image_content_part(image_str: str) -> Dict:
+    """Create a dictionary that can be part of a message content list.
+
+    Args:
+        image_str: Can be either:
+            - b64 encoded image data
+            - GCS uri
+            - Url
+            - Path to an image.
+
+    Returns:
+        Dictionary that can be part of a message content list.
+    """
+    return {"type": "image_url", "image_url": {"url": image_str}}
+
+
+def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
+    """Parses an image string from a dictionary with the correct format.
+
+    Args:
+        content_part: String or dictionary.
+
+    Returns:
+        Image string if the dictionary has the correct format otherwise None.
+    """
+
+    if isinstance(content_part, str):
+        return None
+
+    if content_part.get("type") != "image_url":
+        return None
+
+    image_str = content_part.get("image_url", {}).get("url")
+
+    if isinstance(image_str, str):
+        return image_str
+    else:
+        return None
+
+
+def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
+    """Parses an string from a dictionary or string with the correct format.
+
+    Args:
+        content_part:  String or dictionary.
+
+    Returns:
+        String if the dictionary has the correct format or the input is an string,
+        otherwise None.
+    """
+
+    if isinstance(content_part, str):
+        return content_part
+
+    if content_part.get("type") != "text":
+        return None
+
+    text = content_part.get("text")
+
+    if isinstance(text, str):
+        return text
+    else:
+        return None
