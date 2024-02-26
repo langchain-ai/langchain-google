@@ -68,14 +68,12 @@ async def test_vertexai_agenerate(model_name: str) -> None:
     sync_generation = cast(ChatGeneration, sync_response.generations[0][0])
     async_generation = cast(ChatGeneration, response.generations[0][0])
 
-    # assert some properties to make debugging easier
-
-    # xfail: this is not equivalent with temp=0 right now
-    # assert sync_generation.message.content == async_generation.message.content
-    assert sync_generation.generation_info == async_generation.generation_info
-
-    # xfail: content is not same right now
-    # assert sync_generation == async_generation
+    usage_metadata = sync_generation.generation_info["usage_metadata"]  # type: ignore
+    assert int(usage_metadata["prompt_token_count"]) > 0
+    assert int(usage_metadata["candidates_token_count"]) > 0
+    usage_metadata = async_generation.generation_info["usage_metadata"]  # type: ignore
+    assert int(usage_metadata["prompt_token_count"]) > 0
+    assert int(usage_metadata["candidates_token_count"]) > 0
 
 
 @pytest.mark.parametrize("model_name", ["chat-bison@001", "gemini-pro"])
@@ -85,6 +83,14 @@ def test_vertexai_stream(model_name: str) -> None:
 
     sync_response = model.stream([message])
     for chunk in sync_response:
+        assert isinstance(chunk, AIMessageChunk)
+
+
+async def test_vertexai_astream() -> None:
+    model = ChatVertexAI(temperature=0, model_name="gemini-pro")
+    message = HumanMessage(content="Hello")
+
+    async for chunk in model.astream([message]):
         assert isinstance(chunk, AIMessageChunk)
 
 

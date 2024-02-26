@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Type, Union
+from typing import Any, Dict, List, Type, Union
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
@@ -8,10 +8,12 @@ from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import FunctionDescription
 from langchain_core.utils.json_schema import dereference_refs
-from vertexai.preview.generative_models import (  # type: ignore
+from vertexai.generative_models import (  # type: ignore
     FunctionDeclaration,
 )
-from vertexai.preview.generative_models import Tool as VertexTool
+from vertexai.generative_models import (
+    Tool as VertexTool,
+)
 
 
 def _format_pydantic_to_vertex_function(
@@ -23,17 +25,7 @@ def _format_pydantic_to_vertex_function(
     return {
         "name": schema["title"],
         "description": schema.get("description", ""),
-        "parameters": {
-            "properties": {
-                k: {
-                    "type": v["type"],
-                    "description": v.get("description"),
-                }
-                for k, v in schema["properties"].items()
-            },
-            "required": schema["required"],
-            "type": schema["type"],
-        },
+        "parameters": _get_parameters_from_schema(schema=schema),
     }
 
 
@@ -46,17 +38,7 @@ def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
         return {
             "name": tool.name or schema["title"],
             "description": tool.description or schema["description"],
-            "parameters": {
-                "properties": {
-                    k: {
-                        "type": v["type"],
-                        "description": v.get("description"),
-                    }
-                    for k, v in schema["properties"].items()
-                },
-                "required": schema["required"],
-                "type": schema["type"],
-            },
+            "parameters": _get_parameters_from_schema(schema=schema),
         }
     else:
         return {
@@ -85,6 +67,37 @@ def _format_tools_to_vertex_tool(
         function_declarations.append(FunctionDeclaration(**func))
 
     return [VertexTool(function_declarations=function_declarations)]
+
+
+def _get_parameters_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Given a schema, format the parameters key to match VertexAI
+    expected input.
+
+    Args:
+        schema: Dictionary that must have the following keys.
+
+    Returns:
+        Dictionary with the formatted parameters.
+    """
+
+    parameters = {}
+
+    parameters["type"] = schema["type"]
+
+    if "required" in schema:
+        parameters["required"] = schema["required"]
+
+    schema_properties: Dict[str, Any] = schema.get("properties", {})
+
+    parameters["properties"] = {
+        parameter_name: {
+            "type": parameter_dict["type"],
+            "description": parameter_dict.get("description"),
+        }
+        for parameter_name, parameter_dict in schema_properties.items()
+    }
+
+    return parameters
 
 
 class PydanticFunctionsOutputParser(BaseOutputParser):

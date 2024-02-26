@@ -55,6 +55,9 @@ def test_vertex_generate(model_name: str) -> None:
     output = llm.generate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
+    usage_metadata = output.generations[0][0].generation_info["usage_metadata"]  # type: ignore
+    assert int(usage_metadata["prompt_token_count"]) == 3
+    assert int(usage_metadata["candidates_token_count"]) > 0
 
 
 @pytest.mark.xfail(reason="VertexAI doesn't always respect number of candidates")
@@ -73,12 +76,18 @@ def test_vertex_generate_code() -> None:
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     assert len(output.generations[0]) == 2
+    usage_metadata = output.generations[0][0].generation_info["usage_metadata"]  # type: ignore
+    assert int(usage_metadata["prompt_token_count"]) == 3
+    assert int(usage_metadata["candidates_token_count"]) > 1
 
 
 async def test_vertex_agenerate() -> None:
     llm = VertexAI(temperature=0)
     output = await llm.agenerate(["Please say foo:"])
     assert isinstance(output, LLMResult)
+    usage_metadata = output.generations[0][0].generation_info["usage_metadata"]  # type: ignore
+    assert int(usage_metadata["prompt_token_count"]) == 4
+    assert int(usage_metadata["candidates_token_count"]) > 0
 
 
 @pytest.mark.parametrize(
@@ -102,6 +111,12 @@ async def test_vertex_consistency() -> None:
     async_output = await llm.agenerate(["Please say foo:"])
     assert output.generations[0][0].text == streaming_output.generations[0][0].text
     assert output.generations[0][0].text == async_output.generations[0][0].text
+
+
+async def test_astream() -> None:
+    llm = VertexAI(temperature=0, model_name="gemini-pro")
+    async for token in llm.astream("I'm Pickle Rick"):
+        assert isinstance(token, str)
 
 
 @pytest.mark.skip("CI testing not set up")

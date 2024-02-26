@@ -6,17 +6,13 @@ all: help
 # Define a variable for the test file path.
 TEST_FILE ?= tests/unit_tests/
 
-test:
-	poetry run pytest $(TEST_FILE)
+integration_test integration_tests: TEST_FILE = tests/integration_tests/
 
-tests:
+test tests integration_test integration_tests:
 	poetry run pytest $(TEST_FILE)
 
 check_imports: $(shell find langchain_google_genai -name '*.py')
 	poetry run python ./scripts/check_imports.py $^
-
-integration_tests:
-	poetry run pytest tests/integration_tests
 
 ######################
 # LINTING AND FORMATTING

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor
-from typing import Any, ClassVar, Dict, Iterator, List, Optional, Union
+from typing import Any, AsyncIterator, ClassVar, Dict, Iterator, List, Optional, Union
 
 import vertexai  # type: ignore[import-untyped]
 from google.api_core.client_options import ClientOptions
@@ -19,16 +19,17 @@ from langchain_core.callbacks.manager import (
 from langchain_core.language_models.llms import BaseLLM
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from vertexai.generative_models import (  # type: ignore[import-untyped]
+    Candidate,
+    GenerativeModel,
+    Image,
+)
 from vertexai.language_models import (  # type: ignore[import-untyped]
     CodeGenerationModel,
     TextGenerationModel,
 )
 from vertexai.language_models._language_models import (  # type: ignore[import-untyped]
     TextGenerationResponse,
-)
-from vertexai.preview.generative_models import (  # type: ignore[import-untyped]
-    GenerativeModel,
-    Image,
 )
 from vertexai.preview.language_models import (  # type: ignore[import-untyped]
     ChatModel as PreviewChatModel,
@@ -94,6 +95,7 @@ async def _acompletion_with_retry(
     llm: VertexAI,
     prompt: str,
     is_gemini: bool = False,
+    stream: bool = False,
     run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
     **kwargs: Any,
 ) -> Any:
@@ -104,17 +106,22 @@ async def _acompletion_with_retry(
 
     @retry_decorator
     async def _acompletion_with_retry_inner(
-        prompt: str, is_gemini: bool = False, **kwargs: Any
+        prompt: str, is_gemini: bool = False, stream: bool = False, **kwargs: Any
     ) -> Any:
         if is_gemini:
             return await llm.client.generate_content_async(
                 prompt,
                 generation_config=kwargs,
+                stream=stream,
                 safety_settings=kwargs.pop("safety_settings", None),
             )
+        if stream:
+            raise ValueError("Async streaming is supported only for Gemini family!")
         return await llm.client.predict_async(prompt, **kwargs)
 
-    return await _acompletion_with_retry_inner(prompt, is_gemini, **kwargs)
+    return await _acompletion_with_retry_inner(
+        prompt, is_gemini, stream=stream, **kwargs
+    )
 
 
 class _VertexAIBase(BaseModel):
@@ -327,12 +334,19 @@ class VertexAI(_VertexAICommon, BaseLLM):
             raise ValueError("Only one candidate can be generated with streaming!")
         return values
 
-    def _response_to_generation(
-        self, response: TextGenerationResponse, *, stream: bool = False
+    def _candidate_to_generation(
+        self,
+        response: Union[Candidate, TextGenerationResponse],
+        *,
+        stream: bool = False,
+        usage_metadata: Optional[Dict] = None,
     ) -> GenerationChunk:
         """Converts a stream response to a generation chunk."""
         generation_info = get_generation_info(
-            response, self._is_gemini_model, stream=stream
+            response,
+            self._is_gemini_model,
+            stream=stream,
+            usage_metadata=usage_metadata,
         )
         try:
             text = response.text
@@ -373,8 +387,15 @@ class VertexAI(_VertexAICommon, BaseLLM):
                     run_manager=run_manager,
                     **params,
                 )
+                if self._is_gemini_model:
+                    usage_metadata = res.to_dict().get("usage_metadata")
+                else:
+                    usage_metadata = res.raw_prediction_response.metadata
                 generations.append(
-                    [self._response_to_generation(r) for r in res.candidates]
+                    [
+                        self._candidate_to_generation(r, usage_metadata=usage_metadata)
+                        for r in res.candidates
+                    ]
                 )
         return LLMResult(generations=generations)
 
@@ -395,8 +416,15 @@ class VertexAI(_VertexAICommon, BaseLLM):
                 run_manager=run_manager,
                 **params,
             )
+            if self._is_gemini_model:
+                usage_metadata = res.to_dict().get("usage_metadata")
+            else:
+                usage_metadata = res.raw_prediction_response.metadata
             generations.append(
-                [self._response_to_generation(r) for r in res.candidates]
+                [
+                    self._candidate_to_generation(r, usage_metadata=usage_metadata)
+                    for r in res.candidates
+                ]
             )
         return LLMResult(generations=generations)
 
@@ -416,20 +444,47 @@ class VertexAI(_VertexAICommon, BaseLLM):
             run_manager=run_manager,
             **params,
         ):
-            # Gemini models return GenerationResponse even when streaming, which has a
-            # candidates field.
-            stream_resp = (
-                stream_resp
-                if isinstance(stream_resp, TextGenerationResponse)
-                else stream_resp.candidates[0]
+            usage_metadata = None
+            if self._is_gemini_model:
+                usage_metadata = stream_resp.to_dict().get("usage_metadata")
+                stream_resp = stream_resp.candidates[0]
+            chunk = self._candidate_to_generation(
+                stream_resp, stream=True, usage_metadata=usage_metadata
             )
-            chunk = self._response_to_generation(stream_resp, stream=True)
             yield chunk
             if run_manager:
                 run_manager.on_llm_new_token(
                     chunk.text,
                     chunk=chunk,
                     verbose=self.verbose,
+                )
+
+    async def _astream(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[GenerationChunk]:
+        params = self._prepare_params(stop=stop, stream=True, **kwargs)
+        if not self._is_gemini_model:
+            raise ValueError("Async streaming is supported only for Gemini family!")
+        async for chunk in await _acompletion_with_retry(
+            self,
+            prompt,
+            stream=True,
+            is_gemini=self._is_gemini_model,
+            run_manager=run_manager,
+            **params,
+        ):
+            usage_metadata = chunk.to_dict().get("usage_metadata")
+            chunk = self._candidate_to_generation(
+                chunk.candidates[0], stream=True, usage_metadata=usage_metadata
+            )
+            yield chunk
+            if run_manager:
+                await run_manager.on_llm_new_token(
+                    chunk.text, chunk=chunk, verbose=self.verbose
                 )
 
 
