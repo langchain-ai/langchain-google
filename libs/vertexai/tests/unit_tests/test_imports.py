@@ -16,6 +16,11 @@ EXPECTED_ALL = [
     "PydanticFunctionsOutputParser",
     "create_structured_runnable",
     "VectorSearchVectorStore",
+    "VertexAIImageCaptioning",
+    "VertexAIImageCaptioningChat",
+    "VertexAIImageEditorChat",
+    "VertexAIImageGeneratorChat",
+    "VertexAIVisualQnAChat",
 ]
 
 
