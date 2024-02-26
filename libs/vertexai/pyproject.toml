@@ -46,6 +46,7 @@ optional = true
 [tool.poetry.group.test_integration.dependencies]
 numexpr = { version = "^2.8.8", python = ">=3.9,<4.0" }
 google-api-python-client = "^2.114.0"
+google-cloud-datastore = "^2.19.0"
 
 [tool.poetry.group.lint]
 optional = true
