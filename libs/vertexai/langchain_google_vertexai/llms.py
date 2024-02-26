@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor
-from typing import Any, ClassVar, Dict, Iterator, List, Optional, Union
+from typing import Any, AsyncIterator, ClassVar, Dict, Iterator, List, Optional, Union
 
 import vertexai  # type: ignore[import-untyped]
 from google.api_core.client_options import ClientOptions
@@ -95,6 +95,7 @@ async def _acompletion_with_retry(
     llm: VertexAI,
     prompt: str,
     is_gemini: bool = False,
+    stream: bool = False,
     run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
     **kwargs: Any,
 ) -> Any:
@@ -105,17 +106,22 @@ async def _acompletion_with_retry(
 
     @retry_decorator
     async def _acompletion_with_retry_inner(
-        prompt: str, is_gemini: bool = False, **kwargs: Any
+        prompt: str, is_gemini: bool = False, stream: bool = False, **kwargs: Any
     ) -> Any:
         if is_gemini:
             return await llm.client.generate_content_async(
                 prompt,
                 generation_config=kwargs,
+                stream=stream,
                 safety_settings=kwargs.pop("safety_settings", None),
             )
+        if stream:
+            raise ValueError("Async streaming is supported only for Gemini family!")
         return await llm.client.predict_async(prompt, **kwargs)
 
-    return await _acompletion_with_retry_inner(prompt, is_gemini, **kwargs)
+    return await _acompletion_with_retry_inner(
+        prompt, is_gemini, stream=stream, **kwargs
+    )
 
 
 class _VertexAIBase(BaseModel):
@@ -451,6 +457,34 @@ class VertexAI(_VertexAICommon, BaseLLM):
                     chunk.text,
                     chunk=chunk,
                     verbose=self.verbose,
+                )
+
+    async def _astream(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[GenerationChunk]:
+        params = self._prepare_params(stop=stop, stream=True, **kwargs)
+        if not self._is_gemini_model:
+            raise ValueError("Async streaming is supported only for Gemini family!")
+        async for chunk in await _acompletion_with_retry(
+            self,
+            prompt,
+            stream=True,
+            is_gemini=self._is_gemini_model,
+            run_manager=run_manager,
+            **params,
+        ):
+            usage_metadata = chunk.to_dict().get("usage_metadata")
+            chunk = self._candidate_to_generation(
+                chunk.candidates[0], stream=True, usage_metadata=usage_metadata
+            )
+            yield chunk
+            if run_manager:
+                await run_manager.on_llm_new_token(
+                    chunk.text, chunk=chunk, verbose=self.verbose
                 )
 
 

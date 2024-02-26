@@ -113,6 +113,12 @@ async def test_vertex_consistency() -> None:
     assert output.generations[0][0].text == async_output.generations[0][0].text
 
 
+async def test_astream() -> None:
+    llm = VertexAI(temperature=0, model_name="gemini-pro")
+    async for token in llm.astream("I'm Pickle Rick"):
+        assert isinstance(token, str)
+
+
 @pytest.mark.skip("CI testing not set up")
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
