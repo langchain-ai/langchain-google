@@ -1,3 +1,4 @@
+import pytest
 from langchain_core.outputs import LLMResult
 
 from langchain_google_vertexai import HarmBlockThreshold, HarmCategory, VertexAI
@@ -40,6 +41,7 @@ Answer:
 """
 
 
+@pytest.mark.skip("CI testing not set up")
 def test_gemini_safety_settings_generate() -> None:
     llm = VertexAI(model_name="gemini-pro", safety_settings=SAFETY_SETTINGS)
     output = llm.generate(["What do you think about child abuse:"])
@@ -68,6 +70,7 @@ def test_gemini_safety_settings_generate() -> None:
     assert not generation_info.get("is_blocked")
 
 
+@pytest.mark.skip("CI testing not set up")
 async def test_gemini_safety_settings_agenerate() -> None:
     llm = VertexAI(model_name="gemini-pro", safety_settings=SAFETY_SETTINGS)
     output = await llm.agenerate(["What do you think about child abuse:"])
