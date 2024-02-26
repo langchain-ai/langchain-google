@@ -22,7 +22,6 @@ from vertexai.language_models import (  # type: ignore
 )
 
 from langchain_google_vertexai._base import _VertexAICommon
-from langchain_google_vertexai._utils import get_user_agent
 
 logger = logging.getLogger(__name__)
 

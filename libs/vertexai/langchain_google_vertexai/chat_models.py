@@ -58,7 +58,6 @@ from langchain_google_vertexai._base import (
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import (
     get_generation_info,
-    get_user_agent,
     is_codey_model,
     is_gemini_model,
 )
