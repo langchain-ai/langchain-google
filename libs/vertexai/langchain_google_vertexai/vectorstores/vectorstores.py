@@ -196,7 +196,9 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         # TODO: Change to vertexai embbedingss
 
-        from langchain_community.embeddings import TensorflowHubEmbeddings
+        from langchain_community.embeddings import (
+            TensorflowHubEmbeddings,  # type: ignore[import-not-found, unused-ignore]
+        )
 
         return TensorflowHubEmbeddings()
 
