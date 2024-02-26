@@ -22,6 +22,7 @@ from vertexai.language_models import (  # type: ignore
 )
 
 from langchain_google_vertexai._base import _VertexAICommon
+from langchain_google_vertexai._utils import get_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "textembedding-gecko@001"
             )
             values["model_name"] = "textembedding-gecko@001"
+        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")
+        with tool_context_manager(user_agent):
             values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
         return values
 

@@ -5,10 +5,13 @@ from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
 )
+from google.cloud.aiplatform.telemetry import tool_context_manager
 from google.oauth2.service_account import Credentials  # type: ignore
 
 if TYPE_CHECKING:
     from google.cloud import datastore  # type: ignore[attr-defined]
+
+from langchain_google_vertexai._utils import get_client_info, get_user_agent
 
 
 class VectorSearchSDKManager:
@@ -60,7 +63,11 @@ class VectorSearchSDKManager:
         Returns:
             Google Cloud Storage Agent.
         """
-        return storage.Client(project=self._project_id, credentials=self._credentials)
+        return storage.Client(
+            project=self._project_id,
+            credentials=self._credentials,
+            client_info=get_client_info(module="vertex-ai-matching-engine"),
+        )
 
     def get_gcs_bucket(self, bucket_name: str) -> storage.Bucket:
         """Retrieves a Google Cloud Bucket by bucket name.
@@ -79,12 +86,14 @@ class VectorSearchSDKManager:
         Returns:
             MatchingEngineIndex instance.
         """
-        return MatchingEngineIndex(
-            index_name=index_id,
-            project=self._project_id,
-            location=self._region,
-            credentials=self._credentials,
-        )
+        _, user_agent = get_user_agent("vertex-ai-matching-engine")
+        with tool_context_manager(user_agent):
+            return MatchingEngineIndex(
+                index_name=index_id,
+                project=self._project_id,
+                location=self._region,
+                credentials=self._credentials,
+            )
 
     def get_endpoint(self, endpoint_id: str) -> MatchingEngineIndexEndpoint:
         """Retrieves a MatchingEngineIndexEndpoint (VectorSearchIndexEndpoint) by id.
@@ -93,24 +102,29 @@ class VectorSearchSDKManager:
         Returns:
             MatchingEngineIndexEndpoint instance.
         """
-        return MatchingEngineIndexEndpoint(
-            index_endpoint_name=endpoint_id,
-            project=self._project_id,
-            location=self._region,
-            credentials=self._credentials,
-        )
+        _, user_agent = get_user_agent("vertex-ai-matching-engine")
+        with tool_context_manager(user_agent):
+            return MatchingEngineIndexEndpoint(
+                index_endpoint_name=endpoint_id,
+                project=self._project_id,
+                location=self._region,
+                credentials=self._credentials,
+            )
 
     def get_datastore_client(self, **kwargs: Any) -> "datastore.Client":
         """Gets a datastore Client.
         Args:
-            **kwargs: Keyword arguments to pass to datatastore.Client constructor.
+            **kwargs: Keyword arguments to pass to datastore.Client constructor.
         Returns:
             datastore Client.
         """
         from google.cloud import datastore  # type: ignore[attr-defined]
 
         ds_client = datastore.Client(
-            project=self._project_id, credentials=self._credentials, **kwargs
+            project=self._project_id,
+            credentials=self._credentials,
+            client_info=get_client_info(module="vertex-ai-matching-engine"),
+            **kwargs,
         )
 
         return ds_client
