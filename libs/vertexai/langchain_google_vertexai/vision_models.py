@@ -273,26 +273,44 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
         return answers
     
 class _BaseVertexAIImageGenerator(BaseModel):
-    """ """
+    """ Base class form generation and edition of images. 
+    """
 
     model_name: str = Field(default="imagegeneration@005")
+    """Name of the base model"""
     negative_prompt: str | None = Field(default=None)
+    """A description of what you want to omit in
+        the generated images"""
     number_of_images: int = Field(default=1)
+    """Number of images to generate"""
     guidance_scale: float | None = Field(default=None)
+    """Controls the stregth of the prompt"""
     language: str | None = Field(default=None)
+    """Language of the text prompt for the image Supported values are "en" for English, 
+    "hi" for Hindi, "ja" for Japanese, "ko" for Korean, and "auto" for automatic 
+    language detection"""
     seed: int | None = Field(default=None)
+    """Random seed for the image generation"""
     project: str | None = Field(default=None)
-
+    """Google cloud project id"""
+    
     def _generate_images(self, prompt: str) -> List[str]:
-        """
+        """ Generates images given a prompt.
+
+        Args:
+            prompt: Description of what the image should look like.
+
+        Returns:
+            List of b64 encoded strings.
         """
         
         model = ImageGenerationModel.from_pretrained(self.model_name)
-
+        model.generate_images()
         generation_result = model.generate_images(
             prompt=prompt,
             negative_prompt=self.negative_prompt,
             number_of_images=self.number_of_images,
+            language=self.language,
             guidance_scale=self.guidance_scale,
             seed=self.seed
         )
@@ -304,6 +322,15 @@ class _BaseVertexAIImageGenerator(BaseModel):
         return image_str_list 
     
     def _edit_images(self, image_str: str, prompt: str) -> List[str]:
+        """ Edit an image given a image and a prompt.
+
+        Args:
+            image_str: String representation of the image.
+            prompt: Description of what the image should look like.
+
+        Returns:
+            List of b64 encoded strings.
+        """
 
         model = ImageGenerationModel.from_pretrained(self.model_name)
 
@@ -316,6 +343,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
             base_image=image,
             negative_prompt=self.negative_prompt,
             number_of_images=self.number_of_images,
+            language=self.language,
             guidance_scale=self.guidance_scale,
             seed=self.seed
         )
@@ -327,7 +355,13 @@ class _BaseVertexAIImageGenerator(BaseModel):
         return image_str_list 
 
     def _to_b64_string(self, image: GeneratedImage) -> str:
-        """
+        """ Transforms a generated image into a b64 encoded string.
+
+        Args:
+            image: Image to convert.
+
+        Returns:
+            b64 encoded string of the image.
         """
 
         # This is a hack because at the moment, GeneratedImage doesn't provide

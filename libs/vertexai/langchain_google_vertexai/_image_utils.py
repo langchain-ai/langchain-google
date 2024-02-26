@@ -207,10 +207,13 @@ def create_image_content_part(image_str: str) -> Dict:
 
 
 def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
-    """
+    """ Parses an image string from a dictionary with the correct format.
 
     Args:
-        content_part
+        content_part: String or dictionary.
+
+    Returns:
+        Image string if the dictionary has the correct format otherwise None.
     """
 
     if isinstance(content_part, str):
@@ -227,10 +230,14 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
         return None
 
 def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
-    """
+    """ Parses an string from a dictionary or string with the correct format.
 
     Args:
-        content_part
+        content_part:  String or dictionary.
+
+    Returns:
+        String if the dictionary has the correct format or the input is an string, 
+        otherwise None.
     """
     
     if isinstance(content_part, str):
