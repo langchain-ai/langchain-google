@@ -9,9 +9,19 @@ from langchain_core.outputs import ChatResult, LLMResult
 from langchain_core.outputs.chat_generation import ChatGeneration
 from langchain_core.outputs.generation import Generation
 from langchain_core.pydantic_v1 import BaseModel, Field
+from vertexai.preview.vision_models import (  # type: ignore[import-untyped]
+    GeneratedImage,
+    ImageGenerationModel,
+)
 from vertexai.vision_models import Image, ImageTextModel  # type: ignore[import-untyped]
 
-from langchain_google_vertexai._image_utils import ImageBytesLoader
+from langchain_google_vertexai._image_utils import (
+    ImageBytesLoader,
+    create_image_content_part,
+    get_image_str_from_content_part,
+    get_text_str_from_content_part,
+    image_bytes_to_b64_string,
+)
 
 
 class _BaseImageTextModel(BaseModel):
@@ -40,20 +50,14 @@ class _BaseImageTextModel(BaseModel):
             Image is successful otherwise None.
         """
 
-        if isinstance(message_part, str):
+        image_str = get_image_str_from_content_part(message_part)
+
+        if isinstance(image_str, str):
+            loader = ImageBytesLoader(project=self.project)
+            image_bytes = loader.load_bytes(image_str)
+            return Image(image_bytes=image_bytes)
+        else:
             return None
-
-        if message_part.get("type") != "image_url":
-            return None
-
-        image_str = message_part.get("image_url", {}).get("url")
-
-        if not isinstance(image_str, str):
-            return None
-
-        loader = ImageBytesLoader(project=self.project)
-        image_bytes = loader.load_bytes(image_str)
-        return Image(image_bytes=image_bytes)
 
     def _get_text_from_message_part(self, message_part: str | Dict) -> str | None:
         """Given a message part obtain a text if the part represents it.
@@ -64,19 +68,7 @@ class _BaseImageTextModel(BaseModel):
         Returns:
             str is successful otherwise None.
         """
-
-        if isinstance(message_part, str):
-            return message_part
-
-        if message_part.get("type") != "text":
-            return None
-
-        message_text = message_part.get("text")
-
-        if not isinstance(message_text, str):
-            return None
-
-        return message_text
+        return get_text_str_from_content_part(message_part)
 
     @property
     def _llm_type(self) -> str:
@@ -279,3 +271,168 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
             image=image, question=query, number_of_results=self.number_of_results
         )
         return answers
+    
+class _BaseVertexAIImageGenerator(BaseModel):
+    """ """
+
+    model_name: str = Field(default="imagegeneration@005")
+    negative_prompt: str | None = Field(default=None)
+    number_of_images: int = Field(default=1)
+    guidance_scale: float | None = Field(default=None)
+    language: str | None = Field(default=None)
+    seed: int | None = Field(default=None)
+    project: str | None = Field(default=None)
+
+    def _generate_images(self, prompt: str) -> List[str]:
+        """
+        """
+        
+        model = ImageGenerationModel.from_pretrained(self.model_name)
+
+        generation_result = model.generate_images(
+            prompt=prompt,
+            negative_prompt=self.negative_prompt,
+            number_of_images=self.number_of_images,
+            guidance_scale=self.guidance_scale,
+            seed=self.seed
+        )
+
+        image_str_list = [
+            self._to_b64_string(image) for image in generation_result.images
+        ]
+
+        return image_str_list 
+    
+    def _edit_images(self, image_str: str, prompt: str) -> List[str]:
+
+        model = ImageGenerationModel.from_pretrained(self.model_name)
+
+        image_loader = ImageBytesLoader(project=self.project)
+        image_bytes = image_loader.load_bytes(image_str)
+        image = Image(image_bytes=image_bytes)
+
+        generation_result = model.edit_image(
+            prompt=prompt,
+            base_image=image,
+            negative_prompt=self.negative_prompt,
+            number_of_images=self.number_of_images,
+            guidance_scale=self.guidance_scale,
+            seed=self.seed
+        )
+
+        image_str_list = [
+            self._to_b64_string(image) for image in generation_result.images
+        ]
+
+        return image_str_list 
+
+    def _to_b64_string(self, image: GeneratedImage) -> str:
+        """
+        """
+
+        # This is a hack because at the moment, GeneratedImage doesn't provide
+        # a way to get the bytes of the image (or anything else). There is
+        # only private methods that are not reliable.
+
+        from tempfile import NamedTemporaryFile
+
+        temp_file = NamedTemporaryFile()
+        image.save(temp_file.name, include_generation_parameters=False)
+        temp_file.seek(0)
+        image_bytes = temp_file.read()
+        temp_file.close()
+
+        return image_bytes_to_b64_string(image_bytes=image_bytes)
+    
+
+    @property
+    def _llm_type(self) -> str:
+        """Returns the type of LLM"""
+        return "vertexai-vision"
+    
+class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
+    """
+    """
+
+    def _generate(
+        self, 
+        messages: List[BaseMessage], 
+        stop: List[str] | None = None, 
+        run_manager: CallbackManagerForLLMRun | None = None, 
+        **kwargs: Any
+    ) -> ChatResult:
+        """
+        """
+
+        # Only one message allowed with one text part.
+        user_query = None
+        is_valid = (
+            len(messages) == 1
+            and len(messages[0].content) == 1
+        )
+        if is_valid:
+            user_query = get_text_str_from_content_part(messages[0].content[0])
+        if user_query is None:
+            raise ValueError(
+                "Only one message wiht one text part allowed for image generation"
+                " Must The prompt of the image"
+            )
+        
+        image_str_list = self._generate_images(prompt=user_query)
+        image_content_part_list = [
+            create_image_content_part(image_str=image_str)
+            for image_str in image_str_list
+        ] 
+
+        generations = [
+            ChatGeneration(message=AIMessage(content=[content_part])) 
+            for content_part in image_content_part_list
+        ]
+
+        return ChatResult(generations=generations)
+    
+class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
+    """
+    """
+
+    def _generate(
+        self, 
+        messages: List[BaseMessage], 
+        stop: List[str] | None = None, 
+        run_manager: CallbackManagerForLLMRun | None = None, 
+        **kwargs: Any
+    ) -> ChatResult:
+        """
+        """
+
+        # Only one message allowed with two parts: the image and the text.
+        user_query = None
+        is_valid = (
+            len(messages) == 1
+            and len(messages[0].content) == 2
+        )
+        if is_valid:
+            image_str = get_image_str_from_content_part(messages[0].content[0])
+            user_query = get_text_str_from_content_part(messages[0].content[1])
+        if (user_query is None) or (image_str is None):
+            raise ValueError(
+                "Only one message allowed for image edition. The message must have"
+                "two parts: First the image and then the user prompt."
+            )
+        
+        image_str_list = self._edit_images(image_str=image_str, prompt=user_query)
+        image_content_part_list = [
+            create_image_content_part(image_str=image_str)
+            for image_str in image_str_list
+        ] 
+
+        generations = [
+            ChatGeneration(message=AIMessage(content=[content_part])) 
+            for content_part in image_content_part_list
+        ]
+
+        return ChatResult(generations=generations)
+        
+        
+
+        
