@@ -48,7 +48,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "textembedding-gecko@001"
             )
             values["model_name"] = "textembedding-gecko@001"
-        with tool_context_manager(get_user_agent("vertex-ai-embeddings")):
             values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
         return values
 
@@ -173,7 +172,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             embeddings = self.client.get_embeddings(requests)
             return [embs.values for embs in embeddings]
 
-        return _completion_with_retry(texts)
+        with tool_context_manager(self._user_agent):
+            return _completion_with_retry(texts)
 
     def _prepare_and_validate_batches(
         self, texts: List[str], embeddings_type: Optional[str] = None

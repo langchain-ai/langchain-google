@@ -66,7 +66,7 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
         module (Optional[str]):
             Optional. The module for a custom user agent header.
     Returns:
-        google.api_core.gapic_v1.client_info.ClientInfo
+        Tuple[str, str]
     """
     try:
         langchain_version = metadata.version("langchain")
@@ -95,7 +95,7 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
 
 
 def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
-    """Loads im Image from GCS."""
+    """Loads an Image from GCS."""
     gcs_client = storage.Client(project=project)
     pieces = path.split("/")
     blobs = list(gcs_client.list_blobs(pieces[2], prefix="/".join(pieces[3:])))

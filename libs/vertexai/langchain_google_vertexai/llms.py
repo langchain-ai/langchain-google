@@ -91,7 +91,8 @@ def _completion_with_retry(
                 return llm.client.predict_streaming(prompt[0], **kwargs)
             return llm.client.predict(prompt[0], **kwargs)
 
-    return _completion_with_retry_inner(prompt, is_gemini, **kwargs)
+    with tool_context_manager(llm._user_agent):
+        return _completion_with_retry_inner(prompt, is_gemini, **kwargs)
 
 
 async def _acompletion_with_retry(
@@ -122,9 +123,10 @@ async def _acompletion_with_retry(
             raise ValueError("Async streaming is supported only for Gemini family!")
         return await llm.client.predict_async(prompt, **kwargs)
 
-    return await _acompletion_with_retry_inner(
-        prompt, is_gemini, stream=stream, **kwargs
-    )
+    with tool_context_manager(llm._user_agent):
+        return await _acompletion_with_retry_inner(
+            prompt, is_gemini, stream=stream, **kwargs
+        )
 
 
 class _VertexAIBase(BaseModel):
@@ -232,6 +234,12 @@ class _VertexAICommon(_VertexAIBase):
                 )
         return updated_params
 
+    @property
+    def _user_agent(self) -> str:
+        """Gets the User Agent."""
+        _, user_agent = get_user_agent(f"{type(self).__name__}_{self.model_name}")
+        return user_agent
+
     @classmethod
     def _init_vertexai(cls, values: Dict) -> None:
         vertexai.init(
@@ -316,25 +324,22 @@ class VertexAI(_VertexAICommon, BaseLLM):
             model_cls = TextGenerationModel
             preview_model_cls = PreviewTextGenerationModel
 
-        with tool_context_manager(get_user_agent("vertex-ai-llm")):
-            if tuned_model_name:
-                values["client"] = model_cls.get_tuned_model(tuned_model_name)
-                values["client_preview"] = preview_model_cls.get_tuned_model(
-                    tuned_model_name
+        if tuned_model_name:
+            values["client"] = model_cls.get_tuned_model(tuned_model_name)
+            values["client_preview"] = preview_model_cls.get_tuned_model(
+                tuned_model_name
+            )
+        else:
+            if is_gemini:
+                values["client"] = model_cls(
+                    model_name=model_name, safety_settings=safety_settings
+                )
+                values["client_preview"] = preview_model_cls(
+                    model_name=model_name, safety_settings=safety_settings
                 )
             else:
-                if is_gemini:
-                    values["client"] = model_cls(
-                        model_name=model_name, safety_settings=safety_settings
-                    )
-                    values["client_preview"] = preview_model_cls(
-                        model_name=model_name, safety_settings=safety_settings
-                    )
-                else:
-                    values["client"] = model_cls.from_pretrained(model_name)
-                    values["client_preview"] = preview_model_cls.from_pretrained(
-                        model_name
-                    )
+                values["client"] = model_cls.from_pretrained(model_name)
+                values["client_preview"] = preview_model_cls.from_pretrained(model_name)
 
         if values["streaming"] and values["n"] > 1:
             raise ValueError("Only one candidate can be generated with streaming!")
