@@ -10,11 +10,12 @@ from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union, ca
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
 from google.cloud.aiplatform_v1beta1.types.tool import FunctionCall
+from google.cloud.aiplatform.telemetry import tool_context_manager
+
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from google.cloud.aiplatform.telemetry import tool_context_manager
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     generate_from_stream,

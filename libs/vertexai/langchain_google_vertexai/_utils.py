@@ -3,7 +3,7 @@
 import dataclasses
 import re
 from importlib import metadata
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import google.api_core
 import proto  # type: ignore[import-untyped]
