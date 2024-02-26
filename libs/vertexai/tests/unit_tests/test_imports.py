@@ -6,6 +6,8 @@ EXPECTED_ALL = [
     "GemmaChatVertexAIModelGarden",
     "GemmaLocalKaggle",
     "GemmaChatLocalKaggle",
+    "GemmaChatLocalHF",
+    "GemmaLocalHF",
     "VertexAIEmbeddings",
     "VertexAI",
     "VertexAIModelGarden",

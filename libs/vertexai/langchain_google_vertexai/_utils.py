@@ -1,8 +1,9 @@
 """Utilities to init Vertex AI."""
 
 import dataclasses
+import re
 from importlib import metadata
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import google.api_core
 import proto  # type: ignore[import-untyped]
@@ -162,3 +163,8 @@ def get_generation_info(
         info.pop("is_blocked")
 
     return info
+
+
+def enforce_stop_tokens(text: str, stop: List[str]) -> str:
+    """Cut off the text as soon as any stop words occur."""
+    return re.split("|".join(stop), text, maxsplit=1)[0]
