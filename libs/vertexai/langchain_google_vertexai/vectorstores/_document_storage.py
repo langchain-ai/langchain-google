@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, List, Optional
 from google.cloud import storage  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
-    from google.cloud import datastore  # type: ignore[attr-defined]
+    from google.cloud import datastore
 
 
 class DocumentStorage(ABC):
