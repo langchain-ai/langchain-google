@@ -13,7 +13,6 @@ from langchain_google_vertexai._image_utils import (
 
 
 def test_get_text_str_from_content_part():
-
     content_part = "This is a text"
     result = get_text_str_from_content_part(content_part)
     assert result == content_part
@@ -30,8 +29,8 @@ def test_get_text_str_from_content_part():
     result = get_text_str_from_content_part(content_part_dict)
     assert result is None
 
+
 def test_get_image_str_from_content_part():
-        
     content_part = "This is a text"
     result = get_image_str_from_content_part(content_part)
     assert result is None
@@ -48,8 +47,8 @@ def test_get_image_str_from_content_part():
     result = get_image_str_from_content_part(content_part_dict)
     assert result is None
 
-def test_create_content_parts():
 
+def test_create_content_parts():
     message_str = "This is a message str"
     text_content_part = create_text_content_part(message_str)
     result = get_text_str_from_content_part(text_content_part)
@@ -59,6 +58,7 @@ def test_create_content_parts():
     text_content_part = create_image_content_part(message_str)
     result = get_image_str_from_content_part(text_content_part)
     assert message_str == result
+
 
 def test_image_bytes_loader():
     loader = ImageBytesLoader()

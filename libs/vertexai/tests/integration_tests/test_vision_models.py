@@ -4,6 +4,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_google_vertexai.vision_models import (
     VertexAIImageCaptioning,
     VertexAIImageCaptioningChat,
+    VertexAIImageEditorChat,
+    VertexAIImageGeneratorChat,
     VertexAIVisualQnAChat,
 )
 
@@ -108,6 +110,23 @@ def test_vertex_ai_visual_qna_chat(base64_image: str):
                 HumanMessage(content="And the eyes?"),
             ]
         )
+
+
+def test_vertex_ai_image_generation_and_edition():
+    generator = VertexAIImageGeneratorChat()
+
+    messages = [HumanMessage(content=["Generate a dog reading the newspaper"])]
+    response = generator.invoke(messages)
+    assert isinstance(response, AIMessage)
+
+    generated_image = response.content[0]
+
+    editor = VertexAIImageEditorChat()
+
+    messages = [HumanMessage(content=[generated_image, "Change the dog for a cat"])]
+
+    response = editor.invoke(messages)
+    assert isinstance(response, AIMessage)
 
 
 @pytest.fixture

@@ -171,7 +171,7 @@ def image_bytes_to_b64_string(
 
 
 def create_text_content_part(message_str: str) -> Dict:
-    """ Create a dictonary that can be part of a message content list.
+    """Create a dictionary that can be part of a message content list.
 
     Args:
         message_str: Message as an string.
@@ -179,14 +179,11 @@ def create_text_content_part(message_str: str) -> Dict:
     Returns:
         Dictionary that can be part of a message content list.
     """
-    return {
-        "type": "text",
-        "text": message_str
-    }
+    return {"type": "text", "text": message_str}
 
 
 def create_image_content_part(image_str: str) -> Dict:
-    """ Create a dictonary that can be part of a message content list.
+    """Create a dictionary that can be part of a message content list.
 
     Args:
         image_str: Can be either:
@@ -198,16 +195,11 @@ def create_image_content_part(image_str: str) -> Dict:
     Returns:
         Dictionary that can be part of a message content list.
     """
-    return {
-        "type": "image_url",
-        "image_url": {
-            "url": image_str
-        }
-    }
+    return {"type": "image_url", "image_url": {"url": image_str}}
 
 
 def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
-    """ Parses an image string from a dictionary with the correct format.
+    """Parses an image string from a dictionary with the correct format.
 
     Args:
         content_part: String or dictionary.
@@ -221,7 +213,7 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
 
     if content_part.get("type") != "image_url":
         return None
-    
+
     image_str = content_part.get("image_url", {}).get("url")
 
     if isinstance(image_str, str):
@@ -229,27 +221,27 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
     else:
         return None
 
+
 def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
-    """ Parses an string from a dictionary or string with the correct format.
+    """Parses an string from a dictionary or string with the correct format.
 
     Args:
         content_part:  String or dictionary.
 
     Returns:
-        String if the dictionary has the correct format or the input is an string, 
+        String if the dictionary has the correct format or the input is an string,
         otherwise None.
     """
-    
+
     if isinstance(content_part, str):
         return content_part
-    
+
     if content_part.get("type") != "text":
         return None
-    
+
     text = content_part.get("text")
 
     if isinstance(text, str):
         return text
     else:
         return None
-

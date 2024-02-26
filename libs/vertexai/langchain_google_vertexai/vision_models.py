@@ -271,12 +271,12 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
             image=image, question=query, number_of_results=self.number_of_results
         )
         return answers
-    
-class _BaseVertexAIImageGenerator(BaseModel):
-    """ Base class form generation and edition of images. 
-    """
 
-    model_name: str = Field(default="imagegeneration@005")
+
+class _BaseVertexAIImageGenerator(BaseModel):
+    """Base class form generation and edition of images."""
+
+    model_name: str = Field(default="imagegeneration@002")
     """Name of the base model"""
     negative_prompt: str | None = Field(default=None)
     """A description of what you want to omit in
@@ -284,7 +284,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
     number_of_images: int = Field(default=1)
     """Number of images to generate"""
     guidance_scale: float | None = Field(default=None)
-    """Controls the stregth of the prompt"""
+    """Controls the strength of the prompt"""
     language: str | None = Field(default=None)
     """Language of the text prompt for the image Supported values are "en" for English, 
     "hi" for Hindi, "ja" for Japanese, "ko" for Korean, and "auto" for automatic 
@@ -293,9 +293,9 @@ class _BaseVertexAIImageGenerator(BaseModel):
     """Random seed for the image generation"""
     project: str | None = Field(default=None)
     """Google cloud project id"""
-    
+
     def _generate_images(self, prompt: str) -> List[str]:
-        """ Generates images given a prompt.
+        """Generates images given a prompt.
 
         Args:
             prompt: Description of what the image should look like.
@@ -303,26 +303,26 @@ class _BaseVertexAIImageGenerator(BaseModel):
         Returns:
             List of b64 encoded strings.
         """
-        
+
         model = ImageGenerationModel.from_pretrained(self.model_name)
-        model.generate_images()
+
         generation_result = model.generate_images(
             prompt=prompt,
             negative_prompt=self.negative_prompt,
             number_of_images=self.number_of_images,
             language=self.language,
             guidance_scale=self.guidance_scale,
-            seed=self.seed
+            seed=self.seed,
         )
 
         image_str_list = [
             self._to_b64_string(image) for image in generation_result.images
         ]
 
-        return image_str_list 
-    
+        return image_str_list
+
     def _edit_images(self, image_str: str, prompt: str) -> List[str]:
-        """ Edit an image given a image and a prompt.
+        """Edit an image given a image and a prompt.
 
         Args:
             image_str: String representation of the image.
@@ -345,17 +345,17 @@ class _BaseVertexAIImageGenerator(BaseModel):
             number_of_images=self.number_of_images,
             language=self.language,
             guidance_scale=self.guidance_scale,
-            seed=self.seed
+            seed=self.seed,
         )
 
         image_str_list = [
             self._to_b64_string(image) for image in generation_result.images
         ]
 
-        return image_str_list 
+        return image_str_list
 
     def _to_b64_string(self, image: GeneratedImage) -> str:
-        """ Transforms a generated image into a b64 encoded string.
+        """Transforms a generated image into a b64 encoded string.
 
         Args:
             image: Image to convert.
@@ -377,74 +377,78 @@ class _BaseVertexAIImageGenerator(BaseModel):
         temp_file.close()
 
         return image_bytes_to_b64_string(image_bytes=image_bytes)
-    
 
     @property
     def _llm_type(self) -> str:
         """Returns the type of LLM"""
         return "vertexai-vision"
-    
+
+
 class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
-    """
-    """
+    """Generates an image from a prompt."""
 
     def _generate(
-        self, 
-        messages: List[BaseMessage], 
-        stop: List[str] | None = None, 
-        run_manager: CallbackManagerForLLMRun | None = None, 
-        **kwargs: Any
+        self,
+        messages: List[BaseMessage],
+        stop: List[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
     ) -> ChatResult:
         """
+        Args:
+            messages: The message must be a list of only one element with one part:
+                The user prompt.
         """
 
         # Only one message allowed with one text part.
         user_query = None
-        is_valid = (
-            len(messages) == 1
-            and len(messages[0].content) == 1
-        )
+        is_valid = len(messages) == 1 and len(messages[0].content) == 1
         if is_valid:
             user_query = get_text_str_from_content_part(messages[0].content[0])
         if user_query is None:
             raise ValueError(
-                "Only one message wiht one text part allowed for image generation"
+                "Only one message with one text part allowed for image generation"
                 " Must The prompt of the image"
             )
-        
+
         image_str_list = self._generate_images(prompt=user_query)
         image_content_part_list = [
             create_image_content_part(image_str=image_str)
             for image_str in image_str_list
-        ] 
+        ]
 
         generations = [
-            ChatGeneration(message=AIMessage(content=[content_part])) 
+            ChatGeneration(message=AIMessage(content=[content_part]))
             for content_part in image_content_part_list
         ]
 
         return ChatResult(generations=generations)
-    
+
+
 class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
-    """
+    """Given an image and a prompt, edits the image.
+    Currently only supports mask free editing.
     """
 
     def _generate(
-        self, 
-        messages: List[BaseMessage], 
-        stop: List[str] | None = None, 
-        run_manager: CallbackManagerForLLMRun | None = None, 
-        **kwargs: Any
+        self,
+        messages: List[BaseMessage],
+        stop: List[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
     ) -> ChatResult:
         """
+        Args:
+            messages: The message must be a list of only one element with two part:
+                - The image as a dict {
+                    'type': 'image_url', 'image_url': {'url': <message_str>}
+                    }
+                - The user prompt.
         """
 
         # Only one message allowed with two parts: the image and the text.
         user_query = None
-        is_valid = (
-            len(messages) == 1
-            and len(messages[0].content) == 2
-        )
+        is_valid = len(messages) == 1 and len(messages[0].content) == 2
         if is_valid:
             image_str = get_image_str_from_content_part(messages[0].content[0])
             user_query = get_text_str_from_content_part(messages[0].content[1])
@@ -453,20 +457,16 @@ class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
                 "Only one message allowed for image edition. The message must have"
                 "two parts: First the image and then the user prompt."
             )
-        
+
         image_str_list = self._edit_images(image_str=image_str, prompt=user_query)
         image_content_part_list = [
             create_image_content_part(image_str=image_str)
             for image_str in image_str_list
-        ] 
+        ]
 
         generations = [
-            ChatGeneration(message=AIMessage(content=[content_part])) 
+            ChatGeneration(message=AIMessage(content=[content_part]))
             for content_part in image_content_part_list
         ]
 
         return ChatResult(generations=generations)
-        
-        
-
-        
