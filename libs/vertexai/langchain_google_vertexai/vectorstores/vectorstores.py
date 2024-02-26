@@ -202,11 +202,11 @@ class _BaseVertexAIVectorStore(VectorStore):
         )
 
         # TODO: Change to vertexai embbedingss
-        from langchain_community import (
-            embeddings,  # type: ignore[import-not-found, unused-ignore]
+        from langchain_community.embeddings import (  # type: ignore[import-not-found, unused-ignore]
+            TensorflowHubEmbeddings,
         )
 
-        return embeddings.TensorflowHubEmbeddings()
+        return TensorflowHubEmbeddings()
 
     def _generate_unique_ids(self, number: int) -> List[str]:
         """Generates a list of unique ids of length `number`
