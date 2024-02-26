@@ -37,6 +37,7 @@ def test_get_image_str_from_content_part():
 
     content_part_dict = {"type": "image_url", "image_url": {"url": "img_url"}}
     result = get_image_str_from_content_part(content_part_dict)
+    assert isinstance(content_part_dict["image_url"], dict)
     assert result == content_part_dict["image_url"]["url"]
 
     content_part_dict = {"type": "image", "text": "This is a text"}
