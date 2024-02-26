@@ -1,4 +1,5 @@
 import uuid
+import warnings
 from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Tuple, Type, Union
 
 from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
@@ -193,6 +194,15 @@ class _BaseVertexAIVectorStore(VectorStore):
         Returns:
             Default TensorflowHubEmbeddings to use.
         """
+
+        warnings.warn(
+            message=(
+                "`TensorflowHubEmbeddings` as a default embbedings is deprecated."
+                " Will change to `VertexAIEmbbedings`. Please specify the embbeding "
+                "type in the constructor."
+            ),
+            category=DeprecationWarning,
+        )
 
         # TODO: Change to vertexai embbedingss
 
