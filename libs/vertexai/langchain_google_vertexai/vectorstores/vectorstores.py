@@ -195,7 +195,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         warnings.warn(
             message=(
                 "`TensorflowHubEmbeddings` as a default embbedings is deprecated."
-                " Will change to `VertexAIEmbbedings`. Please specify the embbeding "
+                " Will change to `VertexAIEmbbedings`. Please specify the embedding "
                 "type in the constructor."
             ),
             category=DeprecationWarning,
