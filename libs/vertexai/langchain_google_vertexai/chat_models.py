@@ -49,6 +49,9 @@ from vertexai.preview.language_models import (
     CodeChatModel as PreviewCodeChatModel,
 )
 
+from langchain_google_vertexai._base import (
+    _VertexAICommon,
+)
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import (
     get_generation_info,
@@ -57,9 +60,6 @@ from langchain_google_vertexai._utils import (
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tools_to_vertex_tool,
-)
-from langchain_google_vertexai.llms import (
-    _VertexAICommon,
 )
 
 logger = logging.getLogger(__name__)

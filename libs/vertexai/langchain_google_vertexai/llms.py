@@ -44,6 +44,12 @@ from vertexai.preview.language_models import (
     TextGenerationModel as PreviewTextGenerationModel,
 )
 
+from langchain_google_vertexai._base import (
+    _PALM_DEFAULT_MAX_OUTPUT_TOKENS,
+    _PALM_DEFAULT_TEMPERATURE,
+    _PALM_DEFAULT_TOP_K,
+    _PALM_DEFAULT_TOP_P,
+)
 from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
@@ -52,11 +58,6 @@ from langchain_google_vertexai._utils import (
     is_codey_model,
     is_gemini_model,
 )
-
-_PALM_DEFAULT_MAX_OUTPUT_TOKENS = TextGenerationModel._DEFAULT_MAX_OUTPUT_TOKENS
-_PALM_DEFAULT_TEMPERATURE = 0.0
-_PALM_DEFAULT_TOP_P = 0.95
-_PALM_DEFAULT_TOP_K = 40
 
 
 def _completion_with_retry(

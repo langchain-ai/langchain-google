@@ -2,6 +2,10 @@ from langchain_google_vertexai import __all__
 
 EXPECTED_ALL = [
     "ChatVertexAI",
+    "GemmaVertexAIModelGarden",
+    "GemmaChatVertexAIModelGarden",
+    "GemmaLocalKaggle",
+    "GemmaChatLocalKaggle",
     "VertexAIEmbeddings",
     "VertexAI",
     "VertexAIModelGarden",
