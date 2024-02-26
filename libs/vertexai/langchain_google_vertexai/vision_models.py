@@ -284,7 +284,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
     number_of_images: int = Field(default=1)
     """Number of images to generate"""
     guidance_scale: Union[float, None] = Field(default=None)
-    """Controls the stregth of the prompt"""
+    """Controls the strength of the prompt"""
     language: Union[str, None] = Field(default=None)
     """Language of the text prompt for the image Supported values are "en" for English, 
     "hi" for Hindi, "ja" for Japanese, "ko" for Korean, and "auto" for automatic 
@@ -407,7 +407,7 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             user_query = get_text_str_from_content_part(messages[0].content[0])
         if user_query is None:
             raise ValueError(
-                "Only one message wiht one text part allowed for image generation"
+                "Only one message with one text part allowed for image generation"
                 " Must The prompt of the image"
             )
 
