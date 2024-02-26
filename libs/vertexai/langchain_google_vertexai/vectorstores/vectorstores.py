@@ -1,6 +1,6 @@
 import uuid
 import warnings
-from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Iterable, List, Optional, Tuple, Type, Union
 
 from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
     Namespace,
@@ -18,9 +18,6 @@ from langchain_google_vertexai.vectorstores._searcher import (
     PublicEndpointVectorSearchSearcher,
     Searcher,
 )
-
-if TYPE_CHECKING:
-    from langchain_community.embeddings import TensorflowHubEmbeddings
 
 
 class _BaseVertexAIVectorStore(VectorStore):
@@ -189,7 +186,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         )
 
     @classmethod
-    def _get_default_embeddings(cls) -> "TensorflowHubEmbeddings":
+    def _get_default_embeddings(cls) -> Embeddings:
         """This function returns the default embedding.
         Returns:
             Default TensorflowHubEmbeddings to use.
@@ -205,12 +202,9 @@ class _BaseVertexAIVectorStore(VectorStore):
         )
 
         # TODO: Change to vertexai embbedingss
+        from langchain_community import embeddings  # type: ignore[import-not-found]
 
-        from langchain_community.embeddings import (
-            TensorflowHubEmbeddings,  # type: ignore
-        )
-
-        return TensorflowHubEmbeddings()
+        return embeddings.TensorflowHubEmbeddings()
 
     def _generate_unique_ids(self, number: int) -> List[str]:
         """Generates a list of unique ids of length `number`
