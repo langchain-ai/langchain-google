@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, BaseLLM
@@ -33,7 +33,7 @@ class _BaseImageTextModel(BaseModel):
     """Number of results to return from one query"""
     language: str = Field(default="en")
     """Language of the query"""
-    project: str = Field(default=None)
+    project: Union[str, None] = Field(default=None)
     """Google cloud project"""
 
     def _create_model(self) -> ImageTextModel:
@@ -278,20 +278,20 @@ class _BaseVertexAIImageGenerator(BaseModel):
 
     model_name: str = Field(default="imagegeneration@002")
     """Name of the base model"""
-    negative_prompt: str | None = Field(default=None)
+    negative_prompt: Union[str, None] = Field(default=None)
     """A description of what you want to omit in
         the generated images"""
     number_of_images: int = Field(default=1)
     """Number of images to generate"""
-    guidance_scale: float | None = Field(default=None)
-    """Controls the strength of the prompt"""
-    language: str | None = Field(default=None)
+    guidance_scale: Union[float, None] = Field(default=None)
+    """Controls the stregth of the prompt"""
+    language: Union[str, None] = Field(default=None)
     """Language of the text prompt for the image Supported values are "en" for English, 
     "hi" for Hindi, "ja" for Japanese, "ko" for Korean, and "auto" for automatic 
     language detection"""
-    seed: int | None = Field(default=None)
+    seed: Union[int, None] = Field(default=None)
     """Random seed for the image generation"""
-    project: str | None = Field(default=None)
+    project: Union[str, None] = Field(default=None)
     """Google cloud project id"""
 
     def _generate_images(self, prompt: str) -> List[str]:
@@ -407,7 +407,7 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             user_query = get_text_str_from_content_part(messages[0].content[0])
         if user_query is None:
             raise ValueError(
-                "Only one message with one text part allowed for image generation"
+                "Only one message wiht one text part allowed for image generation"
                 " Must The prompt of the image"
             )
 
