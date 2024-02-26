@@ -15,7 +15,6 @@ from langchain_google_vertexai import (
 
 
 @pytest.mark.skip("CI testing not set up")
-@pytest.mark.skip("CI testing not set up")
 def test_gemma_model_garden() -> None:
     """In order to run this test, you should provide endpoint names.
 

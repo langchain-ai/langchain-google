@@ -6,6 +6,8 @@ EXPECTED_ALL = [
     "GemmaChatVertexAIModelGarden",
     "GemmaLocalKaggle",
     "GemmaChatLocalKaggle",
+    "GemmaChatLocalHF",
+    "GemmaLocalHF",
     "VertexAIEmbeddings",
     "VertexAI",
     "VertexAIModelGarden",
@@ -13,6 +15,7 @@ EXPECTED_ALL = [
     "HarmCategory",
     "PydanticFunctionsOutputParser",
     "create_structured_runnable",
+    "VectorSearchVectorStore",
 ]
 
 
