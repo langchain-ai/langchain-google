@@ -48,7 +48,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "textembedding-gecko@001"
             )
             values["model_name"] = "textembedding-gecko@001"
-        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")
+        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")  # type: ignore
         with tool_context_manager(user_agent):
             values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
         return values
@@ -83,9 +83,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["task_executor"] = ThreadPoolExecutor(
             max_workers=request_parallelism
         )
-        self.instance[
-            "embeddings_task_type_supported"
-        ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+        self.instance["embeddings_task_type_supported"] = (
+            not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+        )
 
     @staticmethod
     def _split_by_punctuation(text: str) -> List[str]:
