@@ -197,7 +197,7 @@ class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):
         """Run the LLM on the given prompt and input."""
         params = {"max_length": self.max_tokens} if self.max_tokens else {}
         results = self.client.generate(prompts, **params)
-        results = results if isinstance(results, str) else [results]
+        results = [results] if isinstance(results, str) else results
         if stop:
             results = [enforce_stop_tokens(text, stop) for text in results]
         return LLMResult(generations=[[Generation(text=result)] for result in results])
@@ -268,7 +268,7 @@ class _GemmaLocalHFBase(_GemmaBase):
         params = {"max_length": self.max_tokens}
         return {k: v for k, v in params.items() if v is not None}
 
-    def _run(self, prompt: str, kwargs: Any) -> str:
+    def _run(self, prompt: str, **kwargs: Any) -> str:
         inputs = self.tokenizer(prompt, return_tensors="pt")
         generate_ids = self.client.generate(inputs.input_ids, **kwargs)
         return self.tokenizer.batch_decode(
