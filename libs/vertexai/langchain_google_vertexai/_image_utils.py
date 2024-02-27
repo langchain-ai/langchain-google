@@ -46,7 +46,7 @@ class ImageBytesLoader:
         """
 
         if image_string.startswith("gs://"):
-            return self._bytes_from_gsc(image_string)
+            return self._bytes_from_gcs(image_string)
 
         if image_string.startswith("data:image/"):
             return self._bytes_from_b64(image_string)
@@ -115,8 +115,8 @@ class ImageBytesLoader:
 
         return response.content
 
-    def _bytes_from_gsc(self, gcs_uri: str) -> bytes:
-        """Gets image bytes from a google cloud storage uri.
+    def _bytes_from_gcs(self, gcs_uri: str) -> bytes:
+        """Gets image bytes from a Google Cloud Storage uri.
 
         Args:
             gcs_uri: Valid gcs uri.
@@ -129,15 +129,7 @@ class ImageBytesLoader:
         """
 
         gcs_client = storage.Client(project=self._project)
-
-        pieces = gcs_uri.split("/")
-
-        blobs = list(gcs_client.list_blobs(pieces[2], prefix="/".join(pieces[3:])))
-
-        if len(blobs) > 1:
-            raise ValueError(f"Found more than one candidate for {gcs_uri}!")
-
-        return blobs[0].download_as_bytes()
+        return storage.Blob.from_string(gcs_uri, gcs_client).download_as_bytes()
 
     def _is_url(self, url_string: str) -> bool:
         """Checks if a url is valid.
