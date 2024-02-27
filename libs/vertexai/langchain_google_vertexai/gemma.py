@@ -59,13 +59,11 @@ def _parse_gemma_chat_response(response: str) -> str:
     pos = response.rfind(pattern)
     if pos == -1:
         return response
-    else:
-        text = response[(pos + len(pattern)) :]
-        pos = text.find("<start_of_turn>user\n")
-        if pos > 0:
-            return text[:pos]
-        else:
-            return text
+    text = response[(pos + len(pattern)) :]
+    pos = text.find("<start_of_turn>user\n")
+    if pos > 0:
+        return text[:pos]
+    return text
 
 
 class _GemmaBase(BaseModel):
@@ -159,10 +157,10 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
         """Top Level call"""
         request = self._get_params(**kwargs)
         request["prompt"] = gemma_messages_to_prompt(messages)
-        text = await self.async_client.predict(
+        output = await self.async_client.predict(
             endpoint=self.endpoint_path, instances=[request]
         )
-        text = _parse_gemma_chat_response(text)
+        text = output.predictions[0]
         if self.parse_response or kwargs.get("parse_response"):
             text = _parse_gemma_chat_response(text)
         if stop:
