@@ -8,11 +8,13 @@ import pytest
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
 
 
+@pytest.mark.release
 def test_initialization() -> None:
     """Test embedding model initialization."""
     VertexAIEmbeddings()
 
 
+@pytest.mark.release
 def test_langchain_google_vertexai_embedding_documents() -> None:
     documents = ["foo bar"]
     model = VertexAIEmbeddings()
@@ -23,6 +25,7 @@ def test_langchain_google_vertexai_embedding_documents() -> None:
     assert model.model_name == "textembedding-gecko@001"
 
 
+@pytest.mark.release
 def test_langchain_google_vertexai_embedding_query() -> None:
     document = "foo bar"
     model = VertexAIEmbeddings()
@@ -30,6 +33,7 @@ def test_langchain_google_vertexai_embedding_query() -> None:
     assert len(output) == 768
 
 
+@pytest.mark.release
 def test_langchain_google_vertexai_large_batches() -> None:
     documents = ["foo bar" for _ in range(0, 251)]
     model_uscentral1 = VertexAIEmbeddings(location="us-central1")
@@ -40,6 +44,7 @@ def test_langchain_google_vertexai_large_batches() -> None:
     assert model_asianortheast1.instance["batch_size"] < 50
 
 
+@pytest.mark.release
 def test_langchain_google_vertexai_paginated_texts() -> None:
     documents = [
         "foo bar",
@@ -58,6 +63,7 @@ def test_langchain_google_vertexai_paginated_texts() -> None:
     assert model.model_name == model.client._model_id
 
 
+@pytest.mark.release
 def test_warning(caplog: pytest.LogCaptureFixture) -> None:
     _ = VertexAIEmbeddings()
     assert len(caplog.records) == 1
