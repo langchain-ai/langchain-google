@@ -14,7 +14,7 @@ from langchain_google_vertexai import (
 )
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.extended
 def test_gemma_model_garden() -> None:
     """In order to run this test, you should provide endpoint names.
 
@@ -36,7 +36,7 @@ def test_gemma_model_garden() -> None:
     assert llm._llm_type == "gemma_vertexai_model_garden"
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.extended
 def test_gemma_chat_model_garden() -> None:
     """In order to run this test, you should provide endpoint names.
 
@@ -67,7 +67,7 @@ def test_gemma_chat_model_garden() -> None:
     assert len(output.content) > 2
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.gpu
 def test_gemma_kaggle() -> None:
     llm = GemmaLocalKaggle(model_name="gemma_2b_en")
     output = llm.invoke("What is the meaning of life?")
@@ -76,7 +76,7 @@ def test_gemma_kaggle() -> None:
     assert len(output) > 2
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.gpu
 def test_gemma_chat_kaggle() -> None:
     llm = GemmaChatLocalKaggle(model_name="gemma_2b_en")
     text_question1, text_answer1 = "How much is 2+2?", "4"
