@@ -74,3 +74,9 @@ def test_warning(caplog: pytest.LogCaptureFixture) -> None:
         "Feb-01-2024. Currently the default is set to textembedding-gecko@001"
     )
     assert record.message == expected_message
+
+
+def test_langchain_google_vertexai_image_embeddings(tmp_image) -> None:
+    model = VertexAIEmbeddings(model_name="multimodalembedding")
+    output = model.embed_image(tmp_image)
+    assert len(output) == 1408
