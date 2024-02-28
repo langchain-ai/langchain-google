@@ -11,12 +11,7 @@ _GPU_FLAG = "gpu"
 _LONG_FLAG = "long"
 _EXTENDED_FLAG = "extended"
 
-_PYTEST_FLAGS = [
-    _RELEASE_FLAG,
-    _GPU_FLAG,
-    _LONG_FLAG,
-    _EXTENDED_FLAG
-]
+_PYTEST_FLAGS = [_RELEASE_FLAG, _GPU_FLAG, _LONG_FLAG, _EXTENDED_FLAG]
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -31,10 +26,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     """
     for flag in _PYTEST_FLAGS:
         parser.addoption(
-            f"--{flag}",
-            action="store_true",
-            default=False,
-            help=f"run {flag} tests"
+            f"--{flag}", action="store_true", default=False, help=f"run {flag} tests"
         )
 
 
@@ -49,14 +41,12 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     for flag in _PYTEST_FLAGS:
         config.addinivalue_line(
-            "markers",
-            f"{flag}: mark test to run as {flag} only test"
+            "markers", f"{flag}: mark test to run as {flag} only test"
         )
 
 
 def pytest_collection_modifyitems(
-    config: pytest.Config,
-    items: List[pytest.Item]
+    config: pytest.Config, items: List[pytest.Item]
 ) -> None:
     """
     Skip tests with a marker from our list that were not explicitly invoked.
