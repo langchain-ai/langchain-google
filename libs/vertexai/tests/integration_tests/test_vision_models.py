@@ -10,6 +10,7 @@ from langchain_google_vertexai.vision_models import (
 )
 
 
+@pytest.mark.release
 def test_vertex_ai_image_captioning_chat(base64_image: str):
     # This should work
     model = VertexAIImageCaptioningChat()
@@ -43,12 +44,14 @@ def test_vertex_ai_image_captioning_chat(base64_image: str):
         )
 
 
+@pytest.mark.release
 def test_vertex_ai_image_captioning(base64_image: str):
     model = VertexAIImageCaptioning()
     response = model.invoke(base64_image)
     assert isinstance(response, str)
 
 
+@pytest.mark.release
 def test_vertex_ai_visual_qna_chat(base64_image: str):
     model = VertexAIVisualQnAChat()
 
@@ -112,6 +115,7 @@ def test_vertex_ai_visual_qna_chat(base64_image: str):
         )
 
 
+@pytest.mark.release
 def test_vertex_ai_image_generation_and_edition():
     generator = VertexAIImageGeneratorChat()
 
