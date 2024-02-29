@@ -2,7 +2,7 @@ import base64
 
 import pytest
 from _pytest.tmpdir import TempPathFactory
-from vertexai.vision_models import Image
+from vertexai.vision_models import Image  # type: ignore
 
 
 @pytest.fixture
