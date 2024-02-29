@@ -53,7 +53,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             values["model_name"] = "textembedding-gecko@001"
         if cls._is_multimodal_model(values["model_name"]):
             values["client"] = MultiModalEmbeddingModel.from_pretrained(
-                values["model_name"])
+                values["model_name"]
+            )
         else:
             values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
         return values

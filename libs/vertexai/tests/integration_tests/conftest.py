@@ -32,7 +32,7 @@ def base64_image() -> str:
 
 @pytest.fixture
 def tmp_image(tmp_path_factory: TempPathFactory, base64_image) -> str:
-    img_data = base64.b64decode(base64_image.split(',')[1])
+    img_data = base64.b64decode(base64_image.split(",")[1])
     image = Image(image_bytes=img_data)
     fn = tmp_path_factory.mktemp("data") / "img.png"
     image.save(str(fn))
