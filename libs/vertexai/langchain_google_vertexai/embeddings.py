@@ -3,6 +3,7 @@ import re
 import string
 import threading
 from concurrent.futures import ThreadPoolExecutor, wait
+from enum import Enum, auto
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 from google.api_core.exceptions import (
@@ -34,6 +35,19 @@ _MAX_BATCH_SIZE = 250
 _MIN_BATCH_SIZE = 5
 
 
+class GoogleEmbeddingModelType(str, Enum):
+    TEXT = auto()
+    MULTIMODAL = auto()
+
+    @classmethod
+    def _missing_(cls, value: Any) -> Optional["GoogleEmbeddingModelType"]:
+        if "textembedding-gecko" in value.lower():
+            return GoogleEmbeddingModelType.TEXT
+        elif "multimodalembedding" in value.lower():
+            return GoogleEmbeddingModelType.MULTIMODAL
+        return None
+
+
 class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     """Google Cloud VertexAI embedding models."""
 
@@ -51,7 +65,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "textembedding-gecko@001"
             )
             values["model_name"] = "textembedding-gecko@001"
-        if cls._is_multimodal_model(values["model_name"]):
+        if (
+            GoogleEmbeddingModelType(values["model_name"])
+            == GoogleEmbeddingModelType.MULTIMODAL
+        ):
             values["client"] = MultiModalEmbeddingModel.from_pretrained(
                 values["model_name"]
             )
@@ -92,6 +109,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance[
             "embeddings_task_type_supported"
         ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+
         retry_errors: List[Type[BaseException]] = [
             ResourceExhausted,
             ServiceUnavailable,
@@ -101,6 +119,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["retry_decorator"] = create_base_retry_decorator(
             error_types=retry_errors, max_retries=self.max_retries
         )
+
+    @property
+    def model_type(self) -> str:
+        return GoogleEmbeddingModelType(self.model_name)
 
     @staticmethod
     def _split_by_punctuation(text: str) -> List[str]:
@@ -340,7 +362,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
-        if self._is_multimodal_model(self.model_name):
+        if self.model_type != GoogleEmbeddingModelType.TEXT:
             raise NotImplementedError("Not supported for multimodal models")
         return self.embed(texts, batch_size, "RETRIEVAL_DOCUMENT")
 
@@ -353,7 +375,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             Embedding for the text.
         """
-        if self._is_multimodal_model(self.model_name):
+        if self.model_type != GoogleEmbeddingModelType.TEXT:
             raise NotImplementedError("Not supported for multimodal models")
         embeddings = self.embed([text], 1, "RETRIEVAL_QUERY")
         return embeddings[0]
@@ -368,23 +390,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             Embedding for the image.
         """
-        if not self._is_multimodal_model(self.model_name):
+        if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
 
         embed_with_retry = self.instance["retry_decorator"](self.client.get_embeddings)
         image = Image.load_from_file(image_path)
         result: MultiModalEmbeddingResponse = embed_with_retry(image=image)
         return result.image_embedding
-
-    @staticmethod
-    def _is_multimodal_model(model_name: str) -> bool:
-        """
-        Check if the embeddings model is multimodal or not.
-
-        Args:
-            model_name: The embeddings model name.
-
-        Returns:
-            A boolean, True if the model is multimodal.
-        """
-        return "multimodalembedding" in model_name

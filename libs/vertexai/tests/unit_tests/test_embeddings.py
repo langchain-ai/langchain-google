@@ -4,10 +4,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from langchain_google_vertexai import VertexAIEmbeddings
+from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
 
 
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
     mock_embeddings = MockVertexAIEmbeddings("textembedding-gecko@001")
+    assert mock_embeddings.model_type == GoogleEmbeddingModelType.TEXT
     with pytest.raises(NotImplementedError) as e:
         mock_embeddings.embed_image("test")
         assert e.value == "Only supported for multimodal models"
@@ -15,6 +17,7 @@ def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
 
 def test_langchain_google_vertexai_embed_documents_text_only() -> None:
     mock_embeddings = MockVertexAIEmbeddings("multimodalembedding@001")
+    assert mock_embeddings.model_type == GoogleEmbeddingModelType.MULTIMODAL
     with pytest.raises(NotImplementedError) as e:
         mock_embeddings.embed_documents(["test"])
         assert e.value == "Not supported for multimodal models"
@@ -22,6 +25,7 @@ def test_langchain_google_vertexai_embed_documents_text_only() -> None:
 
 def test_langchain_google_vertexai_embed_query_text_only() -> None:
     mock_embeddings = MockVertexAIEmbeddings("multimodalembedding@001")
+    assert mock_embeddings.model_type == GoogleEmbeddingModelType.MULTIMODAL
     with pytest.raises(NotImplementedError) as e:
         mock_embeddings.embed_query("test")
         assert e.value == "Not supported for multimodal models"
