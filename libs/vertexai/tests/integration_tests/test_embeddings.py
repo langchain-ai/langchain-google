@@ -4,8 +4,13 @@ Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 """
 import pytest
+from vertexai.language_models import TextEmbeddingModel  # type: ignore
+from vertexai.vision_models import MultiModalEmbeddingModel  # type: ignore
 
-from langchain_google_vertexai.embeddings import VertexAIEmbeddings
+from langchain_google_vertexai.embeddings import (
+    GoogleEmbeddingModelType,
+    VertexAIEmbeddings,
+)
 
 
 @pytest.mark.release
@@ -74,3 +79,24 @@ def test_warning(caplog: pytest.LogCaptureFixture) -> None:
         "Feb-01-2024. Currently the default is set to textembedding-gecko@001"
     )
     assert record.message == expected_message
+
+
+@pytest.mark.release
+def test_langchain_google_vertexai_image_embeddings(tmp_image) -> None:
+    model = VertexAIEmbeddings(model_name="multimodalembedding")
+    output = model.embed_image(tmp_image)
+    assert len(output) == 1408
+
+
+@pytest.mark.release
+def test_langchain_google_vertexai_text_model() -> None:
+    embeddings_model = VertexAIEmbeddings(model_name="textembedding-gecko@001")
+    assert isinstance(embeddings_model.client, TextEmbeddingModel)
+    assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
+
+
+@pytest.mark.release
+def test_langchain_google_vertexai_multimodal_model() -> None:
+    embeddings_model = VertexAIEmbeddings(model_name="multimodalembedding@001")
+    assert isinstance(embeddings_model.client, MultiModalEmbeddingModel)
+    assert embeddings_model.model_type == GoogleEmbeddingModelType.MULTIMODAL
