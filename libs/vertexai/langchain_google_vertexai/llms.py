@@ -10,7 +10,7 @@ from google.cloud.aiplatform.gapic import (
     PredictionServiceClient,
 )
 from google.cloud.aiplatform.models import Prediction
-from google.cloud.aiplatform.telemetry import tool_context_manager
+from google.cloud.aiplatform import telemetry
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.callbacks.manager import (
@@ -91,7 +91,7 @@ def _completion_with_retry(
                 return llm.client.predict_streaming(prompt[0], **kwargs)
             return llm.client.predict(prompt[0], **kwargs)
 
-    with tool_context_manager(llm._user_agent):
+    with telemetry.tool_context_manager(llm._user_agent):
         return _completion_with_retry_inner(prompt, is_gemini, **kwargs)
 
 
@@ -123,7 +123,7 @@ async def _acompletion_with_retry(
             raise ValueError("Async streaming is supported only for Gemini family!")
         return await llm.client.predict_async(prompt, **kwargs)
 
-    with tool_context_manager(llm._user_agent):
+    with telemetry.tool_context_manager(llm._user_agent):
         return await _acompletion_with_retry_inner(
             prompt, is_gemini, stream=stream, **kwargs
         )

@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union, ca
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
 from google.cloud.aiplatform_v1beta1.types.tool import FunctionCall
-from google.cloud.aiplatform.telemetry import tool_context_manager
+from google.cloud.aiplatform import telemetry
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
@@ -337,7 +337,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Raises:
             ValueError: if the last message in the list is not from human.
         """
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             should_stream = stream if stream is not None else self.streaming
             safety_settings = kwargs.pop("safety_settings", None)
             if should_stream:
@@ -426,7 +426,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             kwargs.pop("stream")
             logger.warning("ChatVertexAI does not currently support async streaming.")
 
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             params = self._prepare_params(stop=stop, **kwargs)
             safety_settings = kwargs.pop("safety_settings", None)
             msg_params = {}
@@ -489,7 +489,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             params = self._prepare_params(stop=stop, stream=True, **kwargs)
             if self._is_gemini_model:
                 history_gemini = _parse_chat_history_gemini(
@@ -554,7 +554,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self._is_gemini_model:
             raise NotImplementedError()
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             params = self._prepare_params(stop=stop, stream=True, **kwargs)
             history_gemini = _parse_chat_history_gemini(
                 messages,

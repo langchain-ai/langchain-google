@@ -5,7 +5,7 @@ from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
 )
-from google.cloud.aiplatform.telemetry import tool_context_manager
+from google.cloud.aiplatform import telemetry
 from google.oauth2.service_account import Credentials  # type: ignore
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ class VectorSearchSDKManager:
             MatchingEngineIndex instance.
         """
         _, user_agent = get_user_agent("vertex-ai-matching-engine")
-        with tool_context_manager(user_agent):
+        with telemetry.tool_context_manager(user_agent):
             return MatchingEngineIndex(
                 index_name=index_id,
                 project=self._project_id,
@@ -103,7 +103,7 @@ class VectorSearchSDKManager:
             MatchingEngineIndexEndpoint instance.
         """
         _, user_agent = get_user_agent("vertex-ai-matching-engine")
-        with tool_context_manager(user_agent):
+        with telemetry.tool_context_manager(user_agent):
             return MatchingEngineIndexEndpoint(
                 index_endpoint_name=endpoint_id,
                 project=self._project_id,

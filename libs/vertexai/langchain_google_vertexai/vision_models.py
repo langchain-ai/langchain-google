@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Union
 
-from google.cloud.aiplatform.telemetry import tool_context_manager
+from google.cloud.aiplatform import telemetry
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, BaseLLM
 from langchain_core.messages import AIMessage, BaseMessage
@@ -96,7 +96,7 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
         Returns:
             List of captions obtained from the image.
         """
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             model = self._create_model()
             captions = model.get_captions(
                 image=image,
@@ -275,7 +275,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
         Returns:
             List of responses to the query.
         """
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             model = self._create_model()
             answers = model.ask_question(
                 image=image, question=query, number_of_results=self.number_of_results
@@ -313,7 +313,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
         Returns:
             List of b64 encoded strings.
         """
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             model = ImageGenerationModel.from_pretrained(self.model_name)
 
             generation_result = model.generate_images(
@@ -341,7 +341,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
         Returns:
             List of b64 encoded strings.
         """
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             model = ImageGenerationModel.from_pretrained(self.model_name)
 
             image_loader = ImageBytesLoader(project=self.project)

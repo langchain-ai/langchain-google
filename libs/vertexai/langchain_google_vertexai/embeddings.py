@@ -12,7 +12,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
-from google.cloud.aiplatform.telemetry import tool_context_manager
+from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from langchain_core.pydantic_v1 import root_validator
@@ -49,7 +49,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             )
             values["model_name"] = "textembedding-gecko@001"
         _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")  # type: ignore
-        with tool_context_manager(user_agent):
+        with telemetry.tool_context_manager(user_agent):
             values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
         return values
 
@@ -83,9 +83,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["task_executor"] = ThreadPoolExecutor(
             max_workers=request_parallelism
         )
-        self.instance[
-            "embeddings_task_type_supported"
-        ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+        self.instance["embeddings_task_type_supported"] = (
+            not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+        )
 
     @staticmethod
     def _split_by_punctuation(text: str) -> List[str]:
@@ -174,7 +174,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             embeddings = self.client.get_embeddings(requests)
             return [embs.values for embs in embeddings]
 
-        with tool_context_manager(self._user_agent):
+        with telemetry.tool_context_manager(self._user_agent):
             return _completion_with_retry(texts)
 
     def _prepare_and_validate_batches(
