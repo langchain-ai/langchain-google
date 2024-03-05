@@ -110,9 +110,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["task_executor"] = ThreadPoolExecutor(
             max_workers=request_parallelism
         )
-        self.instance["embeddings_task_type_supported"] = (
-            not self.client._endpoint_name.endswith("/textembedding-gecko@001")
-        )
+        self.instance[
+            "embeddings_task_type_supported"
+        ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
 
         retry_errors: List[Type[BaseException]] = [
             ResourceExhausted,

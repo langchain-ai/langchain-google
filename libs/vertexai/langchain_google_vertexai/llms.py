@@ -4,15 +4,7 @@ from concurrent.futures import Executor
 from typing import Any, AsyncIterator, ClassVar, Dict, Iterator, List, Optional, Union
 
 import vertexai  # type: ignore[import-untyped]
-from google.api_core.client_options import ClientOptions
-from google.cloud.aiplatform.gapic import (
-    PredictionServiceAsyncClient,
-    PredictionServiceClient,
-)
-from google.cloud.aiplatform.models import Prediction
 from google.cloud.aiplatform import telemetry
-from google.protobuf import json_format
-from google.protobuf.struct_pb2 import Value
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,

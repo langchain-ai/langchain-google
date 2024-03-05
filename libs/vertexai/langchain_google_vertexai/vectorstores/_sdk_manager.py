@@ -1,11 +1,11 @@
 from typing import TYPE_CHECKING, Any, Union
 
 from google.cloud import aiplatform, storage  # type: ignore[attr-defined]
+from google.cloud.aiplatform import telemetry
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
 )
-from google.cloud.aiplatform import telemetry
 from google.oauth2.service_account import Credentials  # type: ignore
 
 if TYPE_CHECKING:
