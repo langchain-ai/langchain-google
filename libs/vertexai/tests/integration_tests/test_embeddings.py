@@ -20,22 +20,37 @@ def test_initialization() -> None:
 
 
 @pytest.mark.release
-def test_langchain_google_vertexai_embedding_documents() -> None:
-    documents = ["foo bar"]
-    model = VertexAIEmbeddings()
+@pytest.mark.parametrize(
+    "number_of_docs",
+    [1, 8],
+)
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    [("textembedding-gecko@001", 768), ("multimodalembedding@001", 1408)],
+)
+def test_langchain_google_vertexai_embedding_documents(
+    number_of_docs: int, model_name: str, embeddings_dim: int
+) -> None:
+    documents = ["foo bar"] * number_of_docs
+    model = VertexAIEmbeddings(model_name)
     output = model.embed_documents(documents)
-    assert len(output) == 1
-    assert len(output[0]) == 768
+    assert len(output) == number_of_docs
+    for embedding in output:
+        assert len(embedding) == embeddings_dim
     assert model.model_name == model.client._model_id
-    assert model.model_name == "textembedding-gecko@001"
+    assert model.model_name == model_name
 
 
 @pytest.mark.release
-def test_langchain_google_vertexai_embedding_query() -> None:
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    [("textembedding-gecko@001", 768), ("multimodalembedding@001", 1408)],
+)
+def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -> None:
     document = "foo bar"
-    model = VertexAIEmbeddings()
+    model = VertexAIEmbeddings(model_name)
     output = model.embed_query(document)
-    assert len(output) == 768
+    assert len(output) == embeddings_dim
 
 
 @pytest.mark.release
@@ -47,25 +62,6 @@ def test_langchain_google_vertexai_large_batches() -> None:
     model_asianortheast1.embed_documents(documents)
     assert model_uscentral1.instance["batch_size"] >= 250
     assert model_asianortheast1.instance["batch_size"] < 50
-
-
-@pytest.mark.release
-def test_langchain_google_vertexai_paginated_texts() -> None:
-    documents = [
-        "foo bar",
-        "foo baz",
-        "bar foo",
-        "baz foo",
-        "bar bar",
-        "foo foo",
-        "baz baz",
-        "baz bar",
-    ]
-    model = VertexAIEmbeddings()
-    output = model.embed_documents(documents)
-    assert len(output) == 8
-    assert len(output[0]) == 768
-    assert model.model_name == model.client._model_id
 
 
 @pytest.mark.release

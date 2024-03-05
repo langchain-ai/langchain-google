@@ -16,22 +16,6 @@ def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
         assert e.value == "Only supported for multimodal models"
 
 
-def test_langchain_google_vertexai_embed_documents_text_only() -> None:
-    mock_embeddings = MockVertexAIEmbeddings("multimodalembedding@001")
-    assert mock_embeddings.model_type == GoogleEmbeddingModelType.MULTIMODAL
-    with pytest.raises(NotImplementedError) as e:
-        mock_embeddings.embed_documents(["test"])
-        assert e.value == "Not supported for multimodal models"
-
-
-def test_langchain_google_vertexai_embed_query_text_only() -> None:
-    mock_embeddings = MockVertexAIEmbeddings("multimodalembedding@001")
-    assert mock_embeddings.model_type == GoogleEmbeddingModelType.MULTIMODAL
-    with pytest.raises(NotImplementedError) as e:
-        mock_embeddings.embed_query("test")
-        assert e.value == "Not supported for multimodal models"
-
-
 class MockVertexAIEmbeddings(VertexAIEmbeddings):
     """
     A mock class for avoiding instantiating VertexAI and the EmbeddingModel client
