@@ -1,11 +1,17 @@
 from langchain_google_genai import __all__
 
 EXPECTED_ALL = [
+    "AqaInput",
+    "AqaOutput",
     "ChatGoogleGenerativeAI",
+    "DoesNotExistsException",
+    "GenAIAqa",
     "GoogleGenerativeAIEmbeddings",
     "GoogleGenerativeAI",
+    "GoogleVectorStore",
     "HarmBlockThreshold",
     "HarmCategory",
+    "DoesNotExistsException",
 ]
 
 

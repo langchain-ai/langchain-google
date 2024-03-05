@@ -14,6 +14,13 @@ from langchain_google_vertexai.gemma import (
 from langchain_google_vertexai.llms import VertexAI
 from langchain_google_vertexai.model_garden import VertexAIModelGarden
 from langchain_google_vertexai.vectorstores.vectorstores import VectorSearchVectorStore
+from langchain_google_vertexai.vision_models import (
+    VertexAIImageCaptioning,
+    VertexAIImageCaptioningChat,
+    VertexAIImageEditorChat,
+    VertexAIImageGeneratorChat,
+    VertexAIVisualQnAChat,
+)
 
 __all__ = [
     "ChatVertexAI",
@@ -31,4 +38,9 @@ __all__ = [
     "PydanticFunctionsOutputParser",
     "create_structured_runnable",
     "VectorSearchVectorStore",
+    "VertexAIImageCaptioning",
+    "VertexAIImageCaptioningChat",
+    "VertexAIImageEditorChat",
+    "VertexAIImageGeneratorChat",
+    "VertexAIVisualQnAChat",
 ]

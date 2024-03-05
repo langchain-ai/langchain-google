@@ -44,7 +44,7 @@ class _TestOutputParser(BaseOutputParser):
         raise ValueError("Can only parse messages")
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.extended
 def test_tools() -> None:
     from langchain.agents import AgentExecutor
     from langchain.agents.format_scratchpad import (
@@ -93,7 +93,7 @@ def test_tools() -> None:
     assert round(float(just_numbers), 2) == 2.16
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.extended
 def test_stream() -> None:
     from langchain.chains import LLMMathChain
 
@@ -112,6 +112,7 @@ def test_stream() -> None:
     assert "function_call" in response[0].additional_kwargs
 
 
+@pytest.mark.release
 def test_multiple_tools() -> None:
     from langchain.agents import AgentExecutor
     from langchain.agents.format_scratchpad import format_to_openai_function_messages

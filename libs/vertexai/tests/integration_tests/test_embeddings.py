@@ -4,32 +4,56 @@ Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 """
 import pytest
+from vertexai.language_models import TextEmbeddingModel  # type: ignore
+from vertexai.vision_models import MultiModalEmbeddingModel  # type: ignore
 
-from langchain_google_vertexai.embeddings import VertexAIEmbeddings
+from langchain_google_vertexai.embeddings import (
+    GoogleEmbeddingModelType,
+    VertexAIEmbeddings,
+)
 
 
+@pytest.mark.release
 def test_initialization() -> None:
     """Test embedding model initialization."""
     VertexAIEmbeddings()
 
 
-def test_langchain_google_vertexai_embedding_documents() -> None:
-    documents = ["foo bar"]
-    model = VertexAIEmbeddings()
+@pytest.mark.release
+@pytest.mark.parametrize(
+    "number_of_docs",
+    [1, 8],
+)
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    [("textembedding-gecko@001", 768), ("multimodalembedding@001", 1408)],
+)
+def test_langchain_google_vertexai_embedding_documents(
+    number_of_docs: int, model_name: str, embeddings_dim: int
+) -> None:
+    documents = ["foo bar"] * number_of_docs
+    model = VertexAIEmbeddings(model_name)
     output = model.embed_documents(documents)
-    assert len(output) == 1
-    assert len(output[0]) == 768
+    assert len(output) == number_of_docs
+    for embedding in output:
+        assert len(embedding) == embeddings_dim
     assert model.model_name == model.client._model_id
-    assert model.model_name == "textembedding-gecko@001"
+    assert model.model_name == model_name
 
 
-def test_langchain_google_vertexai_embedding_query() -> None:
+@pytest.mark.release
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    [("textembedding-gecko@001", 768), ("multimodalembedding@001", 1408)],
+)
+def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -> None:
     document = "foo bar"
-    model = VertexAIEmbeddings()
+    model = VertexAIEmbeddings(model_name)
     output = model.embed_query(document)
-    assert len(output) == 768
+    assert len(output) == embeddings_dim
 
 
+@pytest.mark.release
 def test_langchain_google_vertexai_large_batches() -> None:
     documents = ["foo bar" for _ in range(0, 251)]
     model_uscentral1 = VertexAIEmbeddings(location="us-central1")
@@ -40,24 +64,7 @@ def test_langchain_google_vertexai_large_batches() -> None:
     assert model_asianortheast1.instance["batch_size"] < 50
 
 
-def test_langchain_google_vertexai_paginated_texts() -> None:
-    documents = [
-        "foo bar",
-        "foo baz",
-        "bar foo",
-        "baz foo",
-        "bar bar",
-        "foo foo",
-        "baz baz",
-        "baz bar",
-    ]
-    model = VertexAIEmbeddings()
-    output = model.embed_documents(documents)
-    assert len(output) == 8
-    assert len(output[0]) == 768
-    assert model.model_name == model.client._model_id
-
-
+@pytest.mark.release
 def test_warning(caplog: pytest.LogCaptureFixture) -> None:
     _ = VertexAIEmbeddings()
     assert len(caplog.records) == 1
@@ -68,3 +75,24 @@ def test_warning(caplog: pytest.LogCaptureFixture) -> None:
         "Feb-01-2024. Currently the default is set to textembedding-gecko@001"
     )
     assert record.message == expected_message
+
+
+@pytest.mark.release
+def test_langchain_google_vertexai_image_embeddings(tmp_image) -> None:
+    model = VertexAIEmbeddings(model_name="multimodalembedding")
+    output = model.embed_image(tmp_image)
+    assert len(output) == 1408
+
+
+@pytest.mark.release
+def test_langchain_google_vertexai_text_model() -> None:
+    embeddings_model = VertexAIEmbeddings(model_name="textembedding-gecko@001")
+    assert isinstance(embeddings_model.client, TextEmbeddingModel)
+    assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
+
+
+@pytest.mark.release
+def test_langchain_google_vertexai_multimodal_model() -> None:
+    embeddings_model = VertexAIEmbeddings(model_name="multimodalembedding@001")
+    assert isinstance(embeddings_model.client, MultiModalEmbeddingModel)
+    assert embeddings_model.model_type == GoogleEmbeddingModelType.MULTIMODAL

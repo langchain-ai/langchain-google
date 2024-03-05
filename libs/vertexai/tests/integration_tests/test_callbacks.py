@@ -6,6 +6,7 @@ from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_google_vertexai.llms import VertexAI
 
 
+@pytest.mark.release
 @pytest.mark.parametrize(
     "model_name",
     ["gemini-pro", "text-bison@001", "code-bison@001"],
@@ -25,6 +26,7 @@ def test_llm_invoke(model_name: str) -> None:
     assert vb.completion_tokens > completion_tokens
 
 
+@pytest.mark.release
 @pytest.mark.parametrize(
     "model_name",
     ["gemini-pro", "chat-bison@001", "codechat-bison@001"],
@@ -45,6 +47,7 @@ def test_chat_call(model_name: str) -> None:
     assert vb.completion_tokens > completion_tokens
 
 
+@pytest.mark.release
 @pytest.mark.parametrize(
     "model_name",
     ["gemini-pro", "text-bison@001", "code-bison@001"],
@@ -64,6 +67,7 @@ def test_invoke_config(model_name: str) -> None:
     assert vb.completion_tokens > completion_tokens
 
 
+@pytest.mark.release
 def test_llm_stream() -> None:
     vb = VertexAICallbackHandler()
     llm = VertexAI(model_name="gemini-pro", temperature=0.0, callbacks=[vb])
@@ -74,6 +78,7 @@ def test_llm_stream() -> None:
     assert vb.completion_tokens > 0
 
 
+@pytest.mark.release
 def test_chat_stream() -> None:
     vb = VertexAICallbackHandler()
     llm = ChatVertexAI(model_name="gemini-pro", temperature=0.0, callbacks=[vb])
