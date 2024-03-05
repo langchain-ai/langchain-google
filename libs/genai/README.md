@@ -76,3 +76,32 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 embeddings.embed_query("hello, world!")
 ```
+
+## Semantic Retrieval
+
+Enables retrieval augmented generation (RAG) in your application.
+
+```
+# Create a new store for housing your documents.
+corpus_store = GoogleVectorStore.create_corpus(display_name="My Corpus")
+
+# Create a new document under the above corpus.
+document_store = GoogleVectorStore.create_document(
+    corpus_id=corpus_store.corpus_id, display_name="My Document"
+)
+
+# Upload some texts to the document.
+text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=0)
+for file in DirectoryLoader(path="data/").load():
+    documents = text_splitter.split_documents([file])
+    document_store.add_documents(documents)
+
+# Talk to your entire corpus with possibly many documents. 
+aqa = corpus_store.as_aqa()
+answer = aqa.invoke("What is the meaning of life?")
+
+# Read the response along with the attributed passages and answerability.
+print(response.answer)
+print(response.attributed_passages)
+print(response.answerable_probability)
+```
