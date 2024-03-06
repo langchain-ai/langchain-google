@@ -217,7 +217,7 @@ class _VertexAICommon(_VertexAIBase):
             default_value = default_params.get(param_name)
             if param_value or default_value:
                 updated_params[param_name] = (
-                    param_value if param_value else default_value
+                    param_value if param_value is not None else default_value
                 )
         return updated_params
 
