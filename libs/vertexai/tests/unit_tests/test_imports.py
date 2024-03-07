@@ -21,6 +21,9 @@ EXPECTED_ALL = [
     "VertexAIImageEditorChat",
     "VertexAIImageGeneratorChat",
     "VertexAIVisualQnAChat",
+    "VertexAISearchRetriever",
+    "VertexAIMultiTurnSearchRetriever",
+    "CloudEnterpriseSearchRetriever",
 ]
 
 
