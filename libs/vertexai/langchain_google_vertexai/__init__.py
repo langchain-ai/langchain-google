@@ -14,7 +14,6 @@ from langchain_google_vertexai.gemma import (
 from langchain_google_vertexai.llms import VertexAI
 from langchain_google_vertexai.model_garden import VertexAIModelGarden
 from langchain_google_vertexai.search import (
-    CloudEnterpriseSearchRetriever,
     VertexAIMultiTurnSearchRetriever,
     VertexAISearchRetriever,
 )
@@ -50,5 +49,4 @@ __all__ = [
     "VertexAIVisualQnAChat",
     "VertexAISearchRetriever",
     "VertexAIMultiTurnSearchRetriever",
-    "CloudEnterpriseSearchRetriever",
 ]

@@ -23,7 +23,6 @@ EXPECTED_ALL = [
     "VertexAIVisualQnAChat",
     "VertexAISearchRetriever",
     "VertexAIMultiTurnSearchRetriever",
-    "CloudEnterpriseSearchRetriever",
 ]
 
 

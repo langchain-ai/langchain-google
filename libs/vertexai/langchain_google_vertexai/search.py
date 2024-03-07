@@ -451,19 +451,3 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
         return self._convert_unstructured_search_response(
             response.search_results, "extractive_answers"
         )
-
-
-class CloudEnterpriseSearchRetriever(VertexAISearchRetriever):
-    """`Google Vertex Search API` retriever alias for backwards compatibility.
-    DEPRECATED: Use `VertexAISearchRetriever` instead.
-    """
-
-    def __init__(self, **data: Any):
-        import warnings
-
-        warnings.warn(
-            "CloudEnterpriseSearchRetriever is deprecated, use VertexAISearchRetriever",  # noqa: E501
-            DeprecationWarning,
-        )
-
-        super().__init__(**data)
