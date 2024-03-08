@@ -47,3 +47,9 @@ def test_vertexai_args_passed() -> None:
                     },
                 },
             )
+            assert (
+                model_instance.generate_content.call_args.kwargs["generation_config"][
+                    "temperature"
+                ]
+                == 0
+            )
