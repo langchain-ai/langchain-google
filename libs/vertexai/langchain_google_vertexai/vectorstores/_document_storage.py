@@ -99,7 +99,7 @@ class GCSDocumentStorage(DocumentStorage):
         """Stores a document text associated to a document_id.
         Args:
             document_id: Id of the document to be stored.
-            dcoument: Document to be stored.
+            document: Document to be stored.
         """
         blob_name = self._get_blob_name(document_id)
         new_blow = self._bucket.blob(blob_name)
