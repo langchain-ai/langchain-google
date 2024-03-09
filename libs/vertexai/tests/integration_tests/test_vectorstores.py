@@ -12,6 +12,7 @@ If required to run slow tests, environment variable 'RUN_SLOW_TESTS' must be set
 """
 
 import os
+from uuid import uuid4
 
 import pytest
 from google.cloud import storage  # type: ignore[attr-defined]
@@ -24,6 +25,7 @@ from langchain_core.documents import Document
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
 from langchain_google_vertexai.vectorstores._document_storage import (
     DataStoreDocumentStorage,
+    DocumentStorage,
     GCSDocumentStorage,
 )
 from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKManager
@@ -39,6 +41,20 @@ def sdk_manager() -> VectorSearchSDKManager:
         project_id=os.environ["PROJECT_ID"], region=os.environ["REGION"]
     )
     return sdk_manager
+
+
+@pytest.fixture
+def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStorage:
+    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
+
+
+@pytest.fixture
+def datastore_document_storage(
+    sdk_manager: VectorSearchSDKManager,
+) -> DataStoreDocumentStorage:
+    ds_client = sdk_manager.get_datastore_client(namespace="integration_tests")
+    return DataStoreDocumentStorage(datastore_client=ds_client)
 
 
 @pytest.mark.extended
@@ -57,50 +73,38 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
 
 
 @pytest.mark.extended
-def test_gcs_document_storage(sdk_manager: VectorSearchSDKManager):
-    bucket = sdk_manager.get_gcs_bucket(os.environ["GCS_BUCKET_NAME"])
-    prefix = "integration-test"
+@pytest.mark.parametrize(
+    "storage_class", ["gcs_document_storage", "datastore_document_storage"]
+)
+def test_document_storage(
+    sdk_manager: VectorSearchSDKManager,
+    storage_class: str,
+    request: pytest.FixtureRequest,
+):
+    document_storage: DocumentStorage = request.getfixturevalue(storage_class)
 
-    storage = GCSDocumentStorage(bucket=bucket, prefix=prefix)
+    N = 10
+    documents = [
+        Document(
+            page_content=f"Text content of document {i}",
+            metadata={"index": i, "nested": {"a": i, "b": str(uuid4())}},
+        )
+        for i in range(N)
+    ]
+    ids = [str(uuid4()) for i in range(N)]
 
-    id_ = "test-id"
-    text = "Test text"
+    # Test individual retrieval
+    for id, document in zip(ids, documents):
+        document_storage.store_by_id(document_id=id, document=document)
+        retrieved = document_storage.get_by_id(document_id=id)
+        assert document == retrieved
 
-    storage.store_by_id(id_, text)
+    # Test batch regtrieval
+    document_storage.batch_store_by_id(ids, documents)
+    retrieved_documents = document_storage.batch_get_by_id(ids)
 
-    assert storage.get_by_id(id_) == text
-
-    ids = [f"test-id_{i}" for i in range(5)]
-    texts = [f"Test Text {i}" for i in range(5)]
-
-    storage.batch_store_by_id(ids, texts)
-    retrieved_texts = storage.batch_get_by_id(ids)
-
-    for original_text, retrieved_text in zip(retrieved_texts, texts):
-        assert original_text == retrieved_text
-
-
-@pytest.mark.extended
-def test_datastore_document_storage(sdk_manager: VectorSearchSDKManager):
-    ds_client = sdk_manager.get_datastore_client(namespace="Foo")
-
-    storage = DataStoreDocumentStorage(datastore_client=ds_client)
-
-    id_ = "test-id"
-    text = "Test text"
-
-    storage.store_by_id(id_, text)
-
-    assert storage.get_by_id(id_) == text
-
-    ids = [f"test-id_{i}" for i in range(5)]
-    texts = [f"Test Text {i}" for i in range(5)]
-
-    storage.batch_store_by_id(ids, texts)
-    retrieved_texts = storage.batch_get_by_id(ids)
-
-    for original_text, retrieved_text in zip(retrieved_texts, texts):
-        assert original_text == retrieved_text
+    for og_document, retrieved_document in zip(documents, retrieved_documents):
+        assert og_document == retrieved_document
 
 
 @pytest.mark.extended

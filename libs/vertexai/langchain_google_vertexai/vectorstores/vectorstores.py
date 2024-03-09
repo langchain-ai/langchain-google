@@ -106,14 +106,13 @@ class _BaseVertexAIVectorStore(VectorStore):
         results = []
 
         for neighbor_id, distance in neighbors_list[0]:
-            text = self._document_storage.get_by_id(neighbor_id)
+            document = self._document_storage.get_by_id(neighbor_id)
 
-            if text is None:
+            if document is None:
                 raise ValueError(
                     f"Document with id {neighbor_id} not found in document" "storage."
                 )
-            # TODO: Handle metadata
-            document = Document(page_content=text, metadata={})
+
             results.append((document, distance))
 
         return results
@@ -164,8 +163,24 @@ class _BaseVertexAIVectorStore(VectorStore):
         texts = list(texts)
         ids = self._generate_unique_ids(len(texts))
 
-        self._document_storage.batch_store_by_id(ids=ids, texts=texts)
+        if metadatas is None:
+            metadatas = [{}] * len(texts)
+
+        if len(metadatas) != len(texts):
+            raise ValueError(
+                "`metadatas` should be the same length as `texts` "
+                f"{len(metadatas)} != {len(texts)}"
+            )
+
+        documents = [
+            Document(page_content=text, metadata=metadata)
+            for text, metadata in zip(texts, metadatas)
+        ]
+
+        self._document_storage.batch_store_by_id(ids=ids, documents=documents)
+
         embeddings = self._embeddings.embed_documents(texts)
+
         self._searcher.add_to_index(ids, embeddings, metadatas, **kwargs)
 
         return ids
