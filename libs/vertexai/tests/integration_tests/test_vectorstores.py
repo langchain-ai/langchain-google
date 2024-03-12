@@ -175,7 +175,7 @@ def test_vector_store_filtering(vector_store: VectorSearchVectorStore):
 
 
 @pytest.mark.extended
-def test_vector_store_update_index(sample_documents: list[Document]):
+def test_vector_store_update_index(sample_documents: List[Document]):
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
     vector_store = VectorSearchVectorStore.from_components(
