@@ -91,19 +91,19 @@ def to_data_points(
                 raise ValueError("All metadata keys must be strings")
 
             if isinstance(value, str):
-                restriction = meidx_types.Index.Restriction(
+                restriction = meidx_types.IndexDataPoint.Restriction(
                     namespace=namespace, allow_list=[value]
                 )
                 restricts.append(restriction)
             elif isinstance(value, list) and all(
                 isinstance(item, str) for item in value
             ):
-                restriction = meidx_types.Index.Restriction(
+                restriction = meidx_types.IndexDataPoint.Restriction(
                     namespace=namespace, allow_list=value
                 )
                 restricts.append(restriction)
             elif isinstance(value, (int, float)) and not isinstance(value, bool):
-                restriction = meidx_types.Index.NumericRestriction(
+                restriction = meidx_types.IndexDataPoint.NumericRestriction(
                     namespace=namespace, value_float=value
                 )
                 numeric_restricts.append(restriction)
