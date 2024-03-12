@@ -1,10 +1,7 @@
-import json
-import time
-import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, List, Tuple, Union
 
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
@@ -12,6 +9,12 @@ from google.cloud.aiplatform.matching_engine import (
 from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
     MatchNeighbor,
     Namespace,
+)
+
+from langchain_google_vertexai.vectorstores._utils import (
+    batch_update_index,
+    stream_update_index,
+    to_data_points,
 )
 
 
@@ -41,9 +44,16 @@ class Searcher(ABC):
         ids: List[str],
         embeddings: List[List[float]],
         metadatas: Union[List[dict], None] = None,
+        is_complete_overwrite: bool = False,
         **kwargs: Any,
-    ):
-        """ """
+    ) -> None:
+        """Adds documents to the index.
+
+        Args:
+            ids: List of unique ids.
+            embeddings: List of embedddings for each record.
+            metadatas: List of metadata of each record.
+        """
         raise NotImplementedError()
 
     def _postprocess_response(
@@ -63,13 +73,14 @@ class Searcher(ABC):
 
 
 class VectorSearchSearcher(Searcher):
-    """ """
+    """Class to interface with a VectorSearch index and endpoint."""
 
     def __init__(
         self,
         endpoint: MatchingEngineIndexEndpoint,
         index: MatchingEngineIndex,
         staging_bucket: Union[storage.Bucket, None] = None,
+        stream_update: bool = False,
     ) -> None:
         """Constructor.
         Args:
@@ -85,38 +96,67 @@ class VectorSearchSearcher(Searcher):
         self._index = index
         self._deployed_index_id = self._get_deployed_index_id()
         self._staging_bucket = staging_bucket
+        self._stream_update = stream_update
 
     def add_to_index(
         self,
         ids: List[str],
         embeddings: List[List[float]],
         metadatas: Union[List[dict], None] = None,
+        is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> None:
-        """ """
+        """Adds documents to the index.
 
-        if self._staging_bucket is None:
-            raise ValueError(
-                "In order to update a Vector Search index a staging bucket must"
-                " be defined."
+        Args:
+            ids: List of unique ids.
+            embeddings: List of embedddings for each record.
+            metadatas: List of metadata of each record.
+            is_complete_overwrite: Whether to overwrite everything.
+        """
+
+        data_points = to_data_points(ids, embeddings, metadatas)
+
+        if self._stream_update:
+            stream_update_index(index=self._index, data_points=data_points)
+        else:
+            if self._staging_bucket is None:
+                raise ValueError(
+                    "In order to update a Vector Search index a staging bucket must"
+                    " be defined."
+                )
+            batch_update_index(
+                index=self._index,
+                data_points=data_points,
+                staging_bucket=self._staging_bucket,
+                is_complete_overwrite=is_complete_overwrite,
             )
 
-        record_list = []
-        for i, (idx, embedding) in enumerate(zip(ids, embeddings)):
-            record: Dict[str, Any] = {"id": idx, "embedding": embedding}
-            if metadatas is not None:
-                record["metadata"] = metadatas[i]
-            record_list.append(record)
-        file_content = "\n".join([json.dumps(x) for x in record_list])
+    def find_neighbors(
+        self,
+        embeddings: List[List[float]],
+        k: int = 4,
+        filter_: Union[List[Namespace], None] = None,
+    ) -> List[List[Tuple[str, float]]]:
+        """Finds the k closes neighbors of each instance of embeddings.
+        Args:
+            embedding: List of embeddings vectors.
+            k: Number of neighbors to be retrieved.
+            filter_: List of filters to apply.
+        Returns:
+            List of lists of Tuples (id, distance) for each embedding vector.
+        """
 
-        filename_prefix = f"indexes/{uuid.uuid4()}"
-        filename = f"{filename_prefix}/{time.time()}.json"
-        blob = self._staging_bucket.blob(filename)
-        blob.upload_from_string(data=file_content)
-
-        self.index = self._index.update_embeddings(
-            contents_delta_uri=f"gs://{self._staging_bucket.name}/{filename_prefix}/"
+        # No need to implement other method for private VPC, find_neighbors now works
+        # with public and private.
+        response = self._endpoint.find_neighbors(
+            deployed_index_id=self._deployed_index_id,
+            queries=embeddings,
+            num_neighbors=k,
+            filter=filter_,
         )
+
+        return self._postprocess_response(response)
 
     def _get_deployed_index_id(self) -> str:
         """Gets the deployed index id that matches with the provided index.
@@ -132,59 +172,3 @@ class VectorSearchSearcher(Searcher):
             f"deployed on endpoint "
             f"{self._endpoint.display_name}."
         )
-
-
-class PublicEndpointVectorSearchSearcher(VectorSearchSearcher):
-    """ """
-
-    def find_neighbors(
-        self,
-        embeddings: List[List[float]],
-        k: int = 4,
-        filter_: Union[List[Namespace], None] = None,
-    ) -> List[List[Tuple[str, float]]]:
-        """Finds the k closes neighbors of each instance of embeddings.
-        Args:
-            embedding: List of embeddings vectors.
-            k: Number of neighbors to be retrieved.
-            filter_: List of filters to apply.
-        Returns:
-            List of lists of Tuples (id, distance) for each embedding vector.
-        """
-
-        response = self._endpoint.find_neighbors(
-            deployed_index_id=self._deployed_index_id,
-            queries=embeddings,
-            num_neighbors=k,
-            filter=filter_,
-        )
-
-        return self._postprocess_response(response)
-
-
-class VPCVertexVectorStore(VectorSearchSearcher):
-    """ """
-
-    def find_neighbors(
-        self,
-        embeddings: List[List[float]],
-        k: int = 4,
-        filter_: Union[List[Namespace], None] = None,
-    ) -> List[List[Tuple[str, float]]]:
-        """Finds the k closes neighbors of each instance of embeddings.
-        Args:
-            embedding: List of embeddings vectors.
-            k: Number of neighbors to be retrieved.
-            filter_: List of filters to apply.
-        Returns:
-            List of lists of Tuples (id, distance) for each embedding vector.
-        """
-
-        response = self._endpoint.match(
-            deployed_index_id=self._deployed_index_id,
-            queries=embeddings,
-            num_neighbors=k,
-            filter=filter_,
-        )
-
-        return self._postprocess_response(response)

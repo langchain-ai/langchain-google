@@ -15,7 +15,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
@@ -30,7 +30,7 @@ from langchain_google_vertexai.vectorstores._document_storage import (
 )
 from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKManager
 from langchain_google_vertexai.vectorstores._searcher import (
-    PublicEndpointVectorSearchSearcher,
+    VectorSearchSearcher,
 )
 from langchain_google_vertexai.vectorstores.vectorstores import VectorSearchVectorStore
 
@@ -113,7 +113,7 @@ def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
     endpoint = sdk_manager.get_endpoint(os.environ["ENDPOINT_ID"])
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
-    searcher = PublicEndpointVectorSearchSearcher(endpoint=endpoint, index=index)
+    searcher = VectorSearchSearcher(endpoint=endpoint, index=index)
 
     texts = ["What's your favourite animal", "What's your favourite city"]
 

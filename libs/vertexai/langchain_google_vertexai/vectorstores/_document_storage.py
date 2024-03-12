@@ -4,7 +4,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from langchain_core.documents import Document
 
 if TYPE_CHECKING:

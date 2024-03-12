@@ -15,8 +15,8 @@ from langchain_google_vertexai.vectorstores._document_storage import (
 )
 from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKManager
 from langchain_google_vertexai.vectorstores._searcher import (
-    PublicEndpointVectorSearchSearcher,
     Searcher,
+    VectorSearchSearcher,
 )
 
 
@@ -147,6 +147,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         self,
         texts: Iterable[str],
         metadatas: Union[List[dict], None] = None,
+        is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> List[str]:
         """Run more texts through the embeddings and add to the vectorstore.
@@ -181,7 +182,9 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         embeddings = self._embeddings.embed_documents(texts)
 
-        self._searcher.add_to_index(ids, embeddings, metadatas, **kwargs)
+        self._searcher.add_to_index(
+            ids, embeddings, metadatas, is_complete_overwrite, **kwargs
+        )
 
         return ids
 
@@ -278,7 +281,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
 
         return cls(
             document_storage=GCSDocumentStorage(bucket=bucket),
-            searcher=PublicEndpointVectorSearchSearcher(
+            searcher=VectorSearchSearcher(
                 endpoint=endpoint, index=index, staging_bucket=bucket
             ),
             embbedings=embedding,
