@@ -28,7 +28,7 @@ class Searcher(ABC):
         embeddings: List[List[float]],
         k: int = 4,
         filter_: Union[List[Namespace], None] = None,
-        numeric_filter: Union[List[NumericNamespace], None] = None
+        numeric_filter: Union[List[NumericNamespace], None] = None,
     ) -> List[List[Tuple[str, float]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
@@ -139,7 +139,7 @@ class VectorSearchSearcher(Searcher):
         embeddings: List[List[float]],
         k: int = 4,
         filter_: Union[List[Namespace], None] = None,
-        numeric_filter: Union[List[Namespace], None] = None
+        numeric_filter: Union[List[NumericNamespace], None] = None,
     ) -> List[List[Tuple[str, float]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
@@ -157,7 +157,7 @@ class VectorSearchSearcher(Searcher):
             queries=embeddings,
             num_neighbors=k,
             filter=filter_,
-            numeric_filter=numeric_filter
+            numeric_filter=numeric_filter,
         )
 
         return self._postprocess_response(response)

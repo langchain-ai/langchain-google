@@ -51,7 +51,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         query: str,
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
-        numeric_filter: Optional[List[NumericNamespace]] = None
+        numeric_filter: Optional[List[NumericNamespace]] = None,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to query and their cosine distance from the query.
         Args:
@@ -86,7 +86,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         embedding: List[float],
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
-        numeric_filter: Optional[List[NumericNamespace]] = None
+        numeric_filter: Optional[List[NumericNamespace]] = None,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to the embedding and their cosine distance.
         Args:
@@ -157,7 +157,8 @@ class _BaseVertexAIVectorStore(VectorStore):
         return [
             document
             for document, _ in self.similarity_search_with_score(
-                query, k, filter, numeric_filter)
+                query, k, filter, numeric_filter
+            )
         ]
 
     def add_texts(
