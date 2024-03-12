@@ -4,6 +4,7 @@ from typing import Any, Iterable, List, Optional, Tuple, Type, Union
 
 from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
     Namespace,
+    NumericNamespace,
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -50,6 +51,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         query: str,
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
+        numeric_filter: Optional[List[NumericNamespace]] = None
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to query and their cosine distance from the query.
         Args:
@@ -63,6 +65,10 @@ class _BaseVertexAIVectorStore(VectorStore):
                 datapoints with "squared shape". Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
+            numeric_filter: Optional. A list of NumericNamespaces for filterning
+                the matching results. Please refer to
+                https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
+                for more detail.
         Returns:
             List[Tuple[Document, float]]: List of documents most similar to
             the query text and cosine distance in float for each.
@@ -72,7 +78,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         embbedings = self._embeddings.embed_query(query)
 
         return self.similarity_search_by_vector_with_score(
-            embedding=embbedings, k=k, filter=filter
+            embedding=embbedings, k=k, filter=filter, numeric_filter=numeric_filter
         )
 
     def similarity_search_by_vector_with_score(
@@ -80,6 +86,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         embedding: List[float],
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
+        numeric_filter: Optional[List[NumericNamespace]] = None
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to the embedding and their cosine distance.
         Args:
@@ -93,6 +100,10 @@ class _BaseVertexAIVectorStore(VectorStore):
                 datapoints with "squared shape". Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
+            numeric_filter: Optional. A list of NumericNamespaces for filterning
+                the matching results. Please refer to
+                https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
+                for more detail.
         Returns:
             List[Tuple[Document, float]]: List of documents most similar to
             the query text and cosine distance in float for each.
@@ -100,7 +111,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         """
 
         neighbors_list = self._searcher.find_neighbors(
-            embeddings=[embedding], k=k, filter_=filter
+            embeddings=[embedding], k=k, filter_=filter, numeric_filter=numeric_filter
         )
 
         results = []
@@ -122,6 +133,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         query: str,
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
+        numeric_filter: Optional[List[NumericNamespace]] = None,
         **kwargs: Any,
     ) -> List[Document]:
         """Return docs most similar to query.
@@ -135,12 +147,17 @@ class _BaseVertexAIVectorStore(VectorStore):
                 datapoints with "squared shape". Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                  for more detail.
+            numeric_filter: Optional. A list of NumericNamespaces for filterning
+                the matching results. Please refer to
+                https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
+                for more detail.
         Returns:
             A list of k matching documents.
         """
         return [
             document
-            for document, _ in self.similarity_search_with_score(query, k, filter)
+            for document, _ in self.similarity_search_with_score(
+                query, k, filter, numeric_filter)
         ]
 
     def add_texts(
