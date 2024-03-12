@@ -8,10 +8,10 @@ variables:
 - GCS_BUCKET_NAME: Name of a Google Cloud Storage Bucket
 - INDEX_ID: Id of the Vector Search index.
 - ENDPOINT_ID: Id of the Vector Search endpoint.
-If required to run slow tests, environment variable 'RUN_SLOW_TESTS' must be set
 """
 
 import os
+from typing import List
 from uuid import uuid4
 
 import pytest
@@ -19,6 +19,10 @@ from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
+)
+from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
+    Namespace,
+    NumericNamespace,
 )
 from langchain_core.documents import Document
 
@@ -55,6 +59,22 @@ def datastore_document_storage(
 ) -> DataStoreDocumentStorage:
     ds_client = sdk_manager.get_datastore_client(namespace="integration_tests")
     return DataStoreDocumentStorage(datastore_client=ds_client)
+
+
+@pytest.fixture
+def vector_store() -> VectorSearchVectorStore:
+    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
+
+    vector_store = VectorSearchVectorStore.from_components(
+        project_id=os.environ["PROJECT_ID"],
+        region=os.environ["REGION"],
+        gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
+        index_id=os.environ["INDEX_ID"],
+        endpoint_id=os.environ["ENDPOINT_ID"],
+        embedding=embeddings,
+    )
+
+    return vector_store
 
 
 @pytest.mark.extended
@@ -125,18 +145,7 @@ def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
 
 
 @pytest.mark.extended
-def test_vector_store():
-    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
-
-    vector_store = VectorSearchVectorStore.from_components(
-        project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
-        gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
-        index_id=os.environ["INDEX_ID"],
-        endpoint_id=os.environ["ENDPOINT_ID"],
-        embedding=embeddings,
-    )
-
+def test_vector_store(vector_store: VectorSearchVectorStore):
     assert isinstance(vector_store, VectorSearchVectorStore)
 
     query = "What are your favourite animals?"
@@ -153,7 +162,20 @@ def test_vector_store():
 
 
 @pytest.mark.extended
-def test_vector_store_update_index():
+def test_vector_store_filtering(vector_store: VectorSearchVectorStore):
+    documents = vector_store.similarity_search(
+        "I want some pants",
+        filter=[Namespace(name="color", allow_tokens=["blue"])],
+        numeric_filter=[NumericNamespace(name="price", value_float=20.0, op="LESS")],
+    )
+
+    assert len(documents) > 0
+
+    assert all(document.metadata["price"] < 20.0 for document in documents)
+
+
+@pytest.mark.extended
+def test_vector_store_update_index(sample_documents: list[Document]):
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
     vector_store = VectorSearchVectorStore.from_components(
@@ -165,10 +187,179 @@ def test_vector_store_update_index():
         embedding=embeddings,
     )
 
-    vector_store.add_texts(
-        texts=[
-            "Lions are my favourite animals",
-            "There are two apples on the table",
-            "Today is raining a lot in Madrid",
-        ]
-    )
+    vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
+
+
+@pytest.fixture
+def sample_documents() -> List[Document]:
+    record_data = [
+        {
+            "description": "A versatile pair of dark-wash denim jeans."
+            "Made from durable cotton with a classic straight-leg cut, these jeans"
+            " transition easily from casual days to dressier occasions.",
+            "price": 65.00,
+            "color": "blue",
+            "season": ["fall", "winter", "spring"],
+        },
+        {
+            "description": "A lightweight linen button-down shirt in a crisp white."
+            " Perfect for keeping cool with breathable fabric and a relaxed fit.",
+            "price": 34.99,
+            "color": "white",
+            "season": ["summer", "spring"],
+        },
+        {
+            "description": "A soft, chunky knit sweater in a vibrant forest green. "
+            "The oversized fit and cozy wool blend make this ideal for staying warm "
+            "when the temperature drops.",
+            "price": 89.99,
+            "color": "green",
+            "season": ["fall", "winter"],
+        },
+        {
+            "description": "A classic crewneck t-shirt in a soft, heathered blue. "
+            "Made from comfortable cotton jersey, this t-shirt is a wardrobe essential "
+            "that works for every season.",
+            "price": 19.99,
+            "color": "blue",
+            "season": ["fall", "winter", "summer", "spring"],
+        },
+        {
+            "description": "A flowing midi-skirt in a delicate floral print. "
+            "Lightweight and airy, this skirt adds a touch of feminine style "
+            "to warmer days.",
+            "price": 45.00,
+            "color": "white",
+            "season": ["spring", "summer"],
+        },
+        {
+            "description": "A pair of tailored black trousers in a comfortable stretch "
+            "fabric. Perfect for work or dressier events, these trousers provide a"
+            " sleek, polished look.",
+            "price": 59.99,
+            "color": "black",
+            "season": ["fall", "winter", "spring"],
+        },
+        {
+            "description": "A cozy fleece hoodie in a neutral heather grey.  "
+            "This relaxed sweatshirt is perfect for casual days or layering when the "
+            "weather turns chilly.",
+            "price": 39.99,
+            "color": "grey",
+            "season": ["fall", "winter", "spring"],
+        },
+        {
+            "description": "A bright yellow raincoat with a playful polka dot pattern. "
+            "This waterproof jacket will keep you dry and add a touch of cheer to "
+            "rainy days.",
+            "price": 75.00,
+            "color": "yellow",
+            "season": ["spring", "fall"],
+        },
+        {
+            "description": "A pair of comfortable khaki chino shorts. These versatile "
+            "shorts are a summer staple, perfect for outdoor adventures or relaxed"
+            " weekends.",
+            "price": 34.99,
+            "color": "khaki",
+            "season": ["summer"],
+        },
+        {
+            "description": "A bold red cocktail dress with a flattering A-line "
+            "silhouette. This statement piece is made from a luxurious satin fabric, "
+            "ensuring a head-turning look.",
+            "price": 125.00,
+            "color": "red",
+            "season": ["fall", "winter", "summer", "spring"],
+        },
+        {
+            "description": "A pair of classic white sneakers crafted from smooth "
+            "leather. These timeless shoes offer a clean and polished look, perfect "
+            "for everyday wear.",
+            "price": 79.99,
+            "color": "white",
+            "season": ["fall", "winter", "summer", "spring"],
+        },
+        {
+            "description": "A chunky cable-knit scarf in a rich burgundy color. "
+            "Made from a soft wool blend, this scarf will provide warmth and a touch "
+            "of classic style to cold-weather looks.",
+            "price": 45.00,
+            "color": "burgundy",
+            "season": ["fall", "winter"],
+        },
+        {
+            "description": "A lightweight puffer vest in a vibrant teal hue. "
+            "This versatile piece adds a layer of warmth without bulk, transitioning"
+            " perfectly between seasons.",
+            "price": 65.00,
+            "color": "teal",
+            "season": ["fall", "spring"],
+        },
+        {
+            "description": "A pair of high-waisted leggings in a sleek black."
+            " Crafted from a moisture-wicking fabric with plenty of stretch, "
+            "these leggings are perfect for workouts or comfortable athleisure style.",
+            "price": 49.99,
+            "color": "black",
+            "season": ["fall", "winter", "summer", "spring"],
+        },
+        {
+            "description": "A denim jacket with a faded wash and distressed details. "
+            "This wardrobe staple adds a touch of effortless cool to any outfit.",
+            "price": 79.99,
+            "color": "blue",
+            "season": ["fall", "spring", "summer"],
+        },
+        {
+            "description": "A woven straw sunhat with a wide brim. This stylish "
+            "accessory provides protection from the sun while adding a touch of "
+            "summery elegance.",
+            "price": 32.00,
+            "color": "beige",
+            "season": ["summer"],
+        },
+        {
+            "description": "A graphic tee featuring a vintage band logo. "
+            "Made from a soft cotton blend, this casual tee adds a touch of "
+            "personal style to everyday looks.",
+            "price": 24.99,
+            "color": "white",
+            "season": ["fall", "winter", "summer", "spring"],
+        },
+        {
+            "description": "A pair of well-tailored dress pants in a neutral grey. "
+            "Made from a wrinkle-resistant blend, these pants look sharp and "
+            "professional for workwear or formal occasions.",
+            "price": 69.99,
+            "color": "grey",
+            "season": ["fall", "winter", "summer", "spring"],
+        },
+        {
+            "description": "A pair of classic leather ankle boots in a rich brown hue."
+            " Featuring a subtle stacked heel and sleek design, these boots are perfect"
+            " for elevating outfits in cooler seasons.",
+            "price": 120.00,
+            "color": "brown",
+            "season": ["fall", "winter", "spring"],
+        },
+        {
+            "description": "A vibrant swimsuit with a bold geometric pattern. This fun "
+            "and eye-catching piece is perfect for making a splash by the pool or at "
+            "the beach.",
+            "price": 55.00,
+            "color": "multicolor",
+            "season": ["summer"],
+        },
+    ]
+
+    documents = []
+    for record in record_data:
+        record = record.copy()
+        page_content = record.pop("description")
+        if isinstance(page_content, str):
+            metadata = {**record}
+            document = Document(page_content=page_content, metadata=metadata)
+            documents.append(document)
+
+    return documents
