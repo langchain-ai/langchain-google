@@ -1,5 +1,6 @@
 import json
 import uuid
+import warnings
 from typing import Any, Dict, List, Union
 
 from google.cloud.aiplatform import MatchingEngineIndex
@@ -81,6 +82,7 @@ def to_data_points(
         metadatas = [{}] * len(ids)
 
     data_points = []
+    ignored_fields = set()
 
     for id_, embedding, metadata in zip(ids, embeddings, metadatas):
         restricts = []
@@ -107,6 +109,15 @@ def to_data_points(
                     namespace=namespace, value_float=value
                 )
                 numeric_restricts.append(restriction)
+            else:
+                ignored_fields.add(namespace)
+
+        if len(ignored_fields) > 0:
+            warnings.warn(
+                f"Some values in fields {', '.join(ignored_fields)} are not usable for"
+                f" restrictions. In order to be used they must be str, list[str] or"
+                f" numeric."
+            )
 
         data_point = meidx_types.IndexDatapoint(
             datapoint_id=id_,
