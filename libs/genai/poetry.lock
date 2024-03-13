@@ -281,12 +281,12 @@ requests = ["requests (>=2.20.0,<3.0.0.dev0)"]
 
 [[package]]
 name = "google-generativeai"
-version = "0.4.0"
+version = "0.4.1"
 description = "Google Generative AI High level API client library and tools."
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "google_generativeai-0.4.0-py3-none-any.whl", hash = "sha256:cf53a51f7c22f0193685e39708e015119b2500626bb2e74ad8c2bf8d8568ef1e"},
+    {file = "google_generativeai-0.4.1-py3-none-any.whl", hash = "sha256:89be3c00c2e688108fccefc50f47f45fc9d37ecd53c1ade9d86b5d982919c24a"},
 ]
 
 [package.dependencies]
@@ -1344,4 +1344,4 @@ images = ["pillow"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "bdc9af566c7f84c0cc18b21cf2d1f4839e62a8323924bb64895b06c924bea8b9"
+content-hash = "dd7ba0d20a620f1eac259e8809a0f968bb49997574523c171611c827e7134c5f"
