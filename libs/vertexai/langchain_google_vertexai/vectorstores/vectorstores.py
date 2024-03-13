@@ -303,8 +303,10 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         return cls(
             document_storage=GCSDocumentStorage(bucket=bucket),
             searcher=VectorSearchSearcher(
-                endpoint=endpoint, index=index, staging_bucket=bucket,
-                stream_update=stream_update
+                endpoint=endpoint,
+                index=index,
+                staging_bucket=bucket,
+                stream_update=stream_update,
             ),
             embbedings=embedding,
         )
