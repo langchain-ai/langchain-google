@@ -269,6 +269,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         endpoint_id: str,
         credentials_path: Optional[str] = None,
         embedding: Optional[Embeddings] = None,
+        stream_update: bool = False,
         **kwargs: Any,
     ) -> "VectorSearchVectorStore":
         """Takes the object creation out of the constructor.
@@ -284,6 +285,8 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
             the local file system.
             embedding: The :class:`Embeddings` that will be used for
             embedding the texts.
+            stream_update: Whether to update with streaming or batching. VectorSearch
+                index must be compatible with stream/batch updates.
             kwargs: Additional keyword arguments to pass to
                 VertexAIVectorSearch.__init__().
         Returns:
@@ -300,7 +303,8 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         return cls(
             document_storage=GCSDocumentStorage(bucket=bucket),
             searcher=VectorSearchSearcher(
-                endpoint=endpoint, index=index, staging_bucket=bucket
+                endpoint=endpoint, index=index, staging_bucket=bucket,
+                stream_update=stream_update
             ),
             embbedings=embedding,
         )

@@ -170,7 +170,7 @@ def test_vector_store_filtering(vector_store: VectorSearchVectorStore):
     )
 
     assert len(documents) > 0
-
+    assert all(document.metadata["color"] == "blue" for document in documents)
     assert all(document.metadata["price"] < 20.0 for document in documents)
 
 
