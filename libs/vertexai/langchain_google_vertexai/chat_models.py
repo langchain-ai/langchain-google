@@ -1,6 +1,6 @@
 """Wrapper around Google VertexAI chat-based models."""
 
-from __future__ import annotations
+from __future__ import annotations  # noqa
 
 import json
 import logging
