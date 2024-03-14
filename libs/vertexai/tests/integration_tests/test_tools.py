@@ -95,9 +95,12 @@ def test_tools() -> None:
 
 @pytest.mark.extended
 def test_custom_tool() -> None:
-    from langchain.agents import AgentExecutor, create_openai_functions_agent, tool
+    from langchain.agents import AgentExecutor, tool
+    from langchain.agents.format_scratchpad import (
+        format_to_openai_function_messages,
+    )
 
-    @tool
+    @tool("search", return_direct=True)
     def search(query: str) -> str:
         """Look up things online."""
         return "LangChain"
@@ -115,8 +118,19 @@ def test_custom_tool() -> None:
             MessagesPlaceholder("agent_scratchpad"),
         ]
     )
+    llm_with_tools = llm.bind(functions=tools)
 
-    agent = create_openai_functions_agent(llm, tools, prompt)
+    agent: Any = (
+        {
+            "input": lambda x: x["input"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | _TestOutputParser()
+    )
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
     response = agent_executor.invoke({"input": "What is LangChain?"})
