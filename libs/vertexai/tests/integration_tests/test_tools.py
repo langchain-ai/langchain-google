@@ -112,7 +112,7 @@ def test_stream() -> None:
     assert "function_call" in response[0].additional_kwargs
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_multiple_tools() -> None:
     from langchain.agents import AgentExecutor
     from langchain.agents.format_scratchpad import format_to_openai_function_messages
