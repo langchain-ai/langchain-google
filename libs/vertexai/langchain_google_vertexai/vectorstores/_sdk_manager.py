@@ -9,7 +9,7 @@ from google.cloud.aiplatform.matching_engine import (
 from google.oauth2.service_account import Credentials  # type: ignore
 
 if TYPE_CHECKING:
-    from google.cloud import datastore  # type: ignore[attr-defined]
+    from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
 
 from langchain_google_vertexai._utils import get_client_info, get_user_agent
 
@@ -118,7 +118,7 @@ class VectorSearchSDKManager:
         Returns:
             datastore Client.
         """
-        from google.cloud import datastore  # type: ignore[attr-defined]
+        from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
 
         ds_client = datastore.Client(
             project=self._project_id,
