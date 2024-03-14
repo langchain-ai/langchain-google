@@ -77,7 +77,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     values["model_name"]
                 )
             else:
-                values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
+                values["client"] = TextEmbeddingModel.from_pretrained(
+                    values["model_name"]
+                )
         return values
 
     def __init__(
