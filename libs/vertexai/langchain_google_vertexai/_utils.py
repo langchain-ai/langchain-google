@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import google.api_core
 import proto  # type: ignore[import-untyped]
 from google.api_core.gapic_v1.client_info import ClientInfo
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
