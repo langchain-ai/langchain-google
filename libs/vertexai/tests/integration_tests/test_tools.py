@@ -94,6 +94,53 @@ def test_tools() -> None:
 
 
 @pytest.mark.extended
+def test_custom_tool() -> None:
+    from langchain.agents import AgentExecutor, tool
+    from langchain.agents.format_scratchpad import (
+        format_to_openai_function_messages,
+    )
+
+    @tool("search", return_direct=True)
+    def search(query: str) -> str:
+        """Look up things online."""
+        return "LangChain"
+
+    tools = [search]
+
+    llm = ChatVertexAI(
+        model_name="gemini-pro", temperature=0.0, convert_system_message_to_human=True
+    )
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "You are a helpful assistant"),
+            MessagesPlaceholder("chat_history", optional=True),
+            ("human", "{input}"),
+            MessagesPlaceholder("agent_scratchpad"),
+        ]
+    )
+    llm_with_tools = llm.bind(functions=tools)
+
+    agent: Any = (
+        {
+            "input": lambda x: x["input"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | _TestOutputParser()
+    )
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+    response = agent_executor.invoke({"input": "What is LangChain?"})
+    assert isinstance(response, dict)
+    assert response["input"] == "What is LangChain?"
+
+    assert "LangChain" in response["output"]
+
+
+@pytest.mark.extended
 def test_stream() -> None:
     from langchain.chains import LLMMathChain
 
