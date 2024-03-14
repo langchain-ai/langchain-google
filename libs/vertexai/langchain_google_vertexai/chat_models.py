@@ -1,6 +1,6 @@
 """Wrapper around Google VertexAI chat-based models."""
 
-from __future__ import annotations  # noqa
+from __future__ import annotations
 
 import json
 import logging
@@ -11,8 +11,6 @@ from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Type, Uni
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
 from google.cloud.aiplatform_v1beta1.types.tool import FunctionCall
-from google.cloud.aiplatform import telemetry
-
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -253,7 +251,7 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 def _parse_response_candidate(response_candidate: "Candidate") -> AIMessage:
     try:
         content = response_candidate.text
-    except ValueError:
+    except AttributeError:
         content = ""
 
     additional_kwargs = {}
@@ -345,68 +343,67 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Raises:
             ValueError: if the last message in the list is not from human.
         """
-        with telemetry.tool_context_manager(self._user_agent):
-            should_stream = stream if stream is not None else self.streaming
-            safety_settings = kwargs.pop("safety_settings", None)
-            if should_stream:
-                stream_iter = self._stream(
-                    messages, stop=stop, run_manager=run_manager, **kwargs
-                )
-                return generate_from_stream(stream_iter)
+        should_stream = stream if stream is not None else self.streaming
+        safety_settings = kwargs.pop("safety_settings", None)
+        if should_stream:
+            stream_iter = self._stream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            return generate_from_stream(stream_iter)
 
-            params = self._prepare_params(stop=stop, stream=False, **kwargs)
-            msg_params = {}
-            if "candidate_count" in params:
-                msg_params["candidate_count"] = params.pop("candidate_count")
+        params = self._prepare_params(stop=stop, stream=False, **kwargs)
+        msg_params = {}
+        if "candidate_count" in params:
+            msg_params["candidate_count"] = params.pop("candidate_count")
 
-            if self._is_gemini_model:
-                history_gemini = _parse_chat_history_gemini(
-                    messages,
-                    project=self.project,
-                    convert_system_message_to_human=self.convert_system_message_to_human,
-                )
-                message = history_gemini.pop()
-                chat = self.client.start_chat(history=history_gemini)
+        if self._is_gemini_model:
+            history_gemini = _parse_chat_history_gemini(
+                messages,
+                project=self.project,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+            message = history_gemini.pop()
+            chat = self.client.start_chat(history=history_gemini)
 
-                # set param to `functions` until core tool/function calling implemented
-                raw_tools = params.pop("functions") if "functions" in params else None
-                tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
-                response = chat.send_message(
-                    message,
-                    generation_config=params,
-                    tools=tools,
-                    safety_settings=safety_settings,
+            # set param to `functions` until core tool/function calling implemented
+            raw_tools = params.pop("functions") if "functions" in params else None
+            tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
+            response = chat.send_message(
+                message,
+                generation_config=params,
+                tools=tools,
+                safety_settings=safety_settings,
+            )
+            generations = [
+                ChatGeneration(
+                    message=_parse_response_candidate(candidate),
+                    generation_info=get_generation_info(
+                        candidate,
+                        self._is_gemini_model,
+                        usage_metadata=response.to_dict().get("usage_metadata"),
+                    ),
                 )
-                generations = [
-                    ChatGeneration(
-                        message=_parse_response_candidate(candidate),
-                        generation_info=get_generation_info(
-                            candidate,
-                            self._is_gemini_model,
-                            usage_metadata=response.to_dict().get("usage_metadata"),
-                        ),
-                    )
-                    for candidate in response.candidates
-                ]
-            else:
-                question = _get_question(messages)
-                history = _parse_chat_history(messages[:-1])
-                examples = kwargs.get("examples") or self.examples
-                if examples:
-                    params["examples"] = _parse_examples(examples)
-                chat = self._start_chat(history, **params)
-                response = chat.send_message(question.content, **msg_params)
-                generations = [
-                    ChatGeneration(
-                        message=AIMessage(content=candidate.text),
-                        generation_info=get_generation_info(
-                            candidate,
-                            self._is_gemini_model,
-                            usage_metadata=response.raw_prediction_response.metadata,
-                        ),
-                    )
-                    for candidate in response.candidates
-                ]
+                for candidate in response.candidates
+            ]
+        else:
+            question = _get_question(messages)
+            history = _parse_chat_history(messages[:-1])
+            examples = kwargs.get("examples") or self.examples
+            if examples:
+                params["examples"] = _parse_examples(examples)
+            chat = self._start_chat(history, **params)
+            response = chat.send_message(question.content, **msg_params)
+            generations = [
+                ChatGeneration(
+                    message=AIMessage(content=candidate.text),
+                    generation_info=get_generation_info(
+                        candidate,
+                        self._is_gemini_model,
+                        usage_metadata=response.raw_prediction_response.metadata,
+                    ),
+                )
+                for candidate in response.candidates
+            ]
         return ChatResult(generations=generations)
 
     async def _agenerate(
@@ -434,60 +431,59 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             kwargs.pop("stream")
             logger.warning("ChatVertexAI does not currently support async streaming.")
 
-        with telemetry.tool_context_manager(self._user_agent):
-            params = self._prepare_params(stop=stop, **kwargs)
-            safety_settings = kwargs.pop("safety_settings", None)
-            msg_params = {}
-            if "candidate_count" in params:
-                msg_params["candidate_count"] = params.pop("candidate_count")
+        params = self._prepare_params(stop=stop, **kwargs)
+        safety_settings = kwargs.pop("safety_settings", None)
+        msg_params = {}
+        if "candidate_count" in params:
+            msg_params["candidate_count"] = params.pop("candidate_count")
 
-            if self._is_gemini_model:
-                history_gemini = _parse_chat_history_gemini(
-                    messages,
-                    project=self.project,
-                    convert_system_message_to_human=self.convert_system_message_to_human,
+        if self._is_gemini_model:
+            history_gemini = _parse_chat_history_gemini(
+                messages,
+                project=self.project,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+            message = history_gemini.pop()
+            chat = self.client.start_chat(history=history_gemini)
+            # set param to `functions` until core tool/function calling implemented
+            raw_tools = params.pop("functions") if "functions" in params else None
+            tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
+            response = await chat.send_message_async(
+                message,
+                generation_config=params,
+                tools=tools,
+                safety_settings=safety_settings,
+            )
+            generations = [
+                ChatGeneration(
+                    message=_parse_response_candidate(c),
+                    generation_info=get_generation_info(
+                        c,
+                        self._is_gemini_model,
+                        usage_metadata=response.to_dict().get("usage_metadata"),
+                    ),
                 )
-                message = history_gemini.pop()
-                chat = self.client.start_chat(history=history_gemini)
-                # set param to `functions` until core tool/function calling implemented
-                raw_tools = params.pop("functions") if "functions" in params else None
-                tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
-                response = await chat.send_message_async(
-                    message,
-                    generation_config=params,
-                    tools=tools,
-                    safety_settings=safety_settings,
+                for c in response.candidates
+            ]
+        else:
+            question = _get_question(messages)
+            history = _parse_chat_history(messages[:-1])
+            examples = kwargs.get("examples", None) or self.examples
+            if examples:
+                params["examples"] = _parse_examples(examples)
+            chat = self._start_chat(history, **params)
+            response = await chat.send_message_async(question.content, **msg_params)
+            generations = [
+                ChatGeneration(
+                    message=AIMessage(content=r.text),
+                    generation_info=get_generation_info(
+                        r,
+                        self._is_gemini_model,
+                        usage_metadata=response.raw_prediction_response.metadata,
+                    ),
                 )
-                generations = [
-                    ChatGeneration(
-                        message=_parse_response_candidate(c),
-                        generation_info=get_generation_info(
-                            c,
-                            self._is_gemini_model,
-                            usage_metadata=response.to_dict().get("usage_metadata"),
-                        ),
-                    )
-                    for c in response.candidates
-                ]
-            else:
-                question = _get_question(messages)
-                history = _parse_chat_history(messages[:-1])
-                examples = kwargs.get("examples", None) or self.examples
-                if examples:
-                    params["examples"] = _parse_examples(examples)
-                chat = self._start_chat(history, **params)
-                response = await chat.send_message_async(question.content, **msg_params)
-                generations = [
-                    ChatGeneration(
-                        message=AIMessage(content=r.text),
-                        generation_info=get_generation_info(
-                            r,
-                            self._is_gemini_model,
-                            usage_metadata=response.raw_prediction_response.metadata,
-                        ),
-                    )
-                    for r in response.candidates
-                ]
+                for r in response.candidates
+            ]
         return ChatResult(generations=generations)
 
     def _stream(
@@ -497,61 +493,60 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        with telemetry.tool_context_manager(self._user_agent):
-            params = self._prepare_params(stop=stop, stream=True, **kwargs)
-            if self._is_gemini_model:
-                history_gemini = _parse_chat_history_gemini(
-                    messages,
-                    project=self.project,
-                    convert_system_message_to_human=self.convert_system_message_to_human,
+        params = self._prepare_params(stop=stop, stream=True, **kwargs)
+        if self._is_gemini_model:
+            history_gemini = _parse_chat_history_gemini(
+                messages,
+                project=self.project,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+            message = history_gemini.pop()
+            chat = self.client.start_chat(history=history_gemini)
+            # set param to `functions` until core tool/function calling implemented
+            raw_tools = params.pop("functions") if "functions" in params else None
+            tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
+            safety_settings = params.pop("safety_settings", None)
+            responses = chat.send_message(
+                message,
+                stream=True,
+                generation_config=params,
+                safety_settings=safety_settings,
+                tools=tools,
+            )
+            for response in responses:
+                message = _parse_response_candidate(response.candidates[0])
+                if run_manager:
+                    run_manager.on_llm_new_token(message.content)
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(
+                        content=message.content,
+                        additional_kwargs=message.additional_kwargs,
+                    ),
+                    generation_info=get_generation_info(
+                        response.candidates[0],
+                        self._is_gemini_model,
+                        usage_metadata=response.to_dict().get("usage_metadata"),
+                    ),
                 )
-                message = history_gemini.pop()
-                chat = self.client.start_chat(history=history_gemini)
-                # set param to `functions` until core tool/function calling implemented
-                raw_tools = params.pop("functions") if "functions" in params else None
-                tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
-                safety_settings = params.pop("safety_settings", None)
-                responses = chat.send_message(
-                    message,
-                    stream=True,
-                    generation_config=params,
-                    safety_settings=safety_settings,
-                    tools=tools,
+        else:
+            question = _get_question(messages)
+            history = _parse_chat_history(messages[:-1])
+            examples = kwargs.get("examples", None)
+            if examples:
+                params["examples"] = _parse_examples(examples)
+            chat = self._start_chat(history, **params)
+            responses = chat.send_message_streaming(question.content, **params)
+            for response in responses:
+                if run_manager:
+                    run_manager.on_llm_new_token(response.text)
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(content=response.text),
+                    generation_info=get_generation_info(
+                        response,
+                        self._is_gemini_model,
+                        usage_metadata=response.raw_prediction_response.metadata,
+                    ),
                 )
-                for response in responses:
-                    message = _parse_response_candidate(response.candidates[0])
-                    if run_manager:
-                        run_manager.on_llm_new_token(message.content)
-                    yield ChatGenerationChunk(
-                        message=AIMessageChunk(
-                            content=message.content,
-                            additional_kwargs=message.additional_kwargs,
-                        ),
-                        generation_info=get_generation_info(
-                            response.candidates[0],
-                            self._is_gemini_model,
-                            usage_metadata=response.to_dict().get("usage_metadata"),
-                        ),
-                    )
-            else:
-                question = _get_question(messages)
-                history = _parse_chat_history(messages[:-1])
-                examples = kwargs.get("examples", None)
-                if examples:
-                    params["examples"] = _parse_examples(examples)
-                chat = self._start_chat(history, **params)
-                responses = chat.send_message_streaming(question.content, **params)
-                for response in responses:
-                    if run_manager:
-                        run_manager.on_llm_new_token(response.text)
-                    yield ChatGenerationChunk(
-                        message=AIMessageChunk(content=response.text),
-                        generation_info=get_generation_info(
-                            response,
-                            self._is_gemini_model,
-                            usage_metadata=response.raw_prediction_response.metadata,
-                        ),
-                    )
 
     async def _astream(
         self,
@@ -562,39 +557,38 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self._is_gemini_model:
             raise NotImplementedError()
-        with telemetry.tool_context_manager(self._user_agent):
-            params = self._prepare_params(stop=stop, stream=True, **kwargs)
-            history_gemini = _parse_chat_history_gemini(
-                messages,
-                project=self.project,
-                convert_system_message_to_human=self.convert_system_message_to_human,
+        params = self._prepare_params(stop=stop, stream=True, **kwargs)
+        history_gemini = _parse_chat_history_gemini(
+            messages,
+            project=self.project,
+            convert_system_message_to_human=self.convert_system_message_to_human,
+        )
+        message = history_gemini.pop()
+        chat = self.client.start_chat(history=history_gemini)
+        raw_tools = params.pop("functions") if "functions" in params else None
+        tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
+        safety_settings = params.pop("safety_settings", None)
+        async for chunk in await chat.send_message_async(
+            message,
+            stream=True,
+            generation_config=params,
+            safety_settings=safety_settings,
+            tools=tools,
+        ):
+            message = _parse_response_candidate(chunk.candidates[0])
+            if run_manager:
+                await run_manager.on_llm_new_token(message.content)
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(
+                    content=message.content,
+                    additional_kwargs=message.additional_kwargs,
+                ),
+                generation_info=get_generation_info(
+                    chunk.candidates[0],
+                    self._is_gemini_model,
+                    usage_metadata=chunk.to_dict().get("usage_metadata"),
+                ),
             )
-            message = history_gemini.pop()
-            chat = self.client.start_chat(history=history_gemini)
-            raw_tools = params.pop("functions") if "functions" in params else None
-            tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
-            safety_settings = params.pop("safety_settings", None)
-            async for chunk in await chat.send_message_async(
-                message,
-                stream=True,
-                generation_config=params,
-                safety_settings=safety_settings,
-                tools=tools,
-            ):
-                message = _parse_response_candidate(chunk.candidates[0])
-                if run_manager:
-                    await run_manager.on_llm_new_token(message.content)
-                yield ChatGenerationChunk(
-                    message=AIMessageChunk(
-                        content=message.content,
-                        additional_kwargs=message.additional_kwargs,
-                    ),
-                    generation_info=get_generation_info(
-                        chunk.candidates[0],
-                        self._is_gemini_model,
-                        usage_metadata=chunk.to_dict().get("usage_metadata"),
-                    ),
-                )
 
     def with_structured_output(
         self,
