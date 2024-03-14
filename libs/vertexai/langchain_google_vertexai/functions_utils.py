@@ -62,8 +62,14 @@ def _format_tools_to_vertex_tool(
     for tool in tools:
         if isinstance(tool, BaseTool):
             func = _format_tool_to_vertex_function(tool)
-        else:
+        elif isinstance(tool, type) and issubclass(tool, BaseModel):
             func = _format_pydantic_to_vertex_function(tool)
+        else:
+            func = {
+                "name": tool["name"],
+                "description": tool.get("description"),
+                "parameters": _get_parameters_from_schema(tool["parameters"]),
+            }
         function_declarations.append(FunctionDeclaration(**func))
 
     return [VertexTool(function_declarations=function_declarations)]
