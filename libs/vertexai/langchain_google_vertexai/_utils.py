@@ -45,7 +45,7 @@ def create_retry_decorator(
     return decorator
 
 
-def raise_vertex_import_error(minimum_expected_version: str = "1.38.0") -> None:
+def raise_vertex_import_error(minimum_expected_version: str = "1.44.0") -> None:
     """Raise ImportError related to Vertex SDK being not available.
 
     Args:
