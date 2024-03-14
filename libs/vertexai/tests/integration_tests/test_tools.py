@@ -95,8 +95,7 @@ def test_tools() -> None:
 
 @pytest.mark.extended
 def test_custom_tool() -> None:
-    from langchain.agents import AgentExecutor, create_openai_functions_agent
-    from langchain.agents import tool
+    from langchain.agents import AgentExecutor, create_openai_functions_agent, tool
 
     @tool
     def search(query: str) -> str:
@@ -105,7 +104,9 @@ def test_custom_tool() -> None:
 
     tools = [search]
 
-    llm = ChatVertexAI(model_name="gemini-pro", temperature=0.0, convert_system_message_to_human=True)
+    llm = ChatVertexAI(
+        model_name="gemini-pro", temperature=0.0, convert_system_message_to_human=True
+    )
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", "You are a helpful assistant"),
