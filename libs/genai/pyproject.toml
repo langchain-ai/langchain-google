@@ -14,10 +14,7 @@ license = "MIT"
 python = ">=3.9,<4.0"
 langchain-core = "^0.1"
 google-generativeai = "^0.4.1"
-pillow = { version = "^10.1.0", optional = true }
-
-[tool.poetry.extras]
-images = ["pillow"]
+pillow = "^10.1.0"
 
 [tool.poetry.group.test]
 optional = true
