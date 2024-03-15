@@ -13,6 +13,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from langchain_core.pydantic_v1 import root_validator
@@ -27,6 +28,7 @@ from vertexai.vision_models import (  # type: ignore
 )
 
 from langchain_google_vertexai._base import _VertexAICommon
+from langchain_google_vertexai._utils import get_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +67,19 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "textembedding-gecko@001"
             )
             values["model_name"] = "textembedding-gecko@001"
-        if (
-            GoogleEmbeddingModelType(values["model_name"])
-            == GoogleEmbeddingModelType.MULTIMODAL
-        ):
-            values["client"] = MultiModalEmbeddingModel.from_pretrained(
-                values["model_name"]
-            )
-        else:
-            values["client"] = TextEmbeddingModel.from_pretrained(values["model_name"])
+        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")  # type: ignore
+        with telemetry.tool_context_manager(user_agent):
+            if (
+                GoogleEmbeddingModelType(values["model_name"])
+                == GoogleEmbeddingModelType.MULTIMODAL
+            ):
+                values["client"] = MultiModalEmbeddingModel.from_pretrained(
+                    values["model_name"]
+                )
+            else:
+                values["client"] = TextEmbeddingModel.from_pretrained(
+                    values["model_name"]
+                )
         return values
 
     def __init__(
@@ -191,11 +197,12 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self, texts: List[str], embeddings_type: Optional[str] = None
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
-        if self.model_type == GoogleEmbeddingModelType.MULTIMODAL:
-            return self._get_multimodal_embeddings_with_retry(texts)
-        return self._get_text_embeddings_with_retry(
-            texts, embeddings_type=embeddings_type
-        )
+        with telemetry.tool_context_manager(self._user_agent):
+            if self.model_type == GoogleEmbeddingModelType.MULTIMODAL:
+                return self._get_multimodal_embeddings_with_retry(texts)
+            return self._get_text_embeddings_with_retry(
+                texts, embeddings_type=embeddings_type
+            )
 
     def _get_multimodal_embeddings_with_retry(
         self, texts: List[str]
