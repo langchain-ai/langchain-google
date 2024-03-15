@@ -1,5 +1,5 @@
 import pytest
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.exceptions import NotFound
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
