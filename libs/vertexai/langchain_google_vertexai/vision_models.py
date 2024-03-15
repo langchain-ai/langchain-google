@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Union
 
+from google.cloud.aiplatform import telemetry
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, BaseLLM
 from langchain_core.messages import AIMessage, BaseMessage
@@ -22,6 +23,7 @@ from langchain_google_vertexai._image_utils import (
     get_text_str_from_content_part,
     image_bytes_to_b64_string,
 )
+from langchain_google_vertexai._utils import get_user_agent
 
 
 class _BaseImageTextModel(BaseModel):
@@ -75,6 +77,12 @@ class _BaseImageTextModel(BaseModel):
         """Returns the type of LLM"""
         return "vertexai-vision"
 
+    @property
+    def _user_agent(self) -> str:
+        """Gets the User Agent."""
+        _, user_agent = get_user_agent(f"{type(self).__name__}_{self.model_name}")
+        return user_agent
+
 
 class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
     """Base class for Image Captioning models."""
@@ -88,13 +96,14 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
         Returns:
             List of captions obtained from the image.
         """
-        model = self._create_model()
-        captions = model.get_captions(
-            image=image,
-            number_of_results=self.number_of_results,
-            language=self.language,
-        )
-        return captions
+        with telemetry.tool_context_manager(self._user_agent):
+            model = self._create_model()
+            captions = model.get_captions(
+                image=image,
+                number_of_results=self.number_of_results,
+                language=self.language,
+            )
+            return captions
 
 
 class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
@@ -266,11 +275,12 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
         Returns:
             List of responses to the query.
         """
-        model = self._create_model()
-        answers = model.ask_question(
-            image=image, question=query, number_of_results=self.number_of_results
-        )
-        return answers
+        with telemetry.tool_context_manager(self._user_agent):
+            model = self._create_model()
+            answers = model.ask_question(
+                image=image, question=query, number_of_results=self.number_of_results
+            )
+            return answers
 
 
 class _BaseVertexAIImageGenerator(BaseModel):
@@ -303,17 +313,17 @@ class _BaseVertexAIImageGenerator(BaseModel):
         Returns:
             List of b64 encoded strings.
         """
+        with telemetry.tool_context_manager(self._user_agent):
+            model = ImageGenerationModel.from_pretrained(self.model_name)
 
-        model = ImageGenerationModel.from_pretrained(self.model_name)
-
-        generation_result = model.generate_images(
-            prompt=prompt,
-            negative_prompt=self.negative_prompt,
-            number_of_images=self.number_of_images,
-            language=self.language,
-            guidance_scale=self.guidance_scale,
-            seed=self.seed,
-        )
+            generation_result = model.generate_images(
+                prompt=prompt,
+                negative_prompt=self.negative_prompt,
+                number_of_images=self.number_of_images,
+                language=self.language,
+                guidance_scale=self.guidance_scale,
+                seed=self.seed,
+            )
 
         image_str_list = [
             self._to_b64_string(image) for image in generation_result.images
@@ -331,22 +341,22 @@ class _BaseVertexAIImageGenerator(BaseModel):
         Returns:
             List of b64 encoded strings.
         """
+        with telemetry.tool_context_manager(self._user_agent):
+            model = ImageGenerationModel.from_pretrained(self.model_name)
 
-        model = ImageGenerationModel.from_pretrained(self.model_name)
+            image_loader = ImageBytesLoader(project=self.project)
+            image_bytes = image_loader.load_bytes(image_str)
+            image = Image(image_bytes=image_bytes)
 
-        image_loader = ImageBytesLoader(project=self.project)
-        image_bytes = image_loader.load_bytes(image_str)
-        image = Image(image_bytes=image_bytes)
-
-        generation_result = model.edit_image(
-            prompt=prompt,
-            base_image=image,
-            negative_prompt=self.negative_prompt,
-            number_of_images=self.number_of_images,
-            language=self.language,
-            guidance_scale=self.guidance_scale,
-            seed=self.seed,
-        )
+            generation_result = model.edit_image(
+                prompt=prompt,
+                base_image=image,
+                negative_prompt=self.negative_prompt,
+                number_of_images=self.number_of_images,
+                language=self.language,
+                guidance_scale=self.guidance_scale,
+                seed=self.seed,
+            )
 
         image_str_list = [
             self._to_b64_string(image) for image in generation_result.images
@@ -382,6 +392,12 @@ class _BaseVertexAIImageGenerator(BaseModel):
     def _llm_type(self) -> str:
         """Returns the type of LLM"""
         return "vertexai-vision"
+
+    @property
+    def _user_agent(self) -> str:
+        """Gets the User Agent."""
+        _, user_agent = get_user_agent(f"{type(self).__name__}_{self.model_name}")
+        return user_agent
 
 
 class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
