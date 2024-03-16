@@ -3,6 +3,7 @@ from __future__ import annotations
 from enum import Enum, auto
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
+from google.auth import credentials as ga_credentials
 import google.api_core
 import google.generativeai as genai  # type: ignore[import]
 from langchain_core.callbacks import (
@@ -122,6 +123,10 @@ Supported examples:
     )
     """Model name to use."""
     google_api_key: Optional[SecretStr] = None
+    
+    credentials: Optional[ga_credentials.Credentials | dict | None] = None
+    """credentials: the credentials passed to genai.configure method"""
+    
     temperature: float = 0.7
     """Run inference with this temperature. Must by in the closed interval
        [0.0, 1.0]."""
@@ -209,14 +214,16 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         model_name = values["model"]
 
         safety_settings = values["safety_settings"]
-
+        
         if isinstance(google_api_key, SecretStr):
             google_api_key = google_api_key.get_secret_value()
 
         genai.configure(
-            api_key=google_api_key,
+            # ignore api_key otherwise error occured
+            api_key=google_api_key if values.get("credentials") is None else None,
             transport=values.get("transport"),
             client_options=values.get("client_options"),
+            credentials=values.get("credentials")
         )
 
         if safety_settings and (

@@ -17,6 +17,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         1. The ``GOOGLE_API_KEY``` environment variable set with your API key, or
         2. Pass your API key using the google_api_key kwarg to the ChatGoogle
            constructor.
+        3. Pass your OAuth 2 credentials using credentials kwargs to the 
+           ChatGoogle constructor.
 
     Example:
         .. code-block:: python
@@ -65,9 +67,10 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             google_api_key = google_api_key.get_secret_value()
 
         genai.configure(
-            api_key=google_api_key,
+            api_key=google_api_key if values.get("credentials") is None else None,
             transport=values.get("transport"),
             client_options=values.get("client_options"),
+            credentials=values.get("credentials")
         )
         return values
 
