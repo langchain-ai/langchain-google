@@ -13,7 +13,7 @@ from langchain_core.callbacks import (
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.llms import BaseLLM, create_base_retry_decorator
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
-from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
+from langchain_core.pydantic_v1 import BaseModel, validator, Field, SecretStr, root_validator
 from langchain_core.utils import get_from_dict_or_env
 
 from langchain_google_genai._enums import (
@@ -122,9 +122,9 @@ Supported examples:
     - models/text-bison-001""",
     )
     """Model name to use."""
-    google_api_key: Optional[SecretStr] = None
+    google_api_key: Optional[SecretStr | None] = None
     
-    credentials: Optional[ga_credentials.Credentials | dict | None] = None
+    credentials: Optional[ga_credentials.Credentials | None] = None
     """credentials: the credentials passed to genai.configure method"""
     
     temperature: float = 0.7
@@ -172,6 +172,9 @@ Supported examples:
             }
             """  # noqa: E501
 
+    class Config:
+        arbitrary_types_allowed = True
+
     @property
     def lc_secrets(self) -> Dict[str, str]:
         return {"google_api_key": "GOOGLE_API_KEY"}
@@ -185,6 +188,7 @@ Supported examples:
         """Get the identifying parameters."""
         return {
             "model": self.model,
+            "credentials": self.credentials,
             "temperature": self.temperature,
             "top_p": self.top_p,
             "top_k": self.top_k,
@@ -209,8 +213,11 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     def validate_environment(cls, values: Dict) -> Dict:
         """Validates params and passes them to google-generativeai package."""
         google_api_key = get_from_dict_or_env(
-            values, "google_api_key", "GOOGLE_API_KEY"
+            values, "google_api_key", "GOOGLE_API_KEY", ''
         )
+        if google_api_key == '':
+            google_api_key = None
+            
         model_name = values["model"]
 
         safety_settings = values["safety_settings"]
