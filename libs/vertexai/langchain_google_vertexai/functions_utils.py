@@ -67,7 +67,7 @@ def _format_tools_to_vertex_tool(
         elif isinstance(tool, dict):
             func = {
                 "name": tool["name"],
-                "description": tool.pop("description"),
+                "description": tool["description"],
                 "parameters": _get_parameters_from_schema(tool["parameters"]),
             }
         else:
