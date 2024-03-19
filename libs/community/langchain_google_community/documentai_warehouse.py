@@ -9,12 +9,12 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.utils import get_from_dict_or_env
 
 if TYPE_CHECKING:
-    from google.cloud.contentwarehouse_v1 import (
+    from google.cloud.contentwarehouse_v1 import (  # type: ignore[import]
         DocumentServiceClient,
         RequestMetadata,
         SearchDocumentsRequest,
     )
-    from google.cloud.contentwarehouse_v1.services.document_service.pagers import (
+    from google.cloud.contentwarehouse_v1.services.document_service.pagers import (  # type: ignore[import]
         SearchDocumentsPager,
     )
 
