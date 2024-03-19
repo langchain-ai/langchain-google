@@ -7,7 +7,7 @@ from typing import Dict, Union
 from urllib.parse import urlparse
 
 import requests
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import storage
 
 
 class ImageBytesLoader:

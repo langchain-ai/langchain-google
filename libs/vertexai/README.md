@@ -22,6 +22,7 @@ llm.invoke("Sing a ballad of LangChain.")
 ```
 
 You can use other models, e.g. `chat-bison`:
+
 ```python
 from langchain_google_vertexai import ChatVertexAI
 
@@ -58,7 +59,6 @@ The value of `image_url` can be any of the following:
 - A local file path
 - A base64 encoded image (e.g., `data:image/png;base64,abcd124`)
 
-
 ## Embeddings
 
 You can use Google Cloud's embeddings models as:
@@ -71,24 +71,27 @@ embeddings.embed_query("hello, world!")
 ```
 
 ## LLMs
+
 You can use Google Cloud's generative AI models as Langchain LLMs:
 
 ```python
-from langchain.prompts import PromptTemplate
-from langchain_google_vertexai import VertexAI
+from langchain_core.prompts import PromptTemplate
+from langchain_google_vertexai import ChatVertexAI
 
 template = """Question: {question}
 
 Answer: Let's think step by step."""
 prompt = PromptTemplate.from_template(template)
 
+llm = ChatVertexAI(model_name="gemini-pro")
 chain = prompt | llm
 
-question = "Who was the president in the year Justin Beiber was born?"
+question = "Who was the president of the USA in 1994?"
 print(chain.invoke({"question": question}))
 ```
 
 You can use Gemini and Palm models, including code-generations ones:
+
 ```python
 from langchain_google_vertexai import VertexAI
 
