@@ -11,10 +11,9 @@ export PROJECT_ID=... - set to your Google Cloud project ID
 export DATA_STORE_ID=... - the ID of the search engine to use for the test
 """
 
-
 from langchain_core.documents import Document
 
-from langchain_google_tools import (
+from langchain_google_community import (
     VertexAIMultiTurnSearchRetriever,
     VertexAISearchRetriever,
 )
