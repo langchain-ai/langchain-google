@@ -11,7 +11,6 @@ from functools import partial
 from threading import Lock, Thread
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
-import numpy as np
 from google.api_core.exceptions import ClientError
 from langchain_community.utils.google import get_client_info
 from langchain_community.vectorstores.utils import (
@@ -101,6 +100,13 @@ class BigQueryVectorSearch(VectorStore):
             raise ImportError(
                 "Please, install or upgrade the google-cloud-bigquery library: "
                 "pip install google-cloud-bigquery"
+            )
+        try:
+            import numpy as np
+        except ModuleNotFoundError:
+            raise ImportError(
+                "Please, install or upgrade the numpy library: "
+                "pip install numpy"
             )
         self._logger = logging.getLogger(__name__)
         self._creating_index = False
@@ -729,6 +735,8 @@ class BigQueryVectorSearch(VectorStore):
         Returns:
             List of Documents selected by maximal marginal relevance.
         """
+        import numpy as np
+
         query_embedding = self.embedding_model.embed_query(  # type: ignore
             query
         )
@@ -777,6 +785,8 @@ class BigQueryVectorSearch(VectorStore):
         Returns:
             List of Documents selected by maximal marginal relevance.
         """
+        import numpy as np
+
         doc_tuples = self._search_with_score_and_embeddings_by_vector(
             embedding, fetch_k, filter, brute_force, fraction_lists_to_search
         )
