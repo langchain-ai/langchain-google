@@ -10,7 +10,7 @@ import uuid
 
 import pytest
 
-from langchain_google_tools import BigQueryVectorSearch
+from langchain_google_community import BigQueryVectorSearch
 from tests.integration_tests.fake import FakeEmbeddings
 
 TEST_TABLE_NAME = "langchain_test_table"
