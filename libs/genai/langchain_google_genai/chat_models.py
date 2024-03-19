@@ -483,17 +483,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validates params and passes them to google-generativeai package."""
-        google_api_key = get_from_dict_or_env(
-            values, "google_api_key", "GOOGLE_API_KEY"
-        )
-        if isinstance(google_api_key, SecretStr):
-            google_api_key = google_api_key.get_secret_value()
+        if values.get("credentials"):
+            genai.configure(
+                credentials=values.get("credentials"),
+                transport=values.get("transport"),
+                client_options=values.get("client_options"),
+            )
+        else:
+            google_api_key = get_from_dict_or_env(
+                values, "google_api_key", "GOOGLE_API_KEY"
+            )
+            if isinstance(google_api_key, SecretStr):
+                google_api_key = google_api_key.get_secret_value()
 
-        genai.configure(
-            api_key=google_api_key,
-            transport=values.get("transport"),
-            client_options=values.get("client_options"),
-        )
+            genai.configure(
+                api_key=google_api_key,
+                transport=values.get("transport"),
+                client_options=values.get("client_options"),
+            )
         if (
             values.get("temperature") is not None
             and not 0 <= values["temperature"] <= 1
