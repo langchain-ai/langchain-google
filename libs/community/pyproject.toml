@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "langchain-google-tools"
-version = "0.1.0"
+name = "langchain-google-community"
+version = "0.1.0rc0"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 readme = "README.md"
@@ -8,7 +8,7 @@ repository = "https://github.com/langchain-ai/langchain-google"
 license = "MIT"
 
 [tool.poetry.urls]
-"Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/tools"
+"Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/community"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
