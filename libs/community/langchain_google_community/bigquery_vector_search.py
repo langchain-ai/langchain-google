@@ -88,7 +88,7 @@ class BigQueryVectorSearch(VectorStore):
                 to use. Defaults to None.
         """
         try:
-            from google.cloud import bigquery
+            from google.cloud import bigquery  # type: ignore[attr-defined]
 
             client_info = get_client_info(module="bigquery-vector-search")
             self.bq_client = bigquery.Client(
@@ -126,7 +126,7 @@ class BigQueryVectorSearch(VectorStore):
 
     def _initialize_table(self) -> Any:
         """Validates or creates the BigQuery table."""
-        from google.cloud import bigquery
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
         table_ref = bigquery.TableReference.from_string(self._full_table_id)
         table = self.bq_client.create_table(table_ref, exists_ok=True)
@@ -192,7 +192,7 @@ class BigQueryVectorSearch(VectorStore):
         A vector index in BigQuery table enables efficient
         approximate vector search.
         """
-        from google.cloud import bigquery
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
         if self._have_index or self._creating_index:
             # Already have an index or in the process of creating one.
@@ -264,7 +264,7 @@ class BigQueryVectorSearch(VectorStore):
 
     def _persist(self, data: Dict[str, Any]) -> None:
         """Saves documents and embeddings to BigQuery."""
-        from google.cloud import bigquery
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
         data_len = len(data[list(data.keys())[0]])
         if data_len == 0:
@@ -357,7 +357,7 @@ class BigQueryVectorSearch(VectorStore):
             List of ids from adding the texts into the vectorstore.
         """
         if ids and len(ids) > 0:
-            from google.cloud import bigquery
+            from google.cloud import bigquery  # type: ignore[attr-defined]
 
             job_config = bigquery.QueryJobConfig(
                 query_parameters=[
@@ -424,7 +424,7 @@ class BigQueryVectorSearch(VectorStore):
         """
         if not ids or len(ids) == 0:
             return True
-        from google.cloud import bigquery
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
@@ -465,7 +465,7 @@ class BigQueryVectorSearch(VectorStore):
         brute_force: bool = False,
         fraction_lists_to_search: Optional[float] = None,
     ) -> List[Tuple[Document, List[float], float]]:
-        from google.cloud import bigquery
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
         # Create an index if no index exists.
         if not self._have_index and not self._creating_index:

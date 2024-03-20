@@ -22,7 +22,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.utils import get_from_dict_or_env
 
 if TYPE_CHECKING:
-    from google.cloud.discoveryengine_v1beta import (
+    from google.cloud.discoveryengine_v1beta import (  # type: ignore[import]
         ConversationalSearchServiceClient,
         SearchRequest,
         SearchResult,

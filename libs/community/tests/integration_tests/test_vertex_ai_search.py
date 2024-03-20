@@ -10,7 +10,7 @@ Set the following environment variables before the tests:
 export PROJECT_ID=... - set to your Google Cloud project ID
 export DATA_STORE_ID=... - the ID of the search engine to use for the test
 """
-
+import pytest
 from langchain_core.documents import Document
 
 from langchain_google_community import (
@@ -19,6 +19,7 @@ from langchain_google_community import (
 )
 
 
+@pytest.mark.skip(reason="CI/CD not ready.")
 def test_google_vertex_ai_search_get_relevant_documents() -> None:
     """Test the get_relevant_documents() method."""
     retriever = VertexAIMultiTurnSearchRetriever()
@@ -31,6 +32,7 @@ def test_google_vertex_ai_search_get_relevant_documents() -> None:
         assert doc.metadata["source"]
 
 
+@pytest.mark.skip(reason="CI/CD not ready.")
 def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
     """Test the get_relevant_documents() method."""
     retriever = VertexAISearchRetriever()

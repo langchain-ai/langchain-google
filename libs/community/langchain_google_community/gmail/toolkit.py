@@ -14,7 +14,7 @@ from langchain_core.pydantic_v1 import Field
 
 if TYPE_CHECKING:
     # This is for linting and IDE typehints
-    from googleapiclient.discovery import Resource
+    from googleapiclient.discovery import Resource  # type: ignore[import]
 else:
     try:
         # We do this so pydantic can resolve the types when instantiating

@@ -9,7 +9,7 @@ TEST_FILE ?= tests/unit_tests/
 integration_test integration_tests: TEST_FILE = tests/integration_tests/
 
 test tests integration_test integration_tests:
-	poetry run pytest --release $(TEST_FILE)
+	poetry run pytest $(TEST_FILE)
 
 
 ######################
@@ -20,8 +20,8 @@ test tests integration_test integration_tests:
 PYTHON_FILES=.
 MYPY_CACHE=.mypy_cache
 lint format: PYTHON_FILES=.
-lint_diff format_diff: PYTHON_FILES=$(shell git diff --relative=libs/tools --name-only --diff-filter=d main | grep -E '\.py$$|\.ipynb$$')
-lint_package: PYTHON_FILES=langchain_google_tools
+lint_diff format_diff: PYTHON_FILES=$(shell git diff --relative=libs/community --name-only --diff-filter=d main | grep -E '\.py$$|\.ipynb$$')
+lint_package: PYTHON_FILES=langchain_google_community
 lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test
 
@@ -41,7 +41,7 @@ spell_check:
 spell_fix:
 	poetry run codespell --toml pyproject.toml -w
 
-check_imports: $(shell find langchain_google_tools -name '*.py')
+check_imports: $(shell find langchain_google_community -name '*.py')
 	poetry run python ./scripts/check_imports.py $^
 
 ######################

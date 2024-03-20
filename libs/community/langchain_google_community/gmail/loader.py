@@ -2,7 +2,7 @@ import base64
 import re
 from typing import Any, Iterator
 
-from googleapiclient.discovery import build
+from googleapiclient.discovery import build  # type: ignore[import]
 from langchain_community.chat_loaders.base import BaseChatLoader
 from langchain_core.chat_sessions import ChatSession
 from langchain_core.messages import HumanMessage
