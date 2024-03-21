@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 # TODO: remove ignore once the google package is published with types
 import google.generativeai as genai  # type: ignore[import]
@@ -46,9 +46,9 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     credentials: Any = Field(
         default=None,
         exclude=True,
-        description="The default custom credentials (google.auth.credentials.Credentials) "
-        "to use when making API calls. If not provided, credentials will be ascertained from "
-        "the GOOGLE_API_KEY envvar"
+        description="The default custom credentials "
+        "(google.auth.credentials.Credentials) to use when making API calls. If not "
+        "provided, credentials will be ascertained from the GOOGLE_API_KEY envvar",
     )
     client_options: Optional[Dict] = Field(
         None,
