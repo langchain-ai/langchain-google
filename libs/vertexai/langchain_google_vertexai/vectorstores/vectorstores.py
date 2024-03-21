@@ -333,7 +333,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         credentials_path: Optional[str] = None,
         embedding: Optional[Embeddings] = None,
         stream_update: bool = False,
-        datastore_client_kwargs: Dict[str, Any] | None = None,
+        datastore_client_kwargs: Optional[Dict[str, Any]] = None,
         datastore_kind: str = "document_id",
         datastore_text_property_name: str = "text",
         datastore_metadata_property_name: str = "metadata",
