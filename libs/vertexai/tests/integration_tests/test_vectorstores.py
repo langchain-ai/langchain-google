@@ -66,7 +66,6 @@ def datastore_document_storage(
 
 @pytest.fixture
 def vector_store() -> VectorSearchVectorStore:
-
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
     vector_store = VectorSearchVectorStore.from_components(
@@ -83,7 +82,6 @@ def vector_store() -> VectorSearchVectorStore:
 
 @pytest.fixture
 def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
-
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
     vector_store = VectorSearchVectorStoreDatastore.from_components(
@@ -92,7 +90,7 @@ def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
         index_id=os.environ["STREAM_INDEX_ID_DATASTORE"],
         endpoint_id=os.environ["STREAM_ENDPOINT_ID_DATASTORE"],
         embedding=embeddings,
-        stream_update=True
+        stream_update=True,
     )
 
     return vector_store
@@ -170,7 +168,6 @@ def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
     "vector_store_class", ["vector_store", "datastore_vector_store"]
 )
 def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
-
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
     query = "What are your favourite animals?"
@@ -188,14 +185,15 @@ def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
 
 @pytest.mark.extended
 @pytest.mark.parametrize(
-    "vector_store_class", [
-        "vector_store", 
-        #"datastore_vector_store" Waiting for the bug to be fixed as its stream
-    ]
+    "vector_store_class",
+    [
+        "vector_store",
+        # "datastore_vector_store" Waiting for the bug to be fixed as its stream
+    ],
 )
 def test_vector_store_filtering(
-    vector_store_class: str, request: pytest.FixtureRequest):
-
+    vector_store_class: str, request: pytest.FixtureRequest
+):
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
     documents = vector_store.similarity_search(
         "I want some pants",
@@ -210,16 +208,19 @@ def test_vector_store_filtering(
 
 @pytest.mark.extended
 def test_vector_store_update_index(
-    vector_store: VectorSearchVectorStore, sample_documents: List[Document]):
+    vector_store: VectorSearchVectorStore, sample_documents: List[Document]
+):
     vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
+
 
 @pytest.mark.extended
 def test_vector_store_stream_update_index(
-    datastore_vector_store: VectorSearchVectorStoreDatastore, 
-    sample_documents: List[Document]):
-
+    datastore_vector_store: VectorSearchVectorStoreDatastore,
+    sample_documents: List[Document],
+):
     datastore_vector_store.add_documents(
-        documents=sample_documents, is_complete_overwrite=True)
+        documents=sample_documents, is_complete_overwrite=True
+    )
 
 
 @pytest.fixture
