@@ -10,10 +10,10 @@ def test_model_name() -> None:
     assert llm.model_name == "text-bison"
 
     for llm in [
-        VertexAI(model_name="foo"),
-        VertexAI(model="foo"),  # type: ignore[call-arg]
+        VertexAI(model_name="text-bison@001"),
+        VertexAI(model="text-bison@001"),  # type: ignore[call-arg]
     ]:
-        assert llm.model_name == "foo"
+        assert llm.model_name == "text-bison@001"
 
 
 def test_vertexai_args_passed() -> None:
