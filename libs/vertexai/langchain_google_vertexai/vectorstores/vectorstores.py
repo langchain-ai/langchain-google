@@ -311,15 +311,16 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
             ),
             embbedings=embedding,
         )
-    
+
+
 class VectorSearchVectorStoreGCS(VectorSearchVectorStore):
-    """ Alias of `VectorSearchVectorStore` for consistency with the rest of vector
+    """Alias of `VectorSearchVectorStore` for consistency with the rest of vector
     stores with different document storage backends.
     """
 
+
 class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
-    """ VectorSearch with DatasTore document storage.
-    """
+    """VectorSearch with DatasTore document storage."""
 
     @classmethod
     def from_components(
@@ -336,10 +337,10 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         datastore_kind: str = "document_id",
         datastore_text_property_name: str = "text",
         datastore_metadata_property_name: str = "metadata",
-        **kwargs: Dict[str, Any]
+        **kwargs: Dict[str, Any],
     ) -> "VectorSearchVectorStoreDatastore":
-        """ Takes the object creation out of the constructor.
-        
+        """Takes the object creation out of the constructor.
+
         # Args:
             project_id: The GCP project id.
             region: The default location making the API calls. It must have
@@ -371,7 +372,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
             bucket = sdk_manager.get_gcs_bucket(bucket_name=index_staging_bucket_name)
         else:
             bucket = None
-        
+
         index = sdk_manager.get_index(index_id=index_id)
         endpoint = sdk_manager.get_endpoint(endpoint_id=endpoint_id)
 

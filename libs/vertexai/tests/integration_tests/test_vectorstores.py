@@ -79,11 +79,11 @@ def vector_store() -> VectorSearchVectorStore:
 
     return vector_store
 
+
 @pytest.fixture
 def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
-
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
-    
+
     vector_store = VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ["REGION"],
@@ -94,7 +94,6 @@ def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
     )
 
     return vector_store
-
 
 
 @pytest.mark.extended
