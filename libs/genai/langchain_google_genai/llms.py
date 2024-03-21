@@ -4,7 +4,6 @@ from enum import Enum, auto
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import google.api_core
-import google.cloud.aiplatform
 import google.generativeai as genai  # type: ignore[import]
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
