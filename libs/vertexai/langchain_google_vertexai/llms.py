@@ -136,6 +136,12 @@ class _VertexAIBase(BaseModel):
     model_name: Optional[str] = None
     "Underlying model name."
 
+    @root_validator(pre=True)
+    def validate_params(cls, values: dict) -> dict:
+        if "model" in values and "model_name" not in values:
+            values["model_name"] = values.pop("model")
+        return values
+
 
 class _VertexAICommon(_VertexAIBase):
     client: Any = None  #: :meta private:

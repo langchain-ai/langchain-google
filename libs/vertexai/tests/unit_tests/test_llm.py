@@ -5,6 +5,17 @@ from unittest.mock import MagicMock, patch
 from langchain_google_vertexai.llms import VertexAI
 
 
+def test_model_name() -> None:
+    llm = VertexAI()
+    assert llm.model_name == "text-bison"
+
+    for llm in [
+        VertexAI(model_name="foo"),
+        VertexAI(model="foo"),  # type: ignore[call-arg]
+    ]:
+        assert llm.model_name == "foo"
+
+
 def test_vertexai_args_passed() -> None:
     response_text = "Goodbye"
     user_prompt = "Hello"
