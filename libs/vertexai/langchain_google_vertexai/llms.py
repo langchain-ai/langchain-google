@@ -4,6 +4,7 @@ from concurrent.futures import Executor
 from typing import Any, AsyncIterator, ClassVar, Dict, Iterator, List, Optional, Union
 
 import vertexai  # type: ignore[import-untyped]
+from google.cloud.aiplatform import telemetry
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -46,6 +47,7 @@ from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
+    get_user_agent,
     is_codey_model,
     is_gemini_model,
 )
@@ -80,7 +82,8 @@ def _completion_with_retry(
                 return llm.client.predict_streaming(prompt[0], **kwargs)
             return llm.client.predict(prompt[0], **kwargs)
 
-    return _completion_with_retry_inner(prompt, is_gemini, **kwargs)
+    with telemetry.tool_context_manager(llm._user_agent):
+        return _completion_with_retry_inner(prompt, is_gemini, **kwargs)
 
 
 async def _acompletion_with_retry(
@@ -111,9 +114,10 @@ async def _acompletion_with_retry(
             raise ValueError("Async streaming is supported only for Gemini family!")
         return await llm.client.predict_async(prompt, **kwargs)
 
-    return await _acompletion_with_retry_inner(
-        prompt, is_gemini, stream=stream, **kwargs
-    )
+    with telemetry.tool_context_manager(llm._user_agent):
+        return await _acompletion_with_retry_inner(
+            prompt, is_gemini, stream=stream, **kwargs
+        )
 
 
 class _VertexAIBase(BaseModel):
@@ -220,6 +224,12 @@ class _VertexAICommon(_VertexAIBase):
                     param_value if param_value is not None else default_value
                 )
         return updated_params
+
+    @property
+    def _user_agent(self) -> str:
+        """Gets the User Agent."""
+        _, user_agent = get_user_agent(f"{type(self).__name__}_{self.model_name}")
+        return user_agent
 
     @classmethod
     def _init_vertexai(cls, values: Dict) -> None:

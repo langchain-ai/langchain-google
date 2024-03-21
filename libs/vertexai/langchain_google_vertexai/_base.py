@@ -27,6 +27,7 @@ from vertexai.preview.language_models import (
 from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai._utils import (
     get_client_info,
+    get_user_agent,
     is_codey_model,
     is_gemini_model,
 )
@@ -141,6 +142,12 @@ class _VertexAICommon(_VertexAIBase):
                     param_value if param_value else default_value
                 )
         return updated_params
+
+    @property
+    def _user_agent(self) -> str:
+        """Gets the User Agent."""
+        _, user_agent = get_user_agent(f"{type(self).__name__}_{self.model_name}")
+        return user_agent
 
     @classmethod
     def _init_vertexai(cls, values: Dict) -> None:

@@ -4,6 +4,7 @@ from typing import Any, Iterable, List, Optional, Tuple, Type, Union
 
 from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
     Namespace,
+    NumericNamespace,
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -15,8 +16,8 @@ from langchain_google_vertexai.vectorstores._document_storage import (
 )
 from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKManager
 from langchain_google_vertexai.vectorstores._searcher import (
-    PublicEndpointVectorSearchSearcher,
     Searcher,
+    VectorSearchSearcher,
 )
 
 
@@ -50,6 +51,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         query: str,
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
+        numeric_filter: Optional[List[NumericNamespace]] = None,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to query and their cosine distance from the query.
         Args:
@@ -63,6 +65,10 @@ class _BaseVertexAIVectorStore(VectorStore):
                 datapoints with "squared shape". Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
+            numeric_filter: Optional. A list of NumericNamespaces for filterning
+                the matching results. Please refer to
+                https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
+                for more detail.
         Returns:
             List[Tuple[Document, float]]: List of documents most similar to
             the query text and cosine distance in float for each.
@@ -72,7 +78,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         embbedings = self._embeddings.embed_query(query)
 
         return self.similarity_search_by_vector_with_score(
-            embedding=embbedings, k=k, filter=filter
+            embedding=embbedings, k=k, filter=filter, numeric_filter=numeric_filter
         )
 
     def similarity_search_by_vector_with_score(
@@ -80,6 +86,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         embedding: List[float],
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
+        numeric_filter: Optional[List[NumericNamespace]] = None,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to the embedding and their cosine distance.
         Args:
@@ -93,6 +100,10 @@ class _BaseVertexAIVectorStore(VectorStore):
                 datapoints with "squared shape". Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
+            numeric_filter: Optional. A list of NumericNamespaces for filterning
+                the matching results. Please refer to
+                https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
+                for more detail.
         Returns:
             List[Tuple[Document, float]]: List of documents most similar to
             the query text and cosine distance in float for each.
@@ -100,20 +111,19 @@ class _BaseVertexAIVectorStore(VectorStore):
         """
 
         neighbors_list = self._searcher.find_neighbors(
-            embeddings=[embedding], k=k, filter_=filter
+            embeddings=[embedding], k=k, filter_=filter, numeric_filter=numeric_filter
         )
 
         results = []
 
         for neighbor_id, distance in neighbors_list[0]:
-            text = self._document_storage.get_by_id(neighbor_id)
+            document = self._document_storage.get_by_id(neighbor_id)
 
-            if text is None:
+            if document is None:
                 raise ValueError(
                     f"Document with id {neighbor_id} not found in document" "storage."
                 )
-            # TODO: Handle metadata
-            document = Document(page_content=text, metadata={})
+
             results.append((document, distance))
 
         return results
@@ -123,6 +133,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         query: str,
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
+        numeric_filter: Optional[List[NumericNamespace]] = None,
         **kwargs: Any,
     ) -> List[Document]:
         """Return docs most similar to query.
@@ -136,18 +147,25 @@ class _BaseVertexAIVectorStore(VectorStore):
                 datapoints with "squared shape". Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                  for more detail.
+            numeric_filter: Optional. A list of NumericNamespaces for filterning
+                the matching results. Please refer to
+                https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
+                for more detail.
         Returns:
             A list of k matching documents.
         """
         return [
             document
-            for document, _ in self.similarity_search_with_score(query, k, filter)
+            for document, _ in self.similarity_search_with_score(
+                query, k, filter, numeric_filter
+            )
         ]
 
     def add_texts(
         self,
         texts: Iterable[str],
         metadatas: Union[List[dict], None] = None,
+        is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> List[str]:
         """Run more texts through the embeddings and add to the vectorstore.
@@ -164,9 +182,27 @@ class _BaseVertexAIVectorStore(VectorStore):
         texts = list(texts)
         ids = self._generate_unique_ids(len(texts))
 
-        self._document_storage.batch_store_by_id(ids=ids, texts=texts)
+        if metadatas is None:
+            metadatas = [{}] * len(texts)
+
+        if len(metadatas) != len(texts):
+            raise ValueError(
+                "`metadatas` should be the same length as `texts` "
+                f"{len(metadatas)} != {len(texts)}"
+            )
+
+        documents = [
+            Document(page_content=text, metadata=metadata)
+            for text, metadata in zip(texts, metadatas)
+        ]
+
+        self._document_storage.batch_store_by_id(ids=ids, documents=documents)
+
         embeddings = self._embeddings.embed_documents(texts)
-        self._searcher.add_to_index(ids, embeddings, metadatas, **kwargs)
+
+        self._searcher.add_to_index(
+            ids, embeddings, metadatas, is_complete_overwrite, **kwargs
+        )
 
         return ids
 
@@ -233,6 +269,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         endpoint_id: str,
         credentials_path: Optional[str] = None,
         embedding: Optional[Embeddings] = None,
+        stream_update: bool = False,
         **kwargs: Any,
     ) -> "VectorSearchVectorStore":
         """Takes the object creation out of the constructor.
@@ -248,6 +285,8 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
             the local file system.
             embedding: The :class:`Embeddings` that will be used for
             embedding the texts.
+            stream_update: Whether to update with streaming or batching. VectorSearch
+                index must be compatible with stream/batch updates.
             kwargs: Additional keyword arguments to pass to
                 VertexAIVectorSearch.__init__().
         Returns:
@@ -263,8 +302,11 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
 
         return cls(
             document_storage=GCSDocumentStorage(bucket=bucket),
-            searcher=PublicEndpointVectorSearchSearcher(
-                endpoint=endpoint, index=index, staging_bucket=bucket
+            searcher=VectorSearchSearcher(
+                endpoint=endpoint,
+                index=index,
+                staging_bucket=bucket,
+                stream_update=stream_update,
             ),
             embbedings=embedding,
         )

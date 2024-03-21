@@ -55,15 +55,23 @@ def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
 
 
 def _format_tools_to_vertex_tool(
-    tools: List[Union[BaseTool, Type[BaseModel]]],
+    tools: List[Union[BaseTool, Type[BaseModel], dict]],
 ) -> List[VertexTool]:
     "Format tool into the Vertex Tool instance."
     function_declarations = []
     for tool in tools:
         if isinstance(tool, BaseTool):
             func = _format_tool_to_vertex_function(tool)
-        else:
+        elif isinstance(tool, type) and issubclass(tool, BaseModel):
             func = _format_pydantic_to_vertex_function(tool)
+        elif isinstance(tool, dict):
+            func = {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": _get_parameters_from_schema(tool["parameters"]),
+            }
+        else:
+            raise ValueError(f"Unsupported tool call type {tool}")
         function_declarations.append(FunctionDeclaration(**func))
 
     return [VertexTool(function_declarations=function_declarations)]
