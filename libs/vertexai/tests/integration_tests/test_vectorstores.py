@@ -36,7 +36,10 @@ from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKM
 from langchain_google_vertexai.vectorstores._searcher import (
     VectorSearchSearcher,
 )
-from langchain_google_vertexai.vectorstores.vectorstores import VectorSearchVectorStore
+from langchain_google_vertexai.vectorstores.vectorstores import (
+    VectorSearchVectorStore,
+    VectorSearchVectorStoreDatastore,
+)
 
 
 @pytest.fixture
@@ -75,6 +78,23 @@ def vector_store() -> VectorSearchVectorStore:
     )
 
     return vector_store
+
+@pytest.fixture
+def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
+
+    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
+    
+    vector_store = VectorSearchVectorStoreDatastore.from_components(
+        project_id=os.environ["PROJECT_ID"],
+        region=os.environ["REGION"],
+        index_staging_bucket_name=os.environ["GCS_BUCKET_NAME"],
+        index_id=os.environ["INDEX_ID"],
+        endpoint_id=os.environ["ENDPOINT_ID"],
+        embedding=embeddings,
+    )
+
+    return vector_store
+
 
 
 @pytest.mark.extended
