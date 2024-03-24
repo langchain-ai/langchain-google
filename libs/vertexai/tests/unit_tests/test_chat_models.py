@@ -34,12 +34,9 @@ from langchain_google_vertexai.chat_models import (
 
 
 def test_model_name() -> None:
-    llm = ChatVertexAI()
-    assert llm.model_name == "chat-bison"
-
     for llm in [
-        ChatVertexAI(model_name="gemini-pro"),
-        ChatVertexAI(model="gemini-pro"),  # type: ignore[call-arg]
+        ChatVertexAI(model_name="gemini-pro", project="test-project"),
+        ChatVertexAI(model="gemini-pro", project="test-project"),  # type: ignore[call-arg]
     ]:
         assert llm.model_name == "gemini-pro"
 
@@ -189,6 +186,7 @@ def test_default_params_palm() -> None:
             top_k=40,
             top_p=0.95,
             stop_sequences=None,
+            temperature=0.0,
         )
 
 

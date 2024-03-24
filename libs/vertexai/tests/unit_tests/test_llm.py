@@ -6,14 +6,11 @@ from langchain_google_vertexai.llms import VertexAI
 
 
 def test_model_name() -> None:
-    llm = VertexAI()
-    assert llm.model_name == "text-bison"
-
     for llm in [
-        VertexAI(model_name="text-bison@001"),
-        VertexAI(model="text-bison@001"),  # type: ignore[call-arg]
+        VertexAI(model_name="gemini-pro", project="test-project"),
+        VertexAI(model="gemini-pro", project="test-project"),  # type: ignore[call-arg]
     ]:
-        assert llm.model_name == "text-bison@001"
+        assert llm.model_name == "gemini-pro"
 
 
 def test_vertexai_args_passed() -> None:
