@@ -646,7 +646,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     answer: str
                     justification: str
 
-                llm = ChatVertexAI(model="gemini-pro", temperature=0)
+                llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
                 structured_llm = llm.with_structured_output(AnswerWithJustification)
 
                 structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
@@ -665,7 +665,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     answer: str
                     justification: str
 
-                llm = ChatVertexAI(model="gemini-pro", temperature=0)
+                llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
                 structured_llm = llm.with_structured_output(AnswerWithJustification, include_raw=True)
 
                 structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
@@ -688,7 +688,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     justification: str
 
                 dict_schema = convert_to_openai_tool(AnswerWithJustification)
-                llm = ChatVertexAI(model="gemini-pro", temperature=0)
+                llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
                 structured_llm = llm.with_structured_output(dict_schema)
 
                 structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
