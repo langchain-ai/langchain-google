@@ -13,7 +13,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import numpy as np
 from google.api_core.exceptions import ClientError
-from langchain_community.utils.google import get_client_info
 from langchain_community.vectorstores.utils import (
     DistanceStrategy,
     maximal_marginal_relevance,
@@ -21,6 +20,8 @@ from langchain_community.vectorstores.utils import (
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
+
+from langchain_google_community._utils import get_client_info
 
 DEFAULT_DISTANCE_STRATEGY = DistanceStrategy.EUCLIDEAN_DISTANCE
 DEFAULT_DOC_ID_COLUMN_NAME = "doc_id"  # document id

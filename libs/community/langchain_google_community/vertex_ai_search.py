@@ -14,12 +14,13 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import InvalidArgument
 from google.protobuf.json_format import MessageToDict
-from langchain_community.utilities.vertexai import get_client_info
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.utils import get_from_dict_or_env
+
+from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
     from google.cloud.discoveryengine_v1beta import (  # type: ignore[import]
