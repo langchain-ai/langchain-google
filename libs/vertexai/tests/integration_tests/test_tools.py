@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from typing import Any, List, Union
@@ -8,6 +9,7 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import Tool
 
 from langchain_google_vertexai.chat_models import ChatVertexAI
@@ -138,6 +140,47 @@ def test_custom_tool() -> None:
     assert response["input"] == "What is LangChain?"
 
     assert "LangChain" in response["output"]
+
+
+@pytest.mark.extended
+def test_tool_nested_properties() -> None:
+    from langchain.agents import tool
+
+    class Movie(BaseModel):
+        actor: str = Field(description="Actor in the film")
+        director: str = Field(description="Director of the film")
+
+    class Input(BaseModel):
+        movie: Movie
+
+    @tool("movie_search", return_direct=True)
+    def movie_search(input: Input) -> str:
+        """Return last movie title by actor and director."""
+        return "Pulp Fiction"
+
+    tools = [movie_search]
+
+    llm = ChatVertexAI(
+        model_name="gemini-pro", temperature=0.0, convert_system_message_to_human=True
+    )
+    llm_with_tools = llm.bind(functions=tools)
+
+    response = llm_with_tools.invoke(
+        "What was the last movie directed by Quentin Tarantino with Bruce Willis?"
+    )
+
+    assert "function_call" in response.additional_kwargs
+    function_call = response.additional_kwargs["function_call"]
+
+    assert function_call["name"] == "movie_search"
+
+    assert "arguments" in function_call
+
+    arguments = json.loads(function_call["arguments"])
+    assert "input" in arguments
+    assert "movie" in arguments["input"]
+    assert "actor" in arguments["input"]["movie"]
+    assert "director" in arguments["input"]["movie"]
 
 
 @pytest.mark.extended

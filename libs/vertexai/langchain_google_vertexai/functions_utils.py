@@ -1,10 +1,10 @@
 import json
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
-from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import FunctionDescription
 from langchain_core.utils.json_schema import dereference_refs
@@ -19,8 +19,7 @@ from vertexai.generative_models import (
 def _format_pydantic_to_vertex_function(
     pydantic_model: Type[BaseModel],
 ) -> FunctionDescription:
-    schema = dereference_refs(pydantic_model.schema())
-    schema.pop("definitions", None)
+    schema = pydantic_model.schema()
 
     return {
         "name": schema["title"],
@@ -32,8 +31,7 @@ def _format_pydantic_to_vertex_function(
 def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
     "Format tool into the Vertex function API."
     if tool.args_schema:
-        schema = dereference_refs(tool.args_schema.schema())
-        schema.pop("definitions", None)
+        schema = tool.args_schema.schema()
 
         return {
             "name": tool.name or schema["title"],
@@ -77,6 +75,25 @@ def _format_tools_to_vertex_tool(
     return [VertexTool(function_declarations=function_declarations)]
 
 
+class ParametersSchema(BaseModel):
+    """
+    This is a schema of currently supported definitions in function calling.
+    We need explicitly exclude `title` and `definitions` fields as they
+    are not currently supported.
+
+    All other fields will be passed through (as extra fields are allowed)
+    and intercepted on `google.cloud.aiplatform` level
+    """
+
+    title: Optional[str] = Field(exclude=True)
+    definitions: Optional[Any] = Field(exclude=True)
+    items: Optional["ParametersSchema"]
+    properties: Optional[Dict[str, "ParametersSchema"]]
+
+    class Config:
+        extra = "allow"
+
+
 def _get_parameters_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     """Given a schema, format the parameters key to match VertexAI
     expected input.
@@ -88,24 +105,10 @@ def _get_parameters_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary with the formatted parameters.
     """
 
-    parameters = {}
+    dereferenced_schema = dereference_refs(schema)
+    model = ParametersSchema.parse_obj(dereferenced_schema)
 
-    parameters["type"] = schema["type"]
-
-    if "required" in schema:
-        parameters["required"] = schema["required"]
-
-    schema_properties: Dict[str, Any] = schema.get("properties", {})
-
-    parameters["properties"] = {
-        parameter_name: {
-            "type": parameter_dict["type"],
-            "description": parameter_dict.get("description"),
-        }
-        for parameter_name, parameter_dict in schema_properties.items()
-    }
-
-    return parameters
+    return model.dict(exclude_unset=True)
 
 
 class PydanticFunctionsOutputParser(BaseOutputParser):
