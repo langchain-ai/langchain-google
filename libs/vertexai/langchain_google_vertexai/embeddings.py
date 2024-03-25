@@ -28,6 +28,7 @@ from vertexai.vision_models import (  # type: ignore
 )
 
 from langchain_google_vertexai._base import _VertexAICommon
+from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import get_user_agent
 
 logger = logging.getLogger(__name__)
@@ -396,12 +397,15 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         """
         return self.embed([text], 1, "RETRIEVAL_QUERY")[0]
 
-    def embed_image(self, image_path: str) -> List[float]:
+    def embed_image(
+        self, image_path: str, contextual_text: Optional[str] = None
+    ) -> List[float]:
         """Embed an image.
 
         Args:
-            image_path: Path to image (local or Google Cloud Storage) to generate
+            image_path: Path to image (local, Google Cloud Storage or web) to generate
             embeddings for.
+            contextual_text: Text to generate embeddings for.
 
         Returns:
             Embedding for the image.
@@ -409,8 +413,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
 
-        image = Image.load_from_file(image_path)
+        image_loader = ImageBytesLoader()
+        bytes_image = image_loader.load_bytes(image_path)
+        image = Image(bytes_image)
         result: MultiModalEmbeddingResponse = self.instance[
             "get_embeddings_with_retry"
-        ](image=image)
+        ](image=image, contextual_text=contextual_text)
         return result.image_embedding
