@@ -2943,6 +2943,20 @@ files = [
 ]
 
 [[package]]
+name = "types-beautifulsoup4"
+version = "4.12.0.20240229"
+description = "Typing stubs for beautifulsoup4"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "types-beautifulsoup4-4.12.0.20240229.tar.gz", hash = "sha256:e37e4cfa11b03b01775732e56d2c010cb24ee107786277bae6bc0fa3e305b686"},
+    {file = "types_beautifulsoup4-4.12.0.20240229-py3-none-any.whl", hash = "sha256:000cdddb8aee4effb45a04be95654de8629fb8594a4f2f1231cff81108977324"},
+]
+
+[package.dependencies]
+types-html5lib = "*"
+
+[[package]]
 name = "types-google-cloud-ndb"
 version = "2.3.0.20240311"
 description = "Typing stubs for google-cloud-ndb"
@@ -2951,6 +2965,17 @@ python-versions = ">=3.8"
 files = [
     {file = "types-google-cloud-ndb-2.3.0.20240311.tar.gz", hash = "sha256:c37a149f313827d9443a0f7b8dfd572292f9d9dabb8a9c4d68cdba81689a380f"},
     {file = "types_google_cloud_ndb-2.3.0.20240311-py3-none-any.whl", hash = "sha256:8209962a420d2c60615ee26bc21ad74d77a3e337045b70ed86843a974f2d2ecd"},
+]
+
+[[package]]
+name = "types-html5lib"
+version = "1.1.11.20240228"
+description = "Typing stubs for html5lib"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "types-html5lib-1.1.11.20240228.tar.gz", hash = "sha256:22736b7299e605ec4ba539d48691e905fd0c61c3ea610acc59922232dc84cede"},
+    {file = "types_html5lib-1.1.11.20240228-py3-none-any.whl", hash = "sha256:af5de0125cb0fe5667543b158db83849b22e25c0e36c9149836b095548bf1020"},
 ]
 
 [[package]]
@@ -3295,4 +3320,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "5e339be1a11064883f6b1f42169906cae8148cd644a0bc1ae83e7b435eadabe8"
+content-hash = "a4bf9454bc1bcb3e488fef393a466a6ac1314de7b0536b0c305d96df12c8e851"
