@@ -94,6 +94,31 @@ class ParametersSchema(BaseModel):
         extra = "allow"
 
 
+def _replace_all_ofs(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Assumes dereferenced schema."""
+    new_schema: Dict[str, Any] = {}
+    for k, v in schema.items():
+        if isinstance(v, dict) and "allOf" in v:
+            if isinstance(v["allOf"], list) and len(v["allOf"]) == 1:
+                obj = dict(v["allOf"][0])
+                obj["title"] = v.get("title", obj.get("title", ""))
+                obj["description"] = " ".join(
+                    (v.get("description", ""), obj.get("description", ""))
+                )
+                new_schema[k] = obj
+            else:
+                raise ValueError(
+                    f"allOf expected to be a singleton list. Received {v['allOf']}"
+                )
+        elif isinstance(v, dict):
+            new_schema[k] = _replace_all_ofs(v)
+        elif isinstance(v, list) and v and isinstance(v[0], dict):
+            new_schema[k] = [_replace_all_ofs(s) for s in v]
+        else:
+            new_schema[k] = v
+    return new_schema
+
+
 def _get_parameters_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     """Given a schema, format the parameters key to match VertexAI
     expected input.
@@ -105,8 +130,10 @@ def _get_parameters_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary with the formatted parameters.
     """
 
-    dereferenced_schema = dereference_refs(schema)
-    model = ParametersSchema.parse_obj(dereferenced_schema)
+    schema = dereference_refs(schema)
+    # TODO: Remove once vertexai api supports allOf elements.
+    schema = _replace_all_ofs(schema)
+    model = ParametersSchema.parse_obj(schema)
 
     return model.dict(exclude_unset=True)
 
