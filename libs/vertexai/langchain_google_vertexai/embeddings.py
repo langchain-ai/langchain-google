@@ -61,13 +61,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     def validate_environment(cls, values: Dict) -> Dict:
         """Validates that the python package exists in environment."""
         cls._init_vertexai(values)
-        if values["model_name"] == "textembedding-gecko-default":
-            logger.warning(
-                "Model_name will become a required arg for VertexAIEmbeddings "
-                "starting from Feb-01-2024. Currently the default is set to "
-                "textembedding-gecko@001"
-            )
-            values["model_name"] = "textembedding-gecko@001"
         _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")  # type: ignore
         with telemetry.tool_context_manager(user_agent):
             if (
@@ -85,8 +78,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
 
     def __init__(
         self,
-        # the default value would be removed after Feb-01-2024
-        model_name: str = "textembedding-gecko-default",
+        model_name: str,
         project: Optional[str] = None,
         location: str = "us-central1",
         request_parallelism: int = 5,
