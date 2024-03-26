@@ -16,7 +16,7 @@ from langchain_google_vertexai.embeddings import (
 @pytest.mark.release
 def test_initialization() -> None:
     """Test embedding model initialization."""
-    VertexAIEmbeddings()
+    VertexAIEmbeddings(model_name="textembedding-gecko@001")
 
 
 @pytest.mark.release
@@ -56,25 +56,16 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
 @pytest.mark.release
 def test_langchain_google_vertexai_large_batches() -> None:
     documents = ["foo bar" for _ in range(0, 251)]
-    model_uscentral1 = VertexAIEmbeddings(location="us-central1")
-    model_asianortheast1 = VertexAIEmbeddings(location="asia-northeast1")
+    model_uscentral1 = VertexAIEmbeddings(
+        model_name="textembedding-gecko@001", location="us-central1"
+    )
+    model_asianortheast1 = VertexAIEmbeddings(
+        model_name="textembedding-gecko@001", location="asia-northeast1"
+    )
     model_uscentral1.embed_documents(documents)
     model_asianortheast1.embed_documents(documents)
     assert model_uscentral1.instance["batch_size"] >= 250
     assert model_asianortheast1.instance["batch_size"] < 50
-
-
-@pytest.mark.release
-def test_warning(caplog: pytest.LogCaptureFixture) -> None:
-    _ = VertexAIEmbeddings()
-    assert len(caplog.records) == 1
-    record = caplog.records[0]
-    assert record.levelname == "WARNING"
-    expected_message = (
-        "Model_name will become a required arg for VertexAIEmbeddings starting from "
-        "Feb-01-2024. Currently the default is set to textembedding-gecko@001"
-    )
-    assert record.message == expected_message
 
 
 @pytest.mark.release
