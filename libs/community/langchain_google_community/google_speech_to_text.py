@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from google.protobuf.field_mask_pb2 import FieldMask
 
 
-class GoogleSpeechToTextLoader(BaseLoader):
+class SpeechToTextLoader(BaseLoader):
     """
     Loader for Google Cloud Speech-to-Text audio transcripts.
 
