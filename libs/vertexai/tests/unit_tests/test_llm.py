@@ -5,6 +5,14 @@ from unittest.mock import MagicMock, patch
 from langchain_google_vertexai.llms import VertexAI
 
 
+def test_model_name() -> None:
+    for llm in [
+        VertexAI(model_name="gemini-pro", project="test-project"),
+        VertexAI(model="gemini-pro", project="test-project"),  # type: ignore[call-arg]
+    ]:
+        assert llm.model_name == "gemini-pro"
+
+
 def test_vertexai_args_passed() -> None:
     response_text = "Goodbye"
     user_prompt = "Hello"

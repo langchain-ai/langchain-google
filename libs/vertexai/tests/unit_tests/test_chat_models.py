@@ -33,6 +33,14 @@ from langchain_google_vertexai.chat_models import (
 )
 
 
+def test_model_name() -> None:
+    for llm in [
+        ChatVertexAI(model_name="gemini-pro", project="test-project"),
+        ChatVertexAI(model="gemini-pro", project="test-project"),  # type: ignore[call-arg]
+    ]:
+        assert llm.model_name == "gemini-pro"
+
+
 def test_parse_examples_correct() -> None:
     text_question = (
         "Hello, could you recommend a good movie for me to watch this evening, please?"
@@ -178,6 +186,7 @@ def test_default_params_palm() -> None:
             top_k=40,
             top_p=0.95,
             stop_sequences=None,
+            temperature=0.0,
         )
 
 
