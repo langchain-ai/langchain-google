@@ -131,7 +131,7 @@ def _get_parameters_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     """
 
     schema = dereference_refs(schema)
-    # TODO: Remove once vertexai api supports allOf elements.
+    # TODO: Remove if vertexai api supports allOf elements in the future.
     schema = _replace_all_ofs(schema)
     model = ParametersSchema.parse_obj(schema)
 
