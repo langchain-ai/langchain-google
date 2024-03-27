@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from langchain_google_vertexai.functions_utils import (
     _format_tool_to_vertex_function,
     _get_parameters_from_schema,
+    _replace_all_ofs,
 )
 
 
@@ -77,3 +78,47 @@ def test_get_parameters_from_schema():
     assert len(result["properties"]["b1"]["properties"]) == 1
 
     assert "anyOf" in result["properties"]["b3"]
+
+
+def test__replace_all_ofs() -> None:
+    schema = {
+        "title": "Relationship",
+        "type": "object",
+        "properties": {
+            "target": {
+                "title": "Target",
+                "description": "The target of the relationship.",
+                "allOf": [
+                    {
+                        "title": "Node",
+                        "type": "object",
+                        "description": "An entity in a graph.",
+                        "properties": {
+                            "id": {"title": "Id", "type": "string"},
+                        },
+                        "required": ["id"],
+                    }
+                ],
+            }
+        },
+        "required": ["target"],
+    }
+    expected = {
+        "title": "Relationship",
+        "type": "object",
+        "properties": {
+            "target": {
+                "title": "Target",
+                "type": "object",
+                "description": "The target of the relationship. An entity in a graph.",
+                "properties": {
+                    "id": {"title": "Id", "type": "string"},
+                },
+                "required": ["id"],
+            }
+        },
+        "required": ["target"],
+    }
+    actual = _replace_all_ofs(schema)
+    assert actual == expected
+    assert _replace_all_ofs(expected) == expected
