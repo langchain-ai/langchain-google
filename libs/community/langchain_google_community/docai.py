@@ -131,7 +131,7 @@ class DocAIParser(BaseBlobParser):
         """
         try:
             from google.cloud import documentai
-            from google.cloud.documentai_v1.types import (  # type: ignore[import]
+            from google.cloud.documentai_v1.types import (  # type: ignore[import, attr-defined]
                 IndividualPageSelector,
                 OcrConfig,
                 ProcessOptions,
