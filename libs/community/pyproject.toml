@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-community"
-version = "1.0.1"
+version = "1.0.1rc1"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 readme = "README.md"
@@ -16,6 +16,7 @@ langchain-core = "^0.1"
 langchain-community = "^0.0.28"
 google-api-core = "^2.17.1"
 google-api-python-client = "^2.122.0"
+grpcio = "^1.62.0"
 
 [tool.poetry.group.test]
 optional = true
