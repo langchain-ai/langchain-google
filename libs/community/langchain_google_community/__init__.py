@@ -23,10 +23,12 @@ from langchain_google_community.vertex_ai_search import (
     VertexAIMultiTurnSearchRetriever,
     VertexAISearchRetriever,
 )
+from langchain_google_community.vision import CloudImageLoader
 
 __all__ = [
     "BigQueryLoader",
     "BigQueryVectorSearch",
+    "CloudImageLoader",
     "DocAIParser",
     "DocAIParsingResults",
     "DocumentAIWarehouseRetriever",
