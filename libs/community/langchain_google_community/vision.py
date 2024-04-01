@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 from langchain_google_community._utils import get_client_info
 
 
-class CloudImageLoader(BaseBlobParser):
+class CloudVisionLoader(BaseBlobParser):
     def __init__(self, project: Optional[str] = None):
         try:
             from google.cloud import vision  # type: ignore[attr-defined]
@@ -17,7 +17,6 @@ class CloudImageLoader(BaseBlobParser):
                 "`pip install google-cloud-vision`."
             ) from e
         client_options = None
-        print(project)
         if project:
             client_options = {"quota_project_id": project}
         self._client = vision.ImageAnnotatorClient(
@@ -25,11 +24,11 @@ class CloudImageLoader(BaseBlobParser):
             client_info=get_client_info(module="cloud-vision"),
         )
 
-    def load(self, gsc_path: str) -> Document:
-        """Loads an image from GCS path to a Document."""
+    def load(self, gcs_uri: str) -> Document:
+        """Loads an image from GCS path to a Document, only the text."""
         from google.cloud import vision  # type: ignore[attr-defined]
 
-        image = vision.Image(source=vision.ImageSource(gcs_image_uri=gsc_path))
+        image = vision.Image(source=vision.ImageSource(gcs_image_uri=gcs_uri))
         text_detection_response = self._client.text_detection(image=image)
         annotations = text_detection_response.text_annotations
 
@@ -37,7 +36,7 @@ class CloudImageLoader(BaseBlobParser):
             text = annotations[0].description
         else:
             text = ""
-        return Document(page_content=text)
+        return Document(page_content=text, metadata={"source": gcs_uri})
 
     def lazy_parse(self, blob: Blob) -> Iterator[Document]:
         yield self.load(blob.path)  # type: ignore[arg-type]
