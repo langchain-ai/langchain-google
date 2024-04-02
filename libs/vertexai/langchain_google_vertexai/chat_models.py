@@ -130,15 +130,14 @@ def _parse_chat_history_gemini(
             )
         if part["type"] == "text":
             return Part.from_text(part["text"])
-
         if part["type"] == "image_url":
             path = part["image_url"]["url"]
+            if path.startswith("gs://"):
+                blob = ImageBytesLoader(project=project)._blob_from_gcs(path)
+                return Part.from_uri(path, blob.content_type)
             image_bytes = ImageBytesLoader(project=project).load_bytes(path)
             image = Image.from_bytes(image_bytes)
             return Part.from_image(image)
-
-        if part["type"] == "gcs_uri":
-            return Part.from_uri(uri=part["gcs_uri"], mime_type=part["mime_type"])
 
         raise ValueError("Only text and image_url types are supported!")
 

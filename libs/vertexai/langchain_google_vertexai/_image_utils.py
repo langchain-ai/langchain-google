@@ -46,7 +46,7 @@ class ImageBytesLoader:
         """
 
         if image_string.startswith("gs://"):
-            return self._bytes_from_gcs(image_string)
+            return self._blob_from_gcs(image_string).download_as_bytes()
 
         if image_string.startswith("data:image/"):
             return self._bytes_from_b64(image_string)
@@ -115,7 +115,7 @@ class ImageBytesLoader:
 
         return response.content
 
-    def _bytes_from_gcs(self, gcs_uri: str) -> bytes:
+    def _blob_from_gcs(self, gcs_uri: str) -> storage.Blob:
         """Gets image bytes from a Google Cloud Storage uri.
 
         Args:
