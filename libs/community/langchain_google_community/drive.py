@@ -48,10 +48,11 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
     load_auth: bool = False
     """Whether to load authorization identities."""
 
-    def _get_identity_metadata_from_id(self, id: str):
+    def _get_identity_metadata_from_id(self, id: str)-> List[str]:
         """Fetch the list of people having access to ID file."""
         try:
-            from googleapiclient.discovery import build
+            from googleapiclient.discovery import build # type: ignore[import]
+            import googleapiclient.errors # type: ignore[import]
         except ImportError as exc:
             raise ImportError(
                 "You must run "
@@ -63,7 +64,17 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         authorized_identities = []
         creds = self._load_credentials()
         service = build("drive", "v3", credentials=creds)  # Build the service
-        permissions = service.permissions().list(fileId=id).execute()
+        try:
+            permissions = service.permissions().list(fileId=id).execute()
+        except googleapiclient.errors.HttpError:
+            print(f"You dont have permission to retrieve permission for the file \
+                  with fileId: {id}")
+            return authorized_identities
+        except Exception as exc:
+            print(f"Error occured while fetching permission for the file with fileId: {id}")
+            print(f"Error: {exc}")
+            return authorized_identities
+
         for perm in permissions.get("permissions", {}):
             email_id = (
                 service.permissions()
