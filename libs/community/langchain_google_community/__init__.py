@@ -23,12 +23,13 @@ from langchain_google_community.vertex_ai_search import (
     VertexAIMultiTurnSearchRetriever,
     VertexAISearchRetriever,
 )
-from langchain_google_community.vision import CloudVisionLoader
+from langchain_google_community.vision import CloudVisionLoader, CloudVisionParser
 
 __all__ = [
     "BigQueryLoader",
     "BigQueryVectorSearch",
     "CloudVisionLoader",
+    "CloudVisionParser",
     "DocAIParser",
     "DocAIParsingResults",
     "DocumentAIWarehouseRetriever",

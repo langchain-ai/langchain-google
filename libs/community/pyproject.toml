@@ -13,7 +13,7 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
 langchain-core = ">=0.1.33,<0.2"
-langchain-community = "^0.0.28"
+langchain-community = ">=0.0.28"
 google-api-core = "^2.17.1"
 google-api-python-client = "^2.122.0"
 grpcio = "^1.62.0"
