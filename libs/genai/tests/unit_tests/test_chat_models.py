@@ -1,6 +1,6 @@
 """Test chat model integration."""
 
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 from unittest.mock import Mock, patch
 
 import pytest
@@ -76,12 +76,11 @@ def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> 
     _parse_chat_history([function_message], convert_system_message_to_human=True)
 
 
-def test_additional_headers_support() -> None:
+@pytest.mark.parametrize(
+    "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
+)
+def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     mock_configure = Mock()
-    headers = {
-        "X-User-Header": "Coco",
-        "X-User-Header2": "Jamboo",
-    }
     params = {
         "google_api_key": "[secret]",
         "client_options": {"api_endpoint": "http://127.0.0.1:8000/ai"},
@@ -92,12 +91,17 @@ def test_additional_headers_support() -> None:
     with patch("langchain_google_genai.chat_models.genai.configure", mock_configure):
         chat = ChatGoogleGenerativeAI(model="gemini-pro", **params)
 
-    assert "X-User-Header" in chat.additional_headers
-    assert "X-User-Header2" in chat.additional_headers
+    expected_default_metadata: tuple = ()
+    if not headers:
+        assert chat.additional_headers == headers
+    else:
+        assert chat.additional_headers
+        assert all(header in chat.additional_headers for header in headers.keys())
+        expected_default_metadata = tuple(headers.items())
 
     mock_configure.assert_called_once_with(
         api_key=params["google_api_key"],
         transport=params["transport"],
         client_options=params["client_options"],
-        default_metadata=tuple(headers.items()),
+        default_metadata=expected_default_metadata,
     )

@@ -154,8 +154,8 @@ Supported examples:
         None,
         description="A string, one of: [`rest`, `grpc`, `grpc_asyncio`].",
     )
-    additional_headers: dict[str, str] = Field(
-        {},
+    additional_headers: Optional[Dict[str, str]] = Field(
+        None,
         description=(
             "A key-value dictionary representing additional headers for the model call"
         ),
