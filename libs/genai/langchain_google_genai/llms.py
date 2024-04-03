@@ -156,7 +156,9 @@ Supported examples:
     )
     additional_headers: dict[str, str] = Field(
         {},
-        description="A key-value dictionary representing additional headers for the model call",
+        description=(
+            "A key-value dictionary representing additional headers for the model call"
+        ),
     )
 
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
