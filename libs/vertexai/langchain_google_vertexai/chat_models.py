@@ -42,7 +42,6 @@ from vertexai.generative_models import (  # type: ignore
     Candidate,
     Content,
     GenerativeModel,
-    Image,
     Part,
 )
 from vertexai.language_models import (  # type: ignore
