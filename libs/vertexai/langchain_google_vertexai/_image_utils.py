@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from enum import Enum
 import os
 import re
 from typing import Dict, Union
@@ -8,6 +9,17 @@ from urllib.parse import urlparse
 
 import requests
 from google.cloud import storage
+
+from vertexai.generative_models import Image, Part  # type: ignore
+
+
+class Route(Enum):
+    """Image Loading Route"""
+
+    GOOGLE_CLOUD_STORAGE = 1
+    BASE64 = 2
+    LOCAL_FILE = 3
+    URL = 4
 
 
 class ImageBytesLoader:
@@ -45,17 +57,69 @@ class ImageBytesLoader:
             Image bytes.
         """
 
-        if image_string.startswith("gs://"):
-            return self._blob_from_gcs(image_string).download_as_bytes()
+        route = self._route(image_string)
 
-        if image_string.startswith("data:image/"):
+        if route == Route.GOOGLE_CLOUD_STORAGE:
+            blob = self._blob_from_gcs(image_string)
+            return blob.download_as_bytes()
+
+        if route == Route.BASE64:
             return self._bytes_from_b64(image_string)
 
-        if self._is_url(image_string):
+        if route == Route.URL:
             return self._bytes_from_url(image_string)
 
-        if os.path.exists(image_string):
+        if route == Route.LOCAL_FILE:
             return self._bytes_from_file(image_string)
+
+        raise ValueError(
+            "Image string must be one of: Google Cloud Storage URI, "
+            "b64 encoded image string (data:image/...), valid image url, "
+            f"or existing local image file. Instead got '{image_string}'."
+        )
+
+    def load_part(self, image_string: str) -> Part:
+        """Gets Part for loading from Gemini.
+
+        Args:
+            image_string: Can be either:
+                    - Google cloud storage URI
+                    - B64 Encoded image string
+                    - Local file path
+                    - URL
+
+        Returns:
+            generative_models.Part
+        """
+        route = self._route(image_string)
+
+        if route == Route.GOOGLE_CLOUD_STORAGE:
+            blob = self._blob_from_gcs(image_string)
+            return Part.from_uri(uri=image_string, mime_type=blob.content_type)
+
+        if route == Route.BASE64:
+            bytes_ = self._bytes_from_b64(image_string)
+
+        if route == Route.URL:
+            bytes_ = self._bytes_from_url(image_string)
+
+        if route == Route.LOCAL_FILE:
+            bytes_ = self._bytes_from_file(image_string)
+
+        return Part.from_image(Image.from_bytes(bytes_))
+
+    def _route(self, image_string: str) -> Route:
+        if image_string.startswith("gs://"):
+            return Route.GOOGLE_CLOUD_STORAGE
+
+        if image_string.startswith("data:image/"):
+            return Route.BASE64
+
+        if self._is_url(image_string):
+            return Route.URL
+
+        if os.path.exists(image_string):
+            return Route.LOCAL_FILE
 
         raise ValueError(
             "Image string must be one of: Google Cloud Storage URI, "
@@ -116,7 +180,7 @@ class ImageBytesLoader:
         return response.content
 
     def _blob_from_gcs(self, gcs_uri: str) -> storage.Blob:
-        """Gets image bytes from a Google Cloud Storage uri.
+        """Gets image Blob from a Google Cloud Storage uri.
 
         Args:
             gcs_uri: Valid gcs uri.
@@ -125,11 +189,11 @@ class ImageBytesLoader:
             ValueError if there are more than one blob matching the uri.
 
         Returns:
-            Image bytes
+            storage.Blob
         """
 
         gcs_client = storage.Client(project=self._project)
-        return storage.Blob.from_string(gcs_uri, gcs_client).download_as_bytes()
+        return storage.Blob.from_string(gcs_uri, gcs_client)
 
     def _is_url(self, url_string: str) -> bool:
         """Checks if a url is valid.
