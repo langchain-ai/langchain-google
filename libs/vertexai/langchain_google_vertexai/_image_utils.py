@@ -193,7 +193,6 @@ class ImageBytesLoader:
 
         gcs_client = storage.Client(project=self._project)
         blob = storage.Blob.from_string(gcs_uri, gcs_client)
-        # Remove once https://github.com/googleapis/python-storage/pull/1249 is released.
         blob.reload()
         return blob
 
