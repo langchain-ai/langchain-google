@@ -1,6 +1,7 @@
 """Test chat model integration."""
 
 from typing import Dict, List, Union
+from unittest.mock import patch, Mock
 
 import pytest
 from langchain_core.messages import (
@@ -73,3 +74,29 @@ def test_parse_history() -> None:
 def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
     _parse_chat_history([function_message], convert_system_message_to_human=True)
+
+
+def test_additional_headers_support() -> None:
+    mock_configure = Mock()
+    params = {
+        "google_api_key": "[secret]",
+        "client_options": {"api_endpoint": "http://127.0.0.1:8000/ai"},
+        "transport": "rest",
+        "additional_headers": {
+            "X-User-Header": "Coco",
+            "X-User-Header2": "Jambo",
+        },
+    }
+
+    with patch("langchain_google_genai.chat_models.genai.configure", mock_configure):
+        chat = ChatGoogleGenerativeAI(model="gemini-pro", **params)
+
+    assert "X-User-Header" in chat.additional_headers
+    assert "X-User-Header2" in chat.additional_headers
+
+    mock_configure.assert_called_once_with(
+        api_key=params["google_api_key"],
+        transport=params["transport"],
+        client_options=params["client_options"],
+        default_metadata=tuple(params["additional_headers"].items())
+    )
