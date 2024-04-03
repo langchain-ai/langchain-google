@@ -48,11 +48,11 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
     load_auth: bool = False
     """Whether to load authorization identities."""
 
-    def _get_identity_metadata_from_id(self, id: str)-> List[str]:
+    def _get_identity_metadata_from_id(self, id: str) -> List[str]:
         """Fetch the list of people having access to ID file."""
         try:
-            from googleapiclient.discovery import build # type: ignore[import]
-            import googleapiclient.errors # type: ignore[import]
+            import googleapiclient.errors  # type: ignore[import]
+            from googleapiclient.discovery import build  # type: ignore[import]
         except ImportError as exc:
             raise ImportError(
                 "You must run "
@@ -61,17 +61,22 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
                 "to load authorization identities."
             ) from exc
 
-        authorized_identities = []
+        authorized_identities: list = []
         creds = self._load_credentials()
         service = build("drive", "v3", credentials=creds)  # Build the service
         try:
             permissions = service.permissions().list(fileId=id).execute()
         except googleapiclient.errors.HttpError:
-            print(f"You dont have permission to retrieve permission for the file \
-                  with fileId: {id}")
+            print(
+                f"insufficientFilePermissions: The user does not have sufficient \
+                permissions to retrieve permission for the file with fileId: {id}"
+            )
             return authorized_identities
         except Exception as exc:
-            print(f"Error occured while fetching permission for the file with fileId: {id}")
+            print(
+                f"Error occurred while fetching the permissions for the file with \
+                fileId: {id}"
+            )
             print(f"Error: {exc}")
             return authorized_identities
 
@@ -154,7 +159,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
             )
         except ImportError:
             raise ImportError(
-                "You must run "
+                "Install prerequisites by running: "
                 "`pip install --upgrade "
                 "google-api-python-client google-auth-httplib2 "
                 "google-auth-oauthlib` "
@@ -275,7 +280,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
             "when": f"{file.get('modifiedTime')}",
         }
         if self.load_auth:
-            metadata["authorized_identities"] = authorized_identities
+            metadata["authorized_identities"] = authorized_identities  # type: ignore
         return Document(page_content=text, metadata=metadata)
 
     def _load_documents_from_folder(
