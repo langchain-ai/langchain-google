@@ -9,8 +9,9 @@ from typing import (
 from langchain_core.output_parsers import (
     BaseGenerationOutputParser,
     BaseOutputParser,
+    StrOutputParser,
 )
-from langchain_core.prompts import BasePromptTemplate
+from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable
 
@@ -43,11 +44,35 @@ def get_output_parser(
     return output_parser
 
 
+def _create_structured_runnable_extra_step(
+    functions: Sequence[Type[BaseModel]],
+    llm: Runnable,
+    *,
+    prompt: Optional[BasePromptTemplate] = None,
+) -> Runnable:
+    llm_with_functions = llm.bind(functions=functions)
+    parsing_prompt = ChatPromptTemplate.from_template(
+        "You are a world class algorithm for recording entities.\nMake calls "
+        "to the relevant function to record the entities in the following "
+        "input:\n{output}\nTip: Make sure to answer in the correct format."
+    )
+    output_parser = get_output_parser(functions)
+    if prompt:
+        initial_chain = (
+            prompt | llm | StrOutputParser() | parsing_prompt | llm_with_functions
+        )
+    else:
+        initial_chain = parsing_prompt | llm_with_functions
+
+    return initial_chain | output_parser
+
+
 def create_structured_runnable(
     function: Union[Type[BaseModel], Sequence[Type[BaseModel]]],
     llm: Runnable,
     *,
     prompt: Optional[BasePromptTemplate] = None,
+    use_extra_step: bool = False,
 ) -> Runnable:
     """Create a runnable sequence that uses OpenAI functions.
 
@@ -59,6 +84,7 @@ def create_structured_runnable(
         llm: Language model to use,
             assumed to support the Google Vertex function-calling API.
         prompt: BasePromptTemplate to pass to the model.
+        use_extra_step: whether to make an extra step to parse output into a function
 
     Returns:
         A runnable sequence that will pass in the given functions to the model when run.
@@ -102,6 +128,10 @@ def create_structured_runnable(
     if not function:
         raise ValueError("Need to pass in at least one function. Received zero.")
     functions = function if isinstance(function, Sequence) else [function]
+    if use_extra_step:
+        return _create_structured_runnable_extra_step(
+            functions=functions, llm=llm, prompt=prompt
+        )
     output_parser = get_output_parser(functions)
     llm_with_functions = llm.bind(functions=functions)
     if prompt is None:
