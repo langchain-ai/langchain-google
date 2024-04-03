@@ -28,6 +28,7 @@ from langchain_core.messages import (
     BaseMessage,
     FunctionMessage,
     HumanMessage,
+    ToolCallsMessage,
     SystemMessage,
 )
 from langchain_core.output_parsers.base import OutputParserLike
@@ -38,6 +39,7 @@ from langchain_core.output_parsers.openai_functions import (
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import BaseModel, root_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.utils.tools import parse_tool_calls
 from vertexai.generative_models import (  # type: ignore
     Candidate,
     Content,
@@ -268,6 +270,15 @@ def _parse_response_candidate(response_candidate: "Candidate") -> AIMessage:
             {k: function_call_args_dict[k] for k in function_call_args_dict}
         )
         additional_kwargs["function_call"] = function_call
+        try:
+            tool_calls = parse_tool_calls([{"function": function_call}])
+        except Exception:
+            tool_calls = None
+        return ToolCallsMessage(
+            content=content,
+            additional_kwargs=additional_kwargs,
+            tool_calls=tool_calls,
+        )
     return AIMessage(content=content, additional_kwargs=additional_kwargs)
 
 
