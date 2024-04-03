@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import base64
-from enum import Enum
 import os
 import re
+from enum import Enum
 from typing import Dict, Union
 from urllib.parse import urlparse
 
 import requests
 from google.cloud import storage
-
 from vertexai.generative_models import Image, Part  # type: ignore
 
 
