@@ -42,7 +42,6 @@ from vertexai.generative_models import (  # type: ignore
     Candidate,
     Content,
     GenerativeModel,
-    Image,
     Part,
 )
 from vertexai.language_models import (  # type: ignore
@@ -130,13 +129,11 @@ def _parse_chat_history_gemini(
             )
         if part["type"] == "text":
             return Part.from_text(part["text"])
-        elif part["type"] == "image_url":
+        if part["type"] == "image_url":
             path = part["image_url"]["url"]
-            image_bytes = ImageBytesLoader(project=project).load_bytes(path)
-            image = Image.from_bytes(image_bytes)
-        else:
-            raise ValueError("Only text and image_url types are supported!")
-        return Part.from_image(image)
+            return ImageBytesLoader(project=project).load_part(path)
+
+        raise ValueError("Only text and image_url types are supported!")
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
         raw_content = message.content
