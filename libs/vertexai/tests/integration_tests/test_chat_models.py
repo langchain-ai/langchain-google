@@ -7,8 +7,10 @@ import pytest
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
+    AIToolCallsMessage,
     HumanMessage,
     SystemMessage,
+    ToolCall,
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.pydantic_v1 import BaseModel
@@ -267,7 +269,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     model = ChatVertexAI(model_name="gemini-pro").bind(functions=[MyModel])
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     response = model.invoke([message])
-    assert isinstance(response, AIMessage)
+    assert isinstance(response, AIToolCallsMessage)
     assert isinstance(response.content, str)
     assert response.content == ""
     function_call = response.additional_kwargs.get("function_call")
@@ -280,3 +282,6 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         "name": "Erick",
         "age": 27.0,
     }
+    assert response.tool_calls == [
+        ToolCall(name="MyModel", args={"age": 27.0, "name": "Erick"})
+    ]
