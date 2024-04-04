@@ -26,10 +26,13 @@ from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     AIToolCallsMessage,
+    AIToolCallsMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
+    ToolCall,
+    ToolCallChunk,
 )
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_functions import (
@@ -252,7 +255,9 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
     return question
 
 
-def _parse_response_candidate(response_candidate: "Candidate") -> AIMessage:
+def _parse_response_candidate(
+    response_candidate: "Candidate", streaming: bool = False
+) -> AIMessage:
     try:
         content = response_candidate.text
     except AttributeError:
@@ -270,18 +275,36 @@ def _parse_response_candidate(response_candidate: "Candidate") -> AIMessage:
             {k: function_call_args_dict[k] for k in function_call_args_dict}
         )
         additional_kwargs["function_call"] = function_call
-        try:
-            tool_calls = parse_tool_calls(
-                [{"function": function_call}],
-                return_id=False,
+        if streaming:
+            tool_call_chunks = [
+                ToolCallChunk(
+                    name=function_call.get("name"),
+                    args=function_call.get("arguments"),
+                    id=function_call.get("id"),
+                    index=function_call.get("index"),
+                )
+            ]
+            return AIToolCallsMessageChunk(
+                content=content,
+                additional_kwargs=additional_kwargs,
+                tool_call_chunks=tool_call_chunks,
             )
-        except Exception:
-            tool_calls = None
-        return AIToolCallsMessage(
-            content=content,
-            additional_kwargs=additional_kwargs,
-            tool_calls=tool_calls,
-        )
+        else:
+            try:
+                tool_call_dicts = parse_tool_calls(
+                    [{"function": function_call}],
+                    return_id=False,
+                )
+                tool_calls = [
+                    ToolCall(**tool_call_dict) for tool_call_dict in tool_call_dicts
+                ]
+            except Exception:
+                tool_calls = None
+            return AIToolCallsMessage(
+                content=content,
+                additional_kwargs=additional_kwargs,
+                tool_calls=tool_calls,
+            )
     return AIMessage(content=content, additional_kwargs=additional_kwargs)
 
 
@@ -539,20 +562,29 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     tools=tools,
                 )
                 for response in responses:
-                    message = _parse_response_candidate(response.candidates[0])
+                    message = _parse_response_candidate(
+                        response.candidates[0], streaming=True
+                    )
+                    generation_info = get_generation_info(
+                        response.candidates[0],
+                        self._is_gemini_model,
+                        usage_metadata=response.to_dict().get("usage_metadata"),
+                    )
                     if run_manager:
                         run_manager.on_llm_new_token(message.content)
-                    yield ChatGenerationChunk(
-                        message=AIMessageChunk(
-                            content=message.content,
-                            additional_kwargs=message.additional_kwargs,
-                        ),
-                        generation_info=get_generation_info(
-                            response.candidates[0],
-                            self._is_gemini_model,
-                            usage_metadata=response.to_dict().get("usage_metadata"),
-                        ),
-                    )
+                    if isinstance(message, AIToolCallsMessageChunk):
+                        yield ChatGenerationChunk(
+                            message=message,
+                            generation_info=generation_info,
+                        )
+                    else:
+                        yield ChatGenerationChunk(
+                            message=AIMessageChunk(
+                                content=message.content,
+                                additional_kwargs=message.additional_kwargs,
+                            ),
+                            generation_info=generation_info,
+                        )
         else:
             question = _get_question(messages)
             history = _parse_chat_history(messages[:-1])
@@ -603,20 +635,27 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 safety_settings=safety_settings,
                 tools=tools,
             ):
-                message = _parse_response_candidate(chunk.candidates[0])
+                message = _parse_response_candidate(chunk.candidates[0], streaming=True)
+                generation_info = get_generation_info(
+                    chunk.candidates[0],
+                    self._is_gemini_model,
+                    usage_metadata=chunk.to_dict().get("usage_metadata"),
+                )
                 if run_manager:
                     await run_manager.on_llm_new_token(message.content)
-                yield ChatGenerationChunk(
-                    message=AIMessageChunk(
-                        content=message.content,
-                        additional_kwargs=message.additional_kwargs,
-                    ),
-                    generation_info=get_generation_info(
-                        chunk.candidates[0],
-                        self._is_gemini_model,
-                        usage_metadata=chunk.to_dict().get("usage_metadata"),
-                    ),
-                )
+                if isinstance(message, AIToolCallsMessageChunk):
+                    yield ChatGenerationChunk(
+                        message=message,
+                        generation_info=generation_info,
+                    )
+                else:
+                    yield ChatGenerationChunk(
+                        message=AIMessageChunk(
+                            content=message.content,
+                            additional_kwargs=message.additional_kwargs,
+                        ),
+                        generation_info=generation_info,
+                    )
 
     def with_structured_output(
         self,
