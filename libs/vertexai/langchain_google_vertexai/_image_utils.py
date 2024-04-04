@@ -192,7 +192,9 @@ class ImageBytesLoader:
         """
 
         gcs_client = storage.Client(project=self._project)
-        return storage.Blob.from_string(gcs_uri, gcs_client)
+        blob = storage.Blob.from_string(gcs_uri, gcs_client)
+        blob.reload(client=gcs_client)
+        return blob
 
     def _is_url(self, url_string: str) -> bool:
         """Checks if a url is valid.
