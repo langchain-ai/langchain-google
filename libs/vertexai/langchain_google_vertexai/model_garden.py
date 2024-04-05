@@ -92,7 +92,7 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     async_client: Any = None  #: :meta private:
-    model_name: str = "claude-3-sonnet@20240229"
+    model_name: Optional[str] = None  # type: ignore[assignment]
     "Underlying model name."
     max_output_tokens: int = 1024
 
@@ -135,6 +135,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         system_message, formatted_messages = _format_messages_anthropic(messages)
         params = self._default_params
         params.update(kwargs)
+        if kwargs.get("model_name"):
+            params["model"] = params["model_name"]
+        if kwargs.get("model"):
+            params["model"] = kwargs["model"]
+        params.pop("model_name", None)
         params.update(
             {
                 "system": system_message,

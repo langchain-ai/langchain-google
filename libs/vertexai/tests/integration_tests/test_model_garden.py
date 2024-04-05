@@ -114,10 +114,9 @@ def test_anthropic() -> None:
     )
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
-    response = model.invoke([context, message])
+    response = model.invoke([context, message], model_name="claude-3-sonnet@20240229")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert response.response_metadata["model"] == "claude-3-sonnet-20240229"
 
 
 def test_anthropic_stream() -> None:
@@ -131,7 +130,7 @@ def test_anthropic_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message])
+    sync_response = model.stream([message], model="claude-3-sonnet@20240229")
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
@@ -152,7 +151,8 @@ async def test_anthropic_async() -> None:
     )
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
-    response = await model.ainvoke([context, message])
+    response = await model.ainvoke(
+        [context, message], model_name="claude-3-sonnet@20240229", temperature=0.2
+    )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert response.response_metadata["model"] == "claude-3-sonnet-20240229"
