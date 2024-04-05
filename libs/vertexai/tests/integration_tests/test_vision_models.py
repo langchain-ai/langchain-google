@@ -50,6 +50,9 @@ def test_vertex_ai_image_captioning(base64_image: str):
     response = model.invoke(base64_image)
     assert isinstance(response, str)
 
+    response = model.invoke(base64_image, language="de")
+    assert isinstance(response, str)
+
 
 @pytest.mark.release
 def test_vertex_ai_visual_qna_chat(base64_image: str):
