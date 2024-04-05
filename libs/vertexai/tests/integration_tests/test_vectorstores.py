@@ -27,14 +27,14 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
 from langchain_core.documents import Document
 
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
-from langchain_google_vertexai.vectorstores._document_storage import (
-    DataStoreDocumentStorage,
-    DocumentStorage,
-    GCSDocumentStorage,
-)
 from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKManager
 from langchain_google_vertexai.vectorstores._searcher import (
     VectorSearchSearcher,
+)
+from langchain_google_vertexai.vectorstores.document_storage import (
+    DataStoreDocumentStorage,
+    DocumentStorage,
+    GCSDocumentStorage,
 )
 from langchain_google_vertexai.vectorstores.vectorstores import (
     VectorSearchVectorStore,
@@ -132,15 +132,9 @@ def test_document_storage(
     ]
     ids = [str(uuid4()) for i in range(N)]
 
-    # Test individual retrieval
-    for id, document in zip(ids, documents):
-        document_storage.store_by_id(document_id=id, document=document)
-        retrieved = document_storage.get_by_id(document_id=id)
-        assert document == retrieved
-
-    # Test batch regtrieval
-    document_storage.batch_store_by_id(ids, documents)
-    retrieved_documents = document_storage.batch_get_by_id(ids)
+    # Test batch storage and retrieval
+    document_storage.mset(list(zip(ids, documents)))
+    retrieved_documents = document_storage.mget(ids)
 
     for og_document, retrieved_document in zip(documents, retrieved_documents):
         assert og_document == retrieved_document

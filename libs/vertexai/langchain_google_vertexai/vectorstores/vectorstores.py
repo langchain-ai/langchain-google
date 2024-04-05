@@ -10,15 +10,15 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 
-from langchain_google_vertexai.vectorstores._document_storage import (
-    DataStoreDocumentStorage,
-    DocumentStorage,
-    GCSDocumentStorage,
-)
 from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKManager
 from langchain_google_vertexai.vectorstores._searcher import (
     Searcher,
     VectorSearchSearcher,
+)
+from langchain_google_vertexai.vectorstores.document_storage import (
+    DataStoreDocumentStorage,
+    DocumentStorage,
+    GCSDocumentStorage,
 )
 
 
@@ -115,19 +115,19 @@ class _BaseVertexAIVectorStore(VectorStore):
             embeddings=[embedding], k=k, filter_=filter, numeric_filter=numeric_filter
         )
 
-        results = []
+        keys = [key for key, _ in neighbors_list[0]]
+        distances = [distance for _, distance in neighbors_list[0]]
+        documents = self._document_storage.mget(keys)
 
-        for neighbor_id, distance in neighbors_list[0]:
-            document = self._document_storage.get_by_id(neighbor_id)
-
-            if document is None:
-                raise ValueError(
-                    f"Document with id {neighbor_id} not found in document" "storage."
-                )
-
-            results.append((document, distance))
-
-        return results
+        if all(document is not None for document in documents):
+            # Ignore typing because mypy doesn't seem to be able to identify that
+            # in documents there is no possibility to have None values with the
+            # check above.
+            return list(zip(documents, distances)) # type: ignore
+        else:  
+            missing_docs = [key for key, doc in zip(keys, documents) if doc is None]
+            message = f"Documents with ids: {missing_docs} not found in the storage"
+            raise ValueError(message)
 
     def similarity_search(
         self,
@@ -197,7 +197,7 @@ class _BaseVertexAIVectorStore(VectorStore):
             for text, metadata in zip(texts, metadatas)
         ]
 
-        self._document_storage.batch_store_by_id(ids=ids, documents=documents)
+        self._document_storage.mset(list(zip(ids, documents)))
 
         embeddings = self._embeddings.embed_documents(texts)
 
