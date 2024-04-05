@@ -18,6 +18,12 @@ google-cloud-storage = "^2.14.0"
 types-requests = "^2.31.0"
 types-protobuf = "^4.24.0.4"
 
+[tool.poetry.group.anthropic]
+optional = true
+
+[tool.poetry.group.anthropic.dependencies]
+anthropic = {extras = ["vertexai"], version = ">=0.23.0,<1"}
+
 [tool.poetry.group.test]
 optional = true
 
