@@ -17,6 +17,8 @@ google-cloud-aiplatform = "^1.44.0"
 google-cloud-storage = "^2.14.0"
 types-requests = "^2.31.0"
 types-protobuf = "^4.24.0.4"
+# optional dependencies
+anthropic = {extras = ["vertexai"], version = ">=0.23.0,<1", optional = true}
 
 [tool.poetry.group.test]
 optional = true
@@ -58,6 +60,8 @@ ruff = "^0.1.5"
 mypy = "^1"
 types-google-cloud-ndb = "^2.2.0.20240106"
 
+[tool.poetry.extras]
+anthropic = ["anthropic"]
 
 [tool.ruff]
 select = [
