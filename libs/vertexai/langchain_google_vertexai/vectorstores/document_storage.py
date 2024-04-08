@@ -14,30 +14,24 @@ if TYPE_CHECKING:
 class DocumentStorage(BaseStore[str, Document]):
     """Abstract interface of a key, text storage for retrieving documents."""
 
-    def _get_one(self, key: str) -> Document | None:
-        """Gets  a document by its id. If not found, returns None.
-        Args:
-            key: Id of the document to get from the storage.
-        Returns:
-            Document if found, otherwise None.
-        """
-        raise NotImplementedError()
+class GCSDocumentStorage(DocumentStorage):
+    """Stores documents in Google Cloud Storage.
+    For each pair id, document_text the name of the blob will be {prefix}/{id} stored
+    in plain text format.
+    """
 
-    def _set_one(self, key: str, value: Document):
-        """Stores a document associated to a document_id.
+    def __init__(
+        self, bucket: storage.Bucket, prefix: Optional[str] = "documents"
+    ) -> None:
+        """Constructor.
         Args:
-            key: Id of the document to be stored.
-            document: Document to be stored.
+            bucket: Bucket where the documents will be stored.
+            prefix: Prefix that is prepended to all document names.
         """
-        raise NotImplementedError()
+        super().__init__()
+        self._bucket = bucket
+        self._prefix = prefix
     
-    def _delete_one(self, key: str) -> None:
-        """Deletes a document by its key.
-        Args:
-            key: Id of the document to delete.
-        """
-        raise NotImplementedError()
-
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
         """ Stores a series of documents using each keys
 
@@ -68,36 +62,16 @@ class DocumentStorage(BaseStore[str, Document]):
         """
         for key in keys:
             self._delete_one(key)
-    
+
     def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
         """ Yields the keys present in the storage.
 
         Args:
-            prefix: Prefix that is prepended to all document names.
-
-        Returns:
-            Iterator[str]: Iterator over the keys.
+            prefix: Ignored. Uses the prefix provided in the constructor.
         """
-        raise NotImplementedError()
-
-
-class GCSDocumentStorage(DocumentStorage):
-    """Stores documents in Google Cloud Storage.
-    For each pair id, document_text the name of the blob will be {prefix}/{id} stored
-    in plain text format.
-    """
-
-    def __init__(
-        self, bucket: storage.Bucket, prefix: Optional[str] = "documents"
-    ) -> None:
-        """Constructor.
-        Args:
-            bucket: Bucket where the documents will be stored.
-            prefix: Prefix that is prepended to all document names.
-        """
-        super().__init__()
-        self._bucket = bucket
-        self._prefix = prefix
+        for blob in self._bucket.list_blobs(prefix=self._prefix):
+            yield blob.name.split("/")[-1]
+        
 
     def _get_one(self, key: str) -> Document | None:
         """Gets the text of a document by its id. If not found, returns None.
@@ -171,39 +145,6 @@ class DataStoreDocumentStorage(DocumentStorage):
         self._metadata_property_name = metadata_property_name
         self._kind = kind
 
-    def _get_one(self, key: str) -> Document | None:
-        """Gets the text of a document by its id. If not found, returns None.
-        Args:
-            document_id: Id of the document to get from the storage.
-        Returns:
-            Text of the document if found, otherwise None.
-        """
-        ds_key = self._client.key(self._kind, key)
-        entity = self._client.get(ds_key)
-
-        if entity is None:
-            return None
-
-        return Document(
-            page_content=entity[self._text_property_name],
-            metadata=self._convert_entity_to_dict(entity[self._metadata_property_name]),
-        )
-
-    def _set_one(self, key: str, document: Document) -> None:
-        """Stores a document text associated to a document_id.
-        Args:
-            document_id: Id of the document to be stored.
-            text: Text of the document to be stored.
-        """
-        with self._client.transaction():
-            ds_key = self._client.key(self._kind, key)
-
-            entity = self._client.entity(key=ds_key)
-            entity[self._text_property_name] = document.page_content
-            entity[self._metadata_property_name] = document.metadata
-
-            self._client.put(entity)
-
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
         Args:
@@ -214,13 +155,12 @@ class DataStoreDocumentStorage(DocumentStorage):
         """
         ds_keys = [self._client.key(self._kind, id_) for id_ in keys]
 
-        # TODO: Handle when a key is not present
         entities = self._client.get_multi(ds_keys)
 
         # Entities are not sorted by key by default, the order is unclear. This orders
         # the list by the id retrieved.
         entity_id_lookup = {entity.key.id_or_name: entity for entity in entities}
-        entities = [entity_id_lookup[id_] for id_ in keys]
+        entities = [entity_id_lookup.get(id_) for id_ in keys]
 
         return [
             Document(
@@ -228,12 +168,15 @@ class DataStoreDocumentStorage(DocumentStorage):
                 metadata=self._convert_entity_to_dict(
                     entity[self._metadata_property_name]
                 ),
-            )
+            ) if entity is not None else None
             for entity in entities
         ]
     
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
-        """
+        """ Stores a series of documents using each keys
+
+        Args:
+            key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
         """
         ids = [key for key, _ in key_value_pairs]
         documents = [document for _, document in key_value_pairs]
@@ -250,6 +193,26 @@ class DataStoreDocumentStorage(DocumentStorage):
 
             self._client.put_multi(entities)
 
+    def mdelete(self, keys: Sequence[str]) -> None:
+        """ Deletes a sequence of documents by key.
+
+        Args:
+            keys (Sequence[str]): A sequence of keys to delete.
+        """
+        with self._client.transaction():
+            keys = [self._client.key(self._kind, id_) for id_ in keys]
+            self._client.delete_multi(keys)
+
+    def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
+        """ Yields the keys of all documents in the storage.
+
+        Args:
+            prefix: Ignored
+        """
+        query = self._client.query(kind=self._kind)
+        query.keys_only()
+        for entity in query.fetch():
+            yield str(entity.key.id_or_name)
 
     def _convert_entity_to_dict(self, entity: datastore.Entity) -> Dict[str, Any]:
         """Recursively transform an entity into a plain dictionary."""

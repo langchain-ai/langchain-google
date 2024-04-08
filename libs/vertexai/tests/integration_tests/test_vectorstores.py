@@ -116,7 +116,6 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     "storage_class", ["gcs_document_storage", "datastore_document_storage"]
 )
 def test_document_storage(
-    sdk_manager: VectorSearchSDKManager,
     storage_class: str,
     request: pytest.FixtureRequest,
 ):
@@ -138,6 +137,14 @@ def test_document_storage(
 
     for og_document, retrieved_document in zip(documents, retrieved_documents):
         assert og_document == retrieved_document
+
+    # Test key yielding
+    keys = list(document_storage.yield_keys())
+    assert all(id in keys for id in ids)
+
+    # Test deletion
+    document_storage.mdelete(ids)
+    assert all(item is None for item in document_storage.mget(ids))
 
 
 @pytest.mark.extended
