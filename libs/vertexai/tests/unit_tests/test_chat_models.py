@@ -36,12 +36,21 @@ from langchain_google_vertexai.chat_models import (
 def test_init() -> None:
     for llm in [
         ChatVertexAI(
-            model_name="gemini-pro", project="test-project", max_output_tokens=10
+            model_name="gemini-pro",
+            project="test-project",
+            max_output_tokens=10,
+            stop=["bar"],
         ),
-        ChatVertexAI(model="gemini-pro", project="test-project", max_tokens=10),  # type: ignore[call-arg]
+        ChatVertexAI(
+            model="gemini-pro",
+            project="test-project",
+            max_tokens=10,
+            stop_sequences=["bar"],
+        ),  # type: ignore[call-arg]
     ]:
         assert llm.model_name == "gemini-pro"
         assert llm.max_output_tokens == 10
+        assert llm.stop == ["bar"]
 
 
 def test_parse_examples_correct() -> None:
