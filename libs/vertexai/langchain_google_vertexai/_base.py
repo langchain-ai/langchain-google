@@ -50,10 +50,15 @@ class _VertexAIBase(BaseModel):
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
     task_executor: ClassVar[Optional[Executor]] = Field(default=None, exclude=True)
-    stop: Optional[List[str]] = None
+    stop: Optional[List[str]] = Field(default=None, alias="stop_sequences")
     "Optional list of stop words to use when generating."
-    model_name: Optional[str] = None
+    model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
 
     @root_validator(pre=True)
     def validate_params(cls, values: dict) -> dict:
@@ -64,11 +69,11 @@ class _VertexAIBase(BaseModel):
 
 class _VertexAICommon(_VertexAIBase):
     client_preview: Any = None  #: :meta private:
-    model_name: str
+    model_name: str = Field(default=None, alias="model")
     "Underlying model name."
     temperature: Optional[float] = None
     "Sampling temperature, it controls the degree of randomness in token selection."
-    max_output_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = Field(defualt=None, alias="max_tokens")
     "Token limit determines the maximum amount of text output from one prompt."
     top_p: Optional[float] = None
     "Tokens are selected from most probable to least until the sum of their "

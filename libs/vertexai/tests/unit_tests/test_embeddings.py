@@ -8,6 +8,17 @@ from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
 
 
+def test_init() -> None:
+    for embeddings in [
+        VertexAIEmbeddings(
+            model_name="foo",
+            project="test-project",
+        ),
+        VertexAIEmbeddings(model="foo", project="test-project"),
+    ]:
+        assert embeddings.model_name == "foo"
+
+
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
     mock_embeddings = MockVertexAIEmbeddings("textembedding-gecko@001")
     assert mock_embeddings.model_type == GoogleEmbeddingModelType.TEXT

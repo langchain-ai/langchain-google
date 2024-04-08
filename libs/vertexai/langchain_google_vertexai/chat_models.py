@@ -36,7 +36,7 @@ from langchain_core.output_parsers.openai_functions import (
     PydanticOutputFunctionsParser,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.pydantic_v1 import BaseModel, root_validator
+from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from vertexai.generative_models import (  # type: ignore
     Candidate,
@@ -271,7 +271,7 @@ def _parse_response_candidate(response_candidate: "Candidate") -> AIMessage:
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """`Vertex AI` Chat large language models API."""
 
-    model_name: str = "chat-bison"
+    model_name: str = Field(default="chat-bison", alias="model")
     "Underlying model name."
     examples: Optional[List[BaseMessage]] = None
     convert_system_message_to_human: bool = False

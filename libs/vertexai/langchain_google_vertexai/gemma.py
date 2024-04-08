@@ -21,7 +21,7 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from langchain_core.pydantic_v1 import BaseModel, root_validator
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai._utils import enforce_stop_tokens
@@ -178,7 +178,7 @@ class _GemmaLocalKaggleBase(_GemmaBase):
 
     client: Any = None  #: :meta private:
     keras_backend: str = "jax"
-    model_name: str = "gemma_2b_en"
+    model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
 
     @root_validator()
@@ -268,7 +268,7 @@ class _GemmaLocalHFBase(_GemmaBase):
     client: Any = None  #: :meta private:
     hf_access_token: str
     cache_dir: Optional[str] = None
-    model_name: str = "gemma_2b_en"
+    model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
 
     @root_validator()

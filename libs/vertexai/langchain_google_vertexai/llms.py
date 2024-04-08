@@ -9,7 +9,7 @@ from langchain_core.callbacks.manager import (
 )
 from langchain_core.language_models.llms import BaseLLM
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
-from langchain_core.pydantic_v1 import root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 from vertexai.generative_models import (  # type: ignore[import-untyped]
     Candidate,
     GenerativeModel,
@@ -110,7 +110,7 @@ async def _acompletion_with_retry(
 class VertexAI(_VertexAICommon, BaseLLM):
     """Google Vertex AI large language models."""
 
-    model_name: str = "text-bison"
+    model_name: str = Field(default="text-bison", alias="model")
     "The name of the Vertex AI large language model."
     tuned_model_name: Optional[str] = None
     "The name of a tuned model. If provided, model_name is ignored."
