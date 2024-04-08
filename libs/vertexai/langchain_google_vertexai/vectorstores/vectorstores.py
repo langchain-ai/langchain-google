@@ -123,8 +123,8 @@ class _BaseVertexAIVectorStore(VectorStore):
             # Ignore typing because mypy doesn't seem to be able to identify that
             # in documents there is no possibility to have None values with the
             # check above.
-            return list(zip(documents, distances)) # type: ignore
-        else:  
+            return list(zip(documents, distances))  # type: ignore
+        else:
             missing_docs = [key for key, doc in zip(keys, documents) if doc is None]
             message = f"Documents with ids: {missing_docs} not found in the storage"
             raise ValueError(message)

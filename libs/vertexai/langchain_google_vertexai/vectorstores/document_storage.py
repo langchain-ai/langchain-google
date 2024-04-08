@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 class DocumentStorage(BaseStore[str, Document]):
     """Abstract interface of a key, text storage for retrieving documents."""
 
+
 class GCSDocumentStorage(DocumentStorage):
     """Stores documents in Google Cloud Storage.
     For each pair id, document_text the name of the blob will be {prefix}/{id} stored
@@ -31,9 +32,9 @@ class GCSDocumentStorage(DocumentStorage):
         super().__init__()
         self._bucket = bucket
         self._prefix = prefix
-    
+
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
-        """ Stores a series of documents using each keys
+        """Stores a series of documents using each keys
 
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
@@ -53,9 +54,9 @@ class GCSDocumentStorage(DocumentStorage):
                 None instead.
         """
         return [self._get_one(key) for key in keys]
-    
+
     def mdelete(self, keys: Sequence[str]) -> None:
-        """ Deletes a batch of documents by id.
+        """Deletes a batch of documents by id.
 
         Args:
             keys: List of ids for the text.
@@ -64,14 +65,13 @@ class GCSDocumentStorage(DocumentStorage):
             self._delete_one(key)
 
     def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
-        """ Yields the keys present in the storage.
+        """Yields the keys present in the storage.
 
         Args:
             prefix: Ignored. Uses the prefix provided in the constructor.
         """
         for blob in self._bucket.list_blobs(prefix=self._prefix):
             yield blob.name.split("/")[-1]
-        
 
     def _get_one(self, key: str) -> Document | None:
         """Gets the text of a document by its id. If not found, returns None.
@@ -105,7 +105,7 @@ class GCSDocumentStorage(DocumentStorage):
         new_blow.upload_from_string(document_text)
 
     def _delete_one(self, key: str) -> None:
-        """ Deletes one document by its key.
+        """Deletes one document by its key.
 
         Args:
             key (str): Id of the document to delete.
@@ -168,12 +168,14 @@ class DataStoreDocumentStorage(DocumentStorage):
                 metadata=self._convert_entity_to_dict(
                     entity[self._metadata_property_name]
                 ),
-            ) if entity is not None else None
+            )
+            if entity is not None
+            else None
             for entity in entities
         ]
-    
+
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
-        """ Stores a series of documents using each keys
+        """Stores a series of documents using each keys
 
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
@@ -194,7 +196,7 @@ class DataStoreDocumentStorage(DocumentStorage):
             self._client.put_multi(entities)
 
     def mdelete(self, keys: Sequence[str]) -> None:
-        """ Deletes a sequence of documents by key.
+        """Deletes a sequence of documents by key.
 
         Args:
             keys (Sequence[str]): A sequence of keys to delete.
@@ -204,7 +206,7 @@ class DataStoreDocumentStorage(DocumentStorage):
             self._client.delete_multi(keys)
 
     def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
-        """ Yields the keys of all documents in the storage.
+        """Yields the keys of all documents in the storage.
 
         Args:
             prefix: Ignored

@@ -13,5 +13,5 @@ __all__ = [
     "VectorSearchVectorStoreDatastore",
     "VectorSearchVectorStoreGCS",
     "DataStoreDocumentStorage",
-    "GCSDocumentStorage"
+    "GCSDocumentStorage",
 ]
