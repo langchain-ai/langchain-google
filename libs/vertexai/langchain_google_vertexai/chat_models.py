@@ -284,6 +284,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
+        arbitrary_types_allowed = True
 
     @classmethod
     def is_lc_serializable(self) -> bool:
