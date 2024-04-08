@@ -34,6 +34,11 @@ from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAIC
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     """Large language models served from Vertex AI Model Garden."""
 
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
     def _generate(
         self,
         prompts: List[str],
