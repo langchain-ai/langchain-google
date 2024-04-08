@@ -115,6 +115,11 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
 
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
     @property
     def _llm_type(self) -> str:
         return "gemma_vertexai_model_garden"

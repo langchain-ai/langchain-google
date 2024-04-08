@@ -115,6 +115,11 @@ class VertexAI(_VertexAICommon, BaseLLM):
     tuned_model_name: Optional[str] = None
     "The name of a tuned model. If provided, model_name is ignored."
 
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
     @classmethod
     def is_lc_serializable(self) -> bool:
         return True

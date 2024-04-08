@@ -96,6 +96,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     "Underlying model name."
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
 
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         from anthropic import (  # type: ignore[import-not-found]

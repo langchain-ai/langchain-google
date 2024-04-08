@@ -280,6 +280,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Gemini does not support system messages; any unsupported messages will 
     raise an error."""
 
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
     @classmethod
     def is_lc_serializable(self) -> bool:
         return True

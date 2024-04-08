@@ -93,7 +93,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             credentials=credentials,
             request_parallelism=request_parallelism,
             max_retries=max_retries,
-            model_name=model_name,
+            model=model_name,
             **kwargs,
         )
         self.instance["max_batch_size"] = kwargs.get("max_batch_size", _MAX_BATCH_SIZE)
