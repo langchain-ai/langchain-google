@@ -2,9 +2,18 @@ import os
 from typing import Optional
 
 import pytest
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    HumanMessage,
+    SystemMessage,
+)
 from langchain_core.outputs import LLMResult
 
-from langchain_google_vertexai import VertexAIModelGarden
+from langchain_google_vertexai.model_garden import (
+    ChatAnthropicVertex,
+    VertexAIModelGarden,
+)
 
 
 @pytest.mark.skip("CI testing not set up")
@@ -87,3 +96,63 @@ async def test_model_garden_agenerate(
     output = await llm.agenerate(["What is the meaning of life?", "How much is 2+2"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 2
+
+
+def test_anthropic() -> None:
+    project = os.environ["PROJECT"]
+    location = "us-central1"
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+    )
+    raw_context = (
+        "My name is Peter. You are my personal assistant. My favorite movies "
+        "are Lord of the Rings and Hobbit."
+    )
+    question = (
+        "Hello, could you recommend a good movie for me to watch this evening, please?"
+    )
+    context = SystemMessage(content=raw_context)
+    message = HumanMessage(content=question)
+    response = model.invoke([context, message], model_name="claude-3-sonnet@20240229")
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+
+def test_anthropic_stream() -> None:
+    project = os.environ["PROJECT"]
+    location = "us-central1"
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+    )
+    question = (
+        "Hello, could you recommend a good movie for me to watch this evening, please?"
+    )
+    message = HumanMessage(content=question)
+    sync_response = model.stream([message], model="claude-3-sonnet@20240229")
+    for chunk in sync_response:
+        assert isinstance(chunk, AIMessageChunk)
+
+
+async def test_anthropic_async() -> None:
+    project = os.environ["PROJECT"]
+    location = "us-central1"
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+    )
+    raw_context = (
+        "My name is Peter. You are my personal assistant. My favorite movies "
+        "are Lord of the Rings and Hobbit."
+    )
+    question = (
+        "Hello, could you recommend a good movie for me to watch this evening, please?"
+    )
+    context = SystemMessage(content=raw_context)
+    message = HumanMessage(content=question)
+    response = await model.ainvoke(
+        [context, message], model_name="claude-3-sonnet@20240229", temperature=0.2
+    )
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
