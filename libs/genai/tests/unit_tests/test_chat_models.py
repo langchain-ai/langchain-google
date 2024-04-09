@@ -61,13 +61,16 @@ def test_parse_history() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
-    history = _parse_chat_history(messages, convert_system_message_to_human=True)
+    system_instruction, history = _parse_chat_history(
+        messages, convert_system_message_to_human=True
+    )
     assert len(history) == 3
     assert history[0] == {
         "role": "user",
-        "parts": [{"text": system_input}, {"text": text_question1}],
+        "parts": [{"text": text_question1}],
     }
     assert history[1] == {"role": "model", "parts": [{"text": text_answer1}]}
+    assert system_instruction == [{"text": system_input}]
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
