@@ -56,7 +56,7 @@ class VertexSearchTool(BaseTool):
             The response from the agent.
         """
 
-        import google.cloud.discoveryengine_v1 as discoveryengine
+        import google.cloud.discoveryengine_v1 as discoveryengine  # type: ignore[import-untyped, unused-ignore]
         from google.api_core.client_options import ClientOptions
 
         client_options_kwargs = {}
