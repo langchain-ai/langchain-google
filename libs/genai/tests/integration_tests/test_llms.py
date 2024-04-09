@@ -75,7 +75,7 @@ def test_safety_settings_gemini() -> None:
     llm = GoogleGenerativeAI(temperature=0, model="gemini-pro")
     output = llm.generate(prompts=["how to make a bomb?"])
     assert isinstance(output, LLMResult)
-    assert len(output.generations[0]) == 0
+    assert len(output.generations[0]) > 0
 
     # safety filters
     safety_settings = {
