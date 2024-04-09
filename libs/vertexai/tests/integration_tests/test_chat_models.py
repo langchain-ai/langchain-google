@@ -7,8 +7,6 @@ import pytest
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
-    AIToolCallsMessage,
-    AIToolCallsMessageChunk,
     HumanMessage,
     SystemMessage,
     ToolCall,
@@ -271,7 +269,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     model = ChatVertexAI(model_name="gemini-pro").bind(functions=[MyModel])
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     response = model.invoke([message])
-    assert isinstance(response, AIToolCallsMessage)
+    assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert response.content == ""
     function_call = response.additional_kwargs.get("function_call")
@@ -285,18 +283,20 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         "age": 27.0,
     }
     assert response.tool_calls == [
-        ToolCall(name="MyModel", args={"age": 27.0, "name": "Erick"})
+        ToolCall(name="MyModel", args={"age": 27.0, "name": "Erick"}, id=None)
     ]
 
     stream = model.stream([message])
-    c = 0
+    first = True
     for chunk in stream:
-        if c == 0:
+        if first:
             gathered = chunk
+            first = False
         else:
             gathered = gathered + chunk  # type: ignore
-    c = c + 1
-    assert isinstance(gathered, AIToolCallsMessageChunk)
+    assert isinstance(gathered, AIMessageChunk)
     assert gathered.tool_call_chunks == [
-        ToolCallChunk(name="MyModel", args='{"age": 27.0, "name": "Erick"}')
+        ToolCallChunk(
+            name="MyModel", args='{"age": 27.0, "name": "Erick"}', id=None, index=None
+        )
     ]

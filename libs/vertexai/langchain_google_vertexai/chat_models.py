@@ -25,11 +25,10 @@ from langchain_core.language_models.chat_models import (
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
-    AIToolCallsMessage,
-    AIToolCallsMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
+    InvalidToolCall,
     SystemMessage,
     ToolCall,
     ToolCallChunk,
@@ -281,26 +280,42 @@ def _parse_response_candidate(
                     index=function_call.get("index"),
                 )
             ]
-            return AIToolCallsMessageChunk(
+            return AIMessageChunk(
                 content=content,
                 additional_kwargs=additional_kwargs,
                 tool_call_chunks=tool_call_chunks,
             )
         else:
+            tool_calls = []
+            invalid_tool_calls = []
             try:
-                tool_call_dicts = parse_tool_calls(
+                tool_calls_dicts = parse_tool_calls(
                     [{"function": function_call}],
                     return_id=False,
                 )
                 tool_calls = [
-                    ToolCall(**tool_call_dict) for tool_call_dict in tool_call_dicts
+                    ToolCall(
+                        name=tool_call["name"],
+                        args=tool_call["args"],
+                        id=tool_call.get("id"),
+                    )
+                    for tool_call in tool_calls_dicts
                 ]
-            except Exception:
-                tool_calls = None
-            return AIToolCallsMessage(
+            except Exception as e:
+                invalid_tool_calls = [
+                    InvalidToolCall(
+                        name=function_call.get("name"),
+                        args=function_call.get("arguments"),
+                        id=function_call.get("id"),
+                        error=str(e),
+                    )
+                ]
+
+            return AIMessage(
                 content=content,
                 additional_kwargs=additional_kwargs,
                 tool_calls=tool_calls,
+                invalid_tool_calls=invalid_tool_calls,
             )
     return AIMessage(content=content, additional_kwargs=additional_kwargs)
 
@@ -569,7 +584,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                     if run_manager:
                         run_manager.on_llm_new_token(message.content)
-                    if isinstance(message, AIToolCallsMessageChunk):
+                    if isinstance(message, AIMessageChunk):
                         yield ChatGenerationChunk(
                             message=message,
                             generation_info=generation_info,
@@ -640,7 +655,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 if run_manager:
                     await run_manager.on_llm_new_token(message.content)
-                if isinstance(message, AIToolCallsMessageChunk):
+                if isinstance(message, AIMessageChunk):
                     yield ChatGenerationChunk(
                         message=message,
                         generation_info=generation_info,
