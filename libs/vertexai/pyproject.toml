@@ -35,6 +35,7 @@ types-requests = "^2.31.0.20231231"
 types-protobuf = "^4.24.0.4"
 numexpr = "^2.8.6"
 google-api-python-client = "^2.117.0"
+langchain-core = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core"}
 
 [tool.poetry.group.codespell]
 optional = true
@@ -59,6 +60,11 @@ ruff = "^0.1.5"
 [tool.poetry.group.typing.dependencies]
 mypy = "^1"
 types-google-cloud-ndb = "^2.2.0.20240106"
+langchain-core = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core"}
+
+
+[tool.poetry.group.dev.dependencies]
+langchain-core = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core"}
 
 [tool.poetry.extras]
 anthropic = ["anthropic"]
