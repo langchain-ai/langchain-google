@@ -112,6 +112,16 @@ def test_chat_google_genai_invoke_multimodal() -> None:
         assert len(chunk.content.strip()) > 0
 
 
+def test_system_message() -> None:
+    messages = [
+        SystemMessage(content="Be a helful assistant."),
+        AIMessage(content="Hi, how are you?"),
+    ]
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    answer = llm.invoke(messages)
+    assert isinstance(answer.content, str)
+
+
 def test_chat_google_genai_invoke_multimodal_too_many_messages() -> None:
     # Only supports 1 turn...
     messages: list = [
