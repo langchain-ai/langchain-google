@@ -13,7 +13,7 @@ from langchain_core.messages import (
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.pydantic_v1 import BaseModel
 
-from langchain_google_vertexai.chat_models import ChatVertexAI
+from langchain_google_vertexai import ChatVertexAI, HarmBlockThreshold, HarmCategory
 
 model_names_to_test = [None, "codechat-bison", "chat-bison", "gemini-pro"]
 
@@ -200,6 +200,43 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
 
 
 @pytest.mark.release
+@pytest.mark.parametrize("model_name", ["gemini-1.0-pro-002"])
+def test_vertexai_system_message(model_name: Optional[str]) -> None:
+    if model_name:
+        model = ChatVertexAI(model_name=model_name)
+    else:
+        model = ChatVertexAI()
+    system_instruction = """CymbalBank is a bank located in London"""
+    text_question1 = "Where is Cymbal located? Provide only the name of the city."
+    sys_message = SystemMessage(content=system_instruction)
+    message1 = HumanMessage(content=text_question1)
+    response = model([sys_message, message1])
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content.lower() == "london"
+
+
+@pytest.mark.release
+@pytest.mark.parametrize("model_name", model_names_to_test)
+def test_vertexai_single_call_with_no_system_messages(
+    model_name: Optional[str],
+) -> None:
+    if model_name:
+        model = ChatVertexAI(model_name=model_name)
+    else:
+        model = ChatVertexAI()
+    text_question1, text_answer1 = "How much is 2+2?", "4"
+    text_question2 = "How much is 3+3?"
+    message1 = HumanMessage(content=text_question1)
+    message2 = AIMessage(content=text_answer1)
+    message3 = HumanMessage(content=text_question2)
+    response = model([message1, message2, message3])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+
+@pytest.mark.release
 def test_vertexai_single_call_fails_no_message() -> None:
     chat = ChatVertexAI()
     with pytest.raises(ValueError) as exc_info:
@@ -208,41 +245,6 @@ def test_vertexai_single_call_fails_no_message() -> None:
         str(exc_info.value)
         == "You should provide at least one message to start the chat!"
     )
-
-
-@pytest.mark.release
-@pytest.mark.parametrize("model_name", ["gemini-pro"])
-def test_chat_vertexai_gemini_system_message_error(model_name: str) -> None:
-    model = ChatVertexAI(model_name=model_name)
-    text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
-    system_message = SystemMessage(content="You're supposed to answer math questions.")
-    message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    with pytest.raises(ValueError):
-        model([system_message, message1, message2, message3])
-
-
-@pytest.mark.release
-@pytest.mark.parametrize("model_name", model_names_to_test)
-def test_chat_vertexai_system_message(model_name: Optional[str]) -> None:
-    if model_name:
-        model = ChatVertexAI(
-            model_name=model_name, convert_system_message_to_human=True
-        )
-    else:
-        model = ChatVertexAI()
-
-    text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
-    system_message = SystemMessage(content="You're supposed to answer math questions.")
-    message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    response = model([system_message, message1, message2, message3])
-    assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
 
 
 @pytest.mark.release
@@ -264,7 +266,12 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         name: str
         age: int
 
-    model = ChatVertexAI(model_name="gemini-pro").bind(functions=[MyModel])
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind(
+        functions=[MyModel]
+    )
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     response = model.invoke([message])
     assert isinstance(response, AIMessage)
