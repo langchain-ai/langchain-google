@@ -5,10 +5,10 @@ from langchain_core.tools import BaseTool
 
 
 class VertexSearchTool(BaseTool):
-    """ Class that exposes a tool to interface with an App in Vertex Search and
-    Conversation. Now Agent Builder. 
+    """Class that exposes a tool to interface with an App in Vertex Search and
+    Conversation. Now Agent Builder.
     """
-    
+
     project_id: str
     """ Id of the GCP project the App is in"""
 
@@ -40,15 +40,14 @@ class VertexSearchTool(BaseTool):
     """ Additional keyword arguments for 
         `discoveryengine.SearchRequest`
     """
-    
+
     content_search_spec_kwargs: Dict[str, Any] = Field(default_factory=dict)
     """ Additional keyword arguments for 
         `discoveryengine.ContentSearchSpec`
     """
 
-
     def _run(self, search_query: str, **kwargs: Any) -> str:
-        """ Runs the tool.
+        """Runs the tool.
 
         Args:
             search_query: The query to run by the agent.
@@ -64,7 +63,8 @@ class VertexSearchTool(BaseTool):
 
         if self.location != "global":
             client_options_kwargs = dict(
-                 api_endpoint=f"{self.location}-discoveryengine.googleapis.com")
+                api_endpoint=f"{self.location}-discoveryengine.googleapis.com"
+            )
 
         client_options = ClientOptions(**client_options_kwargs)
 
@@ -85,9 +85,9 @@ class VertexSearchTool(BaseTool):
                 model_prompt_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec.ModelPromptSpec(
                     preamble=self.summary_prompt
                 ),
-                **self.summary_spec_kwargs
+                **self.summary_spec_kwargs,
             ),
-            **self.content_search_spec_kwargs
+            **self.content_search_spec_kwargs,
         )
 
         request = discoveryengine.SearchRequest(
@@ -95,10 +95,9 @@ class VertexSearchTool(BaseTool):
             query=search_query,
             page_size=self.max_number_of_documents,
             content_search_spec=content_search_spec,
-            **self.search_request_kwargs
+            **self.search_request_kwargs,
         )
 
         response = client.search(request)
 
         return response.summary.summary_text
-
