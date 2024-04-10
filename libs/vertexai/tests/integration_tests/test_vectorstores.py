@@ -27,14 +27,14 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
 from langchain_core.documents import Document
 
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
-from langchain_google_vertexai.vectorstores._document_storage import (
-    DataStoreDocumentStorage,
-    DocumentStorage,
-    GCSDocumentStorage,
-)
 from langchain_google_vertexai.vectorstores._sdk_manager import VectorSearchSDKManager
 from langchain_google_vertexai.vectorstores._searcher import (
     VectorSearchSearcher,
+)
+from langchain_google_vertexai.vectorstores.document_storage import (
+    DataStoreDocumentStorage,
+    DocumentStorage,
+    GCSDocumentStorage,
 )
 from langchain_google_vertexai.vectorstores.vectorstores import (
     VectorSearchVectorStore,
@@ -116,7 +116,6 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     "storage_class", ["gcs_document_storage", "datastore_document_storage"]
 )
 def test_document_storage(
-    sdk_manager: VectorSearchSDKManager,
     storage_class: str,
     request: pytest.FixtureRequest,
 ):
@@ -132,18 +131,20 @@ def test_document_storage(
     ]
     ids = [str(uuid4()) for i in range(N)]
 
-    # Test individual retrieval
-    for id, document in zip(ids, documents):
-        document_storage.store_by_id(document_id=id, document=document)
-        retrieved = document_storage.get_by_id(document_id=id)
-        assert document == retrieved
-
-    # Test batch regtrieval
-    document_storage.batch_store_by_id(ids, documents)
-    retrieved_documents = document_storage.batch_get_by_id(ids)
+    # Test batch storage and retrieval
+    document_storage.mset(list(zip(ids, documents)))
+    retrieved_documents = document_storage.mget(ids)
 
     for og_document, retrieved_document in zip(documents, retrieved_documents):
         assert og_document == retrieved_document
+
+    # Test key yielding
+    keys = list(document_storage.yield_keys())
+    assert all(id in keys for id in ids)
+
+    # Test deletion
+    document_storage.mdelete(ids)
+    assert all(item is None for item in document_storage.mget(ids))
 
 
 @pytest.mark.extended

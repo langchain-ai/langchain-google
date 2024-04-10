@@ -1,62 +1,18 @@
 from __future__ import annotations
 
 import json
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from langchain_core.documents import Document
+from langchain_core.stores import BaseStore
 
 if TYPE_CHECKING:
     from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
 
 
-class DocumentStorage(ABC):
+class DocumentStorage(BaseStore[str, Document]):
     """Abstract interface of a key, text storage for retrieving documents."""
-
-    @abstractmethod
-    def get_by_id(self, document_id: str) -> Document | None:
-        """Gets  a document by its id. If not found, returns None.
-        Args:
-            document_id: Id of the document to get from the storage.
-        Returns:
-            Document if found, otherwise None.
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def store_by_id(self, document_id: str, document: Document):
-        """Stores a document associated to a document_id.
-        Args:
-            document_id: Id of the document to be stored.
-            document: Document to be stored.
-        """
-        raise NotImplementedError()
-
-    def batch_store_by_id(self, ids: List[str], documents: List[Document]) -> None:
-        """Stores a list of ids and documents in batch.
-        The default implementation only loops to the individual `store_by_id`.
-        Subclasses that have faster ways to store data via batch uploading should
-        implement the proper way.
-        Args:
-            ids: List of ids for the text.
-            documents: List of documents.
-        """
-        for id_, document in zip(ids, documents):
-            self.store_by_id(id_, document)
-
-    def batch_get_by_id(self, ids: List[str]) -> List[Document | None]:
-        """Gets a batch of documents by id.
-        The default implementation only loops `get_by_id`.
-        Subclasses that have faster ways to retrieve data by batch should implement
-        this method.
-        Args:
-            ids: List of ids for the text.
-        Returns:
-            List of documents. If the key id is not found for any id record returns a
-                None instead.
-        """
-        return [self.get_by_id(id_) for id_ in ids]
 
 
 class GCSDocumentStorage(DocumentStorage):
@@ -77,15 +33,55 @@ class GCSDocumentStorage(DocumentStorage):
         self._bucket = bucket
         self._prefix = prefix
 
-    def get_by_id(self, document_id: str) -> Document | None:
+    def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
+        """Stores a series of documents using each keys
+
+        Args:
+            key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
+        """
+        for key, value in key_value_pairs:
+            self._set_one(key, value)
+
+    def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
+        """Gets a batch of documents by id.
+        The default implementation only loops `get_by_id`.
+        Subclasses that have faster ways to retrieve data by batch should implement
+        this method.
+        Args:
+            ids: List of ids for the text.
+        Returns:
+            List of documents. If the key id is not found for any id record returns a
+                None instead.
+        """
+        return [self._get_one(key) for key in keys]
+
+    def mdelete(self, keys: Sequence[str]) -> None:
+        """Deletes a batch of documents by id.
+
+        Args:
+            keys: List of ids for the text.
+        """
+        for key in keys:
+            self._delete_one(key)
+
+    def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
+        """Yields the keys present in the storage.
+
+        Args:
+            prefix: Ignored. Uses the prefix provided in the constructor.
+        """
+        for blob in self._bucket.list_blobs(prefix=self._prefix):
+            yield blob.name.split("/")[-1]
+
+    def _get_one(self, key: str) -> Document | None:
         """Gets the text of a document by its id. If not found, returns None.
         Args:
-            document_id: Id of the document to get from the storage.
+            key: Id of the document to get from the storage.
         Returns:
             Document if found, otherwise None.
         """
 
-        blob_name = self._get_blob_name(document_id)
+        blob_name = self._get_blob_name(key)
         existing_blob = self._bucket.get_blob(blob_name)
 
         if existing_blob is None:
@@ -95,18 +91,28 @@ class GCSDocumentStorage(DocumentStorage):
         document_json: Dict[str, Any] = json.loads(document_str)
         return Document(**document_json)
 
-    def store_by_id(self, document_id: str, document: Document) -> None:
+    def _set_one(self, key: str, value: Document) -> None:
         """Stores a document text associated to a document_id.
         Args:
-            document_id: Id of the document to be stored.
+            key: Id of the document to be stored.
             document: Document to be stored.
         """
-        blob_name = self._get_blob_name(document_id)
+        blob_name = self._get_blob_name(key)
         new_blow = self._bucket.blob(blob_name)
 
-        document_json = document.dict()
+        document_json = value.dict()
         document_text = json.dumps(document_json)
         new_blow.upload_from_string(document_text)
+
+    def _delete_one(self, key: str) -> None:
+        """Deletes one document by its key.
+
+        Args:
+            key (str): Id of the document to delete.
+        """
+        blob_name = self._get_blob_name(key)
+        blob = self._bucket.blob(blob_name)
+        blob.delete()
 
     def _get_blob_name(self, document_id: str) -> str:
         """Builds a blob name using the prefix and the document_id.
@@ -139,40 +145,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         self._metadata_property_name = metadata_property_name
         self._kind = kind
 
-    def get_by_id(self, document_id: str) -> Document | None:
-        """Gets the text of a document by its id. If not found, returns None.
-        Args:
-            document_id: Id of the document to get from the storage.
-        Returns:
-            Text of the document if found, otherwise None.
-        """
-        key = self._client.key(self._kind, document_id)
-        entity = self._client.get(key)
-
-        if entity is None:
-            return None
-
-        return Document(
-            page_content=entity[self._text_property_name],
-            metadata=self._convert_entity_to_dict(entity[self._metadata_property_name]),
-        )
-
-    def store_by_id(self, document_id: str, document: Document) -> None:
-        """Stores a document text associated to a document_id.
-        Args:
-            document_id: Id of the document to be stored.
-            text: Text of the document to be stored.
-        """
-        with self._client.transaction():
-            key = self._client.key(self._kind, document_id)
-
-            entity = self._client.entity(key=key)
-            entity[self._text_property_name] = document.page_content
-            entity[self._metadata_property_name] = document.metadata
-
-            self._client.put(entity)
-
-    def batch_get_by_id(self, ids: List[str]) -> List[Document | None]:
+    def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
         Args:
             ids: List of ids for the text.
@@ -180,15 +153,14 @@ class DataStoreDocumentStorage(DocumentStorage):
             List of texts. If the key id is not found for any id record returns a None
                 instead.
         """
-        keys = [self._client.key(self._kind, id_) for id_ in ids]
+        ds_keys = [self._client.key(self._kind, id_) for id_ in keys]
 
-        # TODO: Handle when a key is not present
-        entities = self._client.get_multi(keys)
+        entities = self._client.get_multi(ds_keys)
 
         # Entities are not sorted by key by default, the order is unclear. This orders
         # the list by the id retrieved.
         entity_id_lookup = {entity.key.id_or_name: entity for entity in entities}
-        entities = [entity_id_lookup[id_] for id_ in ids]
+        entities = [entity_id_lookup.get(id_) for id_ in keys]
 
         return [
             Document(
@@ -197,15 +169,19 @@ class DataStoreDocumentStorage(DocumentStorage):
                     entity[self._metadata_property_name]
                 ),
             )
+            if entity is not None
+            else None
             for entity in entities
         ]
 
-    def batch_store_by_id(self, ids: List[str], documents: List[Document]) -> None:
-        """Stores a list of ids and documents in batch.
+    def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
+        """Stores a series of documents using each keys
+
         Args:
-            ids: List of ids for the text.
-            texts: List of texts.
+            key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
         """
+        ids = [key for key, _ in key_value_pairs]
+        documents = [document for _, document in key_value_pairs]
 
         with self._client.transaction():
             keys = [self._client.key(self._kind, id_) for id_ in ids]
@@ -218,6 +194,27 @@ class DataStoreDocumentStorage(DocumentStorage):
                 entities.append(entity)
 
             self._client.put_multi(entities)
+
+    def mdelete(self, keys: Sequence[str]) -> None:
+        """Deletes a sequence of documents by key.
+
+        Args:
+            keys (Sequence[str]): A sequence of keys to delete.
+        """
+        with self._client.transaction():
+            keys = [self._client.key(self._kind, id_) for id_ in keys]
+            self._client.delete_multi(keys)
+
+    def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
+        """Yields the keys of all documents in the storage.
+
+        Args:
+            prefix: Ignored
+        """
+        query = self._client.query(kind=self._kind)
+        query.keys_only()
+        for entity in query.fetch():
+            yield str(entity.key.id_or_name)
 
     def _convert_entity_to_dict(self, entity: datastore.Entity) -> Dict[str, Any]:
         """Recursively transform an entity into a plain dictionary."""
