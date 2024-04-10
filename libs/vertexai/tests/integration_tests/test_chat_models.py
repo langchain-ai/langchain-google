@@ -9,6 +9,8 @@ from langchain_core.messages import (
     AIMessageChunk,
     HumanMessage,
     SystemMessage,
+    ToolCall,
+    ToolCallChunk,
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.pydantic_v1 import BaseModel
@@ -287,3 +289,21 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         "name": "Erick",
         "age": 27.0,
     }
+    assert response.tool_calls == [
+        ToolCall(name="MyModel", args={"age": 27.0, "name": "Erick"}, id=None)
+    ]
+
+    stream = model.stream([message])
+    first = True
+    for chunk in stream:
+        if first:
+            gathered = chunk
+            first = False
+        else:
+            gathered = gathered + chunk  # type: ignore
+    assert isinstance(gathered, AIMessageChunk)
+    assert gathered.tool_call_chunks == [
+        ToolCallChunk(
+            name="MyModel", args='{"age": 27.0, "name": "Erick"}', id=None, index=None
+        )
+    ]
