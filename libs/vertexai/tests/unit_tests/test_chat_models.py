@@ -22,7 +22,10 @@ from langchain_core.messages import (
 from vertexai.generative_models import (  # type: ignore
     Candidate,
 )
-from vertexai.language_models import ChatMessage, InputOutputTextPair  # type: ignore
+from vertexai.language_models import (  # type: ignore
+    ChatMessage,
+    InputOutputTextPair,
+)
 
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
@@ -152,7 +155,27 @@ def test_parse_history_gemini() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
-    history = _parse_chat_history_gemini(messages, convert_system_message_to_human=True)
+    system_instructions, history = _parse_chat_history_gemini(messages)
+    assert len(history) == 3
+    assert history[0].role == "user"
+    assert history[0].parts[0].text == text_question1
+    assert history[1].role == "model"
+    assert history[1].parts[0].text == text_answer1
+    assert system_instructions and system_instructions.parts[0].text == system_input
+
+
+def test_parse_history_gemini_converted_message() -> None:
+    system_input = "You're supposed to answer math questions."
+    text_question1, text_answer1 = "How much is 2+2?", "4"
+    text_question2 = "How much is 3+3?"
+    system_message = SystemMessage(content=system_input)
+    message1 = HumanMessage(content=text_question1)
+    message2 = AIMessage(content=text_answer1)
+    message3 = HumanMessage(content=text_question2)
+    messages = [system_message, message1, message2, message3]
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, convert_system_message_to_human=True
+    )
     assert len(history) == 3
     assert history[0].role == "user"
     assert history[0].parts[0].text == system_input
