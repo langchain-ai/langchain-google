@@ -78,14 +78,13 @@ def _format_tools_to_vertex_tool(
 class ParametersSchema(BaseModel):
     """
     This is a schema of currently supported definitions in function calling.
-    We need explicitly exclude `title` and `definitions` fields as they
-    are not currently supported.
+    We need explicitly exclude `definitions` field
+    as it is not currently supported.
 
     All other fields will be passed through (as extra fields are allowed)
     and intercepted on `google.cloud.aiplatform` level
     """
 
-    title: Optional[str] = Field(exclude=True)
     definitions: Optional[Any] = Field(exclude=True)
     items: Optional["ParametersSchema"]
     properties: Optional[Dict[str, "ParametersSchema"]]
