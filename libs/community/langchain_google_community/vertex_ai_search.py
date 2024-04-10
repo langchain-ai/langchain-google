@@ -481,7 +481,7 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
     def _get_content_spec_kwargs(self) -> Dict[str, Any] | None:
         """Adds additional summary_spec parameters to the configuration of the search.
         Returns:
-            kwargs for the specication of the content.
+            kwargs for the specification of the content.
         """
         from google.cloud.discoveryengine_v1beta import SearchRequest
 
