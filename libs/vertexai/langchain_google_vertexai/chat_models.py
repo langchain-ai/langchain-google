@@ -29,6 +29,7 @@ from langchain_core.messages import (
     FunctionMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_functions import (
@@ -199,6 +200,16 @@ def _parse_chat_history_gemini(
                     },
                 )
             ]
+        elif isinstance(message, ToolMessage):
+            role = "function"
+            parts = [
+                Part.from_function_response(
+                    name=message.name,
+                    response={
+                        "content": message.content,
+                    },
+                )
+            ]
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
@@ -301,7 +312,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     "Underlying model name."
     examples: Optional[List[BaseMessage]] = None
     convert_system_message_to_human: bool = False
-    """[Deprecated] Since new Gemini models support setting a System Message, 
+    """[Deprecated] Since new Gemini models support setting a System Message,
     setting this parameter to True is discouraged.
     """
 
