@@ -10,7 +10,6 @@ Set the following environment variables before the tests:
 export PROJECT_ID=... - set to your Google Cloud project ID
 export DATA_STORE_ID=... - the ID of the search engine to use for the test
 """
-import os
 
 import pytest
 from langchain_core.documents import Document
@@ -49,7 +48,7 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
 
 
 @pytest.mark.skip(reason="CI/CD not ready.")
-def test_vertex_search_tool():
+def test_vertex_search_tool() -> None:
     tool = VertexAISearchSummaryTool(
         name="vertex-search", description="Vertex Search Tool"
     )

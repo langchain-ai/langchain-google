@@ -24,7 +24,7 @@ from langchain_core.utils import get_from_dict_or_env
 from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
-    from google.cloud.discoveryengine_v1beta import (  # type: ignore[import]
+    from google.cloud.discoveryengine_v1beta import (  # type: ignore[import, attr-defined]
         ConversationalSearchServiceClient,
         SearchRequest,
         SearchResult,
