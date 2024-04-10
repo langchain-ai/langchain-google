@@ -271,7 +271,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             serving_config=self.serving_config_id,
         )
 
-    def _get_content_spec_kwargs(self) -> Dict[str, Any] | None:
+    def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
         """Prepares a ContentSpec object."""
 
         from google.cloud.discoveryengine_v1beta import SearchRequest
@@ -461,7 +461,7 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
     Conversation and get the summary of the documents retrieved.
     """
 
-    summary_prompt: str | None = None
+    summary_prompt: Optional[str] = None
     """Prompt for the summarization agent"""
 
     summary_result_count: int = 3
@@ -478,7 +478,7 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
         not BaseTool
         """
 
-    def _get_content_spec_kwargs(self) -> Dict[str, Any] | None:
+    def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
         """Adds additional summary_spec parameters to the configuration of the search.
         Returns:
             kwargs for the specification of the content.
