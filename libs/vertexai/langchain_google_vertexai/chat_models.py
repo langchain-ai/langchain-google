@@ -190,7 +190,7 @@ def _parse_chat_history_gemini(
             role = "user"
             parts = _convert_to_parts(message)
         elif isinstance(message, FunctionMessage):
-            role = "user"
+            role = "function"
             parts = [
                 Part.from_function_response(
                     name=message.name,
