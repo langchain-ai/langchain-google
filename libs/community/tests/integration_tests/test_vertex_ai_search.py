@@ -47,12 +47,11 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
         assert doc.metadata["id"]
         assert doc.metadata["source"]
 
+
 @pytest.mark.skip(reason="CI/CD not ready.")
 def test_vertex_search_tool():
-
     tool = VertexAISearchSummaryTool(
-        name="vertex-search",
-        description="Vertex Search Tool"
+        name="vertex-search", description="Vertex Search Tool"
     )
 
     response = tool.run("How many Champion's Leagues has Real Madrid won?")

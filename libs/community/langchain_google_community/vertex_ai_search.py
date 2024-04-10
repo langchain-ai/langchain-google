@@ -273,7 +273,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
     def _get_content_spec_kwargs(self) -> Dict[str, Any] | None:
         """Prepares a ContentSpec object."""
-        
+
         from google.cloud.discoveryengine_v1beta import SearchRequest
 
         if self.engine_data_type == 0:
@@ -289,9 +289,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                         max_extractive_segment_count=self.max_extractive_segment_count,
                     )
                 )
-            content_search_spec = dict(
-                extractive_content_spec=extractive_content_spec
-            )
+            content_search_spec = dict(extractive_content_spec=extractive_content_spec)
         elif self.engine_data_type == 1:
             content_search_spec = None
         elif self.engine_data_type == 2:
@@ -310,11 +308,10 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                 + f" Got {self.engine_data_type}"
             )
         return content_search_spec
-        
+
     def _create_search_request(self, query: str) -> SearchRequest:
         """Prepares a SearchRequest object."""
         from google.cloud.discoveryengine_v1beta import SearchRequest
-        
 
         query_expansion_spec = SearchRequest.QueryExpansionSpec(
             condition=self.query_expansion_condition,
@@ -458,8 +455,9 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
             response.search_results, "extractive_answers"
         )
 
+
 class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
-    """ Class that exposes a tool to interface with an App in Vertex Search and
+    """Class that exposes a tool to interface with an App in Vertex Search and
     Conversation and get the summary of the documents retrieved.
     """
 
@@ -471,22 +469,22 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
 
     summary_include_citations: bool = True
     """ Whether to include citations in the summary """
-    
+
     summary_spec_kwargs: Dict[str, Any] = Field(default_factory=dict)
     """ Additional kwargs for `SearchRequest.ContentSearchSpec.SummarySpec`"""
-    
+
     class Config(VertexAISearchRetriever.Config):
-        """ Redefinition to specify that inherits config from `VertexAISearchRetriever`
+        """Redefinition to specify that inherits config from `VertexAISearchRetriever`
         not BaseTool
         """
 
     def _get_content_spec_kwargs(self) -> Dict[str, Any] | None:
-        """ Adds additional summary_spec parameters to the configuration of the search.
+        """Adds additional summary_spec parameters to the configuration of the search.
         Returns:
             kwargs for the specication of the content.
         """
         from google.cloud.discoveryengine_v1beta import SearchRequest
-        
+
         kwargs = super()._get_content_spec_kwargs() or {}
 
         kwargs["summary_spec"] = SearchRequest.ContentSearchSpec.SummarySpec(
@@ -497,7 +495,7 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
             ),
             **self.summary_spec_kwargs,
         )
-        
+
         return kwargs
 
     def _run(self, user_query: str) -> str:
