@@ -43,7 +43,6 @@ __all__ = [
     "HarmCategory",
     "PydanticFunctionsOutputParser",
     "create_structured_runnable",
-    "VectorSearchVectorStore",
     "VertexAIImageCaptioning",
     "VertexAIImageCaptioningChat",
     "VertexAIImageEditorChat",
