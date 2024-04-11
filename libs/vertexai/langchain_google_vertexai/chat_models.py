@@ -6,7 +6,20 @@ import json
 import logging
 from dataclasses import dataclass, field
 from operator import itemgetter
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Type, Union, cast
+import uuid
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+    cast,
+)
 
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
@@ -34,6 +47,7 @@ from langchain_core.messages import (
     ToolCallChunk,
     ToolMessage,
 )
+from langchain_core.tools import BaseTool, tool as tool_from_callable
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_functions import (
     JsonOutputFunctionsParser,
@@ -206,9 +220,17 @@ def _parse_chat_history_gemini(
             ]
         elif isinstance(message, ToolMessage):
             role = "function"
+            if (i > 0) and isinstance(history[i - 1], AIMessage):
+                # message.name can be null for ToolMessage
+                if history[i - 1].tool_calls:  # type: ignore
+                    name = history[i - 1].tool_calls[0]["name"]  # type: ignore
+                else:
+                    name = message.name
+            else:
+                name = message.name
             parts = [
                 Part.from_function_response(
-                    name=message.name,
+                    name=name,
                     response={
                         "content": message.content,
                     },
@@ -313,7 +335,7 @@ def _parse_response_candidate(
                 ToolCallChunk(
                     name=function_call.get("name"),
                     args=function_call.get("arguments"),
-                    id=function_call.get("id"),
+                    id=function_call.get("id", str(uuid.uuid4())),
                     index=function_call.get("index"),
                 )
             ]
@@ -334,7 +356,7 @@ def _parse_response_candidate(
                     ToolCall(
                         name=tool_call["name"],
                         args=tool_call["args"],
-                        id=tool_call.get("id"),
+                        id=tool_call.get("id", str(uuid.uuid4())),
                     )
                     for tool_call in tool_calls_dicts
                 ]
@@ -343,7 +365,7 @@ def _parse_response_candidate(
                     InvalidToolCall(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=function_call.get("id"),
+                        id=function_call.get("id", str(uuid.uuid4())),
                         error=str(e),
                     )
                 ]
@@ -843,6 +865,37 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return {"raw": llm} | parser_with_fallback
         else:
             return llm | parser
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[Type[BaseModel], Callable, BaseTool]],
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        """Bind tool-like objects to this chat model.
+
+        Assumes model is compatible with Vertex tool-calling API.
+
+        Args:
+            tools: A list of tool definitions to bind to this chat model.
+                Can be a pydantic model, callable, or BaseTool. Pydantic
+                models, callables, and BaseTools will be automatically converted to
+                their schema dictionary representation.
+            **kwargs: Any additional parameters to pass to the
+                :class:`~langchain.runnable.Runnable` constructor.
+        """
+        formatted_tools = []
+        for schema in tools:
+            if isinstance(schema, BaseTool) or (
+                isinstance(schema, type) and issubclass(schema, BaseModel)
+            ):
+                formatted_tools.append(schema)
+            elif callable(schema):
+                formatted_tools.append(tool_from_callable(schema))  # type: ignore
+            else:
+                raise ValueError(
+                    "Tool must be a BaseTool, Pydantic model, or callable."
+                )
+        return super().bind(functions=formatted_tools, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
