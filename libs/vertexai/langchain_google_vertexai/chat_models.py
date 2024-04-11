@@ -667,7 +667,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                         self._is_gemini_model,
                         usage_metadata=response.to_dict().get("usage_metadata"),
                     )
-                    if run_manager:
+                    if run_manager and isinstance(message.content, str):
                         run_manager.on_llm_new_token(message.content)
                     if isinstance(message, AIMessageChunk):
                         yield ChatGenerationChunk(
@@ -744,7 +744,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     self._is_gemini_model,
                     usage_metadata=chunk.to_dict().get("usage_metadata"),
                 )
-                if run_manager:
+                if run_manager and isinstance(message.content, str):
                     await run_manager.on_llm_new_token(message.content)
                 if isinstance(message, AIMessageChunk):
                     yield ChatGenerationChunk(

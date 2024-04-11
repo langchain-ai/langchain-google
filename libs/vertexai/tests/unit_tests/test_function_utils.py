@@ -3,7 +3,9 @@ from typing import Optional, Sequence
 
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import tool
-from vertexai.generative_models._generative_models import ToolConfig
+from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
+    ToolConfig,
+)
 
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
@@ -67,7 +69,6 @@ def test_format_tool_config():
         }
     )
     assert isinstance(tool_config, ToolConfig)
-
 
 
 def test_get_parameters_from_schema():

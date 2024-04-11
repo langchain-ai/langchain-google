@@ -330,7 +330,6 @@ def test_default_params_gemini() -> None:
         assert mock_generate_content.call_args.args[0][0].parts[0].text == user_prompt
 
 
-
 @pytest.mark.parametrize(
     "raw_candidate, expected",
     [
