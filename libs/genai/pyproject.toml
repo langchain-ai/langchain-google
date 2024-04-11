@@ -31,6 +31,7 @@ pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
 numpy = "^1.26.2"
 langchain-core = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core"}
+langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests"}
 
 [tool.poetry.group.codespell]
 optional = true

@@ -503,6 +503,26 @@ resolved_reference = "2d83505be979fb947e976ae7c48be87e49f41a27"
 subdirectory = "libs/core"
 
 [[package]]
+name = "langchain-standard-tests"
+version = "0.1.0"
+description = "Standard tests for LangChain implementations"
+optional = false
+python-versions = ">=3.8.1,<4.0"
+files = []
+develop = false
+
+[package.dependencies]
+langchain-core = "^0.1.40"
+pytest = ">=7,<9"
+
+[package.source]
+type = "git"
+url = "https://github.com/langchain-ai/langchain.git"
+reference = "HEAD"
+resolved_reference = "bac9fb9a7c321fa4468d4587b49e2bd7e4afe91b"
+subdirectory = "libs/standard-tests"
+
+[[package]]
 name = "langsmith"
 version = "0.1.42"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
@@ -1392,4 +1412,4 @@ images = ["pillow"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "014cc48a2080a0d572d874c713c8ed24a84b33bd5c0f582b056cb61151c33136"
+content-hash = "685131164a04c61fa9fa243feaf68ac086da193982a166de9487cf79dd2d3a66"
