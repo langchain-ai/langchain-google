@@ -15,6 +15,11 @@ from vertexai.generative_models import (
     Tool as VertexTool,
 )
 
+# FIXME: vertexai is not exporting ToolConfig
+from vertexai.generative_models._generative_models import (  # type: ignore
+    ToolConfig,
+)
+
 
 def _format_pydantic_to_vertex_function(
     pydantic_model: Type[BaseModel],
@@ -73,6 +78,16 @@ def _format_tools_to_vertex_tool(
         function_declarations.append(FunctionDeclaration(**func))
 
     return [VertexTool(function_declarations=function_declarations)]
+
+
+def _format_tool_config(tool_config: Dict[str, Any]) -> Union[ToolConfig, None]:
+    if "function_calling_config" not in tool_config:
+        return None
+    return ToolConfig(
+        function_calling_config=ToolConfig.FunctionCallingConfig(
+            **tool_config["function_calling_config"]
+        )
+    )
 
 
 class ParametersSchema(BaseModel):
