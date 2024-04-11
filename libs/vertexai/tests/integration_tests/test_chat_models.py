@@ -7,13 +7,13 @@ import pytest
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
+    BaseMessage,
     HumanMessage,
     SystemMessage,
-    ToolCall,
-    ToolCallChunk,
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.tools import tool
 
 from langchain_google_vertexai import ChatVertexAI, HarmBlockThreshold, HarmCategory
 
@@ -262,6 +262,28 @@ def test_get_num_tokens_from_messages(model_name: str) -> None:
     assert token == 3
 
 
+def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
+    """Check tool calls are as expected."""
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content == ""
+    function_call = response.additional_kwargs.get("function_call")
+    assert function_call
+    assert function_call["name"] == expected_name
+    arguments_str = function_call.get("arguments")
+    assert arguments_str
+    arguments = json.loads(arguments_str)
+    assert arguments == {
+        "name": "Erick",
+        "age": 27.0,
+    }
+    tool_calls = response.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == expected_name
+    assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
+
+
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):
@@ -271,28 +293,38 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     safety = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
-    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind(
-        functions=[MyModel]
-    )
+    # Test .bind_tools with BaseModel
     message = HumanMessage(content="My name is Erick and I am 27 years old")
+    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind_tools(
+        [MyModel]
+    )
     response = model.invoke([message])
-    assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content == ""
-    function_call = response.additional_kwargs.get("function_call")
-    assert function_call
-    assert function_call["name"] == "MyModel"
-    arguments_str = function_call.get("arguments")
-    assert arguments_str
-    arguments = json.loads(arguments_str)
-    assert arguments == {
-        "name": "Erick",
-        "age": 27.0,
-    }
-    assert response.tool_calls == [
-        ToolCall(name="MyModel", args={"age": 27.0, "name": "Erick"}, id=None)
-    ]
+    _check_tool_calls(response, "MyModel")
 
+    # Test .bind_tools with function
+    def my_model(name: str, age: int) -> None:
+        """Invoke this with names and ages."""
+        pass
+
+    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind_tools(
+        [my_model]
+    )
+    response = model.invoke([message])
+    _check_tool_calls(response, "my_model")
+
+    # Test .bind_tools with tool
+    @tool
+    def my_tool(name: str, age: int) -> None:
+        """Invoke this with names and ages."""
+        pass
+
+    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind_tools(
+        [my_tool]
+    )
+    response = model.invoke([message])
+    _check_tool_calls(response, "my_tool")
+
+    # Test streaming
     stream = model.stream([message])
     first = True
     for chunk in stream:
@@ -302,8 +334,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         else:
             gathered = gathered + chunk  # type: ignore
     assert isinstance(gathered, AIMessageChunk)
-    assert gathered.tool_call_chunks == [
-        ToolCallChunk(
-            name="MyModel", args='{"age": 27.0, "name": "Erick"}', id=None, index=None
-        )
-    ]
+    assert len(gathered.tool_call_chunks) == 1
+    tool_call_chunk = gathered.tool_call_chunks[0]
+    assert tool_call_chunk["name"] == "my_tool"
+    assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'

@@ -10,6 +10,7 @@ import uuid
 from typing import (
     Any,
     AsyncIterator,
+    Callable,
     Dict,
     Iterator,
     List,
@@ -46,7 +47,7 @@ from langchain_core.messages import (
     ToolCallChunk,
     ToolMessage,
 )
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, tool as tool_from_callable
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_functions import (
     JsonOutputFunctionsParser,
@@ -867,10 +868,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[BaseTool],
-        # ideally: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
-        # *,
-        # tool_choice: Optional[Union[dict, str, Literal["auto", "none"], bool]] = None,
+        tools: Sequence[Union[Type[BaseModel], Callable, BaseTool]],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         """Bind tool-like objects to this chat model.
@@ -879,18 +877,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         Args:
             tools: A list of tool definitions to bind to this chat model.
-                Can be  a dictionary, pydantic model, callable, or BaseTool. Pydantic
+                Can be a pydantic model, callable, or BaseTool. Pydantic
                 models, callables, and BaseTools will be automatically converted to
                 their schema dictionary representation.
-            tool_choice: Which tool to require the model to call.
-                Must be the name of the single provided function or
-                "auto" to automatically determine which function to call
-                (if any), or a dict of the form:
-                {"type": "function", "function": {"name": <<tool_name>>}}.
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """
-        return super().bind(functions=tools, **kwargs)
+        formatted_tools = []
+        for schema in tools:
+            if isinstance(schema, BaseTool) or (
+                isinstance(schema, type) and issubclass(schema, BaseModel)
+            ):
+                formatted_tools.append(schema)
+            elif callable(schema):
+                formatted_tools.append(tool_from_callable(schema))  # type: ignore
+            else:
+                raise ValueError(
+                    "Tool must be a BaseTool, Pydantic model, or callable."
+                )
+        return super().bind(functions=formatted_tools, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
