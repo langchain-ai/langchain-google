@@ -15,7 +15,12 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import tool
 
-from langchain_google_vertexai import ChatVertexAI, HarmBlockThreshold, HarmCategory
+from langchain_google_vertexai import (
+    ChatVertexAI,
+    HarmBlockThreshold,
+    HarmCategory,
+    ToolConfig,
+)
 
 model_names_to_test = [None, "codechat-bison", "chat-bison", "gemini-pro"]
 
@@ -338,3 +343,68 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     tool_call_chunk = gathered.tool_call_chunks[0]
     assert tool_call_chunk["name"] == "my_tool"
     assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-preview-0409", safety_settings=safety
+    ).bind(
+        functions=[MyModel],
+        tool_config={
+            "function_calling_config": {
+                "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                "allowed_function_names": ["MyModel"],
+            }
+        },
+    )
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+    response = model.invoke([message])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content == ""
+    function_call = response.additional_kwargs.get("function_call")
+    assert function_call
+    assert function_call["name"] == "MyModel"
+    arguments_str = function_call.get("arguments")
+    assert arguments_str
+    arguments = json.loads(arguments_str)
+    assert arguments == {
+        "name": "Erick",
+        "age": 27.0,
+    }
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-preview-0409", safety_settings=safety
+    ).bind(
+        functions=[MyModel],
+        tool_config={
+            "function_calling_config": {
+                "mode": ToolConfig.FunctionCallingConfig.Mode.NONE,
+            }
+        },
+    )
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+    response = model.invoke([message])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content != ""
+    function_call = response.additional_kwargs.get("function_call")
+    assert function_call is None

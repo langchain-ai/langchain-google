@@ -2,7 +2,10 @@ from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai.chains import create_structured_runnable
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
-from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
+from langchain_google_vertexai.functions_utils import (
+    PydanticFunctionsOutputParser,
+    ToolConfig,
+)
 from langchain_google_vertexai.gemma import (
     GemmaChatLocalHF,
     GemmaChatLocalKaggle,
@@ -42,6 +45,7 @@ __all__ = [
     "HarmBlockThreshold",
     "HarmCategory",
     "PydanticFunctionsOutputParser",
+    "ToolConfig",
     "create_structured_runnable",
     "VertexAIImageCaptioning",
     "VertexAIImageCaptioningChat",

@@ -7,10 +7,14 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
-    Content,
+    Content as Content,
+)
+from google.cloud.aiplatform_v1beta1.types import (
     FunctionCall,
     FunctionResponse,
-    Part,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    Part as Part,
 )
 from google.cloud.aiplatform_v1beta1.types import (
     content as gapic_content_types,
@@ -176,7 +180,7 @@ def test_parse_history_gemini_converted_message() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
-    system_instructions, history = _parse_chat_history_gemini(
+    _, history = _parse_chat_history_gemini(
         messages, convert_system_message_to_human=True
     )
     assert len(history) == 3
@@ -314,18 +318,17 @@ def test_default_params_gemini() -> None:
                 citation_metadata=None,
             )
         ]
-        mock_chat = MagicMock()
-        mock_send_message = MagicMock(return_value=mock_response)
-        mock_chat.send_message = mock_send_message
-
+        mock_generate_content = MagicMock(return_value=mock_response)
         mock_model = MagicMock()
-        mock_start_chat = MagicMock(return_value=mock_chat)
-        mock_model.start_chat = mock_start_chat
+        mock_model.generate_content = mock_generate_content
         gm.return_value = mock_model
+
         model = ChatVertexAI(model_name="gemini-pro")
         message = HumanMessage(content=user_prompt)
-        _ = model([message])
-        mock_start_chat.assert_called_once_with(history=[])
+        _ = model.invoke([message])
+        mock_generate_content.assert_called_once()
+        assert mock_generate_content.call_args.args[0][0].parts[0].text == user_prompt
+
 
 
 @pytest.mark.parametrize(

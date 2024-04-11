@@ -14,6 +14,7 @@ EXPECTED_ALL = [
     "HarmBlockThreshold",
     "HarmCategory",
     "PydanticFunctionsOutputParser",
+    "ToolConfig",
     "create_structured_runnable",
     "VertexAIImageCaptioning",
     "VertexAIImageCaptioningChat",
