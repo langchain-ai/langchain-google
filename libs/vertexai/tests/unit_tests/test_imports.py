@@ -15,12 +15,16 @@ EXPECTED_ALL = [
     "HarmCategory",
     "PydanticFunctionsOutputParser",
     "create_structured_runnable",
-    "VectorSearchVectorStore",
     "VertexAIImageCaptioning",
     "VertexAIImageCaptioningChat",
     "VertexAIImageEditorChat",
     "VertexAIImageGeneratorChat",
     "VertexAIVisualQnAChat",
+    "DataStoreDocumentStorage",
+    "GCSDocumentStorage",
+    "VectorSearchVectorStore",
+    "VectorSearchVectorStoreDatastore",
+    "VectorSearchVectorStoreGCS",
 ]
 
 
