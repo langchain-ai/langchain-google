@@ -330,15 +330,11 @@ def _parse_response_candidate(
         )
         additional_kwargs["function_call"] = function_call
         if streaming:
-            if not function_call.get("id"):
-                tool_call_id = uuid.uuid4().hex[:]
-            else:
-                tool_call_id = None
             tool_call_chunks = [
                 ToolCallChunk(
                     name=function_call.get("name"),
                     args=function_call.get("arguments"),
-                    id=tool_call_id,
+                    id=function_call.get("id", str(uuid.uuid4())),
                     index=function_call.get("index"),
                 )
             ]
@@ -359,7 +355,7 @@ def _parse_response_candidate(
                     ToolCall(
                         name=tool_call["name"],
                         args=tool_call["args"],
-                        id=tool_call.get("id"),
+                        id=tool_call.get("id", str(uuid.uuid4())),
                     )
                     for tool_call in tool_calls_dicts
                 ]
@@ -368,7 +364,7 @@ def _parse_response_candidate(
                     InvalidToolCall(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=function_call.get("id"),
+                        id=function_call.get("id", str(uuid.uuid4())),
                         error=str(e),
                     )
                 ]
