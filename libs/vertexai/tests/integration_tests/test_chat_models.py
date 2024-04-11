@@ -408,3 +408,30 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
     assert response.content != ""
     function_call = response.additional_kwargs.get("function_call")
     assert function_call is None
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0409", safety_settings=safety)
+    model = llm.with_structured_output(MyModel)
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+
+    response = model.invoke([message])
+    assert isinstance(response, MyModel)
+    assert response == MyModel(name="Erick", age=27)
+
+    model = llm.with_structured_output(
+        {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
+    )
+    response = model.invoke([message])
+    assert response == {
+        "name": "Erick",
+        "age": 27,
+    }

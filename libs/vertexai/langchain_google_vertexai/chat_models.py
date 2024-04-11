@@ -63,6 +63,9 @@ from vertexai.generative_models import (  # type: ignore
     GenerativeModel,
     Part,
 )
+from vertexai.generative_models._generative_models import (  # type: ignore
+    ToolConfig,
+)
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     ChatModel,
@@ -860,9 +863,20 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             parser: OutputParserLike = PydanticOutputFunctionsParser(
                 pydantic_schema=schema
             )
+            name = schema.schema()["title"]
         else:
             parser = JsonOutputFunctionsParser()
-        llm = self.bind(functions=[schema])
+            name = schema["name"]
+
+        llm = self.bind(
+            functions=[schema],
+            tool_config={
+                "function_calling_config": {
+                    "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                    "allowed_function_names": [name],
+                }
+            },
+        )
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -877,6 +891,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def bind_tools(
         self,
         tools: Sequence[Union[Type[BaseModel], Callable, BaseTool]],
+        tool_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         """Bind tool-like objects to this chat model.
@@ -903,7 +918,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 raise ValueError(
                     "Tool must be a BaseTool, Pydantic model, or callable."
                 )
-        return super().bind(functions=formatted_tools, **kwargs)
+        return self.bind(functions=formatted_tools, tool_config=tool_config, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
