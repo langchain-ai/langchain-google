@@ -1301,7 +1301,7 @@ extended-testing = ["aiosqlite (>=0.19.0,<0.20.0)", "aleph-alpha-client (>=2.15.
 
 [[package]]
 name = "langchain-core"
-version = "0.1.42rc1"
+version = "0.1.42"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = ">=3.8.1,<4.0"
@@ -1323,7 +1323,7 @@ extended-testing = ["jinja2 (>=3,<4)"]
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "9eb6f538f058af294e365c87ab2c7dae150f535d"
+resolved_reference = "e72330aacc8f3531210beb10c2f4377e27c6866c"
 subdirectory = "libs/core"
 
 [[package]]
@@ -2726,4 +2726,4 @@ anthropic = ["anthropic"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "94fd7fcb4be7f4b210bf1177728b96252dc9176b10e2a9c61d6828914064eea2"
+content-hash = "ec17b6d9a93a3099607e040dc6f66389db9da831474f7045a712310dd0a3fa3b"
