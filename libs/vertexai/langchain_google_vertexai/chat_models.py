@@ -6,7 +6,19 @@ import json
 import logging
 from dataclasses import dataclass, field
 from operator import itemgetter
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Type, Union, cast
+import uuid
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+    cast,
+)
 
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
@@ -34,6 +46,7 @@ from langchain_core.messages import (
     ToolCallChunk,
     ToolMessage,
 )
+from langchain_core.tools import BaseTool
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_functions import (
     JsonOutputFunctionsParser,
@@ -206,9 +219,17 @@ def _parse_chat_history_gemini(
             ]
         elif isinstance(message, ToolMessage):
             role = "function"
+            if (i > 0) and isinstance(history[i - 1], AIMessage):
+                # message.name can be null for ToolMessage
+                if history[i - 1].tool_calls:  # type: ignore
+                    name = history[i - 1].tool_calls[0]["name"]  # type: ignore
+                else:
+                    name = message.name
+            else:
+                name = message.name
             parts = [
                 Part.from_function_response(
-                    name=message.name,
+                    name=name,
                     response={
                         "content": message.content,
                     },
@@ -309,11 +330,15 @@ def _parse_response_candidate(
         )
         additional_kwargs["function_call"] = function_call
         if streaming:
+            if not function_call.get("id"):
+                tool_call_id = uuid.uuid4().hex[:]
+            else:
+                tool_call_id = None
             tool_call_chunks = [
                 ToolCallChunk(
                     name=function_call.get("name"),
                     args=function_call.get("arguments"),
-                    id=function_call.get("id"),
+                    id=tool_call_id,
                     index=function_call.get("index"),
                 )
             ]
@@ -843,6 +868,33 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return {"raw": llm} | parser_with_fallback
         else:
             return llm | parser
+
+    def bind_tools(
+        self,
+        tools: Sequence[BaseTool],
+        # ideally: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
+        # *,
+        # tool_choice: Optional[Union[dict, str, Literal["auto", "none"], bool]] = None,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        """Bind tool-like objects to this chat model.
+
+        Assumes model is compatible with Vertex tool-calling API.
+
+        Args:
+            tools: A list of tool definitions to bind to this chat model.
+                Can be  a dictionary, pydantic model, callable, or BaseTool. Pydantic
+                models, callables, and BaseTools will be automatically converted to
+                their schema dictionary representation.
+            tool_choice: Which tool to require the model to call.
+                Must be the name of the single provided function or
+                "auto" to automatically determine which function to call
+                (if any), or a dict of the form:
+                {"type": "function", "function": {"name": <<tool_name>>}}.
+            **kwargs: Any additional parameters to pass to the
+                :class:`~langchain.runnable.Runnable` constructor.
+        """
+        return super().bind(functions=tools, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
