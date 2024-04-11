@@ -18,12 +18,13 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from langchain_core.retrievers import BaseRetriever
+from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
 
 from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
-    from google.cloud.discoveryengine_v1beta import (  # type: ignore[import]
+    from google.cloud.discoveryengine_v1beta import (  # type: ignore[import, attr-defined]
         ConversationalSearchServiceClient,
         SearchRequest,
         SearchResult,
@@ -270,17 +271,10 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             serving_config=self.serving_config_id,
         )
 
-    def _create_search_request(self, query: str) -> SearchRequest:
-        """Prepares a SearchRequest object."""
+    def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
+        """Prepares a ContentSpec object."""
+
         from google.cloud.discoveryengine_v1beta import SearchRequest
-
-        query_expansion_spec = SearchRequest.QueryExpansionSpec(
-            condition=self.query_expansion_condition,
-        )
-
-        spell_correction_spec = SearchRequest.SpellCorrectionSpec(
-            mode=self.spell_correction_mode
-        )
 
         if self.engine_data_type == 0:
             if self.get_extractive_answers:
@@ -295,13 +289,11 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                         max_extractive_segment_count=self.max_extractive_segment_count,
                     )
                 )
-            content_search_spec = SearchRequest.ContentSearchSpec(
-                extractive_content_spec=extractive_content_spec
-            )
+            content_search_spec = dict(extractive_content_spec=extractive_content_spec)
         elif self.engine_data_type == 1:
             content_search_spec = None
         elif self.engine_data_type == 2:
-            content_search_spec = SearchRequest.ContentSearchSpec(
+            content_search_spec = dict(
                 extractive_content_spec=SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
                     max_extractive_answer_count=self.max_extractive_answer_count,
                 ),
@@ -315,6 +307,28 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                 "or 2 (Website) are supported currently."
                 + f" Got {self.engine_data_type}"
             )
+        return content_search_spec
+
+    def _create_search_request(self, query: str) -> SearchRequest:
+        """Prepares a SearchRequest object."""
+        from google.cloud.discoveryengine_v1beta import SearchRequest
+
+        query_expansion_spec = SearchRequest.QueryExpansionSpec(
+            condition=self.query_expansion_condition,
+        )
+
+        spell_correction_spec = SearchRequest.SpellCorrectionSpec(
+            mode=self.spell_correction_mode
+        )
+
+        content_search_spec_kwargs = self._get_content_spec_kwargs()
+
+        if content_search_spec_kwargs is not None:
+            content_search_spec = SearchRequest.ContentSearchSpec(
+                **content_search_spec_kwargs
+            )
+        else:
+            content_search_spec = None
 
         return SearchRequest(
             query=query,
@@ -440,3 +454,57 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
         return self._convert_unstructured_search_response(
             response.search_results, "extractive_answers"
         )
+
+
+class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
+    """Class that exposes a tool to interface with an App in Vertex Search and
+    Conversation and get the summary of the documents retrieved.
+    """
+
+    summary_prompt: Optional[str] = None
+    """Prompt for the summarization agent"""
+
+    summary_result_count: int = 3
+    """ Number of documents to include in the summary"""
+
+    summary_include_citations: bool = True
+    """ Whether to include citations in the summary """
+
+    summary_spec_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    """ Additional kwargs for `SearchRequest.ContentSearchSpec.SummarySpec`"""
+
+    class Config(VertexAISearchRetriever.Config):
+        """Redefinition to specify that inherits config from `VertexAISearchRetriever`
+        not BaseTool
+        """
+
+    def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
+        """Adds additional summary_spec parameters to the configuration of the search.
+        Returns:
+            kwargs for the specification of the content.
+        """
+        from google.cloud.discoveryengine_v1beta import SearchRequest
+
+        kwargs = super()._get_content_spec_kwargs() or {}
+
+        kwargs["summary_spec"] = SearchRequest.ContentSearchSpec.SummarySpec(
+            summary_result_count=self.summary_result_count,
+            include_citations=self.summary_include_citations,
+            model_prompt_spec=SearchRequest.ContentSearchSpec.SummarySpec.ModelPromptSpec(
+                preamble=self.summary_prompt
+            ),
+            **self.summary_spec_kwargs,
+        )
+
+        return kwargs
+
+    def _run(self, user_query: str) -> str:
+        """Runs the tool.
+        Args:
+            search_query: The query to run by the agent.
+        Returns:
+            The response from the agent.
+        """
+        request = self._create_search_request(user_query)
+        response = self._client.search(request)
+        return response.summary.summary_text
