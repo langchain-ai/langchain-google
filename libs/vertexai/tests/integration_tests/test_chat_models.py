@@ -96,7 +96,6 @@ def test_vertexai_stream(model_name: str) -> None:
         assert isinstance(chunk, AIMessageChunk)
 
 
-@pytest.mark.xfail
 @pytest.mark.release
 async def test_vertexai_astream() -> None:
     model = ChatVertexAI(temperature=0, model_name="gemini-pro")

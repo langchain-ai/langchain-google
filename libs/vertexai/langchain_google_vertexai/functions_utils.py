@@ -1,6 +1,7 @@
 import json
 from typing import Any, Dict, List, Optional, Type, Union
 
+from google.cloud.aiplatform_v1beta1 import ToolConfig
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
@@ -13,11 +14,6 @@ from vertexai.generative_models import (  # type: ignore
 )
 from vertexai.generative_models import (
     Tool as VertexTool,
-)
-
-# FIXME: vertexai is not exporting ToolConfig
-from vertexai.generative_models._generative_models import (  # type: ignore
-    ToolConfig,
 )
 
 

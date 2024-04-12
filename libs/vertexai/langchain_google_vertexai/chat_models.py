@@ -23,7 +23,7 @@ from typing import (
 
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
-from google.cloud.aiplatform_v1beta1.types.tool import FunctionCall
+from google.cloud.aiplatform_v1beta1.types.tool import FunctionCall, ToolConfig
 from google.cloud.aiplatform import telemetry
 
 from langchain_core.callbacks import (
@@ -62,9 +62,6 @@ from vertexai.generative_models import (  # type: ignore
     Content,
     GenerativeModel,
     Part,
-)
-from vertexai.generative_models._generative_models import (  # type: ignore
-    ToolConfig,
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
@@ -722,7 +719,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             project=self.project,
             convert_system_message_to_human=self.convert_system_message_to_human,
         )
-        message = history_gemini.pop()
         self.client = _get_client_with_sys_instruction(
             client=self.client,
             system_instruction=system_instruction,
