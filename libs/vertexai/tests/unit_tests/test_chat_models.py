@@ -51,6 +51,17 @@ def test_model_name() -> None:
         assert llm.model_name == "gemini-pro"
 
 
+def test_tuned_model_name() -> None:
+    llm = ChatVertexAI(
+        model_name="gemini-pro",
+        project="test-project",
+        tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
+    )
+    assert llm.model_name == "gemini-pro"
+    assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
+    assert llm.client._model_name == "projects/123/locations/europe-west4/endpoints/456"
+
+
 def test_parse_examples_correct() -> None:
     text_question = (
         "Hello, could you recommend a good movie for me to watch this evening, please?"

@@ -113,7 +113,9 @@ class VertexAI(_VertexAICommon, BaseLLM):
     model_name: str = "text-bison"
     "The name of the Vertex AI large language model."
     tuned_model_name: Optional[str] = None
-    "The name of a tuned model. If provided, model_name is ignored."
+    """The name of a tuned model. If tuned_model_name is passed
+    model_name will be used to determine the model family
+    """
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -147,22 +149,28 @@ class VertexAI(_VertexAICommon, BaseLLM):
             preview_model_cls = PreviewTextGenerationModel
 
         if tuned_model_name:
-            values["client"] = model_cls.get_tuned_model(tuned_model_name)
-            values["client_preview"] = preview_model_cls.get_tuned_model(
-                tuned_model_name
+            generative_model_name = values["tuned_model_name"]
+        else:
+            generative_model_name = values["model_name"]
+
+        if is_gemini:
+            values["client"] = model_cls(
+                model_name=generative_model_name, safety_settings=safety_settings
+            )
+            values["client_preview"] = preview_model_cls(
+                model_name=generative_model_name, safety_settings=safety_settings
             )
         else:
-            if is_gemini:
-                values["client"] = model_cls(
-                    model_name=model_name, safety_settings=safety_settings
-                )
-                values["client_preview"] = preview_model_cls(
-                    model_name=model_name, safety_settings=safety_settings
+            if tuned_model_name:
+                values["client"] = model_cls.get_tuned_model(generative_model_name)
+                values["client_preview"] = preview_model_cls.get_tuned_model(
+                    generative_model_name
                 )
             else:
-                values["client"] = model_cls.from_pretrained(model_name)
-                values["client_preview"] = preview_model_cls.from_pretrained(model_name)
-
+                values["client"] = model_cls.from_pretrained(generative_model_name)
+                values["client_preview"] = preview_model_cls.from_pretrained(
+                    generative_model_name
+                )
         if values["streaming"] and values["n"] > 1:
             raise ValueError("Only one candidate can be generated with streaming!")
         return values
