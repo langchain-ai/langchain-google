@@ -96,7 +96,6 @@ def test_vertexai_stream(model_name: str) -> None:
         assert isinstance(chunk, AIMessageChunk)
 
 
-@pytest.mark.xfail
 @pytest.mark.release
 async def test_vertexai_astream() -> None:
     model = ChatVertexAI(temperature=0, model_name="gemini-pro")
@@ -144,7 +143,6 @@ def test_multimodal() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.xfail(reason="problem on vertex side")
 def test_multimodal_history() -> None:
     llm = ChatVertexAI(model_name="gemini-pro-vision")
     gcs_url = (
