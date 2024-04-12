@@ -33,7 +33,7 @@ def _format_pydantic_to_vertex_function(
     }
 
 
-def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
+def _format_base_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
     "Format tool into the Vertex function API."
     if tool.args_schema:
         schema = tool.args_schema.schema()
@@ -57,24 +57,31 @@ def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
         }
 
 
+def _format_tool_to_vertex_function(
+    tool: Union[BaseTool, Type[BaseModel], dict],
+) -> FunctionDescription:
+    "Format tool into the Vertex function declaration."
+    if isinstance(tool, BaseTool):
+        return _format_base_tool_to_vertex_function(tool)
+    elif isinstance(tool, type) and issubclass(tool, BaseModel):
+        return _format_pydantic_to_vertex_function(tool)
+    elif isinstance(tool, dict):
+        return {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": _get_parameters_from_schema(tool["parameters"]),
+        }
+    else:
+        raise ValueError(f"Unsupported tool call type {tool}")
+
+
 def _format_tools_to_vertex_tool(
     tools: List[Union[BaseTool, Type[BaseModel], dict]],
 ) -> List[VertexTool]:
-    "Format tool into the Vertex Tool instance."
+    "Format tools into the Vertex Tool instance."
     function_declarations = []
     for tool in tools:
-        if isinstance(tool, BaseTool):
-            func = _format_tool_to_vertex_function(tool)
-        elif isinstance(tool, type) and issubclass(tool, BaseModel):
-            func = _format_pydantic_to_vertex_function(tool)
-        elif isinstance(tool, dict):
-            func = {
-                "name": tool["name"],
-                "description": tool["description"],
-                "parameters": _get_parameters_from_schema(tool["parameters"]),
-            }
-        else:
-            raise ValueError(f"Unsupported tool call type {tool}")
+        func = _format_tool_to_vertex_function(tool)
         function_declarations.append(FunctionDeclaration(**func))
 
     return [VertexTool(function_declarations=function_declarations)]

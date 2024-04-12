@@ -92,6 +92,7 @@ from langchain_google_vertexai._utils import (
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
+    _format_tool_to_vertex_function,
     _format_tools_to_vertex_tool,
 )
 
@@ -863,10 +864,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             parser: OutputParserLike = PydanticOutputFunctionsParser(
                 pydantic_schema=schema
             )
-            name = schema.schema()["title"]
         else:
             parser = JsonOutputFunctionsParser()
-            name = schema["name"]
+
+        name = _format_tool_to_vertex_function(schema)["name"]
 
         llm = self.bind(
             functions=[schema],
