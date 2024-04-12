@@ -63,6 +63,9 @@ from vertexai.generative_models import (  # type: ignore
     GenerativeModel,
     Part,
 )
+from vertexai.generative_models._generative_models import (  # type: ignore
+    ToolConfig,
+)
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     ChatModel,
@@ -161,7 +164,7 @@ def _parse_chat_history_gemini(
             raw_content = [raw_content]
         return [_convert_to_prompt(part) for part in raw_content]
 
-    vertex_messages = []
+    vertex_messages: List[Content] = []
     convert_system_message_to_human_content = None
     system_instruction = None
     for i, message in enumerate(history):
@@ -427,6 +430,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 values["model_name"]
             )
         return values
+
+    @property
+    def _is_gemini_advanced(self) -> bool:
+        try:
+            if float(self.model_name.split("-")[1]) > 1.0:
+                return True
+        except ValueError:
+            pass
+        except IndexError:
+            pass
+        return False
 
     def _generate(
         self,
@@ -719,7 +733,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             project=self.project,
             convert_system_message_to_human=self.convert_system_message_to_human,
         )
-        message = history_gemini.pop()
         self.client = _get_client_with_sys_instruction(
             client=self.client,
             system_instruction=system_instruction,
@@ -860,9 +873,23 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             parser: OutputParserLike = PydanticOutputFunctionsParser(
                 pydantic_schema=schema
             )
+            name = schema.schema()["title"]
         else:
             parser = JsonOutputFunctionsParser()
-        llm = self.bind(functions=[schema])
+            name = schema["name"]
+
+        if self._is_gemini_advanced:
+            llm = self.bind(
+                functions=[schema],
+                tool_config={
+                    "function_calling_config": {
+                        "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                        "allowed_function_names": [name],
+                    }
+                },
+            )
+        else:
+            llm = self.bind(functions=[schema])
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -877,6 +904,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def bind_tools(
         self,
         tools: Sequence[Union[Type[BaseModel], Callable, BaseTool]],
+        tool_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         """Bind tool-like objects to this chat model.
@@ -903,7 +931,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 raise ValueError(
                     "Tool must be a BaseTool, Pydantic model, or callable."
                 )
-        return super().bind(functions=formatted_tools, **kwargs)
+        return self.bind(functions=formatted_tools, tool_config=tool_config, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
