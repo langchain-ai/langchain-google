@@ -164,7 +164,7 @@ def _parse_chat_history_gemini(
             raw_content = [raw_content]
         return [_convert_to_prompt(part) for part in raw_content]
 
-    vertex_messages = []
+    vertex_messages: List[Content] = []
     convert_system_message_to_human_content = None
     system_instruction = None
     for i, message in enumerate(history):
@@ -733,7 +733,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             project=self.project,
             convert_system_message_to_human=self.convert_system_message_to_human,
         )
-        message = history_gemini.pop()
         self.client = _get_client_with_sys_instruction(
             client=self.client,
             system_instruction=system_instruction,
