@@ -1,6 +1,9 @@
 from typing import Optional
 
 import pytest
+from langchain_core.messages import (
+    AIMessage,
+)
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 
@@ -47,3 +50,51 @@ def test_create_structured_runnable_with_prompt() -> None:
     )
     res = chain.invoke({"class": "person", "attr": "age"})
     assert isinstance(res, RecordPerson)
+
+
+@pytest.mark.release
+def test_reflection() -> None:
+    class Reflection(BaseModel):
+        reflections: str = Field(
+            description="The critique and reflections on the sufficiency, superfluency,"
+            " and general quality of the response"
+        )
+        score: int = Field(
+            description="Score from 0-10 on the quality of the candidate response.",
+            # gte=0,
+            # lte=10,
+        )
+        found_solution: bool = Field(
+            description="Whether the response has fully solved the question or task."
+        )
+
+        def as_message(self):
+            return AIMessage(
+                content=f"Reasoning: {self.reflections}\nScore: {self.score}"
+            )
+
+        @property
+        def normalized_score(self) -> float:
+            return self.score / 10.0
+
+    llm = ChatVertexAI(
+        model_name="gemini-1.5-pro-preview-0409",
+    )
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "Reflect and grade the assistant response to the user question below.",
+            ),
+            (
+                "user",
+                "Which planet is the closest to the Earth?",
+            ),
+            ("ai", "{input}"),
+        ]
+    )
+
+    reflection_llm_chain = prompt | llm.with_structured_output(Reflection)
+    res = reflection_llm_chain.invoke({"input": "Mars"})
+    assert isinstance(res, Reflection)

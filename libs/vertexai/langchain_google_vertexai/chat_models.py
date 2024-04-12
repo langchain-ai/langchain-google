@@ -431,6 +431,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         return values
 
+    @property
+    def _is_gemini_advanced(self) -> bool:
+        try:
+            if float(self.model_name.split("-")[1]) > 1.0:
+                return True
+        except ValueError:
+            pass
+        except IndexError:
+            pass
+        return False
+
     def _generate(
         self,
         messages: List[BaseMessage],
@@ -868,15 +879,18 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             parser = JsonOutputFunctionsParser()
             name = schema["name"]
 
-        llm = self.bind(
-            functions=[schema],
-            tool_config={
-                "function_calling_config": {
-                    "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
-                    "allowed_function_names": [name],
-                }
-            },
-        )
+        if self._is_gemini_advanced:
+            llm = self.bind(
+                functions=[schema],
+                tool_config={
+                    "function_calling_config": {
+                        "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                        "allowed_function_names": [name],
+                    }
+                },
+            )
+        else:
+            llm = self.bind(functions=[schema])
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None

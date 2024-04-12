@@ -14,6 +14,9 @@ from langchain_core.output_parsers import (
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable
+from vertexai.generative_models._generative_models import (  # type: ignore
+    ToolConfig,
+)
 
 from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
 
@@ -50,7 +53,21 @@ def _create_structured_runnable_extra_step(
     *,
     prompt: Optional[BasePromptTemplate] = None,
 ) -> Runnable:
-    llm_with_functions = llm.bind(functions=functions)
+    names = [schema.schema()["title"] for schema in functions]
+    if hasattr(llm, "is_gemini_advanced") and llm._is_gemini_advanced:  # type: ignore
+        llm_with_functions = llm.bind(
+            functions=functions,
+            tool_config={
+                "function_calling_config": {
+                    "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                    "allowed_function_names": names,
+                }
+            },
+        )
+    else:
+        llm_with_functions = llm.bind(
+            functions=functions,
+        )
     parsing_prompt = ChatPromptTemplate.from_template(
         "You are a world class algorithm for recording entities.\nMake calls "
         "to the relevant function to record the entities in the following "
