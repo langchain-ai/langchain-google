@@ -44,7 +44,7 @@ class GoogleEmbeddingModelType(str, Enum):
 
     @classmethod
     def _missing_(cls, value: Any) -> Optional["GoogleEmbeddingModelType"]:
-        if value.lower().startswith("text"):
+        if value.lower().startswith("tex"):
             return GoogleEmbeddingModelType.TEXT
         elif "multimodalembedding" in value.lower():
             return GoogleEmbeddingModelType.MULTIMODAL
