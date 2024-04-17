@@ -44,7 +44,7 @@ class GoogleEmbeddingModelType(str, Enum):
 
     @classmethod
     def _missing_(cls, value: Any) -> Optional["GoogleEmbeddingModelType"]:
-        if "textembedding-gecko" in value.lower():
+        if "textembedding-gecko" in value.lower() or "text-embedding" in value.lower():
             return GoogleEmbeddingModelType.TEXT
         elif "multimodalembedding" in value.lower():
             return GoogleEmbeddingModelType.MULTIMODAL
