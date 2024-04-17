@@ -695,9 +695,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                         candidate = response.candidates[0]
                     except IndexError:
                         raise ValueError("Received empty response from model.")
-                    message = _parse_response_candidate(
-                        candidate, streaming=True
-                    )
+                    message = _parse_response_candidate(candidate, streaming=True)
                     generation_info = get_generation_info(
                         candidate,
                         self._is_gemini_model,
