@@ -553,6 +553,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 for candidate in response.candidates
             ]
+        if not generations:
+            raise ValueError("Received empty response from model.")
         return ChatResult(generations=generations)
 
     async def _agenerate(
@@ -646,6 +648,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 for r in response.candidates
             ]
+        if not generations:
+            raise ValueError("Received empty response from model.")
         return ChatResult(generations=generations)
 
     def _stream(
@@ -687,11 +691,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     safety_settings=safety_settings,
                 )
                 for response in responses:
+                    try:
+                        candidate = response.candidates[0]
+                    except IndexError:
+                        raise ValueError("Received empty response from model.")
                     message = _parse_response_candidate(
-                        response.candidates[0], streaming=True
+                        candidate, streaming=True
                     )
                     generation_info = get_generation_info(
-                        response.candidates[0],
+                        candidate,
                         self._is_gemini_model,
                         usage_metadata=response.to_dict().get("usage_metadata"),
                     )
@@ -765,9 +773,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 tool_config=tool_config,
                 safety_settings=safety_settings,
             ):
-                message = _parse_response_candidate(chunk.candidates[0], streaming=True)
+                try:
+                    candidate = chunk.candidates[0]
+                except IndexError:
+                    raise ValueError("Received empty response from model.")
+                message = _parse_response_candidate(candidate, streaming=True)
                 generation_info = get_generation_info(
-                    chunk.candidates[0],
+                    candidate,
                     self._is_gemini_model,
                     usage_metadata=chunk.to_dict().get("usage_metadata"),
                 )
