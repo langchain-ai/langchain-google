@@ -465,13 +465,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _is_gemini_advanced(self) -> bool:
         try:
-            if float(self.model_name.split("-")[1]) > 1.0:
-                return True
-        except ValueError:
-            pass
-        except IndexError:
-            pass
-        return False
+            return float(self.model_name.split("-")[1]) > 1.0
+        except (ValueError, IndexError):
+            return False
 
     def _generate(
         self,
