@@ -26,13 +26,13 @@ from langchain_core.messages import (
     FunctionMessage,
     HumanMessage,
     SystemMessage,
-    ToolMessage,
     ToolCall,
+    ToolMessage,
 )
 from vertexai.generative_models import (  # type: ignore
-    Part,
-    Content,
     Candidate,
+    Content,
+    Part,
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
@@ -478,7 +478,7 @@ def test_default_params_gemini() -> None:
         mock_response.candidates = [
             StubGeminiResponse(
                 text="Goodbye",
-                content=Mock(parts=[Mock(function_call=None)]),
+                content=Mock(parts=[Mock(text="Hi", function_call=None)]),
                 citation_metadata=None,
             )
         ]
