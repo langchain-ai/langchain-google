@@ -341,9 +341,8 @@ def _parse_response_candidate(
     tool_call_chunks = []
 
     for part in response_candidate.content.parts:
-        text = None
         try:
-            text = part.text
+            text: Optional[str] = part.text
         except AttributeError:
             text = None
 
@@ -875,7 +874,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         generation_config = self._prepare_params(stop=stop, stream=stream, **kwargs)
         if not tools and functions:
             tools = _format_tools_to_vertex_tool(functions)
-        if not isinstance(tool_config, ToolConfig):
+        if tool_config and not isinstance(tool_config, ToolConfig):
             tool_config = _format_tool_config(cast(_ToolConfigDict, tool_config))
         return _GeminiGenerateContentKwargs(
             generation_config=generation_config,
