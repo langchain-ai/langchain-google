@@ -1,5 +1,18 @@
+from __future__ import annotations
+
 import json
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypedDict,
+    Union,
+)
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
@@ -11,6 +24,9 @@ from langchain_core.utils.function_calling import FunctionDescription
 from langchain_core.utils.json_schema import dereference_refs
 from vertexai.generative_models import (  # type: ignore
     FunctionDeclaration,
+)
+from vertexai.generative_models import (
+    Tool as VertexAITool,
 )
 from vertexai.generative_models import (
     Tool as VertexTool,
@@ -204,3 +220,60 @@ class PydanticFunctionsOutputParser(BaseOutputParser):
 
     def parse(self, text: str) -> BaseModel:
         raise ValueError("Can only parse messages")
+
+
+class _FunctionCallingConfigDict(TypedDict):
+    mode: ToolConfig.FunctionCallingConfig.Mode
+    allowed_function_names: Optional[List[str]]
+
+
+class _ToolConfigDict(TypedDict):
+    function_calling_config: _FunctionCallingConfigDict
+
+
+def _tool_choice_to_tool_config(
+    tool_choice: Union[
+        dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
+    ],
+    vertexai_tools: Sequence[VertexAITool],
+) -> _ToolConfigDict:
+    allowed_function_names: Optional[List[str]] = None
+    if tool_choice is True or tool_choice == "any":
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = [
+            f["name"]
+            for vt in vertexai_tools
+            for f in vt.to_dict()["function_declarations"]
+        ]
+    elif tool_choice == "auto":
+        mode = ToolConfig.FunctionCallingConfig.Mode.AUTO
+    elif tool_choice == "none":
+        mode = ToolConfig.FunctionCallingConfig.Mode.NONE
+    elif isinstance(tool_choice, str):
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = [tool_choice]
+    elif isinstance(tool_choice, list):
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = tool_choice
+    elif isinstance(tool_choice, dict):
+        if "mode" in tool_choice:
+            mode = tool_choice["mode"]
+            allowed_function_names = tool_choice.get("allowed_function_names")
+        elif "function_calling_config" in tool_choice:
+            mode = tool_choice["function_calling_config"]["mode"]
+            allowed_function_names = tool_choice["function_calling_config"].get(
+                "allowed_function_names"
+            )
+        else:
+            raise ValueError(
+                f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
+                f"VertexAI ToolConfig or FunctionCallingConfig format."
+            )
+    else:
+        raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
+    return _ToolConfigDict(
+        function_calling_config=_FunctionCallingConfigDict(
+            mode=mode,
+            allowed_function_names=allowed_function_names,
+        )
+    )

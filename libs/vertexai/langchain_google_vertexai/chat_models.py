@@ -101,6 +101,8 @@ from langchain_google_vertexai._utils import (
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
     _format_tools_to_vertex_tool,
+    _ToolConfigDict,
+    _tool_choice_to_tool_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -926,60 +928,3 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message=message,
             generation_info=generation_info,
         )
-
-
-class _FunctionCallingConfigDict(TypedDict):
-    mode: ToolConfig.FunctionCallingConfig.Mode
-    allowed_function_names: Optional[List[str]]
-
-
-class _ToolConfigDict(TypedDict):
-    function_calling_config: _FunctionCallingConfigDict
-
-
-def _tool_choice_to_tool_config(
-    tool_choice: Union[
-        dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
-    ],
-    vertexai_tools: Sequence[VertexAITool],
-) -> _ToolConfigDict:
-    allowed_function_names: Optional[List[str]] = None
-    if tool_choice is True or tool_choice == "any":
-        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
-        allowed_function_names = [
-            f["name"]
-            for vt in vertexai_tools
-            for f in vt.to_dict()["function_declarations"]
-        ]
-    elif tool_choice == "auto":
-        mode = ToolConfig.FunctionCallingConfig.Mode.AUTO
-    elif tool_choice == "none":
-        mode = ToolConfig.FunctionCallingConfig.Mode.NONE
-    elif isinstance(tool_choice, str):
-        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
-        allowed_function_names = [tool_choice]
-    elif isinstance(tool_choice, list):
-        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
-        allowed_function_names = tool_choice
-    elif isinstance(tool_choice, dict):
-        if "mode" in tool_choice:
-            mode = tool_choice["mode"]
-            allowed_function_names = tool_choice.get("allowed_function_names")
-        elif "function_calling_config" in tool_choice:
-            mode = tool_choice["function_calling_config"]["mode"]
-            allowed_function_names = tool_choice["function_calling_config"].get(
-                "allowed_function_names"
-            )
-        else:
-            raise ValueError(
-                f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
-                f"VertexAI ToolConfig or FunctionCallingConfig format."
-            )
-    else:
-        raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
-    return _ToolConfigDict(
-        function_calling_config=_FunctionCallingConfigDict(
-            mode=mode,
-            allowed_function_names=allowed_function_names,
-        )
-    )
