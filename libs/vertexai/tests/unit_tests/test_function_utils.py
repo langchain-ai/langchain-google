@@ -1,17 +1,22 @@
 from enum import Enum
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import pytest
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import tool
 from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
+    FunctionDeclaration,
+    Tool,
     ToolConfig,
 )
 
 from langchain_google_vertexai.functions_utils import (
     _format_base_tool_to_vertex_function,
     _format_tool_config,
+    _FunctionCallingConfigDict,
     _get_parameters_from_schema,
+    _tool_choice_to_tool_config,
+    _ToolConfigDict,
 )
 
 
@@ -142,3 +147,22 @@ def test_get_parameters_from_schema():
         "title": "B",
         "required": ["array_field", "int_field", "str_field", "str_enum_field"],
     }
+
+
+@pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
+def test__tool_choice_to_tool_config(choice: Any) -> None:
+    tools = [
+        Tool(
+            function_declarations=[
+                FunctionDeclaration(name="foo", description="bar", parameters={})
+            ]
+        )
+    ]
+    expected = _ToolConfigDict(
+        function_calling_config=_FunctionCallingConfigDict(
+            mode=ToolConfig.FunctionCallingConfig.Mode.ANY,
+            allowed_function_names=["foo"],
+        ),
+    )
+    actual = _tool_choice_to_tool_config(choice, tools)
+    assert expected == actual
