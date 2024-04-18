@@ -287,7 +287,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):
         name: str
@@ -343,7 +343,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
     class MyModel(BaseModel):
         name: str
@@ -408,7 +408,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
     assert function_call is None
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     class MyModel(BaseModel):
         name: str
