@@ -21,6 +21,7 @@ from typing import (
     cast,
     Literal,
     TypedDict,
+    overload,
 )
 
 import proto  # type: ignore[import-untyped]
@@ -71,6 +72,7 @@ from vertexai.generative_models._generative_models import (  # type: ignore
     ToolConfig,
     SafetySettingsType,
     GenerationConfigType,
+    GenerationResponse,
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
@@ -325,6 +327,20 @@ def _get_client_with_sys_instruction(
     return client
 
 
+@overload
+def _parse_response_candidate(
+    response_candidate: "Candidate", streaming: Literal[False] = False
+) -> AIMessage:
+    ...
+
+
+@overload
+def _parse_response_candidate(
+    response_candidate: "Candidate", streaming: Literal[True]
+) -> AIMessageChunk:
+    ...
+
+
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: bool = False
 ) -> AIMessage:
@@ -496,15 +512,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
             return generate_from_stream(stream_iter)
-
-        if self._is_gemini_model:
-            client, contents = self._gemini_client_and_contents(messages)
-            params = self._gemini_params(stop=stop, **kwargs)
-            with telemetry.tool_context_manager(self._user_agent):
-                response = client.generate_content(contents, **params)
-            return self._gemini_response_to_chat_result(response)
-        else:
+        if not self._is_gemini_model:
             return self._generate_non_gemini(messages, stop=stop, **kwargs)
+
+        client, contents = self._gemini_client_and_contents(messages)
+        params = self._gemini_params(stop=stop, **kwargs)
+        with telemetry.tool_context_manager(self._user_agent):
+            response = client.generate_content(contents, **params)
+        return self._gemini_response_to_chat_result(response)
 
     def _generate_non_gemini(
         self,
@@ -562,16 +577,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if "stream" in kwargs:
             kwargs.pop("stream")
             logger.warning("ChatVertexAI does not currently support async streaming.")
-        if self._is_gemini_model:
-            client, contents = self._gemini_client_and_contents(messages)
-            params = self._gemini_params(stop=stop, **kwargs)
-            with telemetry.tool_context_manager(self._user_agent):
-                response = await client.generate_content_async(contents, **params)
-            return self._gemini_response_to_chat_result(response)
-        else:
+
+        if not self._is_gemini_model:
             return await self._agenerate_non_gemini(
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
+
+        client, contents = self._gemini_client_and_contents(messages)
+        params = self._gemini_params(stop=stop, **kwargs)
+        with telemetry.tool_context_manager(self._user_agent):
+            response = await client.generate_content_async(contents, **params)
+        return self._gemini_response_to_chat_result(response)
 
     async def _agenerate_non_gemini(
         self,
@@ -612,81 +628,48 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        if not self._is_gemini_model:
+            return self._stream_non_gemini(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+
+        client, contents = self._gemini_client_and_contents(messages)
+        params = self._gemini_params(stop=stop, stream=True, **kwargs)
+        with telemetry.tool_context_manager(self._user_agent):
+            response_iter = client.generate_content(contents, **params, stream=True)
+        for response_chunk in response_iter:
+            chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
+            if run_manager and isinstance(chunk.message.content, str):
+                run_manager.on_llm_new_token(chunk.message.content)
+            yield chunk
+
+    def _stream_non_gemini(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
         params = self._prepare_params(stop=stop, stream=True, **kwargs)
-        if self._is_gemini_model:
-            safety_settings = params.pop("safety_settings", None)
-            system_instruction, history_gemini = _parse_chat_history_gemini(
-                messages,
-                project=self.project,
-                convert_system_message_to_human=self.convert_system_message_to_human,
-            )
-            self.client = _get_client_with_sys_instruction(
-                client=self.client,
-                system_instruction=system_instruction,
-                model_name=self.model_name,
-            )
-            # set param to `functions` until core tool/function calling implemented
-            raw_tools = params.pop("functions") if "functions" in params else None
-            tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
-            raw_tool_config = (
-                params.pop("tool_config") if "tool_config" in params else None
-            )
-            tool_config = (
-                _format_tool_config(raw_tool_config) if raw_tool_config else None
-            )
-            with telemetry.tool_context_manager(self._user_agent):
-                responses = self.client.generate_content(
-                    history_gemini,
-                    stream=True,
-                    generation_config=params,
-                    tools=tools,
-                    tool_config=tool_config,
-                    safety_settings=safety_settings,
-                )
-                for response in responses:
-                    message = _parse_response_candidate(
-                        response.candidates[0], streaming=True
-                    )
-                    generation_info = get_generation_info(
-                        response.candidates[0],
+        question = _get_question(messages)
+        history = _parse_chat_history(messages[:-1])
+        examples = kwargs.get("examples", None)
+        if examples:
+            params["examples"] = _parse_examples(examples)
+        with telemetry.tool_context_manager(self._user_agent):
+            chat = self._start_chat(history, **params)
+            responses = chat.send_message_streaming(question.content, **params)
+            for response in responses:
+                if run_manager:
+                    run_manager.on_llm_new_token(response.text)
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(content=response.text),
+                    generation_info=get_generation_info(
+                        response,
                         self._is_gemini_model,
-                        usage_metadata=response.to_dict().get("usage_metadata"),
-                    )
-                    if run_manager and isinstance(message.content, str):
-                        run_manager.on_llm_new_token(message.content)
-                    if isinstance(message, AIMessageChunk):
-                        yield ChatGenerationChunk(
-                            message=message,
-                            generation_info=generation_info,
-                        )
-                    else:
-                        yield ChatGenerationChunk(
-                            message=AIMessageChunk(
-                                content=message.content,
-                                additional_kwargs=message.additional_kwargs,
-                            ),
-                            generation_info=generation_info,
-                        )
-        else:
-            question = _get_question(messages)
-            history = _parse_chat_history(messages[:-1])
-            examples = kwargs.get("examples", None)
-            if examples:
-                params["examples"] = _parse_examples(examples)
-            with telemetry.tool_context_manager(self._user_agent):
-                chat = self._start_chat(history, **params)
-                responses = chat.send_message_streaming(question.content, **params)
-                for response in responses:
-                    if run_manager:
-                        run_manager.on_llm_new_token(response.text)
-                    yield ChatGenerationChunk(
-                        message=AIMessageChunk(content=response.text),
-                        generation_info=get_generation_info(
-                            response,
-                            self._is_gemini_model,
-                            usage_metadata=response.raw_prediction_response.metadata,
-                        ),
-                    )
+                        usage_metadata=response.raw_prediction_response.metadata,
+                    ),
+                )
 
     async def _astream(
         self,
@@ -697,52 +680,16 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self._is_gemini_model:
             raise NotImplementedError()
-        params = self._prepare_params(stop=stop, stream=True, **kwargs)
-        safety_settings = params.pop("safety_settings", None)
-        system_instruction, history_gemini = _parse_chat_history_gemini(
-            messages,
-            project=self.project,
-            convert_system_message_to_human=self.convert_system_message_to_human,
-        )
-        self.client = _get_client_with_sys_instruction(
-            client=self.client,
-            system_instruction=system_instruction,
-            model_name=self.model_name,
-        )
-        raw_tools = params.pop("functions") if "functions" in params else None
-        tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
-        raw_tool_config = params.pop("tool_config") if "tool_config" in params else None
-        tool_config = _format_tool_config(raw_tool_config) if raw_tool_config else None
+        client, contents = self._gemini_client_and_contents(messages)
+        params = self._gemini_params(stop=stop, stream=True, **kwargs)
         with telemetry.tool_context_manager(self._user_agent):
-            async for chunk in await self.client.generate_content_async(
-                history_gemini,
-                stream=True,
-                generation_config=params,
-                tools=tools,
-                tool_config=tool_config,
-                safety_settings=safety_settings,
+            async for response_chunk in await client.generate_content_async(
+                contents, **params, stream=True
             ):
-                message = _parse_response_candidate(chunk.candidates[0], streaming=True)
-                generation_info = get_generation_info(
-                    chunk.candidates[0],
-                    self._is_gemini_model,
-                    usage_metadata=chunk.to_dict().get("usage_metadata"),
-                )
-                if run_manager and isinstance(message.content, str):
-                    await run_manager.on_llm_new_token(message.content)
-                if isinstance(message, AIMessageChunk):
-                    yield ChatGenerationChunk(
-                        message=message,
-                        generation_info=generation_info,
-                    )
-                else:
-                    yield ChatGenerationChunk(
-                        message=AIMessageChunk(
-                            content=message.content,
-                            additional_kwargs=message.additional_kwargs,
-                        ),
-                        generation_info=generation_info,
-                    )
+                chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
+                if run_manager and isinstance(chunk.message.content, str):
+                    await run_manager.on_llm_new_token(chunk.message.content)
+                yield chunk
 
     def with_structured_output(
         self,
@@ -954,7 +901,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         client = GenerativeModel(model_name=self.model_name, system_instruction=system)
         return client, contents
 
-    def _gemini_response_to_chat_result(self, response) -> ChatResult:
+    def _gemini_response_to_chat_result(
+        self, response: GenerationResponse
+    ) -> ChatResult:
         generations = []
         usage = response.to_dict().get("usage_metadata")
         for candidate in response.candidates:
@@ -962,6 +911,21 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message = _parse_response_candidate(candidate)
             generations.append(ChatGeneration(message=message, generation_info=info))
         return ChatResult(generations=generations)
+
+    def _gemini_chunk_to_generation_chunk(
+        self, response_chunk: GenerationResponse
+    ) -> ChatGenerationChunk:
+        top_candidate = response_chunk.candidates[0]
+        message = _parse_response_candidate(top_candidate, streaming=True)
+        generation_info = get_generation_info(
+            top_candidate,
+            is_gemini=True,
+            usage_metadata=response_chunk.to_dict().get("usage_metadata"),
+        )
+        return ChatGenerationChunk(
+            message=message,
+            generation_info=generation_info,
+        )
 
 
 class _FunctionCallingConfigDict(TypedDict):
