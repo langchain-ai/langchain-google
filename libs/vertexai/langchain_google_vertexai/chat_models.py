@@ -217,6 +217,10 @@ def _parse_chat_history_gemini(
         elif isinstance(message, AIMessage):
             raw_function_call = message.additional_kwargs.get("function_call")
             role = "model"
+
+            parts = []
+            if message.content:
+                parts = _convert_to_parts(message)
             if raw_function_call:
                 function_call = FunctionCall(
                     {
@@ -225,9 +229,7 @@ def _parse_chat_history_gemini(
                     }
                 )
                 gapic_part = GapicPart(function_call=function_call)
-                parts = [Part._from_gapic(gapic_part)]
-            else:
-                parts = _convert_to_parts(message)
+                parts.append(Part._from_gapic(gapic_part))
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message)
@@ -335,70 +337,89 @@ def _parse_response_candidate(
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: bool = False
 ) -> AIMessage:
-    try:
-        content = response_candidate.text
-    except AttributeError:
-        content = ""
-
+    content: Union[None, str, List[str]] = None
     additional_kwargs = {}
-    first_part = response_candidate.content.parts[0]
-    if first_part.function_call:
-        function_call = {"name": first_part.function_call.name}
-        # dump to match other function calling llm for now
-        function_call_args_dict = proto.Message.to_dict(first_part.function_call)[
-            "args"
-        ]
-        function_call["arguments"] = json.dumps(
-            {k: function_call_args_dict[k] for k in function_call_args_dict}
-        )
-        additional_kwargs["function_call"] = function_call
-        if streaming:
-            tool_call_chunks = [
-                ToolCallChunk(
-                    name=function_call.get("name"),
-                    args=function_call.get("arguments"),
-                    id=function_call.get("id", str(uuid.uuid4())),
-                    index=function_call.get("index"),
-                )
-            ]
-            return AIMessageChunk(
-                content=content,
-                additional_kwargs=additional_kwargs,
-                tool_call_chunks=tool_call_chunks,
+    tool_calls = []
+    invalid_tool_calls = []
+    tool_call_chunks = []
+
+    for part in response_candidate.content.parts:
+        text = None
+        try:
+            text = part.text
+        except AttributeError:
+            text = None
+
+        if text is not None:
+            if content is None:
+                content = text
+            elif isinstance(content, str):
+                content = [content, text]
+            elif isinstance(content, list):
+                content.append(text)
+            else:
+                raise Exception("Unexpected content type")
+
+        if part.function_call:
+            # TODO: support multiple function calls
+            if "function_call" in additional_kwargs:
+                raise Exception("Multiple function calls are not currently supported")
+            function_call = {"name": part.function_call.name}
+            # dump to match other function calling llm for now
+            function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            function_call["arguments"] = json.dumps(
+                {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
-        else:
-            tool_calls = []
-            invalid_tool_calls = []
-            try:
-                tool_calls_dicts = parse_tool_calls(
-                    [{"function": function_call}],
-                    return_id=False,
-                )
-                tool_calls = [
-                    ToolCall(
-                        name=tool_call["name"],
-                        args=tool_call["args"],
-                        id=tool_call.get("id", str(uuid.uuid4())),
-                    )
-                    for tool_call in tool_calls_dicts
-                ]
-            except Exception as e:
-                invalid_tool_calls = [
-                    InvalidToolCall(
+            additional_kwargs["function_call"] = function_call
+
+            if streaming:
+                tool_call_chunks.append(
+                    ToolCallChunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=function_call.get("id", str(uuid.uuid4())),
-                        error=str(e),
+                        index=function_call.get("index"),
                     )
-                ]
+                )
+            else:
+                try:
+                    tool_calls_dicts = parse_tool_calls(
+                        [{"function": function_call}],
+                        return_id=False,
+                    )
+                    tool_calls = [
+                        ToolCall(
+                            name=tool_call["name"],
+                            args=tool_call["args"],
+                            id=tool_call.get("id", str(uuid.uuid4())),
+                        )
+                        for tool_call in tool_calls_dicts
+                    ]
+                except Exception as e:
+                    invalid_tool_calls = [
+                        InvalidToolCall(
+                            name=function_call.get("name"),
+                            args=function_call.get("arguments"),
+                            id=function_call.get("id", str(uuid.uuid4())),
+                            error=str(e),
+                        )
+                    ]
+    if content is None:
+        content = ""
 
-            return AIMessage(
-                content=content,
-                additional_kwargs=additional_kwargs,
-                tool_calls=tool_calls,
-                invalid_tool_calls=invalid_tool_calls,
-            )
-    return AIMessage(content=content, additional_kwargs=additional_kwargs)
+    if streaming:
+        return AIMessageChunk(
+            content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+            additional_kwargs=additional_kwargs,
+            tool_call_chunks=tool_call_chunks,
+        )
+
+    return AIMessage(
+        content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+        additional_kwargs=additional_kwargs,
+        tool_calls=tool_calls,
+        invalid_tool_calls=invalid_tool_calls,
+    )
 
 
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
