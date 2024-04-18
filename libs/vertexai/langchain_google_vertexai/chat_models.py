@@ -103,6 +103,8 @@ from langchain_google_vertexai.functions_utils import (
     _format_tools_to_vertex_tool,
     _ToolConfigDict,
     _tool_choice_to_tool_config,
+    _ToolChoiceType,
+    _FunctionDeclarationLike,
 )
 
 logger = logging.getLogger(__name__)
@@ -803,9 +805,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         ],
         tool_config: Optional[Dict[str, Any]] = None,
         *,
-        tool_choice: Optional[
-            Union[dict, List[str], str, Literal["auto", "none", "any"], bool]
-        ] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         """Bind tool-like objects to this chat model.
@@ -854,17 +854,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         *,
         stop: Optional[List[str]] = None,
         stream: bool = False,
-        tools: Optional[List[VertexAITool]],
-        functions: Optional[List],
-        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
-        safety_settings: Optional[SafetySettingsType],
+        tools: Optional[List[VertexAITool]] = None,
+        functions: Optional[List[_FunctionDeclarationLike]] = None,
+        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = NOne,
+        safety_settings: Optional[SafetySettingsType] = None,
         **kwargs: Any,
     ) -> _GeminiGenerateContentKwargs:
         generation_config = self._prepare_params(stop=stop, stream=stream, **kwargs)
         if not tools and functions:
             tools = _format_tools_to_vertex_tool(functions)
-        if isinstance(tool_config, dict):
-            tool_config = _format_tool_config(cast(dict, tool_config))
+        if not isinstance(tool_config, ToolConfig):
+            tool_config = _format_tool_config(cast(_ToolConfigDict, tool_config))
         return _GeminiGenerateContentKwargs(
             generation_config=generation_config,
             tools=tools,

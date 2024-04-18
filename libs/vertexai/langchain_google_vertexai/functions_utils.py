@@ -85,8 +85,13 @@ def _format_tool_to_vertex_function(
         raise ValueError(f"Unsupported tool call type {tool}")
 
 
+_FunctionDeclarationLike = Union[
+    BaseTool, Type[BaseModel], dict, Callable, FunctionDeclaration
+]
+
+
 def _format_tools_to_vertex_tool(
-    tools: List[Union[BaseTool, Type[BaseModel], dict, Callable, FunctionDeclaration]],
+    tools: List[_FunctionDeclarationLike],
 ) -> List[VertexTool]:
     "Format tools into the Vertex Tool instance."
     function_declarations = []
@@ -100,7 +105,7 @@ def _format_tools_to_vertex_tool(
     return [VertexTool(function_declarations=function_declarations)]
 
 
-def _format_tool_config(tool_config: Dict[str, Any]) -> Union[ToolConfig, None]:
+def _format_tool_config(tool_config: _ToolConfigDict) -> Union[ToolConfig, None]:
     if "function_calling_config" not in tool_config:
         raise ValueError(
             "Invalid ToolConfig, missing 'function_calling_config' key. Received:\n\n"
@@ -222,10 +227,13 @@ class _ToolConfigDict(TypedDict):
     function_calling_config: _FunctionCallingConfigDict
 
 
+_ToolChoiceType = Union[
+    dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
+]
+
+
 def _tool_choice_to_tool_config(
-    tool_choice: Union[
-        dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
-    ],
+    tool_choice: _ToolChoiceType,
     vertexai_tools: Sequence[VertexTool],
 ) -> _ToolConfigDict:
     allowed_function_names: Optional[List[str]] = None
