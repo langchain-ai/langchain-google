@@ -872,9 +872,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             safety_settings=safety_settings,
         )
 
-    def _client_with_system(self, system: Optional[Content]) -> GenerativeModel:
-        return GenerativeModel(model_name=self.model_name, system_instruction=system)
-
     def _gemini_client_and_contents(
         self, messages: List[BaseMessage]
     ) -> tuple[GenerativeModel, list[Content]]:
@@ -883,7 +880,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             project=self.project,
             convert_system_message_to_human=self.convert_system_message_to_human,
         )
-        client = GenerativeModel(model_name=self.model_name, system_instruction=system)
+        # TODO: Store default client params explicitly so private params don't have to
+        # be accessed, like _safety_settings.
+        client = GenerativeModel(
+            model_name=self.model_name,
+            system_instruction=system,
+            safety_settings=self.client._safety_settings,
+        )
         return client, contents
 
     def _gemini_response_to_chat_result(
