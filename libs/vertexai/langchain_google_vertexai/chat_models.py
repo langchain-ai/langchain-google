@@ -10,7 +10,6 @@ import uuid
 from typing import (
     Any,
     AsyncIterator,
-    Callable,
     Dict,
     Iterator,
     List,
@@ -50,7 +49,6 @@ from langchain_core.messages import (
     ToolCallChunk,
     ToolMessage,
 )
-from langchain_core.tools import BaseTool
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_functions import (
     JsonOutputFunctionsParser,
@@ -65,7 +63,6 @@ from vertexai.generative_models import (  # type: ignore
     Content,
     GenerativeModel,
     Part,
-    FunctionDeclaration,
     Tool as VertexAITool,
 )
 from vertexai.generative_models._generative_models import (  # type: ignore
@@ -871,7 +868,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         stream: bool = False,
         tools: Optional[List[VertexAITool]] = None,
         functions: Optional[List[_FunctionDeclarationLike]] = None,
-        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = NOne,
+        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
         **kwargs: Any,
     ) -> _GeminiGenerateContentKwargs:
