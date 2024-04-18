@@ -423,7 +423,7 @@ def test_parse_history_gemini_function() -> None:
     ],
 )
 def test_parse_history_gemini_multi(source_history, expected_history) -> None:
-    source_history.insert(0, HumanMessage("Hello"))
+    source_history.insert(0, HumanMessage(content="Hello"))
     expected_history.insert(0, Content(role="user", parts=[Part.from_text("Hello")]))
     _, result_history = _parse_chat_history_gemini(history=source_history)
     for result, expected in zip(result_history, expected_history):

@@ -318,26 +318,29 @@ def _get_client_with_sys_instruction(
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: bool = False
 ) -> AIMessage:
-    content = None
+    content: Union[None, str, List[str]] = None
     additional_kwargs = {}
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
 
     for part in response_candidate.content.parts:
+        text = None
         try:
             text = part.text
         except AttributeError:
             text = None
+
         if text is not None:
-            if isinstance(content, list):
-                content.append(text)
+            if content is None:
+                content = text
             elif isinstance(content, str):
                 content = [content, text]
-            elif content is None:
-                content = text
+            elif isinstance(content, list):
+                content.append(text)
             else:
                 raise Exception("Unexpected content type")
+
         if part.function_call:
             # TODO: support multiple function calls
             if "function_call" in additional_kwargs:
@@ -387,15 +390,13 @@ def _parse_response_candidate(
 
     if streaming:
         return AIMessageChunk(
-            content=content,
+            content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
             additional_kwargs=additional_kwargs,
             tool_call_chunks=tool_call_chunks,
         )
 
-    print(content)
-
     return AIMessage(
-        content=content,
+        content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
         additional_kwargs=additional_kwargs,
         tool_calls=tool_calls,
         invalid_tool_calls=invalid_tool_calls,
