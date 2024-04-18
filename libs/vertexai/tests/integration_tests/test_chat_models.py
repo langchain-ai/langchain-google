@@ -142,7 +142,7 @@ def test_multimodal() -> None:
     assert isinstance(output.content, str)
 
 
-@pytest.mark.xfail(reason="Gemini issue")
+@pytest.mark.release
 def test_multimodal_history() -> None:
     llm = ChatVertexAI(model_name="gemini-pro-vision")
     gcs_url = (
@@ -287,7 +287,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):
         name: str
@@ -343,7 +343,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
     class MyModel(BaseModel):
         name: str
@@ -408,7 +408,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
     assert function_call is None
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     class MyModel(BaseModel):
         name: str
