@@ -7,14 +7,16 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
-    Content as Content,
+    Content as GAPICContent,
 )
 from google.cloud.aiplatform_v1beta1.types import (
-    FunctionCall,
-    FunctionResponse,
+    FunctionCall as GAPICFunctionCall,
 )
 from google.cloud.aiplatform_v1beta1.types import (
-    Part as Part,
+    FunctionResponse as GAPICFunctionResponse,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    Part as GAPICPart,
 )
 from google.cloud.aiplatform_v1beta1.types import (
     content as gapic_content_types,
@@ -28,6 +30,8 @@ from langchain_core.messages import (
     ToolCall,
 )
 from vertexai.generative_models import (  # type: ignore
+    Part,
+    Content,
     Candidate,
 )
 from vertexai.language_models import (  # type: ignore
@@ -254,29 +258,177 @@ def test_parse_history_gemini_function() -> None:
     assert history[0].parts[0].text == text_question1
 
     assert history[1].role == "model"
-    assert history[1].parts[0].function_call == FunctionCall(
+    assert history[1].parts[0].function_call == GAPICFunctionCall(
         name=function_call_1["name"], args=json.loads(function_call_1["arguments"])
     )
 
     assert history[2].role == "function"
-    assert history[2].parts[0].function_response == FunctionResponse(
+    assert history[2].parts[0].function_response == GAPICFunctionResponse(
         name=function_call_1["name"],
         response={"content": function_answer1},
     )
 
     assert history[3].role == "model"
-    assert history[3].parts[0].function_call == FunctionCall(
+    assert history[3].parts[0].function_call == GAPICFunctionCall(
         name=function_call_2["name"], args=json.loads(function_call_2["arguments"])
     )
 
     assert history[4].role == "function"
-    assert history[2].parts[0].function_response == FunctionResponse(
+    assert history[2].parts[0].function_response == GAPICFunctionResponse(
         name=function_call_2["name"],
         response={"content": function_answer2},
     )
 
     assert history[5].role == "model"
     assert history[5].parts[0].text == text_answer1
+
+
+@pytest.mark.parametrize(
+    "source_history, expected_history",
+    [
+        (
+            [
+                AIMessage(
+                    content="Mike age is 30",
+                    additional_kwargs={},
+                )
+            ],
+            [Content(role="model", parts=[Part.from_text("Mike age is 30")])],
+        ),
+        (
+            [
+                AIMessage(
+                    content=["Mike age is 30", "Arthur age is 30"],
+                    additional_kwargs={},
+                ),
+            ],
+            [
+                Content(
+                    role="model",
+                    parts=[
+                        Part.from_text("Mike age is 30"),
+                        Part.from_text("Arthur age is 30"),
+                    ],
+                ),
+            ],
+        ),
+        (
+            [
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "Information",
+                            "arguments": json.dumps({"name": "Ben"}),
+                        },
+                    },
+                    tool_calls=[
+                        ToolCall(
+                            name="Information",
+                            args={"name": "Ben"},
+                            id="00000000-0000-0000-0000-00000000000",
+                        ),
+                    ],
+                ),
+            ],
+            [
+                Content.from_dict(
+                    {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "function_call": {
+                                    "name": "Information",
+                                    "args": {"name": "Ben"},
+                                }
+                            }
+                        ],
+                    }
+                )
+            ],
+        ),
+        (
+            [
+                AIMessage(
+                    content="Mike age is 30",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "Information",
+                            "arguments": json.dumps({"name": "Ben"}),
+                        },
+                    },
+                    tool_calls=[
+                        ToolCall(
+                            name="Information",
+                            args={"name": "Ben"},
+                            id="00000000-0000-0000-0000-00000000000",
+                        ),
+                    ],
+                ),
+            ],
+            [
+                Content.from_dict(
+                    {
+                        "role": "model",
+                        "parts": [
+                            {"text": "Mike age is 30"},
+                            {
+                                "function_call": {
+                                    "name": "Information",
+                                    "args": {"name": "Ben"},
+                                }
+                            },
+                        ],
+                    }
+                )
+            ],
+        ),
+        (
+            [
+                AIMessage(
+                    content=["Mike age is 30", "Arthur age is 30"],
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "Information",
+                            "arguments": json.dumps({"name": "Ben"}),
+                        },
+                    },
+                    tool_calls=[
+                        ToolCall(
+                            name="Information",
+                            args={"name": "Ben"},
+                            id="00000000-0000-0000-0000-00000000000",
+                        ),
+                    ],
+                ),
+            ],
+            [
+                Content.from_dict(
+                    {
+                        "role": "model",
+                        "parts": [
+                            {"text": "Mike age is 30"},
+                            {"text": "Arthur age is 30"},
+                            {
+                                "function_call": {
+                                    "name": "Information",
+                                    "args": {"name": "Ben"},
+                                }
+                            },
+                        ],
+                    }
+                )
+            ],
+        ),
+    ],
+)
+def test_parse_history_gemini_multi(source_history, expected_history) -> None:
+    source_history.insert(0, HumanMessage("Hello"))
+    expected_history.insert(0, Content(role="user", parts=[Part.from_text("Hello")]))
+    _, result_history = _parse_chat_history_gemini(history=source_history)
+    for result, expected in zip(result_history, expected_history):
+        assert result.role == expected.role
+        assert result._raw_content == expected._raw_content
 
 
 def test_default_params_palm() -> None:
@@ -347,10 +499,10 @@ def test_default_params_gemini() -> None:
     [
         (
             gapic_content_types.Candidate(
-                content=Content(
+                content=GAPICContent(
                     role="model",
                     parts=[
-                        Part(
+                        GAPICPart(
                             text="Mike age is 30",
                         )
                     ],
@@ -363,11 +515,30 @@ def test_default_params_gemini() -> None:
         ),
         (
             gapic_content_types.Candidate(
-                content=Content(
+                content=GAPICContent(
                     role="model",
                     parts=[
-                        Part(
-                            function_call=FunctionCall(
+                        GAPICPart(
+                            text="Mike age is 30",
+                        ),
+                        GAPICPart(
+                            text="Arthur age is 30",
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=["Mike age is 30", "Arthur age is 30"],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            gapic_content_types.Candidate(
+                content=GAPICContent(
+                    role="model",
+                    parts=[
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
                             ),
@@ -394,11 +565,11 @@ def test_default_params_gemini() -> None:
         ),
         (
             gapic_content_types.Candidate(
-                content=Content(
+                content=GAPICContent(
                     role="model",
                     parts=[
-                        Part(
-                            function_call=FunctionCall(
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
                                 name="Information",
                                 args={"info": ["A", "B", "C"]},
                             ),
@@ -425,11 +596,11 @@ def test_default_params_gemini() -> None:
         ),
         (
             gapic_content_types.Candidate(
-                content=Content(
+                content=GAPICContent(
                     role="model",
                     parts=[
-                        Part(
-                            function_call=FunctionCall(
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
                                 name="Information",
                                 args={
                                     "people": [
@@ -473,11 +644,11 @@ def test_default_params_gemini() -> None:
         ),
         (
             gapic_content_types.Candidate(
-                content=Content(
+                content=GAPICContent(
                     role="model",
                     parts=[
-                        Part(
-                            function_call=FunctionCall(
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
                                 name="Information",
                                 args={"info": [[1, 2, 3], [4, 5, 6]]},
                             ),
@@ -490,9 +661,7 @@ def test_default_params_gemini() -> None:
                 additional_kwargs={
                     "function_call": {
                         "name": "Information",
-                        "arguments": json.dumps(
-                            {"info": [[1, 2, 3], [4, 5, 6]]}
-                        ),
+                        "arguments": json.dumps({"info": [[1, 2, 3], [4, 5, 6]]}),
                     },
                 },
                 tool_calls=[
@@ -506,18 +675,16 @@ def test_default_params_gemini() -> None:
         ),
         (
             gapic_content_types.Candidate(
-                content=Content(
+                content=GAPICContent(
                     role="model",
                     parts=[
-                        Part(
-                            text="Mike age is 30"
-                        ),
-                        Part(
-                            function_call=FunctionCall(
+                        GAPICPart(text="Mike age is 30"),
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
                             ),
-                        )
+                        ),
                     ],
                 )
             ),
@@ -526,9 +693,7 @@ def test_default_params_gemini() -> None:
                 additional_kwargs={
                     "function_call": {
                         "name": "Information",
-                        "arguments": json.dumps(
-                            {"name": "Ben"}
-                        ),
+                        "arguments": json.dumps({"name": "Ben"}),
                     },
                 },
                 tool_calls=[
@@ -542,18 +707,16 @@ def test_default_params_gemini() -> None:
         ),
         (
             gapic_content_types.Candidate(
-                content=Content(
+                content=GAPICContent(
                     role="model",
                     parts=[
-                        Part(
-                            function_call=FunctionCall(
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
                             ),
                         ),
-                        Part(
-                            text="Mike age is 30"
-                        ),
+                        GAPICPart(text="Mike age is 30"),
                     ],
                 )
             ),
@@ -562,9 +725,7 @@ def test_default_params_gemini() -> None:
                 additional_kwargs={
                     "function_call": {
                         "name": "Information",
-                        "arguments": json.dumps(
-                            {"name": "Ben"}
-                        ),
+                        "arguments": json.dumps({"name": "Ben"}),
                     },
                 },
                 tool_calls=[
@@ -586,14 +747,15 @@ def test_parse_response_candidate(raw_candidate, expected) -> None:
         assert result.content == expected.content
         assert result.tool_calls == expected.tool_calls
         for key, value in expected.additional_kwargs.items():
-          if key == "function_call":
-            res_fc = result.additional_kwargs[key]
-            exp_fc = value
-            assert res_fc["name"] == exp_fc["name"]
+            if key == "function_call":
+                res_fc = result.additional_kwargs[key]
+                exp_fc = value
+                assert res_fc["name"] == exp_fc["name"]
 
-            assert json.loads(res_fc["arguments"]) == json.loads(exp_fc["arguments"])
-          else:
-            res_kw = result.additional_kwargs[key]
-            exp_kw = value
-            assert res_kw == exp_kw
-
+                assert json.loads(res_fc["arguments"]) == json.loads(
+                    exp_fc["arguments"]
+                )
+            else:
+                res_kw = result.additional_kwargs[key]
+                exp_kw = value
+                assert res_kw == exp_kw

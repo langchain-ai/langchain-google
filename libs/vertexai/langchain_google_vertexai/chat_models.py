@@ -199,6 +199,10 @@ def _parse_chat_history_gemini(
         elif isinstance(message, AIMessage):
             raw_function_call = message.additional_kwargs.get("function_call")
             role = "model"
+
+            parts = []
+            if message.content:
+              parts = _convert_to_parts(message)
             if raw_function_call:
                 function_call = FunctionCall(
                     {
@@ -207,9 +211,7 @@ def _parse_chat_history_gemini(
                     }
                 )
                 gapic_part = GapicPart(function_call=function_call)
-                parts = [Part._from_gapic(gapic_part)]
-            else:
-                parts = _convert_to_parts(message)
+                parts.append(Part._from_gapic(gapic_part))
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message)
