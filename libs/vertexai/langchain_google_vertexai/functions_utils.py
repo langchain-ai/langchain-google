@@ -1,11 +1,12 @@
 import json
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
+from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import FunctionDescription
 from langchain_core.utils.json_schema import dereference_refs
 from vertexai.generative_models import (  # type: ignore
@@ -58,7 +59,7 @@ def _format_base_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
 
 
 def _format_tool_to_vertex_function(
-    tool: Union[BaseTool, Type[BaseModel], dict],
+    tool: Union[BaseTool, Type[BaseModel], dict, Callable],
 ) -> FunctionDescription:
     "Format tool into the Vertex function declaration."
     if isinstance(tool, BaseTool):
@@ -71,18 +72,23 @@ def _format_tool_to_vertex_function(
             "description": tool["description"],
             "parameters": _get_parameters_from_schema(tool["parameters"]),
         }
+    elif callable(tool):
+        return _format_base_tool_to_vertex_function(callable_as_lc_tool()(tool))
     else:
         raise ValueError(f"Unsupported tool call type {tool}")
 
 
 def _format_tools_to_vertex_tool(
-    tools: List[Union[BaseTool, Type[BaseModel], dict]],
+    tools: List[Union[BaseTool, Type[BaseModel], dict, Callable, FunctionDeclaration]],
 ) -> List[VertexTool]:
     "Format tools into the Vertex Tool instance."
     function_declarations = []
     for tool in tools:
-        func = _format_tool_to_vertex_function(tool)
-        function_declarations.append(FunctionDeclaration(**func))
+        if not isinstance(tool, FunctionDeclaration):
+            func = _format_tool_to_vertex_function(tool)
+            function_declarations.append(FunctionDeclaration(**func))
+        else:
+            function_declarations.append(tool)
 
     return [VertexTool(function_declarations=function_declarations)]
 

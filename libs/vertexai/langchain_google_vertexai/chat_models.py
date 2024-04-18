@@ -19,6 +19,8 @@ from typing import (
     Type,
     Union,
     cast,
+    Literal,
+    TypedDict,
 )
 
 import proto  # type: ignore[import-untyped]
@@ -47,7 +49,7 @@ from langchain_core.messages import (
     ToolCallChunk,
     ToolMessage,
 )
-from langchain_core.tools import BaseTool, tool as tool_from_callable
+from langchain_core.tools import BaseTool
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_functions import (
     JsonOutputFunctionsParser,
@@ -62,6 +64,8 @@ from vertexai.generative_models import (  # type: ignore
     Content,
     GenerativeModel,
     Part,
+    FunctionDeclaration,
+    Tool as VertexAITool,
 )
 from vertexai.generative_models._generative_models import (  # type: ignore
     ToolConfig,
@@ -92,7 +96,6 @@ from langchain_google_vertexai._utils import (
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
-    _format_tool_to_vertex_function,
     _format_tools_to_vertex_tool,
 )
 
@@ -506,8 +509,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
 
             # set param to `functions` until core tool/function calling implemented
-            raw_tools = params.pop("functions") if "functions" in params else None
-            tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
+            if "tools" in params:
+                tools = params.pop("tools")
+            elif "functions" in params:
+                raw_tools = params.pop("functions") if "functions" in params else None
+                tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
+            else:
+                tools = None
             raw_tool_config = (
                 params.pop("tool_config") if "tool_config" in params else None
             )
@@ -890,20 +898,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         else:
             parser = JsonOutputFunctionsParser()
 
-        name = _format_tool_to_vertex_function(schema)["name"]
-
-        if self._is_gemini_advanced:
-            llm = self.bind(
-                functions=[schema],
-                tool_config={
-                    "function_calling_config": {
-                        "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
-                        "allowed_function_names": [name],
-                    }
-                },
-            )
-        else:
-            llm = self.bind(functions=[schema])
+        llm = self.bind(
+            functions=[schema],
+            tool_choice=self._is_gemini_advanced,
+        )
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -917,8 +915,16 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[Type[BaseModel], Callable, BaseTool]],
+        tools: Sequence[
+            Union[
+                Type[BaseModel], Callable, BaseTool, FunctionDeclaration, VertexAITool
+            ]
+        ],
         tool_config: Optional[Dict[str, Any]] = None,
+        *,
+        tool_choice: Optional[
+            Union[dict, List[str], str, Literal["auto", "none", "any"], bool]
+        ] = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         """Bind tool-like objects to this chat model.
@@ -933,19 +939,24 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """
-        formatted_tools = []
+        if tool_choice and tool_config:
+            raise ValueError(
+                "Must specify at most one of tool_choice and tool_config, received "
+                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
+            )
+        vertexai_functions = []
+        vertexai_tools = []
         for schema in tools:
-            if isinstance(schema, BaseTool) or (
-                isinstance(schema, type) and issubclass(schema, BaseModel)
-            ):
-                formatted_tools.append(schema)
-            elif callable(schema):
-                formatted_tools.append(tool_from_callable(schema))  # type: ignore
+            if isinstance(schema, VertexAITool):
+                vertexai_tools.append(schema)
             else:
-                raise ValueError(
-                    "Tool must be a BaseTool, Pydantic model, or callable."
-                )
-        return self.bind(functions=formatted_tools, tool_config=tool_config, **kwargs)
+                vertexai_functions.append(schema)
+        vertexai_tools.extend(_format_tools_to_vertex_tool(vertexai_functions))
+        if tool_choice:
+            tool_config = cast(
+                Dict, _tool_choice_to_tool_config(tool_choice, vertexai_tools)
+            )
+        return self.bind(tools=vertexai_tools, tool_config=tool_config, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
@@ -956,3 +967,60 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         else:
             return self.client.start_chat(message_history=history.history, **kwargs)
+
+
+class _FunctionCallingConfigDict(TypedDict):
+    mode: ToolConfig.FunctionCallingConfig.Mode
+    allowed_function_names: Optional[List[str]]
+
+
+class _ToolConfigDict(TypedDict):
+    function_calling_config: _FunctionCallingConfigDict
+
+
+def _tool_choice_to_tool_config(
+    tool_choice: Union[
+        dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
+    ],
+    vertexai_tools: Sequence[VertexAITool],
+) -> _ToolConfigDict:
+    allowed_function_names: Optional[List[str]] = None
+    if tool_choice is True or tool_choice == "any":
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = [
+            f["name"]
+            for vt in vertexai_tools
+            for f in vt.to_dict()["function_declarations"]
+        ]
+    elif tool_choice == "auto":
+        mode = ToolConfig.FunctionCallingConfig.Mode.AUTO
+    elif tool_choice == "none":
+        mode = ToolConfig.FunctionCallingConfig.Mode.NONE
+    elif isinstance(tool_choice, str):
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = [tool_choice]
+    elif isinstance(tool_choice, list):
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = tool_choice
+    elif isinstance(tool_choice, dict):
+        if "mode" in tool_choice:
+            mode = tool_choice["mode"]
+            allowed_function_names = tool_choice.get("allowed_function_names")
+        elif "function_calling_config" in tool_choice:
+            mode = tool_choice["function_calling_config"]["mode"]
+            allowed_function_names = tool_choice["function_calling_config"].get(
+                "allowed_function_names"
+            )
+        else:
+            raise ValueError(
+                f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
+                f"VertexAI ToolConfig or FunctionCallingConfig format."
+            )
+    else:
+        raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
+    return _ToolConfigDict(
+        function_calling_config=_FunctionCallingConfigDict(
+            mode=mode,
+            allowed_function_names=allowed_function_names,
+        )
+    )
