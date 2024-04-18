@@ -29,10 +29,10 @@ def test_model_garden(
     Example:
     export FALCON_ENDPOINT_ID=...
     export LLAMA_ENDPOINT_ID=...
-    export PROJECT=...
+    export PROJECT_ID=...
     """
     endpoint_id = os.environ[endpoint_os_variable_name]
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "europe-west4"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
@@ -59,10 +59,10 @@ def test_model_garden_generate(
     Example:
     export FALCON_ENDPOINT_ID=...
     export LLAMA_ENDPOINT_ID=...
-    export PROJECT=...
+    export PROJECT_ID=...
     """
     endpoint_id = os.environ[endpoint_os_variable_name]
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "europe-west4"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
@@ -85,7 +85,7 @@ async def test_model_garden_agenerate(
     endpoint_os_variable_name: str, result_arg: Optional[str]
 ) -> None:
     endpoint_id = os.environ[endpoint_os_variable_name]
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "europe-west4"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
@@ -100,7 +100,7 @@ async def test_model_garden_agenerate(
 
 @pytest.mark.xfail(reason="CI issue")
 def test_anthropic() -> None:
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     model = ChatAnthropicVertex(
         project=project,
@@ -122,7 +122,7 @@ def test_anthropic() -> None:
 
 @pytest.mark.xfail(reason="CI issue")
 def test_anthropic_stream() -> None:
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     model = ChatAnthropicVertex(
         project=project,
@@ -139,7 +139,7 @@ def test_anthropic_stream() -> None:
 
 @pytest.mark.xfail(reason="CI issue")
 async def test_anthropic_async() -> None:
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     model = ChatAnthropicVertex(
         project=project,

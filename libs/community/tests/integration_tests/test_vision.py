@@ -10,7 +10,7 @@ from langchain_google_community import CloudVisionLoader, CloudVisionParser
 @pytest.mark.skip(reason="CI/CD not ready.")
 def test_parse_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     blob = Blob(path=gcs_path, data="")  # type: ignore
     loader = CloudVisionParser(project=project)
     documents = loader.parse(blob)
@@ -22,7 +22,7 @@ def test_parse_image() -> None:
 @pytest.mark.skip(reason="CI/CD not ready.")
 def test_load_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     loader = CloudVisionLoader(project=project, file_path=gcs_path)
     documents = loader.load()
     assert len(documents) == 1
