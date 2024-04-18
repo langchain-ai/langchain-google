@@ -69,6 +69,8 @@ from vertexai.generative_models import (  # type: ignore
 )
 from vertexai.generative_models._generative_models import (  # type: ignore
     ToolConfig,
+    SafetySettingsType,
+    GenerationConfigType,
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
@@ -108,6 +110,13 @@ class _ChatHistory:
 
     history: List[ChatMessage] = field(default_factory=list)
     context: Optional[str] = None
+
+
+class _GeminiGenerateContentKwargs(TypedDict):
+    generation_config: Optional[GenerationConfigType]
+    safety_settings: Optional[SafetySettingsType]
+    tools: Optional[List[VertexAITool]]
+    tool_config: Optional[ToolConfig]
 
 
 def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
@@ -482,85 +491,67 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Raises:
             ValueError: if the last message in the list is not from human.
         """
-        should_stream = stream if stream is not None else self.streaming
-        safety_settings = kwargs.pop("safety_settings", None)
-        if should_stream:
-            with telemetry.tool_context_manager(self._user_agent):
-                stream_iter = self._stream(
-                    messages, stop=stop, run_manager=run_manager, **kwargs
-                )
-                return generate_from_stream(stream_iter)
+        if stream is True or (stream is None and self.streaming):
+            stream_iter = self._stream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            return generate_from_stream(stream_iter)
 
+        if self._is_gemini_model:
+            return self._generate_gemini(messages, stop=stop, **kwargs)
+        else:
+            return self._generate_non_gemini(messages, stop=stop, **kwargs)
+
+    def _generate_gemini(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        system_instruction, history_gemini = self._parse_chat_history_gemini(messages)
+        client = self._client_with_system(system_instruction)
+        params = self._prepare_gemini_params(stop=stop, **kwargs)
+        with telemetry.tool_context_manager(self._user_agent):
+            response = client.generate_content(history_gemini, **params)
+        generations = []
+        usage = response.to_dict().get("usage_metadata")
+        for candidate in response.candidates:
+            info = get_generation_info(candidate, is_gemini=True, usage_metadata=usage)
+            message = _parse_response_candidate(candidate)
+            generations.append(ChatGeneration(message=message, generation_info=info))
+        return ChatResult(generations=generations)
+
+    def _generate_non_gemini(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        kwargs.pop("safety_settings", None)
         params = self._prepare_params(stop=stop, stream=False, **kwargs)
+
+        question = _get_question(messages)
+        history = _parse_chat_history(messages[:-1])
+        examples = kwargs.get("examples") or self.examples
         msg_params = {}
         if "candidate_count" in params:
             msg_params["candidate_count"] = params.pop("candidate_count")
-
-        if self._is_gemini_model:
-            system_instruction, history_gemini = _parse_chat_history_gemini(
-                messages,
-                project=self.project,
-                convert_system_message_to_human=self.convert_system_message_to_human,
+        if examples:
+            params["examples"] = _parse_examples(examples)
+        with telemetry.tool_context_manager(self._user_agent):
+            chat = self._start_chat(history, **params)
+            response = chat.send_message(question.content, **msg_params)
+        generations = [
+            ChatGeneration(
+                message=AIMessage(content=candidate.text),
+                generation_info=get_generation_info(
+                    candidate,
+                    self._is_gemini_model,
+                    usage_metadata=response.raw_prediction_response.metadata,
+                ),
             )
-            self.client = _get_client_with_sys_instruction(
-                client=self.client,
-                system_instruction=system_instruction,
-                model_name=self.model_name,
-            )
-
-            # set param to `functions` until core tool/function calling implemented
-            if "tools" in params:
-                tools = params.pop("tools")
-            elif "functions" in params:
-                raw_tools = params.pop("functions") if "functions" in params else None
-                tools = _format_tools_to_vertex_tool(raw_tools) if raw_tools else None
-            else:
-                tools = None
-            raw_tool_config = (
-                params.pop("tool_config") if "tool_config" in params else None
-            )
-            tool_config = (
-                _format_tool_config(raw_tool_config) if raw_tool_config else None
-            )
-            with telemetry.tool_context_manager(self._user_agent):
-                response = self.client.generate_content(
-                    history_gemini,
-                    generation_config=params,
-                    tools=tools,
-                    tool_config=tool_config,
-                    safety_settings=safety_settings,
-                )
-            generations = [
-                ChatGeneration(
-                    message=_parse_response_candidate(candidate),
-                    generation_info=get_generation_info(
-                        candidate,
-                        self._is_gemini_model,
-                        usage_metadata=response.to_dict().get("usage_metadata"),
-                    ),
-                )
-                for candidate in response.candidates
-            ]
-        else:
-            question = _get_question(messages)
-            history = _parse_chat_history(messages[:-1])
-            examples = kwargs.get("examples") or self.examples
-            if examples:
-                params["examples"] = _parse_examples(examples)
-            with telemetry.tool_context_manager(self._user_agent):
-                chat = self._start_chat(history, **params)
-                response = chat.send_message(question.content, **msg_params)
-            generations = [
-                ChatGeneration(
-                    message=AIMessage(content=candidate.text),
-                    generation_info=get_generation_info(
-                        candidate,
-                        self._is_gemini_model,
-                        usage_metadata=response.raw_prediction_response.metadata,
-                    ),
-                )
-                for candidate in response.candidates
-            ]
+            for candidate in response.candidates
+        ]
         return ChatResult(generations=generations)
 
     async def _agenerate(
@@ -967,6 +958,41 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         else:
             return self.client.start_chat(message_history=history.history, **kwargs)
+
+    def _prepare_gemini_params(
+        self,
+        *,
+        stop: Optional[List[str]] = None,
+        stream: bool = False,
+        tools: Optional[List[VertexAITool]],
+        functions: Optional[List],
+        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
+        safety_settings: Optional[SafetySettingsType],
+        **kwargs: Any,
+    ) -> _GeminiGenerateContentKwargs:
+        generation_config = self._prepare_params(stop=stop, stream=stream, **kwargs)
+        if not tools and functions:
+            tools = _format_tools_to_vertex_tool(functions)
+        if isinstance(tool_config, dict):
+            tool_config = _format_tool_config(cast(dict, tool_config))
+        return _GeminiGenerateContentKwargs(
+            generation_config=generation_config,
+            tools=tools,
+            tool_config=tool_config,
+            safety_settings=safety_settings,
+        )
+
+    def _client_with_system(self, system: Optional[Content]) -> GenerativeModel:
+        return GenerativeModel(model_name=self.model_name, system_instruction=system)
+
+    def _parse_chat_history_gemini(
+        self, messages: List[BaseMessage]
+    ) -> tuple[Content | None, list[Content]]:
+        return _parse_chat_history_gemini(
+            messages,
+            project=self.project,
+            convert_system_message_to_human=self.convert_system_message_to_human,
+        )
 
 
 class _FunctionCallingConfigDict(TypedDict):

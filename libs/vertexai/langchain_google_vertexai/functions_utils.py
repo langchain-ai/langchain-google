@@ -95,7 +95,10 @@ def _format_tools_to_vertex_tool(
 
 def _format_tool_config(tool_config: Dict[str, Any]) -> Union[ToolConfig, None]:
     if "function_calling_config" not in tool_config:
-        return None
+        raise ValueError(
+            "Invalid ToolConfig, missing 'function_calling_config' key. Received:\n\n"
+            f"{tool_config=}"
+        )
     return ToolConfig(
         function_calling_config=ToolConfig.FunctionCallingConfig(
             **tool_config["function_calling_config"]
