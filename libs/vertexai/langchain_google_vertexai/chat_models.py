@@ -316,19 +316,6 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
     return question
 
 
-def _get_client_with_sys_instruction(
-    client: GenerativeModel,
-    system_instruction: Content,
-    model_name: str,
-):
-    if client._system_instruction != system_instruction:
-        client = GenerativeModel(
-            model_name=model_name,
-            system_instruction=system_instruction,
-        )
-    return client
-
-
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
