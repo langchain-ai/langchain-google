@@ -26,7 +26,7 @@ class RecordDog(BaseModel):
     fav_food: Optional[str] = Field(None, description="The dog's favorite food")
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_create_structured_runnable() -> None:
     llm = ChatVertexAI(model_name="gemini-pro")
     prompt = ChatPromptTemplate.from_template(
