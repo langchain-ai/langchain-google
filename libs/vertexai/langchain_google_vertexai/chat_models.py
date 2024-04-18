@@ -819,12 +819,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[
-            Union[
-                Type[BaseModel], Callable, BaseTool, FunctionDeclaration, VertexAITool
-            ]
-        ],
-        tool_config: Optional[Dict[str, Any]] = None,
+        tools: Sequence[Union[_FunctionDeclarationLike, VertexAITool]],
+        tool_config: Optional[_ToolConfigDict] = None,
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
@@ -855,9 +851,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 vertexai_functions.append(schema)
         vertexai_tools.extend(_format_tools_to_vertex_tool(vertexai_functions))
         if tool_choice:
-            tool_config = cast(
-                Dict, _tool_choice_to_tool_config(tool_choice, vertexai_tools)
-            )
+            tool_config = _tool_choice_to_tool_config(tool_choice, vertexai_tools)
         return self.bind(tools=vertexai_tools, tool_config=tool_config, **kwargs)
 
     def _start_chat(
