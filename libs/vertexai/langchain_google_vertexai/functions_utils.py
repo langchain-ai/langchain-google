@@ -22,20 +22,11 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import FunctionDescription
 from langchain_core.utils.json_schema import dereference_refs
-from vertexai.generative_models import (  # type: ignore
-    FunctionDeclaration,
-)
-from vertexai.generative_models import (
-    Tool as VertexAITool,
-)
-from vertexai.generative_models import (
-    Tool as VertexTool,
-)
+from vertexai.generative_models import FunctionDeclaration  # type: ignore
+from vertexai.generative_models import Tool as VertexTool
 
 # FIXME: vertexai is not exporting ToolConfig
-from vertexai.generative_models._generative_models import (  # type: ignore
-    ToolConfig,
-)
+from vertexai.generative_models._generative_models import ToolConfig  # type: ignore
 
 
 def _format_pydantic_to_vertex_function(
@@ -235,7 +226,7 @@ def _tool_choice_to_tool_config(
     tool_choice: Union[
         dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
     ],
-    vertexai_tools: Sequence[VertexAITool],
+    vertexai_tools: Sequence[VertexTool],
 ) -> _ToolConfigDict:
     allowed_function_names: Optional[List[str]] = None
     if tool_choice is True or tool_choice == "any":
