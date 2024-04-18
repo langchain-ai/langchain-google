@@ -583,9 +583,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             logger.warning("ChatVertexAI does not currently support async streaming.")
 
         if not self._is_gemini_model:
-            return await self._agenerate_non_gemini(
-                messages, stop=stop, run_manager=run_manager, **kwargs
-            )
+            return await self._agenerate_non_gemini(messages, stop=stop, **kwargs)
 
         client, contents = self._gemini_client_and_contents(messages)
         params = self._gemini_params(stop=stop, **kwargs)
@@ -633,9 +631,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         if not self._is_gemini_model:
-            return self._stream_non_gemini(
+            yield from self._stream_non_gemini(
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
+            return
 
         client, contents = self._gemini_client_and_contents(messages)
         params = self._gemini_params(stop=stop, stream=True, **kwargs)
@@ -797,11 +796,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         else:
             parser = JsonOutputFunctionsParser()
-
-        llm = self.bind(
-            functions=[schema],
-            tool_choice=self._is_gemini_advanced,
-        )
+        llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
