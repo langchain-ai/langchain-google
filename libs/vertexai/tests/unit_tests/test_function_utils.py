@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional, Sequence
 
+import pytest
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import tool
 from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
@@ -56,15 +57,17 @@ def test_format_tool_to_vertex_function():
     assert len(schema["parameters"]["required"]) == 1
 
 
-def test_format_tool_config():
-    tool_config = _format_tool_config({})
-    assert tool_config is None
+def test_format_tool_config_invalid():
+    with pytest.raises(ValueError):
+        _format_tool_config({})  # type: ignore
 
+
+def test_format_tool_config():
     tool_config = _format_tool_config(
         {
             "function_calling_config": {
                 "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
-                "allowed_function_names": "my_fun",
+                "allowed_function_names": ["my_fun"],
             }
         }
     )
