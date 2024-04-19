@@ -8,8 +8,9 @@ import pytest
 from langchain_core.outputs import LLMResult
 
 from langchain_google_vertexai.llms import VertexAI
+from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
-model_names_to_test = ["text-bison@001", "gemini-pro"]
+model_names_to_test = ["text-bison@001", _DEFAULT_MODEL_NAME]
 model_names_to_test_with_default = [None] + model_names_to_test
 
 
@@ -121,7 +122,7 @@ async def test_vertex_consistency() -> None:
 
 @pytest.mark.release
 async def test_astream() -> None:
-    llm = VertexAI(temperature=0, model_name="gemini-pro")
+    llm = VertexAI(temperature=0, model_name=_DEFAULT_MODEL_NAME)
     async for token in llm.astream("I'm Pickle Rick"):
         assert isinstance(token, str)
 
