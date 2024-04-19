@@ -64,8 +64,8 @@ def _format_base_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
         }
 
 
-def _format_tool_to_vertex_function(
-    tool: Union[BaseTool, Type[BaseModel], dict, Callable],
+def _format_to_vertex_function_dict(
+    tool: Union[BaseTool, Type[BaseModel], dict, Callable, FunctionDeclaration],
 ) -> FunctionDescription:
     "Format tool into the Vertex function declaration."
     if isinstance(tool, BaseTool):
@@ -78,6 +78,13 @@ def _format_tool_to_vertex_function(
             "description": tool["description"],
             "parameters": _get_parameters_from_schema(tool["parameters"]),
         }
+    elif isinstance(tool, FunctionDeclaration):
+        tool_dict = tool.to_dict()
+        return FunctionDescription(
+            name=tool_dict["name"],
+            description=tool_dict["description"],
+            parameters=tool_dict["parameters"],
+        )
     elif callable(tool):
         return _format_base_tool_to_vertex_function(callable_as_lc_tool()(tool))
     else:
@@ -89,37 +96,36 @@ _FunctionDeclarationLike = Union[
 ]
 
 
-def _format_tools_to_vertex_tool(
-    tools: List[_FunctionDeclarationLike],
-) -> VertexTool:
-    "Format tools into the Vertex Tool instance."
-    function_declarations = []
-    for tool in tools:
-        if not isinstance(tool, FunctionDeclaration):
-            func = _format_tool_to_vertex_function(tool)
-            function_declarations.append(FunctionDeclaration(**func))
-        else:
-            function_declarations.append(tool)
-
-    return VertexTool(function_declarations=function_declarations)
-
-
-class _FunctionDeclarationDict(TypedDict):
-    name: str
-    parameters: Dict[str, Any]
-    description: Optional[str]
-
-
 class _VertexToolDict(TypedDict):
-    function_declarations: List[_FunctionDeclarationDict]
+    function_declarations: List[FunctionDescription]
 
 
-def _vertex_tool_from_dict(tool: _VertexToolDict) -> VertexTool:
-    return VertexTool(
-        function_declarations=[
-            FunctionDeclaration(**fd) for fd in tool["function_declarations"]
-        ]
-    )
+def _format_functions_to_vertex_tool_dict(
+    functions: List[_FunctionDeclarationLike],
+) -> _VertexToolDict:
+    "Format tools into the Vertex Tool instance."
+    function_declarations = [_format_to_vertex_function_dict(fn) for fn in functions]
+    return _VertexToolDict(function_declarations=function_declarations)
+
+
+def _format_to_vertex_tool(
+    tool: Union[VertexTool, _VertexToolDict, List[_FunctionDeclarationLike]],
+) -> VertexTool:
+    if isinstance(tool, VertexTool):
+        return tool
+    elif isinstance(tool, (list, dict)):
+        tool = (
+            _format_functions_to_vertex_tool_dict(tool)
+            if isinstance(tool, list)
+            else tool
+        )
+        return VertexTool(
+            function_declarations=[
+                FunctionDeclaration(**fd) for fd in tool["function_declarations"]
+            ]
+        )
+    else:
+        raise ValueError(f"Unexpected tool value:\n\n{tool=}")
 
 
 def _format_tool_config(tool_config: _ToolConfigDict) -> Union[ToolConfig, None]:

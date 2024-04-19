@@ -97,13 +97,13 @@ from langchain_google_vertexai._utils import (
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
-    _format_tools_to_vertex_tool,
     _ToolConfigDict,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _FunctionDeclarationLike,
-    _vertex_tool_from_dict,
     _VertexToolDict,
+    _format_to_vertex_tool,
+    _format_functions_to_vertex_tool_dict,
 )
 
 logger = logging.getLogger(__name__)
@@ -835,18 +835,18 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
+        vertexai_tools: List[_VertexToolDict] = []
         vertexai_functions = []
-        vertexai_tools = []
         for schema in tools:
             if isinstance(schema, VertexTool):
-                vertexai_tools.append(schema.to_dict())
+                vertexai_tools.append(
+                    {"function_declarations": schema.to_dict()["function_declarations"]}
+                )
             elif isinstance(schema, dict) and "function_declarations" in schema:
-                vertexai_tools.append(schema)
+                vertexai_tools.append(cast(_VertexToolDict, schema))
             else:
                 vertexai_functions.append(schema)
-        vertexai_tools.append(
-            _format_tools_to_vertex_tool(vertexai_functions).to_dict()
-        )
+        vertexai_tools.append(_format_functions_to_vertex_tool_dict(vertexai_functions))
         if tool_choice:
             all_names = [
                 f["name"] for vt in vertexai_tools for f in vt["function_declarations"]
@@ -878,14 +878,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> _GeminiGenerateContentKwargs:
         generation_config = self._prepare_params(stop=stop, stream=stream, **kwargs)
         if tools:
-            tools = [
-                _vertex_tool_from_dict(tool)
-                if not isinstance(tool, VertexTool)
-                else tool
-                for tool in tools
-            ]
+            tools = [_format_to_vertex_tool(tool) for tool in tools]
         elif functions:
-            tools = [_format_tools_to_vertex_tool(functions)]
+            tools = [_format_to_vertex_tool(functions)]
         else:
             pass
 
