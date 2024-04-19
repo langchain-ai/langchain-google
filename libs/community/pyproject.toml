@@ -24,6 +24,7 @@ langchain = "^0.1.16"
 optional = true
 
 [tool.poetry.group.test.dependencies]
+pytest = "^7.3.0"
 freezegun = "^1.2.2"
 pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
@@ -32,7 +33,6 @@ pytest-asyncio = "^0.21.1"
 google-cloud-documentai = "^2.24.2"
 google-cloud-documentai-toolbox = "^0.13.3a0"
 google-cloud-bigquery = "^3.19.0"
-langchain = "^0.1.6"
 
 [tool.poetry.group.codespell]
 optional = true
