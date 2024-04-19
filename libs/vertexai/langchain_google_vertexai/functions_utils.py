@@ -8,7 +8,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     TypedDict,
     Union,
@@ -92,7 +91,7 @@ _FunctionDeclarationLike = Union[
 
 def _format_tools_to_vertex_tool(
     tools: List[_FunctionDeclarationLike],
-) -> List[VertexTool]:
+) -> VertexTool:
     "Format tools into the Vertex Tool instance."
     function_declarations = []
     for tool in tools:
@@ -102,7 +101,25 @@ def _format_tools_to_vertex_tool(
         else:
             function_declarations.append(tool)
 
-    return [VertexTool(function_declarations=function_declarations)]
+    return VertexTool(function_declarations=function_declarations)
+
+
+class _FunctionDeclarationDict(TypedDict):
+    name: str
+    parameters: Dict[str, Any]
+    description: Optional[str]
+
+
+class _VertexToolDict(TypedDict):
+    function_declarations: List[_FunctionDeclarationDict]
+
+
+def _vertex_tool_from_dict(tool: _VertexToolDict) -> VertexTool:
+    return VertexTool(
+        function_declarations=[
+            FunctionDeclaration(**fd) for fd in tool["function_declarations"]
+        ]
+    )
 
 
 def _format_tool_config(tool_config: _ToolConfigDict) -> Union[ToolConfig, None]:
@@ -234,16 +251,12 @@ _ToolChoiceType = Union[
 
 def _tool_choice_to_tool_config(
     tool_choice: _ToolChoiceType,
-    vertexai_tools: Sequence[VertexTool],
+    all_names: List[str],
 ) -> _ToolConfigDict:
     allowed_function_names: Optional[List[str]] = None
     if tool_choice is True or tool_choice == "any":
         mode = ToolConfig.FunctionCallingConfig.Mode.ANY
-        allowed_function_names = [
-            f["name"]
-            for vt in vertexai_tools
-            for f in vt.to_dict()["function_declarations"]
-        ]
+        allowed_function_names = all_names
     elif tool_choice == "auto":
         mode = ToolConfig.FunctionCallingConfig.Mode.AUTO
     elif tool_choice == "none":

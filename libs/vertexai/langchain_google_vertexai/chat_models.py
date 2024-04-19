@@ -63,7 +63,7 @@ from vertexai.generative_models import (  # type: ignore
     Content,
     GenerativeModel,
     Part,
-    Tool as VertexAITool,
+    Tool as VertexTool,
 )
 from vertexai.generative_models._generative_models import (  # type: ignore
     ToolConfig,
@@ -102,6 +102,8 @@ from langchain_google_vertexai.functions_utils import (
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _FunctionDeclarationLike,
+    _vertex_tool_from_dict,
+    _VertexToolDict,
 )
 
 logger = logging.getLogger(__name__)
@@ -118,7 +120,7 @@ class _ChatHistory:
 class _GeminiGenerateContentKwargs(TypedDict):
     generation_config: Optional[GenerationConfigType]
     safety_settings: Optional[SafetySettingsType]
-    tools: Optional[List[VertexAITool]]
+    tools: Optional[List[VertexTool]]
     tool_config: Optional[ToolConfig]
 
 
@@ -810,7 +812,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[_FunctionDeclarationLike, VertexAITool]],
+        tools: Sequence[Union[_FunctionDeclarationLike, VertexTool]],
         tool_config: Optional[_ToolConfigDict] = None,
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
@@ -836,13 +838,21 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         vertexai_functions = []
         vertexai_tools = []
         for schema in tools:
-            if isinstance(schema, VertexAITool):
+            if isinstance(schema, VertexTool):
+                vertexai_tools.append(schema.to_dict())
+            elif isinstance(schema, dict) and "function_declarations" in schema:
                 vertexai_tools.append(schema)
             else:
                 vertexai_functions.append(schema)
-        vertexai_tools.extend(_format_tools_to_vertex_tool(vertexai_functions))
+        vertexai_tools.append(
+            _format_tools_to_vertex_tool(vertexai_functions).to_dict()
+        )
         if tool_choice:
-            tool_config = _tool_choice_to_tool_config(tool_choice, vertexai_tools)
+            all_names = [
+                f["name"] for vt in vertexai_tools for f in vt["function_declarations"]
+            ]
+            tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
+        # Bind dicts for easier serialization/deserialization.
         return self.bind(tools=vertexai_tools, tool_config=tool_config, **kwargs)
 
     def _start_chat(
@@ -860,17 +870,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         *,
         stop: Optional[List[str]] = None,
         stream: bool = False,
-        tools: Optional[List[VertexAITool]] = None,
+        tools: Optional[List[Union[_VertexToolDict, VertexTool]]] = None,
         functions: Optional[List[_FunctionDeclarationLike]] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
         **kwargs: Any,
     ) -> _GeminiGenerateContentKwargs:
         generation_config = self._prepare_params(stop=stop, stream=stream, **kwargs)
-        if not tools and functions:
-            tools = _format_tools_to_vertex_tool(functions)
+        if tools:
+            tools = [
+                _vertex_tool_from_dict(tool)
+                if not isinstance(tool, VertexTool)
+                else tool
+                for tool in tools
+            ]
+        elif functions:
+            tools = [_format_tools_to_vertex_tool(functions)]
+        else:
+            pass
+
         if tool_config and not isinstance(tool_config, ToolConfig):
             tool_config = _format_tool_config(cast(_ToolConfigDict, tool_config))
+
         return _GeminiGenerateContentKwargs(
             generation_config=generation_config,
             tools=tools,

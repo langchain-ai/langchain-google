@@ -5,8 +5,6 @@ import pytest
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import tool
 from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
-    FunctionDeclaration,
-    Tool,
     ToolConfig,
 )
 
@@ -151,18 +149,11 @@ def test_get_parameters_from_schema():
 
 @pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
 def test__tool_choice_to_tool_config(choice: Any) -> None:
-    tools = [
-        Tool(
-            function_declarations=[
-                FunctionDeclaration(name="foo", description="bar", parameters={})
-            ]
-        )
-    ]
     expected = _ToolConfigDict(
         function_calling_config=_FunctionCallingConfigDict(
             mode=ToolConfig.FunctionCallingConfig.Mode.ANY,
             allowed_function_names=["foo"],
         ),
     )
-    actual = _tool_choice_to_tool_config(choice, tools)
+    actual = _tool_choice_to_tool_config(choice, ["foo"])
     assert expected == actual
