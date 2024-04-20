@@ -133,7 +133,9 @@ def test_vertexai_args_passed(stop: Optional[str]) -> None:
             response = model([message])
 
         assert response.content == response_text
-        mock_send_message.assert_called_once_with(user_prompt, candidate_count=1)
+        mock_send_message.assert_called_once_with(
+            message=user_prompt, candidate_count=1
+        )
         expected_stop_sequence = [stop] if stop else None
         mock_start_chat.assert_called_once_with(
             context=None,
@@ -491,7 +493,10 @@ def test_default_params_gemini() -> None:
         message = HumanMessage(content=user_prompt)
         _ = model.invoke([message])
         mock_generate_content.assert_called_once()
-        assert mock_generate_content.call_args.args[0][0].parts[0].text == user_prompt
+        assert (
+            mock_generate_content.call_args.kwargs["contents"][0].parts[0].text
+            == user_prompt
+        )
 
 
 @pytest.mark.parametrize(
