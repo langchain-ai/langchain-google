@@ -10,6 +10,7 @@ import uuid
 from typing import (
     Any,
     AsyncIterator,
+    Callable,
     Dict,
     Iterator,
     List,
@@ -91,6 +92,7 @@ from langchain_google_vertexai._base import (
 )
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import (
+    create_retry_decorator,
     get_generation_info,
     is_codey_model,
     is_gemini_model,
@@ -420,6 +422,54 @@ def _parse_response_candidate(
     )
 
 
+def _completion_with_retry(
+    generation_method: Callable,
+    *,
+    max_retries: int,
+    run_manager: Optional[CallbackManagerForLLMRun] = None,
+    **kwargs: Any,
+) -> Any:
+    """Use tenacity to retry the completion call."""
+    retry_decorator = create_retry_decorator(
+        max_retries=max_retries, run_manager=run_manager
+    )
+
+    @retry_decorator
+    def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
+        response = generation_method(**kwargs)
+        if len(response.candidates):
+            return response
+        else:
+            raise ValueError("Got 0 candidates from generations.")
+
+    return _completion_with_retry_inner(generation_method, **kwargs)
+
+
+async def _acompletion_with_retry(
+    generation_method: Callable,
+    *,
+    max_retries: int,
+    run_manager: Optional[CallbackManagerForLLMRun] = None,
+    **kwargs: Any,
+) -> Any:
+    """Use tenacity to retry the completion call."""
+    retry_decorator = create_retry_decorator(
+        max_retries=max_retries, run_manager=run_manager
+    )
+
+    @retry_decorator
+    async def _completion_with_retry_inner(
+        generation_method: Callable, **kwargs: Any
+    ) -> Any:
+        response = await generation_method(**kwargs)
+        if len(response.candidates):
+            return response
+        else:
+            raise ValueError("Got 0 candidates from generations.")
+
+    return await _completion_with_retry_inner(generation_method, **kwargs)
+
+
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """`Vertex AI` Chat large language models API."""
 
@@ -524,7 +574,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         client, contents = self._gemini_client_and_contents(messages)
         params = self._gemini_params(stop=stop, **kwargs)
         with telemetry.tool_context_manager(self._user_agent):
-            response = client.generate_content(contents, **params)
+            response = _completion_with_retry(
+                client.generate_content,
+                max_retries=self.max_retries,
+                contents=contents,
+                **params,
+            )
         return self._gemini_response_to_chat_result(response)
 
     def _generate_non_gemini(
@@ -545,7 +600,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             params["examples"] = _parse_examples(examples)
         with telemetry.tool_context_manager(self._user_agent):
             chat = self._start_chat(history, **params)
-            response = chat.send_message(question.content, **msg_params)
+            response = _completion_with_retry(
+                chat.send_message,
+                max_retries=self.max_retries,
+                message=question.content,
+                **msg_params,
+            )
         generations = [
             ChatGeneration(
                 message=AIMessage(content=candidate.text),
@@ -590,7 +650,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         client, contents = self._gemini_client_and_contents(messages)
         params = self._gemini_params(stop=stop, **kwargs)
         with telemetry.tool_context_manager(self._user_agent):
-            response = await client.generate_content_async(contents, **params)
+            response = await _acompletion_with_retry(
+                client.generate_content_async,
+                max_retries=self.max_retries,
+                contents=contents,
+                **params,
+            )
         return self._gemini_response_to_chat_result(response)
 
     async def _agenerate_non_gemini(
@@ -611,7 +676,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             params["examples"] = _parse_examples(examples)
         with telemetry.tool_context_manager(self._user_agent):
             chat = self._start_chat(history, **params)
-            response = await chat.send_message_async(question.content, **msg_params)
+            response = await _acompletion_with_retry(
+                chat.send_message_async,
+                message=question.content,
+                max_retries=self.max_retries,
+                **msg_params,
+            )
         generations = [
             ChatGeneration(
                 message=AIMessage(content=candidate.text),
