@@ -11,12 +11,11 @@ from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
 def test_init() -> None:
     for embeddings in [
         VertexAIEmbeddings(
-            model_name="foo",
-            project="test-project",
+            model_name="textembedding-gecko",
         ),
-        VertexAIEmbeddings(model="foo", project="test-project"),
+        VertexAIEmbeddings(model="textembedding-gecko"),
     ]:
-        assert embeddings.model_name == "foo"
+        assert embeddings.model_name == "textembedding-gecko"
 
 
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:

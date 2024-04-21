@@ -507,6 +507,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     have candidates. If not, retries.
     It makes streaming mode essentially useless."""
 
+    def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
+        """Needed for mypy typing to recognize model_name as a valid arg."""
+        if model_name:
+            kwargs["model_name"] = model_name
+        super().__init__(**kwargs)
+
     class Config:
         """Configuration for this pydantic object."""
 

@@ -117,6 +117,12 @@ class VertexAI(_VertexAICommon, BaseLLM):
     model_name will be used to determine the model family
     """
 
+    def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
+        """Needed for mypy typing to recognize model_name as a valid arg."""
+        if model_name:
+            kwargs["model_name"] = model_name
+        super().__init__(**kwargs)
+
     class Config:
         """Configuration for this pydantic object."""
 

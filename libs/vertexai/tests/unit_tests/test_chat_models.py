@@ -61,7 +61,7 @@ def test_init() -> None:
             project="test-project",
             max_tokens=10,
             stop_sequences=["bar"],
-        ),  # type: ignore[call-arg]
+        ),
     ]:
         assert llm.model_name == "gemini-pro"
         assert llm.max_output_tokens == 10
