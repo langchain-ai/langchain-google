@@ -112,6 +112,16 @@ def test_chat_google_genai_invoke_multimodal() -> None:
         assert len(chunk.content.strip()) > 0
 
 
+def test_system_message() -> None:
+    messages = [
+        SystemMessage(content="Be a helful assistant."),
+        HumanMessage(content="Hi, how are you?"),
+    ]
+    llm = ChatGoogleGenerativeAI(model="models/gemini-1.0-pro-latest")
+    answer = llm.invoke(messages)
+    assert isinstance(answer.content, str)
+
+
 def test_chat_google_genai_invoke_multimodal_too_many_messages() -> None:
     # Only supports 1 turn...
     messages: list = [
@@ -166,18 +176,6 @@ def test_chat_google_genai_single_call_with_history() -> None:
     response = model([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-
-
-def test_chat_google_genai_system_message_error() -> None:
-    model = ChatGoogleGenerativeAI(model=_MODEL)
-    text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
-    system_message = SystemMessage(content="You're supposed to answer math questions.")
-    message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    with pytest.raises(ValueError):
-        model([system_message, message1, message2, message3])
 
 
 def test_chat_google_genai_system_message() -> None:

@@ -1,11 +1,20 @@
-from typing import Optional, Union
+from enum import Enum
+from typing import Any, Optional, Sequence
 
+import pytest
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import tool
+from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
+    ToolConfig,
+)
 
 from langchain_google_vertexai.functions_utils import (
-    _format_tool_to_vertex_function,
+    _format_base_tool_to_vertex_function,
+    _format_tool_config,
+    _FunctionCallingConfigDict,
     _get_parameters_from_schema,
+    _tool_choice_to_tool_config,
+    _ToolConfigDict,
 )
 
 
@@ -17,7 +26,7 @@ def test_format_tool_to_vertex_function():
 
         return datetime.datetime.now().strftime("%Y-%m-%d")
 
-    schema = _format_tool_to_vertex_function(get_datetime)  # type: ignore
+    schema = _format_base_tool_to_vertex_function(get_datetime)  # type: ignore
 
     assert schema["name"] == "get_datetime"
     assert schema["description"] == "get_datetime() -> str - Gets the current datetime"
@@ -33,7 +42,7 @@ def test_format_tool_to_vertex_function():
         """
         return str(a + b)
 
-    schema = _format_tool_to_vertex_function(sum_two_numbers)  # type: ignore
+    schema = _format_base_tool_to_vertex_function(sum_two_numbers)  # type: ignore
 
     assert schema["name"] == "sum_two_numbers"
     assert "parameters" in schema
@@ -44,36 +53,107 @@ def test_format_tool_to_vertex_function():
         """Some description"""
         return str(a + b)
 
-    schema = _format_tool_to_vertex_function(do_something_optional)  # type: ignore
+    schema = _format_base_tool_to_vertex_function(do_something_optional)  # type: ignore
 
     assert schema["name"] == "do_something_optional"
     assert "parameters" in schema
     assert len(schema["parameters"]["required"]) == 1
 
 
+def test_format_tool_config_invalid():
+    with pytest.raises(ValueError):
+        _format_tool_config({})  # type: ignore
+
+
+def test_format_tool_config():
+    tool_config = _format_tool_config(
+        {
+            "function_calling_config": {
+                "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                "allowed_function_names": ["my_fun"],
+            }
+        }
+    )
+    assert isinstance(tool_config, ToolConfig)
+
+
 def test_get_parameters_from_schema():
+    class StringEnum(str, Enum):
+        pear = "pear"
+        banana = "banana"
+
     class A(BaseModel):
-        a1: Optional[int]
+        """Class A"""
+
+        int_field: Optional[int]
 
     class B(BaseModel):
-        b1: Optional[A]
-        b2: int = Field(description="f2")
-        b3: Union[int, str]
+        object_field: Optional[A]
+        array_field: Sequence[A]
+        int_field: int = Field(description="int field", min=0, max=10)
+        str_field: str = Field(
+            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", example="ABCD"
+        )
+        str_enum_field: StringEnum
 
     schema = B.schema()
     result = _get_parameters_from_schema(schema)
-    assert result["type"] == "object"
-    assert "required" in result
-    assert len(result["required"]) == 2
 
-    assert "properties" in result
-    assert "b1" in result["properties"]
-    assert "b2" in result["properties"]
-    assert "b3" in result["properties"]
+    assert result == {
+        "properties": {
+            "object_field": {
+                "properties": {"int_field": {"type": "integer", "title": "Int Field"}},
+                "type": "object",
+                "description": "Class A",
+                "title": "A",
+            },
+            "array_field": {
+                "items": {
+                    "properties": {
+                        "int_field": {"type": "integer", "title": "Int Field"}
+                    },
+                    "type": "object",
+                    "description": "Class A",
+                    "title": "A",
+                },
+                "type": "array",
+                "title": "Array Field",
+            },
+            "int_field": {
+                "max": 10,
+                "type": "integer",
+                "min": 0,
+                "description": "int field",
+                "title": "Int Field",
+            },
+            "str_field": {
+                "minLength": 1,
+                "type": "string",
+                "maxLength": 10,
+                "example": "ABCD",
+                "pattern": "^[A-Z]{1,10}$",
+                "title": "Str Field",
+            },
+            "str_enum_field": {
+                "type": "string",
+                "description": "An enumeration.",
+                "title": "StringEnum",
+                "enum": ["pear", "banana"],
+            },
+        },
+        "type": "object",
+        "title": "B",
+        "required": ["array_field", "int_field", "str_field", "str_enum_field"],
+    }
 
-    assert result["properties"]["b1"]["type"] == "object"
-    assert "a1" in result["properties"]["b1"]["properties"]
-    assert "required" not in result["properties"]["b1"]
-    assert len(result["properties"]["b1"]["properties"]) == 1
 
-    assert "anyOf" in result["properties"]["b3"]
+@pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
+def test__tool_choice_to_tool_config(choice: Any) -> None:
+    expected = _ToolConfigDict(
+        function_calling_config=_FunctionCallingConfigDict(
+            mode=ToolConfig.FunctionCallingConfig.Mode.ANY,
+            allowed_function_names=["foo"],
+        ),
+    )
+    actual = _tool_choice_to_tool_config(choice, ["foo"])
+    assert expected == actual

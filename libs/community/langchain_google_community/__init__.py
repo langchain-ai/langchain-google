@@ -22,6 +22,7 @@ from langchain_google_community.translate import GoogleTranslateTransformer
 from langchain_google_community.vertex_ai_search import (
     VertexAIMultiTurnSearchRetriever,
     VertexAISearchRetriever,
+    VertexAISearchSummaryTool,
 )
 from langchain_google_community.vision import CloudVisionLoader, CloudVisionParser
 
@@ -48,4 +49,5 @@ __all__ = [
     "TextToSpeechTool",
     "VertexAIMultiTurnSearchRetriever",
     "VertexAISearchRetriever",
+    "VertexAISearchSummaryTool",
 ]

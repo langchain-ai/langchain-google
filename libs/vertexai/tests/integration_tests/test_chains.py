@@ -1,10 +1,14 @@
 from typing import Optional
 
 import pytest
+from langchain_core.messages import (
+    AIMessage,
+)
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 
 from langchain_google_vertexai import ChatVertexAI, create_structured_runnable
+from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 
 class RecordPerson(BaseModel):
@@ -23,9 +27,9 @@ class RecordDog(BaseModel):
     fav_food: Optional[str] = Field(None, description="The dog's favorite food")
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_create_structured_runnable() -> None:
-    llm = ChatVertexAI(model_name="gemini-pro")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
         "You are a world class algorithm for recording entities.\nMake calls to the "
         "relevant function to record the entities in the following input:\n {input}\n"
@@ -36,9 +40,9 @@ def test_create_structured_runnable() -> None:
     assert isinstance(res, RecordDog)
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_create_structured_runnable_with_prompt() -> None:
-    llm = ChatVertexAI(model_name="gemini-pro")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
         "Describe a random {class} and mention their name, {attr} and favorite food"
     )
@@ -47,3 +51,51 @@ def test_create_structured_runnable_with_prompt() -> None:
     )
     res = chain.invoke({"class": "person", "attr": "age"})
     assert isinstance(res, RecordPerson)
+
+
+@pytest.mark.release
+def test_reflection() -> None:
+    class Reflection(BaseModel):
+        reflections: str = Field(
+            description="The critique and reflections on the sufficiency, superfluency,"
+            " and general quality of the response"
+        )
+        score: int = Field(
+            description="Score from 0-10 on the quality of the candidate response.",
+            # gte=0,
+            # lte=10,
+        )
+        found_solution: bool = Field(
+            description="Whether the response has fully solved the question or task."
+        )
+
+        def as_message(self):
+            return AIMessage(
+                content=f"Reasoning: {self.reflections}\nScore: {self.score}"
+            )
+
+        @property
+        def normalized_score(self) -> float:
+            return self.score / 10.0
+
+    llm = ChatVertexAI(
+        model_name="gemini-1.5-pro-preview-0409",
+    )
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "Reflect and grade the assistant response to the user question below.",
+            ),
+            (
+                "user",
+                "Which planet is the closest to the Earth?",
+            ),
+            ("ai", "{input}"),
+        ]
+    )
+
+    reflection_llm_chain = prompt | llm.with_structured_output(Reflection)
+    res = reflection_llm_chain.invoke({"input": "Mars"})
+    assert isinstance(res, Reflection)

@@ -14,6 +14,17 @@ def test_model_name() -> None:
         assert llm.max_tokens == 10
 
 
+def test_tuned_model_name() -> None:
+    llm = VertexAI(
+        model_name="gemini-pro",
+        project="test-project",
+        tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
+    )
+    assert llm.model_name == "gemini-pro"
+    assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
+    assert llm.client._model_name == "projects/123/locations/europe-west4/endpoints/456"
+
+
 def test_vertexai_args_passed() -> None:
     response_text = "Goodbye"
     user_prompt = "Hello"

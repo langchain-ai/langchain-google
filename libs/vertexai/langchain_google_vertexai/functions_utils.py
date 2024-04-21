@@ -1,19 +1,31 @@
+from __future__ import annotations
+
 import json
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Type,
+    TypedDict,
+    Union,
+)
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
+from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import FunctionDescription
 from langchain_core.utils.json_schema import dereference_refs
-from vertexai.generative_models import (  # type: ignore
-    FunctionDeclaration,
-)
-from vertexai.generative_models import (
-    Tool as VertexTool,
-)
+from vertexai.generative_models import FunctionDeclaration  # type: ignore
+from vertexai.generative_models import Tool as VertexTool
+
+# FIXME: vertexai is not exporting ToolConfig
+from vertexai.generative_models._generative_models import ToolConfig  # type: ignore
 
 
 def _format_pydantic_to_vertex_function(
@@ -28,7 +40,7 @@ def _format_pydantic_to_vertex_function(
     }
 
 
-def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
+def _format_base_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
     "Format tool into the Vertex function API."
     if tool.args_schema:
         schema = tool.args_schema.schema()
@@ -52,40 +64,93 @@ def _format_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
         }
 
 
-def _format_tools_to_vertex_tool(
-    tools: List[Union[BaseTool, Type[BaseModel], dict]],
-) -> List[VertexTool]:
-    "Format tool into the Vertex Tool instance."
-    function_declarations = []
-    for tool in tools:
-        if isinstance(tool, BaseTool):
-            func = _format_tool_to_vertex_function(tool)
-        elif isinstance(tool, type) and issubclass(tool, BaseModel):
-            func = _format_pydantic_to_vertex_function(tool)
-        elif isinstance(tool, dict):
-            func = {
-                "name": tool["name"],
-                "description": tool["description"],
-                "parameters": _get_parameters_from_schema(tool["parameters"]),
-            }
-        else:
-            raise ValueError(f"Unsupported tool call type {tool}")
-        function_declarations.append(FunctionDeclaration(**func))
+def _format_to_vertex_function_dict(
+    tool: Union[BaseTool, Type[BaseModel], dict, Callable, FunctionDeclaration],
+) -> FunctionDescription:
+    "Format tool into the Vertex function declaration."
+    if isinstance(tool, BaseTool):
+        return _format_base_tool_to_vertex_function(tool)
+    elif isinstance(tool, type) and issubclass(tool, BaseModel):
+        return _format_pydantic_to_vertex_function(tool)
+    elif isinstance(tool, dict):
+        return {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": _get_parameters_from_schema(tool["parameters"]),
+        }
+    elif isinstance(tool, FunctionDeclaration):
+        tool_dict = tool.to_dict()
+        return FunctionDescription(
+            name=tool_dict["name"],
+            description=tool_dict["description"],
+            parameters=tool_dict["parameters"],
+        )
+    elif callable(tool):
+        return _format_base_tool_to_vertex_function(callable_as_lc_tool()(tool))
+    else:
+        raise ValueError(f"Unsupported tool call type {tool}")
 
-    return [VertexTool(function_declarations=function_declarations)]
+
+_FunctionDeclarationLike = Union[
+    BaseTool, Type[BaseModel], dict, Callable, FunctionDeclaration
+]
+
+
+class _VertexToolDict(TypedDict):
+    function_declarations: List[FunctionDescription]
+
+
+def _format_functions_to_vertex_tool_dict(
+    functions: List[_FunctionDeclarationLike],
+) -> _VertexToolDict:
+    "Format tools into the Vertex Tool instance."
+    function_declarations = [_format_to_vertex_function_dict(fn) for fn in functions]
+    return _VertexToolDict(function_declarations=function_declarations)
+
+
+def _format_to_vertex_tool(
+    tool: Union[VertexTool, _VertexToolDict, List[_FunctionDeclarationLike]],
+) -> VertexTool:
+    if isinstance(tool, VertexTool):
+        return tool
+    elif isinstance(tool, (list, dict)):
+        tool = (
+            _format_functions_to_vertex_tool_dict(tool)
+            if isinstance(tool, list)
+            else tool
+        )
+        return VertexTool(
+            function_declarations=[
+                FunctionDeclaration(**fd) for fd in tool["function_declarations"]
+            ]
+        )
+    else:
+        raise ValueError(f"Unexpected tool value:\n\n{tool=}")
+
+
+def _format_tool_config(tool_config: _ToolConfigDict) -> Union[ToolConfig, None]:
+    if "function_calling_config" not in tool_config:
+        raise ValueError(
+            "Invalid ToolConfig, missing 'function_calling_config' key. Received:\n\n"
+            f"{tool_config=}"
+        )
+    return ToolConfig(
+        function_calling_config=ToolConfig.FunctionCallingConfig(
+            **tool_config["function_calling_config"]
+        )
+    )
 
 
 class ParametersSchema(BaseModel):
     """
     This is a schema of currently supported definitions in function calling.
-    We need explicitly exclude `title` and `definitions` fields as they
-    are not currently supported.
+    We need explicitly exclude `definitions` field
+    as it is not currently supported.
 
     All other fields will be passed through (as extra fields are allowed)
     and intercepted on `google.cloud.aiplatform` level
     """
 
-    title: Optional[str] = Field(exclude=True)
     definitions: Optional[Any] = Field(exclude=True)
     items: Optional["ParametersSchema"]
     properties: Optional[Dict[str, "ParametersSchema"]]
@@ -174,3 +239,59 @@ class PydanticFunctionsOutputParser(BaseOutputParser):
 
     def parse(self, text: str) -> BaseModel:
         raise ValueError("Can only parse messages")
+
+
+class _FunctionCallingConfigDict(TypedDict):
+    mode: ToolConfig.FunctionCallingConfig.Mode
+    allowed_function_names: Optional[List[str]]
+
+
+class _ToolConfigDict(TypedDict):
+    function_calling_config: _FunctionCallingConfigDict
+
+
+_ToolChoiceType = Union[
+    dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
+]
+
+
+def _tool_choice_to_tool_config(
+    tool_choice: _ToolChoiceType,
+    all_names: List[str],
+) -> _ToolConfigDict:
+    allowed_function_names: Optional[List[str]] = None
+    if tool_choice is True or tool_choice == "any":
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = all_names
+    elif tool_choice == "auto":
+        mode = ToolConfig.FunctionCallingConfig.Mode.AUTO
+    elif tool_choice == "none":
+        mode = ToolConfig.FunctionCallingConfig.Mode.NONE
+    elif isinstance(tool_choice, str):
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = [tool_choice]
+    elif isinstance(tool_choice, list):
+        mode = ToolConfig.FunctionCallingConfig.Mode.ANY
+        allowed_function_names = tool_choice
+    elif isinstance(tool_choice, dict):
+        if "mode" in tool_choice:
+            mode = tool_choice["mode"]
+            allowed_function_names = tool_choice.get("allowed_function_names")
+        elif "function_calling_config" in tool_choice:
+            mode = tool_choice["function_calling_config"]["mode"]
+            allowed_function_names = tool_choice["function_calling_config"].get(
+                "allowed_function_names"
+            )
+        else:
+            raise ValueError(
+                f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
+                f"VertexAI ToolConfig or FunctionCallingConfig format."
+            )
+    else:
+        raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
+    return _ToolConfigDict(
+        function_calling_config=_FunctionCallingConfigDict(
+            mode=mode,
+            allowed_function_names=allowed_function_names,
+        )
+    )

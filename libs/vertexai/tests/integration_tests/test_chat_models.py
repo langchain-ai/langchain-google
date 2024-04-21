@@ -7,15 +7,24 @@ import pytest
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
+    BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.tools import tool
 
-from langchain_google_vertexai.chat_models import ChatVertexAI
+from langchain_google_vertexai import (
+    ChatVertexAI,
+    HarmBlockThreshold,
+    HarmCategory,
+    ToolConfig,
+)
+from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
-model_names_to_test = [None, "codechat-bison", "chat-bison", "gemini-pro"]
+model_names_to_test = [None, "codechat-bison", "chat-bison", _DEFAULT_MODEL_NAME]
 
 
 @pytest.mark.release
@@ -47,9 +56,7 @@ def test_vertexai_single_call(model_name: Optional[str]) -> None:
 
 
 @pytest.mark.release
-# mark xfail because Vertex API randomly doesn't respect
-# the n/candidate_count parameter
-@pytest.mark.xfail
+@pytest.mark.xfail(reason="vertex api doesn't respect n/candidate_count")
 def test_candidates() -> None:
     model = ChatVertexAI(model_name="chat-bison@001", temperature=0.3, n=2)
     message = HumanMessage(content="Hello")
@@ -60,7 +67,7 @@ def test_candidates() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", ["chat-bison@001", "gemini-pro"])
+@pytest.mark.parametrize("model_name", ["chat-bison@001", _DEFAULT_MODEL_NAME])
 async def test_vertexai_agenerate(model_name: str) -> None:
     model = ChatVertexAI(temperature=0, model_name=model_name)
     message = HumanMessage(content="Hello")
@@ -81,7 +88,7 @@ async def test_vertexai_agenerate(model_name: str) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", ["chat-bison@001", "gemini-pro"])
+@pytest.mark.parametrize("model_name", ["chat-bison@001", _DEFAULT_MODEL_NAME])
 def test_vertexai_stream(model_name: str) -> None:
     model = ChatVertexAI(temperature=0, model_name=model_name)
     message = HumanMessage(content="Hello")
@@ -93,7 +100,7 @@ def test_vertexai_stream(model_name: str) -> None:
 
 @pytest.mark.release
 async def test_vertexai_astream() -> None:
-    model = ChatVertexAI(temperature=0, model_name="gemini-pro")
+    model = ChatVertexAI(temperature=0, model_name=_DEFAULT_MODEL_NAME)
     message = HumanMessage(content="Hello")
 
     async for chunk in model.astream([message]):
@@ -137,8 +144,7 @@ def test_multimodal() -> None:
     assert isinstance(output.content, str)
 
 
-@pytest.mark.release
-@pytest.mark.xfail(reason="problem on vertex side")
+@pytest.mark.extended
 def test_multimodal_history() -> None:
     llm = ChatVertexAI(model_name="gemini-pro-vision")
     gcs_url = (
@@ -199,6 +205,44 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
     assert isinstance(response.content, str)
 
 
+@pytest.mark.xfail(reason="CI issue")
+@pytest.mark.release
+@pytest.mark.parametrize("model_name", ["gemini-1.0-pro-002"])
+def test_vertexai_system_message(model_name: Optional[str]) -> None:
+    if model_name:
+        model = ChatVertexAI(model_name=model_name)
+    else:
+        model = ChatVertexAI()
+    system_instruction = """CymbalBank is a bank located in London"""
+    text_question1 = "Where is Cymbal located? Provide only the name of the city."
+    sys_message = SystemMessage(content=system_instruction)
+    message1 = HumanMessage(content=text_question1)
+    response = model([sys_message, message1])
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content.lower() == "london"
+
+
+@pytest.mark.release
+@pytest.mark.parametrize("model_name", model_names_to_test)
+def test_vertexai_single_call_with_no_system_messages(
+    model_name: Optional[str],
+) -> None:
+    if model_name:
+        model = ChatVertexAI(model_name=model_name)
+    else:
+        model = ChatVertexAI()
+    text_question1, text_answer1 = "How much is 2+2?", "4"
+    text_question2 = "How much is 3+3?"
+    message1 = HumanMessage(content=text_question1)
+    message2 = AIMessage(content=text_answer1)
+    message3 = HumanMessage(content=text_question2)
+    response = model([message1, message2, message3])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+
 @pytest.mark.release
 def test_vertexai_single_call_fails_no_message() -> None:
     chat = ChatVertexAI()
@@ -208,41 +252,6 @@ def test_vertexai_single_call_fails_no_message() -> None:
         str(exc_info.value)
         == "You should provide at least one message to start the chat!"
     )
-
-
-@pytest.mark.release
-@pytest.mark.parametrize("model_name", ["gemini-pro"])
-def test_chat_vertexai_gemini_system_message_error(model_name: str) -> None:
-    model = ChatVertexAI(model_name=model_name)
-    text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
-    system_message = SystemMessage(content="You're supposed to answer math questions.")
-    message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    with pytest.raises(ValueError):
-        model([system_message, message1, message2, message3])
-
-
-@pytest.mark.release
-@pytest.mark.parametrize("model_name", model_names_to_test)
-def test_chat_vertexai_system_message(model_name: Optional[str]) -> None:
-    if model_name:
-        model = ChatVertexAI(
-            model_name=model_name, convert_system_message_to_human=True
-        )
-    else:
-        model = ChatVertexAI()
-
-    text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
-    system_message = SystemMessage(content="You're supposed to answer math questions.")
-    message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    response = model([system_message, message1, message2, message3])
-    assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
 
 
 @pytest.mark.release
@@ -258,13 +267,104 @@ def test_get_num_tokens_from_messages(model_name: str) -> None:
     assert token == 3
 
 
-@pytest.mark.release
+def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
+    """Check tool calls are as expected."""
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content == ""
+    function_call = response.additional_kwargs.get("function_call")
+    assert function_call
+    assert function_call["name"] == expected_name
+    arguments_str = function_call.get("arguments")
+    assert arguments_str
+    arguments = json.loads(arguments_str)
+    assert arguments == {
+        "name": "Erick",
+        "age": 27.0,
+    }
+    tool_calls = response.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == expected_name
+    assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
+
+
+@pytest.mark.extended
 def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):
         name: str
         age: int
 
-    model = ChatVertexAI(model_name="gemini-pro").bind(functions=[MyModel])
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    # Test .bind_tools with BaseModel
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
+    ).bind_tools([MyModel])
+    response = model.invoke([message])
+    _check_tool_calls(response, "MyModel")
+
+    # Test .bind_tools with function
+    def my_model(name: str, age: int) -> None:
+        """Invoke this with names and ages."""
+        pass
+
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
+    ).bind_tools([my_model])
+    response = model.invoke([message])
+    _check_tool_calls(response, "my_model")
+
+    # Test .bind_tools with tool
+    @tool
+    def my_tool(name: str, age: int) -> None:
+        """Invoke this with names and ages."""
+        pass
+
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
+    ).bind_tools([my_tool])
+    response = model.invoke([message])
+    _check_tool_calls(response, "my_tool")
+
+    # Test streaming
+    stream = model.stream([message])
+    first = True
+    for chunk in stream:
+        if first:
+            gathered = chunk
+            first = False
+        else:
+            gathered = gathered + chunk  # type: ignore
+    assert isinstance(gathered, AIMessageChunk)
+    assert len(gathered.tool_call_chunks) == 1
+    tool_call_chunk = gathered.tool_call_chunks[0]
+    assert tool_call_chunk["name"] == "my_tool"
+    assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-preview-0409", safety_settings=safety
+    ).bind(
+        functions=[MyModel],
+        tool_config={
+            "function_calling_config": {
+                "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                "allowed_function_names": ["MyModel"],
+            }
+        },
+    )
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     response = model.invoke([message])
     assert isinstance(response, AIMessage)
@@ -280,3 +380,112 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         "name": "Erick",
         "age": 27.0,
     }
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-preview-0409", safety_settings=safety
+    ).bind(
+        functions=[MyModel],
+        tool_config={
+            "function_calling_config": {
+                "mode": ToolConfig.FunctionCallingConfig.Mode.NONE,
+            }
+        },
+    )
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+    response = model.invoke([message])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content != ""
+    function_call = response.additional_kwargs.get("function_call")
+    assert function_call is None
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0409", safety_settings=safety)
+    model = llm.with_structured_output(MyModel)
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+
+    response = model.invoke([message])
+    assert isinstance(response, MyModel)
+    assert response == MyModel(name="Erick", age=27)
+
+    model = llm.with_structured_output(
+        {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
+    )
+    response = model.invoke([message])
+    assert response == {
+        "name": "Erick",
+        "age": 27,
+    }
+
+
+# Can be flaky
+@pytest.mark.release
+def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
+    @tool
+    def search(
+        question: str,
+    ):
+        """
+        Useful for when you need to answer questions or visit websites.
+        You should ask targeted questions.
+        """
+        return "brown"
+
+    tools = [search]
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0409", safety_settings=safety)
+    llm_with_search = llm.bind(
+        functions=tools,
+    )
+    llm_with_search_force = llm_with_search.bind(
+        tool_config={
+            "function_calling_config": {
+                "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                "allowed_function_names": ["search"],
+            }
+        },
+    )
+    request = HumanMessage(
+        content="Please tell the primary color of following birds: sparrow, hawk, crow",
+    )
+    response = llm_with_search_force.invoke([request])
+
+    assert isinstance(response, AIMessage)
+    assert len(response.tool_calls) > 0
+    tool_call = response.tool_calls[0]
+    assert tool_call["name"] == "search"
+
+    tool_response = search("sparrow")
+    tool_message = ToolMessage(
+        name="search",
+        content=json.dumps(tool_response),
+        tool_call_id="0",
+    )
+
+    result = llm_with_search.invoke([request, response, tool_message])
+
+    assert isinstance(result, AIMessage)
+    assert "brown" in result.content
+    assert len(result.tool_calls) > 0

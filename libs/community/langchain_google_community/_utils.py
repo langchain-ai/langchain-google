@@ -16,13 +16,16 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
         Tuple[str, str]
     """
     try:
-        langchain_version = metadata.version("langchain")
+        langchain_version = metadata.version("langchain-google-community")
     except metadata.PackageNotFoundError:
         langchain_version = "0.0.0"
     client_library_version = (
         f"{langchain_version}-{module}" if module else langchain_version
     )
-    return client_library_version, f"langchain/{client_library_version}"
+    return (
+        client_library_version,
+        f"langchain-google-community/{client_library_version}",
+    )
 
 
 def get_client_info(module: Optional[str] = None) -> "ClientInfo":
