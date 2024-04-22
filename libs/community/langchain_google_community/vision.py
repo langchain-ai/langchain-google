@@ -13,8 +13,9 @@ class CloudVisionParser(BaseBlobParser):
             from google.cloud import vision  # type: ignore[attr-defined]
         except ImportError as e:
             raise ImportError(
-                "Cannot import google.cloud.vision, please install "
-                "`pip install google-cloud-vision`."
+                "Could not import google-cloud-vision python package. "
+                "Please, install vision dependency group: "
+                "poetry install --with vision"
             ) from e
         client_options = None
         if project:
@@ -48,8 +49,9 @@ class CloudVisionLoader(BaseLoader):
             from google.cloud import vision  # type: ignore[attr-defined]
         except ImportError as e:
             raise ImportError(
-                "Cannot import google.cloud.vision, please install "
-                "`pip install google-cloud-vision`."
+                "Could not import google-cloud-vision python package. "
+                "Please, install vision dependency group: "
+                "poetry install --with vision"
             ) from e
         client_options = None
         if project:

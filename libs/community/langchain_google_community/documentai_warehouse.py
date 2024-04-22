@@ -48,8 +48,9 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
             from google.cloud.contentwarehouse_v1 import DocumentServiceClient
         except ImportError as exc:
             raise ImportError(
-                "google.cloud.contentwarehouse is not installed."
-                "Please install it with pip install google-cloud-contentwarehouse"
+                "Could not import google-cloud-documentai python package. "
+                "Please, install docai dependency group: "
+                "poetry install --with docai"
             ) from exc
 
         values["project_number"] = get_from_dict_or_env(

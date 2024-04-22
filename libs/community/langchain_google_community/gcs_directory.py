@@ -39,7 +39,8 @@ class GCSDirectoryLoader(BaseLoader):
         except ImportError:
             raise ImportError(
                 "Could not import google-cloud-storage python package. "
-                "Please install it with `pip install google-cloud-storage`."
+                "Please, install gcs dependency group: "
+                "poetry install --with gcs"
             )
         client = storage.Client(
             project=self.project_name,

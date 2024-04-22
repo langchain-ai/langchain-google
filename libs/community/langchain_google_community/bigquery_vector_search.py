@@ -100,8 +100,9 @@ class BigQueryVectorSearch(VectorStore):
             )
         except ModuleNotFoundError:
             raise ImportError(
-                "Please, install or upgrade the google-cloud-bigquery library: "
-                "pip install google-cloud-bigquery"
+                "Could not import google-cloud-bigquery python package. "
+                "Please, install bigquery dependency group: "
+                "poetry install --with bigquery"
             )
         self._logger = logging.getLogger(__name__)
         self._creating_index = False

@@ -138,8 +138,9 @@ class DocAIParser(BaseBlobParser):
             )
         except ImportError as exc:
             raise ImportError(
-                "documentai package not found, please install it with"
-                " `pip install google-cloud-documentai`"
+                "Could not import google-cloud-documentai python package. "
+                "Please, install docai dependency group: "
+                "poetry install --with docai"
             ) from exc
         try:
             from google.cloud.documentai_toolbox.wrappers.page import (  # type: ignore[import]
