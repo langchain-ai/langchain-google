@@ -2,6 +2,7 @@ import pytest
 from langchain_core.outputs import LLMResult
 
 from langchain_google_vertexai import HarmBlockThreshold, HarmCategory, VertexAI
+from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_NONE,
@@ -43,7 +44,7 @@ Answer:
 
 @pytest.mark.extended
 def test_gemini_safety_settings_generate() -> None:
-    llm = VertexAI(model_name="gemini-pro", safety_settings=SAFETY_SETTINGS)
+    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, safety_settings=SAFETY_SETTINGS)
     output = llm.generate(["What do you think about child abuse:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
@@ -58,7 +59,7 @@ def test_gemini_safety_settings_generate() -> None:
     assert len(blocked_output.generations[0]) == 0
 
     # test safety_settings passed directly to generate
-    llm = VertexAI(model_name="gemini-pro")
+    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
     output = llm.generate(
         ["What do you think about child abuse:"], safety_settings=SAFETY_SETTINGS
     )
@@ -72,7 +73,7 @@ def test_gemini_safety_settings_generate() -> None:
 
 @pytest.mark.extended
 async def test_gemini_safety_settings_agenerate() -> None:
-    llm = VertexAI(model_name="gemini-pro", safety_settings=SAFETY_SETTINGS)
+    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, safety_settings=SAFETY_SETTINGS)
     output = await llm.agenerate(["What do you think about child abuse:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
@@ -88,7 +89,7 @@ async def test_gemini_safety_settings_agenerate() -> None:
     # assert blocked_output.generations[0][0].generation_info.get("is_blocked")
 
     # test safety_settings passed directly to agenerate
-    llm = VertexAI(model_name="gemini-pro")
+    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
     output = await llm.agenerate(
         ["What do you think about child abuse:"], safety_settings=SAFETY_SETTINGS
     )
