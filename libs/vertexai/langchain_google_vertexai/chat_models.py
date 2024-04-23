@@ -1030,13 +1030,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def _gemini_chunk_to_generation_chunk(
         self, response_chunk: GenerationResponse
     ) -> ChatGenerationChunk:
-        top_candidate = response_chunk.candidates[0]
-        message = _parse_response_candidate(top_candidate, streaming=True)
-        generation_info = get_generation_info(
-            top_candidate,
-            is_gemini=True,
-            usage_metadata=response_chunk.to_dict().get("usage_metadata"),
-        )
+        if response_chunk.candidates:
+            top_candidate = response_chunk.candidates[0]
+            message = _parse_response_candidate(top_candidate, streaming=True)
+            generation_info = get_generation_info(
+                top_candidate,
+                is_gemini=True,
+                usage_metadata=response_chunk.to_dict().get("usage_metadata"),
+            )
+        else:
+            message = AIMessageChunk(content="")
+            generation_info = {}
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
