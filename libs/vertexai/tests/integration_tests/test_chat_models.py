@@ -22,8 +22,9 @@ from langchain_google_vertexai import (
     HarmCategory,
     ToolConfig,
 )
+from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
-model_names_to_test = [None, "codechat-bison", "chat-bison", "gemini-pro"]
+model_names_to_test = [None, "codechat-bison", "chat-bison", _DEFAULT_MODEL_NAME]
 
 
 @pytest.mark.release
@@ -66,7 +67,7 @@ def test_candidates() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", ["chat-bison@001", "gemini-pro"])
+@pytest.mark.parametrize("model_name", ["chat-bison@001", _DEFAULT_MODEL_NAME])
 async def test_vertexai_agenerate(model_name: str) -> None:
     model = ChatVertexAI(temperature=0, model_name=model_name)
     message = HumanMessage(content="Hello")
@@ -87,7 +88,7 @@ async def test_vertexai_agenerate(model_name: str) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", ["chat-bison@001", "gemini-pro"])
+@pytest.mark.parametrize("model_name", ["chat-bison@001", _DEFAULT_MODEL_NAME])
 def test_vertexai_stream(model_name: str) -> None:
     model = ChatVertexAI(temperature=0, model_name=model_name)
     message = HumanMessage(content="Hello")
@@ -99,7 +100,7 @@ def test_vertexai_stream(model_name: str) -> None:
 
 @pytest.mark.release
 async def test_vertexai_astream() -> None:
-    model = ChatVertexAI(temperature=0, model_name="gemini-pro")
+    model = ChatVertexAI(temperature=0, model_name=_DEFAULT_MODEL_NAME)
     message = HumanMessage(content="Hello")
 
     async for chunk in model.astream([message]):
@@ -299,9 +300,9 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     }
     # Test .bind_tools with BaseModel
     message = HumanMessage(content="My name is Erick and I am 27 years old")
-    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind_tools(
-        [MyModel]
-    )
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
+    ).bind_tools([MyModel])
     response = model.invoke([message])
     _check_tool_calls(response, "MyModel")
 
@@ -310,9 +311,9 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         """Invoke this with names and ages."""
         pass
 
-    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind_tools(
-        [my_model]
-    )
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
+    ).bind_tools([my_model])
     response = model.invoke([message])
     _check_tool_calls(response, "my_model")
 
@@ -322,9 +323,9 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         """Invoke this with names and ages."""
         pass
 
-    model = ChatVertexAI(model_name="gemini-pro", safety_settings=safety).bind_tools(
-        [my_tool]
-    )
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
+    ).bind_tools([my_tool])
     response = model.invoke([message])
     _check_tool_calls(response, "my_tool")
 
