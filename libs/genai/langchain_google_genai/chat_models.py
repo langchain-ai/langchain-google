@@ -29,6 +29,12 @@ import google.api_core
 import google.generativeai as genai  # type: ignore[import]
 import proto  # type: ignore[import]
 import requests
+from google.generativeai.types import SafetySettingDict  # type: ignore[import]
+from google.generativeai.types.content_types import (  # type: ignore[import]
+    FunctionDeclarationType,
+    ToolConfigDict,
+    ToolDict,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -41,6 +47,7 @@ from langchain_core.messages import (
     FunctionMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import SecretStr, root_validator
@@ -350,6 +357,40 @@ def _parse_chat_history(
                     )
                 )
             ]
+        elif isinstance(message, ToolMessage):
+            role = "user"
+            prev_message: Optional[BaseMessage] = (
+                input_messages[i - 1] if i > 0 else None
+            )
+            if (
+                prev_message
+                and isinstance(prev_message, AIMessage)
+                and prev_message.tool_calls
+            ):
+                # message.name can be null for ToolMessage
+                name: str = prev_message.tool_calls[0]["name"]
+            else:
+                name = message.name  # type: ignore
+            tool_response: Any
+            if not isinstance(message.content, str):
+                tool_response = message.content
+            else:
+                try:
+                    tool_response = json.loads(message.content)
+                except json.JSONDecodeError:
+                    tool_response = message.content  # leave as str representation
+            parts = [
+                glm.Part(
+                    function_response=glm.FunctionResponse(
+                        name=name,
+                        response=(
+                            {"output": tool_response}
+                            if not isinstance(tool_response, dict)
+                            else tool_response
+                        ),
+                    )
+                )
+            ]
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
@@ -627,20 +668,26 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self,
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
+        tools: Optional[Sequence[ToolDict]] = None,
+        functions: Optional[Sequence[FunctionDeclarationType]] = None,
+        safety_settings: Optional[SafetySettingDict] = None,
+        tool_config: Optional[Union[Dict, ToolConfigDict]] = None,
         **kwargs: Any,
     ) -> Tuple[Dict[str, Any], genai.ChatSession, genai.types.ContentDict]:
         client = self.client
-        functions = kwargs.pop("functions", None)
-        safety_settings = kwargs.pop("safety_settings", self.safety_settings)
-        if functions or safety_settings:
-            tools = (
-                convert_to_genai_function_declarations(functions) if functions else None
-            )
+        formatted_tools = None
+        raw_tools = tools if tools else functions
+        if raw_tools:
+            formatted_tools = convert_to_genai_function_declarations(raw_tools)
+
+        if formatted_tools or safety_settings:
             client = genai.GenerativeModel(
-                model_name=self.model, tools=tools, safety_settings=safety_settings
+                model_name=self.model,
+                tools=formatted_tools,
+                safety_settings=safety_settings,
             )
 
-        params = self._prepare_params(stop, **kwargs)
+        params = self._prepare_params(stop, tool_config=tool_config, **kwargs)
         system_instruction, history = _parse_chat_history(
             messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
