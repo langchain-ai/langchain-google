@@ -13,6 +13,7 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import Tool
 
 from langchain_google_vertexai.chat_models import ChatVertexAI
+from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 
 class _TestOutputParser(BaseOutputParser):
@@ -54,7 +55,7 @@ def test_tools() -> None:
     )
     from langchain.chains import LLMMathChain
 
-    llm = ChatVertexAI(model_name="gemini-pro")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     math_chain = LLMMathChain.from_llm(llm=llm)
     tools = [
         Tool(
@@ -110,7 +111,9 @@ def test_custom_tool() -> None:
     tools = [search]
 
     llm = ChatVertexAI(
-        model_name="gemini-pro", temperature=0.0, convert_system_message_to_human=True
+        model_name=_DEFAULT_MODEL_NAME,
+        temperature=0.0,
+        convert_system_message_to_human=True,
     )
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -161,7 +164,9 @@ def test_tool_nested_properties() -> None:
     tools = [movie_search]
 
     llm = ChatVertexAI(
-        model_name="gemini-pro", temperature=0.0, convert_system_message_to_human=True
+        model_name=_DEFAULT_MODEL_NAME,
+        temperature=0.0,
+        convert_system_message_to_human=True,
     )
     llm_with_tools = llm.bind(functions=tools)
 
@@ -187,7 +192,7 @@ def test_tool_nested_properties() -> None:
 def test_stream() -> None:
     from langchain.chains import LLMMathChain
 
-    llm = ChatVertexAI(model_name="gemini-pro")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     math_chain = LLMMathChain.from_llm(llm=llm)
     tools = [
         Tool(
@@ -211,7 +216,7 @@ def test_multiple_tools() -> None:
         GoogleSearchAPIWrapper,
     )
 
-    llm = ChatVertexAI(model_name="gemini-pro", max_output_tokens=1024)
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, max_output_tokens=1024)
     math_chain = LLMMathChain.from_llm(llm=llm)
     google_search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
     google_cse_id = os.environ["GOOGLE_CSE_ID"]

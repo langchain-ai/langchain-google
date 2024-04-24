@@ -8,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 
 from langchain_google_vertexai import ChatVertexAI, create_structured_runnable
+from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 
 class RecordPerson(BaseModel):
@@ -28,7 +29,7 @@ class RecordDog(BaseModel):
 
 @pytest.mark.extended
 def test_create_structured_runnable() -> None:
-    llm = ChatVertexAI(model_name="gemini-pro")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
         "You are a world class algorithm for recording entities.\nMake calls to the "
         "relevant function to record the entities in the following input:\n {input}\n"
@@ -41,7 +42,7 @@ def test_create_structured_runnable() -> None:
 
 @pytest.mark.extended
 def test_create_structured_runnable_with_prompt() -> None:
-    llm = ChatVertexAI(model_name="gemini-pro")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
         "Describe a random {class} and mention their name, {attr} and favorite food"
     )
