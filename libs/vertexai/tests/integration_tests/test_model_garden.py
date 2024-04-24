@@ -31,7 +31,7 @@ def test_model_garden(
     """
     endpoint_id = os.environ[endpoint_os_variable_name]
     project = os.environ["PROJECT_ID"]
-    location = "europe-west4"
+    location = "us-central1"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
         project=project,
@@ -59,7 +59,7 @@ def test_model_garden_generate(
     """
     endpoint_id = os.environ[endpoint_os_variable_name]
     project = os.environ["PROJECT_ID"]
-    location = "europe-west4"
+    location = "us-central1"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
         project=project,
@@ -80,7 +80,7 @@ async def test_model_garden_agenerate(
 ) -> None:
     endpoint_id = os.environ[endpoint_os_variable_name]
     project = os.environ["PROJECT_ID"]
-    location = "europe-west4"
+    location = "us-central1"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
         project=project,
