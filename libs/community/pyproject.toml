@@ -129,6 +129,14 @@ optional = true
 [tool.poetry.group.vision.dependencies]
 google-cloud-vision = "^3.7.2"
 
+[tool.poetry.group.gmail]
+optional = true
+
+[tool.poetry.group.gmail.dependencies]
+google-auth-httplib2 = "^0.2.0"
+google-auth-oauthlib = "^1.2.0"
+beautifulsoup4 = "^4.12.3"
+
 [tool.ruff]
 select = [
   "E", # pycodestyle
