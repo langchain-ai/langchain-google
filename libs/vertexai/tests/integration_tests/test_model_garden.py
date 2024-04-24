@@ -15,8 +15,6 @@ from langchain_google_vertexai.model_garden import (
     VertexAIModelGarden,
 )
 
-
-@pytest.mark.skip("CI testing not set up")
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -45,8 +43,6 @@ def test_model_garden(
     print(output)
     assert llm._llm_type == "vertexai_model_garden"
 
-
-@pytest.mark.skip("CI testing not set up")
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -74,8 +70,6 @@ def test_model_garden_generate(
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 2
 
-
-@pytest.mark.skip("CI testing not set up")
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
@@ -97,8 +91,6 @@ async def test_model_garden_agenerate(
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 2
 
-
-@pytest.mark.xfail(reason="CI issue")
 def test_anthropic() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
@@ -119,8 +111,6 @@ def test_anthropic() -> None:
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
-
-@pytest.mark.xfail(reason="CI issue")
 def test_anthropic_stream() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
@@ -136,8 +126,6 @@ def test_anthropic_stream() -> None:
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
-
-@pytest.mark.xfail(reason="CI issue")
 async def test_anthropic_async() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"

@@ -6,8 +6,6 @@ from langchain_core.documents import Document
 
 from langchain_google_community import CloudVisionLoader, CloudVisionParser
 
-
-@pytest.mark.skip(reason="CI/CD not ready.")
 def test_parse_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
     project = os.environ["PROJECT_ID"]
@@ -18,8 +16,6 @@ def test_parse_image() -> None:
     assert isinstance(documents[0], Document)
     assert len(documents[0].page_content) > 1
 
-
-@pytest.mark.skip(reason="CI/CD not ready.")
 def test_load_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
     project = os.environ["PROJECT_ID"]

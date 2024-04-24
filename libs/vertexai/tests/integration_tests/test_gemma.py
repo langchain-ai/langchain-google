@@ -14,7 +14,7 @@ from langchain_google_vertexai import (
 )
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_gemma_model_garden() -> None:
     """In order to run this test, you should provide endpoint names.
 
@@ -36,7 +36,7 @@ def test_gemma_model_garden() -> None:
     assert llm._llm_type == "gemma_vertexai_model_garden"
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_gemma_chat_model_garden() -> None:
     """In order to run this test, you should provide endpoint names.
 
