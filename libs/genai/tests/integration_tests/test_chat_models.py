@@ -259,7 +259,10 @@ def test_chat_function_calling_with_multiple_parts() -> None:
         }
     )
     request = HumanMessage(
-        content="Please tell the primary color of following birds: sparrow, hawk, crow",
+        content=(
+            "Please tell the primary color of following birds: "
+            "sparrow, hawk, crow by using searchm"
+        )
     )
     response = llm_with_search_force.invoke([request])
 
