@@ -107,6 +107,7 @@ from langchain_google_vertexai.functions_utils import (
     _format_to_vertex_tool,
     _format_functions_to_vertex_tool_dict,
 )
+from google.api_core.exceptions import GoogleAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -442,14 +443,14 @@ def _completion_with_retry(
             chunks = list(response)
             for chunk in chunks:
                 if not chunk.candidates:
-                    raise ValueError("Got 0 candidates from generations.")
+                    raise GoogleAPIError("Got 0 candidates from generations.")
             return iter(chunks)
         if kwargs.get("stream"):
             return response
         if len(response.candidates):
             return response
         else:
-            raise ValueError("Got 0 candidates from generations.")
+            raise GoogleAPIError("Got 0 candidates from generations.")
 
     return _completion_with_retry_inner(generation_method, **kwargs)
 
@@ -476,14 +477,14 @@ async def _acompletion_with_retry(
             chunks = list(response)
             for chunk in chunks:
                 if not chunk.candidates:
-                    raise ValueError("Got 0 candidates from generations.")
+                    raise GoogleAPIError("Got 0 candidates from generations.")
             return iter(chunks)
         if kwargs.get("stream"):
             return response
         if len(response.candidates):
             return response
         else:
-            raise ValueError("Got 0 candidates from generations.")
+            raise GoogleAPIError("Got 0 candidates from generations.")
 
     return await _completion_with_retry_inner(generation_method, **kwargs)
 
@@ -737,6 +738,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 client.generate_content,
                 max_retries=self.max_retries,
                 contents=contents,
+                stream=True,
                 check_stream_response_for_candidates=self.check_stream_response_for_candidates,
                 **params,
             )
@@ -790,6 +792,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 client.generate_content_async,
                 max_retries=self.max_retries,
                 contents=contents,
+                stream=True,
                 check_stream_response_for_candidates=self.check_stream_response_for_candidates,
                 **params,
             ):

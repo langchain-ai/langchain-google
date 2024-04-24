@@ -245,7 +245,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
     llm = ChatGoogleGenerativeAI(
-        model_name="models/gemini-1.5-pro-latest", safety_settings=safety
+        model="models/gemini-1.5-pro-latest", safety_settings=safety
     )
     llm_with_search = llm.bind(
         functions=tools,
