@@ -86,7 +86,7 @@ def _completion_with_retry(
                     stream=stream,
                     generation_config=generation_config,
                     safety_settings=kwargs.pop("safety_settings", None),
-                    request_options = {"timeout": llm.timeout} if llm.timeout else None
+                    request_options={"timeout": llm.timeout} if llm.timeout else None,
                 )
             return llm.client.generate_text(prompt=prompt, **kwargs)
         except google.api_core.exceptions.FailedPrecondition as exc:
@@ -263,7 +263,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
 
         if values["max_output_tokens"] is not None and values["max_output_tokens"] <= 0:
             raise ValueError("max_output_tokens must be greater than zero")
-        
+
         if values["timeout"] is not None and values["timeout"] <= 0:
             raise ValueError("timeout must be greater than zero")
 

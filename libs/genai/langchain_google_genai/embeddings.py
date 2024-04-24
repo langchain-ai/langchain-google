@@ -100,7 +100,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 content=texts,
                 task_type=task_type,
                 title=title,
-                request_options=self.request_options
+                request_options=self.request_options,
             )
         except Exception as e:
             raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e
