@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+import uuid
 import warnings
 from io import BytesIO
 from typing import (
@@ -29,6 +30,12 @@ import google.api_core
 import google.generativeai as genai  # type: ignore[import]
 import proto  # type: ignore[import]
 import requests
+from google.generativeai.types import SafetySettingDict  # type: ignore[import]
+from google.generativeai.types.content_types import (  # type: ignore[import]
+    FunctionDeclarationType,
+    ToolConfigDict,
+    ToolDict,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -40,8 +47,13 @@ from langchain_core.messages import (
     BaseMessage,
     FunctionMessage,
     HumanMessage,
+    InvalidToolCall,
     SystemMessage,
+    ToolCall,
+    ToolCallChunk,
+    ToolMessage,
 )
+from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import SecretStr, root_validator
 from langchain_core.utils import get_from_dict_or_env
@@ -350,6 +362,40 @@ def _parse_chat_history(
                     )
                 )
             ]
+        elif isinstance(message, ToolMessage):
+            role = "user"
+            prev_message: Optional[BaseMessage] = (
+                input_messages[i - 1] if i > 0 else None
+            )
+            if (
+                prev_message
+                and isinstance(prev_message, AIMessage)
+                and prev_message.tool_calls
+            ):
+                # message.name can be null for ToolMessage
+                name: str = prev_message.tool_calls[0]["name"]
+            else:
+                name = message.name  # type: ignore
+            tool_response: Any
+            if not isinstance(message.content, str):
+                tool_response = message.content
+            else:
+                try:
+                    tool_response = json.loads(message.content)
+                except json.JSONDecodeError:
+                    tool_response = message.content  # leave as str representation
+            parts = [
+                glm.Part(
+                    function_response=glm.FunctionResponse(
+                        name=name,
+                        response=(
+                            {"output": tool_response}
+                            if not isinstance(tool_response, dict)
+                            else tool_response
+                        ),
+                    )
+                )
+            ]
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
@@ -360,24 +406,89 @@ def _parse_chat_history(
 
 
 def _parse_response_candidate(
-    response_candidate: glm.Candidate, stream: bool
+    response_candidate: glm.Candidate, streaming: bool = False
 ) -> AIMessage:
-    first_part = response_candidate.content.parts[0]
-    if first_part.function_call:
-        function_call = proto.Message.to_dict(first_part.function_call)
-        function_call["arguments"] = json.dumps(function_call.pop("args", {}))
-        return (AIMessageChunk if stream else AIMessage)(
-            content="", additional_kwargs={"function_call": function_call}
-        )
-    else:
-        parts = response_candidate.content.parts
+    content: Union[None, str, List[str]] = None
+    additional_kwargs = {}
+    tool_calls = []
+    invalid_tool_calls = []
+    tool_call_chunks = []
 
-    if len(parts) == 1 and parts[0].text:
-        content: Union[str, List[Union[str, Dict]]] = parts[0].text
-    else:
-        content = [proto.Message.to_dict(part) for part in parts]
-    return (AIMessageChunk if stream else AIMessage)(
-        content=content, additional_kwargs={}
+    for part in response_candidate.content.parts:
+        try:
+            text: Optional[str] = part.text
+        except AttributeError:
+            text = None
+
+        if text is not None:
+            if not content:
+                content = text
+            elif isinstance(content, str) and text:
+                content = [content, text]
+            elif isinstance(content, list) and text:
+                content.append(text)
+            elif text:
+                raise Exception("Unexpected content type")
+
+        if part.function_call:
+            # TODO: support multiple function calls
+            if "function_call" in additional_kwargs:
+                raise Exception("Multiple function calls are not currently supported")
+            function_call = {"name": part.function_call.name}
+            # dump to match other function calling llm for now
+            function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            function_call["arguments"] = json.dumps(
+                {k: function_call_args_dict[k] for k in function_call_args_dict}
+            )
+            additional_kwargs["function_call"] = function_call
+
+            if streaming:
+                tool_call_chunks.append(
+                    ToolCallChunk(
+                        name=function_call.get("name"),
+                        args=function_call.get("arguments"),
+                        id=function_call.get("id", str(uuid.uuid4())),
+                        index=function_call.get("index"),  # type: ignore
+                    )
+                )
+            else:
+                try:
+                    tool_calls_dicts = parse_tool_calls(
+                        [{"function": function_call}],
+                        return_id=False,
+                    )
+                    tool_calls = [
+                        ToolCall(
+                            name=tool_call["name"],
+                            args=tool_call["args"],
+                            id=tool_call.get("id", str(uuid.uuid4())),
+                        )
+                        for tool_call in tool_calls_dicts
+                    ]
+                except Exception as e:
+                    invalid_tool_calls = [
+                        InvalidToolCall(
+                            name=function_call.get("name"),
+                            args=function_call.get("arguments"),
+                            id=function_call.get("id", str(uuid.uuid4())),
+                            error=str(e),
+                        )
+                    ]
+    if content is None:
+        content = ""
+
+    if streaming:
+        return AIMessageChunk(
+            content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+            additional_kwargs=additional_kwargs,
+            tool_call_chunks=tool_call_chunks,
+        )
+
+    return AIMessage(
+        content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+        additional_kwargs=additional_kwargs,
+        tool_calls=tool_calls,
+        invalid_tool_calls=invalid_tool_calls,
     )
 
 
@@ -400,7 +511,7 @@ def _response_to_result(
         ]
         generations.append(
             (ChatGenerationChunk if stream else ChatGeneration)(
-                message=_parse_response_candidate(candidate, stream=stream),
+                message=_parse_response_candidate(candidate, streaming=stream),
                 generation_info=generation_info,
             )
         )
@@ -627,20 +738,26 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self,
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
+        tools: Optional[Sequence[ToolDict]] = None,
+        functions: Optional[Sequence[FunctionDeclarationType]] = None,
+        safety_settings: Optional[SafetySettingDict] = None,
+        tool_config: Optional[Union[Dict, ToolConfigDict]] = None,
         **kwargs: Any,
     ) -> Tuple[Dict[str, Any], genai.ChatSession, genai.types.ContentDict]:
         client = self.client
-        functions = kwargs.pop("functions", None)
-        safety_settings = kwargs.pop("safety_settings", self.safety_settings)
-        if functions or safety_settings:
-            tools = (
-                convert_to_genai_function_declarations(functions) if functions else None
-            )
+        formatted_tools = None
+        raw_tools = tools if tools else functions
+        if raw_tools:
+            formatted_tools = convert_to_genai_function_declarations(raw_tools)
+
+        if formatted_tools or safety_settings:
             client = genai.GenerativeModel(
-                model_name=self.model, tools=tools, safety_settings=safety_settings
+                model_name=self.model,
+                tools=formatted_tools,
+                safety_settings=safety_settings,
             )
 
-        params = self._prepare_params(stop, **kwargs)
+        params = self._prepare_params(stop, tool_config=tool_config, **kwargs)
         system_instruction, history = _parse_chat_history(
             messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
