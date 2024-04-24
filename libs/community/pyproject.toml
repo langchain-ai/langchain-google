@@ -79,6 +79,8 @@ optional = true
 [tool.poetry.group.docai.dependencies]
 google-cloud-documentai = "^2.26.0"
 google-cloud-contentwarehouse = "^0.7.7"
+google-cloud-documentai-toolbox = "^0.13.3a0"
+gapic-google-longrunning = "^0.11.2"
 
 [tool.poetry.group.drive]
 optional = true

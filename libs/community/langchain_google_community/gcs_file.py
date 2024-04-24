@@ -51,7 +51,7 @@ class GCSFileLoader(BaseLoader):
                 message = (
                     "UnstructuredFileLoader loader not found! Either provide a "
                     "custom loader with loader_func argument, or install "
-                    " `poetry install`"
+                    "`pip install langchain-google-community`"
                 )
                 print(message)
             return UnstructuredFileLoader(file_path)
@@ -64,9 +64,9 @@ class GCSFileLoader(BaseLoader):
             from google.cloud import storage  # type: ignore[attr-defined]
         except ImportError:
             raise ImportError(
-                "Could not import google-cloud-documentai python package. "
-                "Please, install docai dependency group: "
-                "poetry install --with docai"
+                "Could not import google-cloud-storage python package. "
+                "Please, install gcs dependency group: "
+                "`pip install langchain-google-community[gcs]`"
             )
 
         # initialize a client

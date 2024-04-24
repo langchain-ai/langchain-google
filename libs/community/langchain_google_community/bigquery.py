@@ -57,7 +57,7 @@ class BigQueryLoader(BaseLoader):
             raise ImportError(
                 "Could not import google-cloud-bigquery python package. "
                 "Please, install bigquery dependency group: "
-                "poetry install --with bigquery"
+                "`pip install langchain-google-community[bigquery]`"
             ) from ex
 
         bq_client = bigquery.Client(

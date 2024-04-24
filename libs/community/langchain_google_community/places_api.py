@@ -55,7 +55,7 @@ class GooglePlacesAPIWrapper(BaseModel):
             raise ImportError(
                 "Could not import googlemaps python package. "
                 "Please, install places dependency group: "
-                "poetry install --with places"
+                "`pip install langchain-google-community[places]`"
             )
         return values
 

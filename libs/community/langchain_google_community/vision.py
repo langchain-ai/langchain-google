@@ -51,7 +51,7 @@ class CloudVisionLoader(BaseLoader):
             raise ImportError(
                 "Could not import google-cloud-vision python package. "
                 "Please, install vision dependency group: "
-                "poetry install --with vision"
+                "`pip install langchain-google-community[vision]`"
             ) from e
         client_options = None
         if project:

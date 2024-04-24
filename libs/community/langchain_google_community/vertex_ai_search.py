@@ -252,7 +252,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
                 "Please, install vertexaisearch dependency group: "
-                "poetry install --with vertexaisearch"
+                "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
 
         super().__init__(**kwargs)

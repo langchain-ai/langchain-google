@@ -32,7 +32,7 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
             raise ImportError(
                 "Could not import google-cloud-translate python package. "
                 "Please, install translate dependency group: "
-                "poetry install --with translate"
+                "`pip install langchain-google-community[translate]`"
             ) from exc
 
         self.project_id = project_id
@@ -74,8 +74,9 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
             from google.cloud import translate  # type: ignore[attr-defined]
         except ImportError as exc:
             raise ImportError(
-                "Install Google Cloud Translate to use this parser."
-                "(pip install google-cloud-translate)"
+                "Could not import google-cloud-translate python package. "
+                "Please, install translate dependency group: "
+                "`pip install langchain-google-community[translate]`"
             ) from exc
 
         response = self._client.translate_text(

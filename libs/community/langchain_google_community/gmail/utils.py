@@ -44,7 +44,8 @@ def import_installed_app_flow() -> InstalledAppFlow:
     except ImportError:
         raise ImportError(
             "You need to install gmail dependencies to use this toolkit. "
-            "Try running poetry install --with gmail"
+            "Please, install bigquery dependency group: "
+            "`pip install langchain-google-community[gmail]`"
         )
     return InstalledAppFlow
 
@@ -60,7 +61,7 @@ def import_googleapiclient_resource_builder() -> build_resource:
     except ImportError:
         raise ImportError(
             "You need to install all dependencies to use this toolkit. "
-            "Try running poetry install"
+            "Try running pip install langchain-google-community"
         )
     return build
 

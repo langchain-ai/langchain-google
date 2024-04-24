@@ -50,7 +50,7 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
             raise ImportError(
                 "Could not import google-cloud-documentai python package. "
                 "Please, install docai dependency group: "
-                "poetry install --with docai"
+                "`pip install langchain-google-community[docai]`"
             ) from exc
 
         values["project_number"] = get_from_dict_or_env(

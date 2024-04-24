@@ -161,7 +161,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
             raise ImportError(
                 "Could execute GoogleDriveLoader. "
                 "Please, install drive dependency group: "
-                "poetry install --with drive"
+                "`pip install langchain-google-community[drive]`"
             )
 
         creds = None

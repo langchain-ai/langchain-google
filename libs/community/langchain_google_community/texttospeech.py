@@ -19,7 +19,7 @@ def _import_google_cloud_texttospeech() -> Any:
         raise ImportError(
             "Could not import google-cloud-texttospeech python package. "
             "Please, install texttospeech dependency group: "
-            "poetry install --with texttospeech"
+            "`pip install langchain-google-community[texttospeech]`"
         ) from e
     return texttospeech
 

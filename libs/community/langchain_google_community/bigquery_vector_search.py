@@ -102,7 +102,7 @@ class BigQueryVectorSearch(VectorStore):
             raise ImportError(
                 "Could not import google-cloud-bigquery python package. "
                 "Please, install bigquery dependency group: "
-                "poetry install --with bigquery"
+                "`pip install langchain-google-community[bigquery]`"
             )
         self._logger = logging.getLogger(__name__)
         self._creating_index = False
