@@ -37,9 +37,6 @@ def ranker(mock_rank_service_client: Mock) -> VertexAIRank:
 
 
 # Unit tests
-@patch(
-    "langchain_google_community.vertex_rank.discoveryengine_v1alpha.RankServiceClient"
-)
 def test_vertex_ai_ranker_initialization(mock_rank_service_client: Mock) -> None:
     ranker = VertexAIRank(
         project_id="test-project",
