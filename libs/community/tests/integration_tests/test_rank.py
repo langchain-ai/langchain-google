@@ -4,12 +4,37 @@ from unittest.mock import create_autospec
 
 import pytest
 from google.cloud import discoveryengine_v1alpha
-from langchain.callbacks.manager import CallbackManagerForRetrieverRun
-from langchain.retrievers import ContextualCompressionRetriever
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
+from langchain_core.pydantic_v1 import Field
+from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 
 from langchain_google_community.rank.rank import VertexAIRank
+
+
+class CustomRankingRetriever(BaseRetriever):
+    """Retriever that directly uses a mock retriever and a ranking API."""
+
+    base_retriever: BaseRetriever = Field(default=None)
+    ranker: VertexAIRank = Field(default=None)
+
+    def __init__(self, base_retriever: BaseRetriever, ranker: VertexAIRank):
+        super().__init__()  # Call to the superclass's constructor
+        self.base_retriever = base_retriever
+        self.ranker = ranker
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        """Retrieve and rank documents according to the query."""
+        # Retrieve documents using the base retriever
+        documents = self.base_retriever._get_relevant_documents(
+            query, run_manager=run_manager
+        )
+        # Rank documents using VertexAIRank
+        ranked_documents = list(self.ranker.compress_documents(documents, query))
+        return ranked_documents
 
 
 class MockVectorStoreRetriever(VectorStoreRetriever):
@@ -122,8 +147,8 @@ def ranker(
 ) -> VertexAIRank:
     return VertexAIRank(
         project_id=os.environ["PROJECT_ID"],
-        location_id=os.environ["REGION"],
-        ranking_config=os.environ["RANKING_CONFIG"],
+        location_id=os.environ.get("REGION", "global"),
+        ranking_config=os.environ.get("RANKING_CONFIG", "default_ranking_config"),
         title_field="source",
         client=rank_service_client,
     )
@@ -132,9 +157,8 @@ def ranker(
 def test_compression_retriever(
     mock_vector_store_retriever: MockVectorStoreRetriever, ranker: VertexAIRank
 ) -> None:
-    print(mock_vector_store_retriever.get_relevant_documents("hi"))
-    compression_retriever = ContextualCompressionRetriever(
-        base_compressor=ranker, base_retriever=mock_vector_store_retriever
+    compression_retriever = CustomRankingRetriever(
+        base_retriever=mock_vector_store_retriever, ranker=ranker
     )
     query = "What was the name of einstein's mother ?"
     compressed_docs = compression_retriever.get_relevant_documents(query)
