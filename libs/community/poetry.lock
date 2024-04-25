@@ -155,6 +155,27 @@ tests-mypy = ["mypy (>=1.6)", "pytest-mypy-plugins"]
 tests-no-zope = ["attrs[tests-mypy]", "cloudpickle", "hypothesis", "pympler", "pytest (>=4.3.0)", "pytest-xdist[psutil]"]
 
 [[package]]
+name = "beautifulsoup4"
+version = "4.12.3"
+description = "Screen-scraping library"
+optional = false
+python-versions = ">=3.6.0"
+files = [
+    {file = "beautifulsoup4-4.12.3-py3-none-any.whl", hash = "sha256:b80878c9f40111313e55da8ba20bdba06d8fa3969fc68304167741bbf9e082ed"},
+    {file = "beautifulsoup4-4.12.3.tar.gz", hash = "sha256:74e3d1928edc070d21748185c46e3fb33490f22f52a3addee9aee0f4f7781051"},
+]
+
+[package.dependencies]
+soupsieve = ">1.2"
+
+[package.extras]
+cchardet = ["cchardet"]
+chardet = ["chardet"]
+charset-normalizer = ["charset-normalizer"]
+html5lib = ["html5lib"]
+lxml = ["lxml"]
+
+[[package]]
 name = "bottleneck"
 version = "1.3.8"
 description = "Fast NumPy array functions written in C"
@@ -571,6 +592,32 @@ ssh = ["paramiko"]
 tqdm = ["tqdm"]
 
 [[package]]
+name = "future"
+version = "1.0.0"
+description = "Clean single-source support for Python 3 and 2"
+optional = false
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+files = [
+    {file = "future-1.0.0-py3-none-any.whl", hash = "sha256:929292d34f5872e70396626ef385ec22355a1fae8ad29e1a734c3e43f9fbc216"},
+    {file = "future-1.0.0.tar.gz", hash = "sha256:bd2968309307861edae1458a4f8a4f3598c03be43b97521076aebf5d94c07b05"},
+]
+
+[[package]]
+name = "gapic-google-longrunning"
+version = "0.11.2"
+description = "GAPIC library for the Google Google API"
+optional = false
+python-versions = "*"
+files = [
+    {file = "gapic-google-longrunning-0.11.2.tar.gz", hash = "sha256:d94a2eb50f8422debb9e7566e3c1c5e677dc67cc29b36f7851a2c2037423383a"},
+]
+
+[package.dependencies]
+google-gax = ">=0.14.1,<0.15.0dev"
+googleapis-common-protos = ">=1.3.5,<2.0.0dev"
+oauth2client = ">=2.0.0,<4.0.0dev"
+
+[[package]]
 name = "gcsfs"
 version = "2024.3.1"
 description = "Convenient Filesystem interface over GCS"
@@ -731,6 +778,25 @@ pandas = ["db-dtypes (>=0.3.0,<2.0.0dev)", "importlib-metadata (>=1.0.0)", "pand
 tqdm = ["tqdm (>=4.7.4,<5.0.0dev)"]
 
 [[package]]
+name = "google-cloud-contentwarehouse"
+version = "0.7.7"
+description = "Google Cloud Contentwarehouse API client library"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "google-cloud-contentwarehouse-0.7.7.tar.gz", hash = "sha256:8c9115d9be44a62cec97d0b8604896196dcfad252af4bbc9a59d4669289a3ac3"},
+    {file = "google_cloud_contentwarehouse-0.7.7-py3-none-any.whl", hash = "sha256:d3a9571aa16b51c2252bb7dbf38953d274076604839226ebb4df153623f94451"},
+]
+
+[package.dependencies]
+google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
+google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
+google-cloud-documentai = ">=2.0.0,<3.0.0dev"
+grpc-google-iam-v1 = ">=0.12.4,<1.0.0dev"
+proto-plus = ">=1.22.3,<2.0.0dev"
+protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
+
+[[package]]
 name = "google-cloud-core"
 version = "2.4.1"
 description = "Google Cloud API client core library"
@@ -767,13 +833,13 @@ protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4
 
 [[package]]
 name = "google-cloud-documentai"
-version = "2.27.0"
+version = "2.26.0"
 description = "Google Cloud Documentai API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google-cloud-documentai-2.27.0.tar.gz", hash = "sha256:1019e47b93513d71cf6492db6dbcc91768e01d7e3a75e2659bdd99dff841682f"},
-    {file = "google_cloud_documentai-2.27.0-py2.py3-none-any.whl", hash = "sha256:1334371f7dcba50c9deb7e69255cf1cf38c9cfdbafb6bef603061d42bb014d04"},
+    {file = "google-cloud-documentai-2.26.0.tar.gz", hash = "sha256:528e3ed9f90fb83e95f5ec100231d928c3b4518f9be1e943adc699333b066fa7"},
+    {file = "google_cloud_documentai-2.26.0-py2.py3-none-any.whl", hash = "sha256:f750d65f32a628258c3f37bb925f06df6865b60471939fafc1dc6c4a1727ab84"},
 ]
 
 [package.dependencies]
@@ -812,6 +878,23 @@ pyarrow = ">=15.0.0,<16.0.0"
 tabulate = ">=0.9.0,<1.0.0"
 
 [[package]]
+name = "google-cloud-speech"
+version = "2.26.0"
+description = "Google Cloud Speech API client library"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "google-cloud-speech-2.26.0.tar.gz", hash = "sha256:d3156a78496aeacff403429408a1b13efe996da6f0544a25567904ad801671d5"},
+    {file = "google_cloud_speech-2.26.0-py2.py3-none-any.whl", hash = "sha256:8b61aebcbcc9bd5450933c94c431584a07667e022d12834f9037bb2c0e673c87"},
+]
+
+[package.dependencies]
+google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
+google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
+proto-plus = ">=1.22.3,<2.0.0dev"
+protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
+
+[[package]]
 name = "google-cloud-storage"
 version = "2.16.0"
 description = "Google Cloud Storage API client library"
@@ -832,6 +915,41 @@ requests = ">=2.18.0,<3.0.0dev"
 
 [package.extras]
 protobuf = ["protobuf (<5.0.0dev)"]
+
+[[package]]
+name = "google-cloud-texttospeech"
+version = "2.16.3"
+description = "Google Cloud Texttospeech API client library"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "google-cloud-texttospeech-2.16.3.tar.gz", hash = "sha256:fabc315032d137da0710bb4c268734d336212d8fa8316b23b277dd3a84ce721c"},
+    {file = "google_cloud_texttospeech-2.16.3-py2.py3-none-any.whl", hash = "sha256:5d1e23f9270908a5d7ecf2af04105fbd3a7ddde60fe48506e397bd18c1ece499"},
+]
+
+[package.dependencies]
+google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
+google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
+proto-plus = ">=1.22.3,<2.0.0dev"
+protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
+
+[[package]]
+name = "google-cloud-translate"
+version = "3.15.3"
+description = "Google Cloud Translate API client library"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "google-cloud-translate-3.15.3.tar.gz", hash = "sha256:ed587a1e60cf847c3b1add6b28256e2d1722fa73a4285334f5ec5ca933e616f2"},
+    {file = "google_cloud_translate-3.15.3-py2.py3-none-any.whl", hash = "sha256:2e92cd286fb25d5cf9fc0e8710f524fdf80656b6b64947d244e91696e69346ad"},
+]
+
+[package.dependencies]
+google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
+google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
+google-cloud-core = ">=1.4.4,<3.0.0dev"
+proto-plus = ">=1.22.3,<2.0.0dev"
+protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
 
 [[package]]
 name = "google-cloud-vision"
@@ -931,6 +1049,23 @@ files = [
 testing = ["pytest"]
 
 [[package]]
+name = "google-gax"
+version = "0.14.1"
+description = "Google API Extensions"
+optional = false
+python-versions = "*"
+files = [
+    {file = "google-gax-0.14.1.tar.gz", hash = "sha256:576e29acbca4d964f304fff480153ec05193a9a22d0c46ff4c7d719e5950e35d"},
+]
+
+[package.dependencies]
+future = ">=0.15.2"
+grpcio = ">=1.0.0"
+oauth2client = ">=1.5.2"
+ply = "3.8"
+protobuf = ">=3.0.0"
+
+[[package]]
 name = "google-resumable-media"
 version = "2.7.0"
 description = "Utilities for Google Media Downloads and Resumable Uploads"
@@ -965,6 +1100,19 @@ protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.1 || >4.21.1,<4
 
 [package.extras]
 grpc = ["grpcio (>=1.44.0,<2.0.0.dev0)"]
+
+[[package]]
+name = "googlemaps"
+version = "4.10.0"
+description = "Python client library for Google Maps Platform"
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "googlemaps-4.10.0.tar.gz", hash = "sha256:3055fcbb1aa262a9159b589b5e6af762b10e80634ae11c59495bd44867e47d88"},
+]
+
+[package.dependencies]
+requests = ">=2.20.0,<3.0"
 
 [[package]]
 name = "greenlet"
@@ -1887,6 +2035,23 @@ files = [
 ]
 
 [[package]]
+name = "oauth2client"
+version = "3.0.0"
+description = "OAuth 2.0 client library"
+optional = false
+python-versions = "*"
+files = [
+    {file = "oauth2client-3.0.0.tar.gz", hash = "sha256:5b5b056ec6f2304e7920b632885bd157fa71d1a7f3ddd00a43b1541a8d1a2460"},
+]
+
+[package.dependencies]
+httplib2 = ">=0.9.1"
+pyasn1 = ">=0.1.7"
+pyasn1-modules = ">=0.0.5"
+rsa = ">=3.1.4"
+six = ">=1.6.1"
+
+[[package]]
 name = "oauthlib"
 version = "3.2.2"
 description = "A generic, spec-compliant, thorough implementation of the OAuth request-signing logic"
@@ -2232,6 +2397,16 @@ files = [
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
+
+[[package]]
+name = "ply"
+version = "3.8"
+description = "Python Lex & Yacc"
+optional = false
+python-versions = "*"
+files = [
+    {file = "ply-3.8.tar.gz", hash = "sha256:e7d1bdff026beb159c9942f7a17e102c375638d9478a7ecd4cc0c76afd8de0b8"},
+]
 
 [[package]]
 name = "proto-plus"
@@ -2758,6 +2933,17 @@ files = [
 ]
 
 [[package]]
+name = "soupsieve"
+version = "2.5"
+description = "A modern CSS selector implementation for Beautiful Soup."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "soupsieve-2.5-py3-none-any.whl", hash = "sha256:eaa337ff55a1579b6549dc679565eac1e3d000563bcb1c8ab0d0fefbc0c2cdc7"},
+    {file = "soupsieve-2.5.tar.gz", hash = "sha256:5663d5a7b3bfaeee0bc4372e7fc48f9cff4940b3eec54a6451cc5299f1097690"},
+]
+
+[[package]]
 name = "sqlalchemy"
 version = "2.0.29"
 description = "Database Abstraction Library"
@@ -3275,4 +3461,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "edc88e6dbb6c97812403d0167f2158d4052ca72bc85a55ffed3da9ede0aabd4a"
+content-hash = "a07b83c8da00a6d9e43b5fbd9fc469bbd10ee2e949fe6fc92313a8565846bbd1"

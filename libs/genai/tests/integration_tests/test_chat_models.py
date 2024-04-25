@@ -1,9 +1,11 @@
 """Test ChatGoogleGenerativeAI chat model."""
 
+import json
 from typing import Generator
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
 
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,
@@ -224,3 +226,60 @@ def test_safety_settings_gemini() -> None:
     out2 = llm.invoke("how to make a bomb")
     assert isinstance(out2, AIMessage)
     assert len(out2.content) > 0
+
+
+def test_chat_function_calling_with_multiple_parts() -> None:
+    @tool
+    def search(
+        question: str,
+    ) -> str:
+        """
+        Useful for when you need to answer questions or visit websites.
+        You should ask targeted questions.
+        """
+        return "brown"
+
+    tools = [search]
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-1.5-pro-latest", safety_settings=safety
+    )
+    llm_with_search = llm.bind(
+        functions=tools,
+    )
+    llm_with_search_force = llm_with_search.bind(
+        tool_config={
+            "function_calling_config": {
+                "mode": "ANY",
+                "allowed_function_names": ["search"],
+            }
+        }
+    )
+    request = HumanMessage(
+        content=(
+            "Please tell the primary color of following birds: "
+            "sparrow, hawk, crow by using searchm"
+        )
+    )
+    response = llm_with_search_force.invoke([request])
+
+    assert isinstance(response, AIMessage)
+    assert len(response.tool_calls) > 0
+    tool_call = response.tool_calls[0]
+    assert tool_call["name"] == "search"
+
+    tool_response = search("sparrow")
+    tool_message = ToolMessage(
+        name="search",
+        content=json.dumps(tool_response),
+        tool_call_id="0",
+    )
+
+    result = llm_with_search.invoke([request, response, tool_message])
+
+    assert isinstance(result, AIMessage)
+    assert "brown" in result.content
+    assert len(result.tool_calls) > 0

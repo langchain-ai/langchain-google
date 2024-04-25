@@ -54,7 +54,8 @@ class GooglePlacesAPIWrapper(BaseModel):
         except ImportError:
             raise ImportError(
                 "Could not import googlemaps python package. "
-                "Please install it with `pip install googlemaps`."
+                "Please, install places dependency group: "
+                "`pip install langchain-google-community[places]`"
             )
         return values
 
