@@ -8,10 +8,10 @@ from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from langchain_core.pydantic_v1 import Extra, Field
 
-from langchain_google_community.ranker._sdk_manager import VertexRankSDKManager
+from langchain_google_community.rank._sdk_manager import VertexRankSDKManager
 
 
-class VertexAIRanker(BaseDocumentCompressor):
+class VertexAIRank(BaseDocumentCompressor):
     """
     Initializes the Vertex AI Ranker with configurable parameters.
 

@@ -7,7 +7,7 @@ from langchain.retrievers import ContextualCompressionRetriever
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 
-from langchain_google_community.ranker.rank import VertexAIRanker
+from langchain_google_community.rank.rank import VertexAIRank
 
 
 class MockVectorStoreRetriever(VectorStoreRetriever):
@@ -55,7 +55,7 @@ def rank_service_client():
 
 @pytest.fixture
 def ranker(rank_service_client):
-    return VertexAIRanker(
+    return VertexAIRank(
         project_id=os.environ["PROJECT_ID"],
         location_id=os.environ["REGION"],
         ranking_config=os.environ["RANKING_CONFIG"],

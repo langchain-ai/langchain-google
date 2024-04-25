@@ -7,7 +7,7 @@ from langchain.retrievers.contextual_compression import ContextualCompressionRet
 from langchain_core.documents import Document
 from pytest import approx
 
-from langchain_google_community.ranker.rank import VertexAIRanker
+from langchain_google_community.rank.rank import VertexAIRank
 
 
 # Fixtures for common setup
@@ -28,7 +28,7 @@ def mock_rank_service_client():
 
 @pytest.fixture
 def ranker(mock_rank_service_client):
-    return VertexAIRanker(
+    return VertexAIRank(
         project_id="test-project",
         location_id="test-location",
         ranking_config="test-config",
@@ -38,7 +38,7 @@ def ranker(mock_rank_service_client):
 
 # Unit tests
 def test_vertex_ai_ranker_initialization():
-    ranker = VertexAIRanker(
+    ranker = VertexAIRank(
         project_id="test-project",
         location_id="test-location",
         ranking_config="test-config",
@@ -49,7 +49,7 @@ def test_vertex_ai_ranker_initialization():
     assert ranker.ranking_config == "test-config"
     assert ranker.title_field == "source"
 
-@patch("langchain_google_community.ranker.rank.discoveryengine_v1alpha.RankServiceClient")
+@patch("langchain_google_community.rank.rank.discoveryengine_v1alpha.RankServiceClient")
 def test_rerank_documents(mock_rank_service_client_class, ranker):
     documents = [
         Document(page_content="Document 1", metadata={"source": "Title 1"}),
