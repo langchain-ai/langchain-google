@@ -10,7 +10,7 @@ from langchain_core.pydantic_v1 import Field
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 
-from langchain_google_community.rank.rank import VertexAIRank
+from langchain_google_community.vertex_rank import VertexAIRank
 
 
 class CustomRankingRetriever(BaseRetriever):

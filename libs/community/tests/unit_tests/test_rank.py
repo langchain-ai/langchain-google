@@ -5,7 +5,7 @@ from google.cloud import discoveryengine_v1alpha
 from langchain_core.documents import Document
 from pytest import approx
 
-from langchain_google_community.rank.rank import VertexAIRank
+from langchain_google_community.vertex_rank import VertexAIRank
 
 
 # Fixtures for common setup
@@ -50,7 +50,9 @@ def test_vertex_ai_ranker_initialization() -> None:
     assert ranker.title_field == "source"
 
 
-@patch("langchain_google_community.rank.rank.discoveryengine_v1alpha.RankServiceClient")
+@patch(
+    "langchain_google_community.vertex_rank.discoveryengine_v1alpha.RankServiceClient"
+)
 def test_rerank_documents(
     mock_rank_service_client_class: Mock, ranker: VertexAIRank
 ) -> None:

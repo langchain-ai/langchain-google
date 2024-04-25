@@ -8,8 +8,6 @@ from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
 from langchain_core.pydantic_v1 import Extra, Field
 
-from langchain_google_community.rank._sdk_manager import VertexRankSDKManager
-
 
 class VertexAIRank(BaseDocumentCompressor):
     """
@@ -55,7 +53,6 @@ class VertexAIRank(BaseDocumentCompressor):
     title_field: Optional[str] = Field(default=None)
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
-    sdk_manager: VertexRankSDKManager = Field(default=None)
     client: discoveryengine_v1alpha.RankServiceClient = Field(default=None)
 
     def __init__(self, **kwargs: Any):
@@ -68,13 +65,31 @@ class VertexAIRank(BaseDocumentCompressor):
         super().__init__(**kwargs)
         self.client = kwargs.get("client")  # type: ignore
         if not self.client:
-            self.sdk_manager = VertexRankSDKManager(
-                project_id=self.project_id,
-                location_id=self.location_id,
-                credentials=self.credentials,
-                credentials_path=self.credentials_path,
+            self.client = self._get_rank_service_client()
+
+    def _get_rank_service_client(self) -> discoveryengine_v1alpha.RankServiceClient:
+        """
+        Returns a RankServiceClient instance for making API calls to the
+        Vertex AI Ranking service.
+
+        Returns:
+            A RankServiceClient instance.
+        """
+        try:
+            return discoveryengine_v1alpha.RankServiceClient(
+                credentials=(
+                    self.credentials
+                    or Credentials.from_service_account_file(self.credentials_path)
+                    if self.credentials_path
+                    else None
+                )
             )
-            self.client = self.sdk_manager.get_rank_service_client()
+        except ImportError as exc:
+            raise ImportError(
+                "Could not import google-cloud-discoveryengine python package. "
+                "Please, install vertexaisearch dependency group: "
+                "`pip install langchain-google-community[vertexaisearch]`"
+            ) from exc
 
     def _rerank_documents(
         self, query: str, documents: Sequence[Document]
