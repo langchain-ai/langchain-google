@@ -44,7 +44,6 @@ optional = true
 [tool.poetry.group.test_integration.dependencies]
 pillow = "^10.1.0"
 
-
 [tool.poetry.group.lint]
 optional = true
 
@@ -67,6 +66,78 @@ pillow = "^10.1.0"
 types-requests = "^2.31.0.10"
 types-pillow = "^10.1.0.2"
 types-google-cloud-ndb = "^2.2.0.1"
+
+[tool.poetry.group.bigquery]
+optional = true
+
+[tool.poetry.group.bigquery.dependencies]
+google-cloud-bigquery = "^3.21.0"
+
+[tool.poetry.group.docai]
+optional = true
+
+[tool.poetry.group.docai.dependencies]
+google-cloud-documentai = "^2.26.0"
+google-cloud-contentwarehouse = "^0.7.7"
+google-cloud-documentai-toolbox = "^0.13.3a0"
+gapic-google-longrunning = "^0.11.2"
+
+[tool.poetry.group.drive]
+optional = true
+
+[tool.poetry.group.drive.dependencies]
+google-auth-httplib2 = "^0.2.0"
+google-auth-oauthlib = "^1.2.0"
+
+[tool.poetry.group.gcs]
+optional = true
+
+[tool.poetry.group.gcs.dependencies]
+google-cloud-storage = "^2.16.0"
+
+[tool.poetry.group.speech]
+optional = true
+
+[tool.poetry.group.speech.dependencies]
+google-cloud-speech = "^2.26.0"
+
+[tool.poetry.group.places]
+optional = true
+
+[tool.poetry.group.places.dependencies]
+googlemaps = "^4.10.0"
+
+[tool.poetry.group.texttospeech]
+optional = true
+
+[tool.poetry.group.texttospeech.dependencies]
+google-cloud-texttospeech = "^2.16.3"
+
+[tool.poetry.group.translate]
+optional = true
+
+[tool.poetry.group.translate.dependencies]
+google-cloud-translate = "^3.15.3"
+
+[tool.poetry.group.vertexaisearch]
+optional = true
+
+[tool.poetry.group.vertexaisearch.dependencies]
+google-cloud-discoveryengine = "^0.11.11"
+
+[tool.poetry.group.vision]
+optional = true
+
+[tool.poetry.group.vision.dependencies]
+google-cloud-vision = "^3.7.2"
+
+[tool.poetry.group.gmail]
+optional = true
+
+[tool.poetry.group.gmail.dependencies]
+google-auth-httplib2 = "^0.2.0"
+google-auth-oauthlib = "^1.2.0"
+beautifulsoup4 = "^4.12.3"
 
 [tool.ruff]
 select = [
