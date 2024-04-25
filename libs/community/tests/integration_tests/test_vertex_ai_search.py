@@ -24,8 +24,7 @@ from langchain_google_community import (
 
 def test_google_vertex_ai_search_get_relevant_documents() -> None:
     """Test the get_relevant_documents() method."""
-    google_cse_id = os.environ["GOOGLE_CSE_ID"]
-    retriever = VertexAIMultiTurnSearchRetriever(data_store_id=google_cse_id)
+    retriever = VertexAIMultiTurnSearchRetriever()
     documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
@@ -37,8 +36,7 @@ def test_google_vertex_ai_search_get_relevant_documents() -> None:
 
 def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
     """Test the get_relevant_documents() method."""
-    google_cse_id = os.environ["GOOGLE_CSE_ID"]
-    retriever = VertexAISearchRetriever(data_store_id=google_cse_id)
+    retriever = VertexAISearchRetriever()
     documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
