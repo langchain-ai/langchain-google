@@ -1,5 +1,6 @@
 """Integration test for Google Search API Wrapper."""
 import pytest
+import os
 
 from langchain_google_community.search import GoogleSearchAPIWrapper
 
