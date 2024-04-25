@@ -1,14 +1,17 @@
 """Test chat model integration."""
-
+import json
 from typing import Dict, List, Optional, Union
 from unittest.mock import Mock, patch
 
+import google.ai.generativelanguage as glm
 import pytest
 from langchain_core.messages import (
     AIMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
+    ToolCall,
+    ToolMessage,
 )
 from langchain_core.pydantic_v1 import SecretStr
 from pytest import CaptureFixture
@@ -16,6 +19,7 @@ from pytest import CaptureFixture
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     _parse_chat_history,
+    _parse_response_candidate,
 )
 
 
@@ -55,21 +59,111 @@ def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> N
 def test_parse_history() -> None:
     system_input = "You're supposed to answer math questions."
     text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
+    function_name = "calculator"
+    function_call_1 = {
+        "name": function_name,
+        "arguments": json.dumps({"arg1": "2", "arg2": "2", "op": "+"}),
+    }
+    function_answer1 = json.dumps({"result": 4})
+    function_call_2 = {
+        "name": function_name,
+        "arguments": json.dumps({"arg1": "2", "arg2": "2", "op": "*"}),
+    }
+    function_answer2 = json.dumps({"result": 4})
+    text_answer1 = "They are same"
+
     system_message = SystemMessage(content=system_input)
     message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    messages = [system_message, message1, message2, message3]
+    message2 = AIMessage(
+        content="",
+        additional_kwargs={
+            "function_call": function_call_1,
+        },
+    )
+    message3 = ToolMessage(
+        name="calculator", content=function_answer1, tool_call_id="1"
+    )
+    message4 = AIMessage(
+        content="",
+        additional_kwargs={
+            "function_call": function_call_2,
+        },
+    )
+    message5 = FunctionMessage(name="calculator", content=function_answer2)
+    message6 = AIMessage(content=text_answer1)
+    messages = [
+        system_message,
+        message1,
+        message2,
+        message3,
+        message4,
+        message5,
+        message6,
+    ]
     system_instruction, history = _parse_chat_history(
         messages, convert_system_message_to_human=True
     )
-    assert len(history) == 3
+    assert len(history) == 6
     assert history[0] == {
         "role": "user",
         "parts": [{"text": text_question1}],
     }
-    assert history[1] == {"role": "model", "parts": [{"text": text_answer1}]}
+    assert history[1] == {
+        "role": "model",
+        "parts": [
+            glm.Part(
+                function_call=glm.FunctionCall(
+                    {
+                        "name": "calculator",
+                        "args": json.loads(function_call_1["arguments"]),
+                    }
+                )
+            )
+        ],
+    }
+    assert history[2] == {
+        "role": "user",
+        "parts": [
+            glm.Part(
+                function_response=glm.FunctionResponse(
+                    {
+                        "name": "calculator",
+                        "response": {"result": 4},
+                    }
+                )
+            )
+        ],
+    }
+    assert history[3] == {
+        "role": "model",
+        "parts": [
+            glm.Part(
+                function_call=glm.FunctionCall(
+                    {
+                        "name": "calculator",
+                        "args": json.loads(function_call_2["arguments"]),
+                    }
+                )
+            )
+        ],
+    }
+    assert history[4] == {
+        "role": "user",
+        "parts": [
+            glm.Part(
+                function_response=glm.FunctionResponse(
+                    {
+                        "name": "calculator",
+                        "response": {"result": 4},
+                    }
+                )
+            )
+        ],
+    }
+    assert history[5] == {
+        "role": "model",
+        "parts": [{"text": text_answer1}],
+    }
     assert system_instruction == [{"text": system_input}]
 
 
@@ -108,3 +202,247 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         client_options=params["client_options"],
         default_metadata=expected_default_metadata,
     )
+
+
+@pytest.mark.parametrize(
+    "raw_candidate, expected",
+    [
+        (
+            {"content": {"parts": [{"text": "Mike age is 30"}]}},
+            AIMessage(
+                content="Mike age is 30",
+                additional_kwargs={},
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {"text": "Mike age is 30"},
+                        {"text": "Arthur age is 30"},
+                    ]
+                }
+            },
+            AIMessage(
+                content=["Mike age is 30", "Arthur age is 30"],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "function_call": glm.FunctionCall(
+                                name="Information", args={"name": "Ben"}
+                            )
+                        }
+                    ]
+                }
+            },
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "Information",
+                        "arguments": json.dumps({"name": "Ben"}),
+                    },
+                },
+                tool_calls=[
+                    ToolCall(
+                        name="Information",
+                        args={"name": "Ben"},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "function_call": glm.FunctionCall(
+                                name="Information",
+                                args={"info": ["A", "B", "C"]},
+                            )
+                        }
+                    ]
+                }
+            },
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "Information",
+                        "arguments": json.dumps({"info": ["A", "B", "C"]}),
+                    },
+                },
+                tool_calls=[
+                    ToolCall(
+                        name="Information",
+                        args={"info": ["A", "B", "C"]},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "function_call": glm.FunctionCall(
+                                name="Information",
+                                args={
+                                    "people": [
+                                        {"name": "Joe", "age": 30},
+                                        {"name": "Martha"},
+                                    ]
+                                },
+                            )
+                        }
+                    ]
+                }
+            },
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "Information",
+                        "arguments": json.dumps(
+                            {
+                                "people": [
+                                    {"name": "Joe", "age": 30},
+                                    {"name": "Martha"},
+                                ]
+                            }
+                        ),
+                    },
+                },
+                tool_calls=[
+                    ToolCall(
+                        name="Information",
+                        args={
+                            "people": [
+                                {"name": "Joe", "age": 30},
+                                {"name": "Martha"},
+                            ]
+                        },
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "function_call": glm.FunctionCall(
+                                name="Information",
+                                args={"info": [[1, 2, 3], [4, 5, 6]]},
+                            )
+                        }
+                    ]
+                }
+            },
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "Information",
+                        "arguments": json.dumps({"info": [[1, 2, 3], [4, 5, 6]]}),
+                    },
+                },
+                tool_calls=[
+                    ToolCall(
+                        name="Information",
+                        args={"info": [[1, 2, 3], [4, 5, 6]]},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {"text": "Mike age is 30"},
+                        {
+                            "function_call": glm.FunctionCall(
+                                name="Information", args={"name": "Ben"}
+                            )
+                        },
+                    ]
+                }
+            },
+            AIMessage(
+                content="Mike age is 30",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "Information",
+                        "arguments": json.dumps({"name": "Ben"}),
+                    },
+                },
+                tool_calls=[
+                    ToolCall(
+                        name="Information",
+                        args={"name": "Ben"},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "function_call": glm.FunctionCall(
+                                name="Information", args={"name": "Ben"}
+                            )
+                        },
+                        {"text": "Mike age is 30"},
+                    ]
+                }
+            },
+            AIMessage(
+                content="Mike age is 30",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "Information",
+                        "arguments": json.dumps({"name": "Ben"}),
+                    },
+                },
+                tool_calls=[
+                    ToolCall(
+                        name="Information",
+                        args={"name": "Ben"},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+    ],
+)
+def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> None:
+    with patch("langchain_google_genai.chat_models.uuid.uuid4") as uuid4:
+        uuid4.return_value = "00000000-0000-0000-0000-00000000000"
+        response_candidate = glm.Candidate(raw_candidate)
+        result = _parse_response_candidate(response_candidate)
+        assert result.content == expected.content
+        assert result.tool_calls == expected.tool_calls
+        for key, value in expected.additional_kwargs.items():
+            if key == "function_call":
+                res_fc = result.additional_kwargs[key]
+                exp_fc = value
+                assert res_fc["name"] == exp_fc["name"]
+
+                assert json.loads(res_fc["arguments"]) == json.loads(
+                    exp_fc["arguments"]
+                )
+            else:
+                res_kw = result.additional_kwargs[key]
+                exp_kw = value
+                assert res_kw == exp_kw

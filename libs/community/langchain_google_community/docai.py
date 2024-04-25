@@ -89,8 +89,9 @@ class DocAIParser(BaseBlobParser):
                 from google.cloud.documentai import DocumentProcessorServiceClient
             except ImportError as exc:
                 raise ImportError(
-                    "documentai package not found, please install it with"
-                    " `pip install google-cloud-documentai`"
+                    "Could not import google-cloud-documentai python package. "
+                    "Please, install docai dependency group: "
+                    "`pip install langchain-google-community[docai]`"
                 ) from exc
             options = ClientOptions(
                 api_endpoint=f"{location}-documentai.googleapis.com"
@@ -138,8 +139,9 @@ class DocAIParser(BaseBlobParser):
             )
         except ImportError as exc:
             raise ImportError(
-                "documentai package not found, please install it with"
-                " `pip install google-cloud-documentai`"
+                "Could not import google-cloud-documentai python package. "
+                "Please, install docai dependency group: "
+                "`pip install langchain-google-community[docai]`"
             ) from exc
         try:
             from google.cloud.documentai_toolbox.wrappers.page import (  # type: ignore[import]
@@ -147,8 +149,8 @@ class DocAIParser(BaseBlobParser):
             )
         except ImportError as exc:
             raise ImportError(
-                "documentai_toolbox package not found, please install it with"
-                " `pip install google-cloud-documentai-toolbox`"
+                "documentai_toolbox package not found, please install it with "
+                "`pip install langchain-google-community[docai]`"
             ) from exc
         ocr_config = (
             OcrConfig(enable_native_pdf_parsing=enable_native_pdf_parsing)
@@ -247,8 +249,8 @@ class DocAIParser(BaseBlobParser):
             from google.cloud.documentai_toolbox.wrappers.page import _text_from_layout
         except ImportError as exc:
             raise ImportError(
-                "documentai_toolbox package not found, please install it with"
-                " `pip install google-cloud-documentai-toolbox`"
+                "documentai_toolbox package not found, please install it with "
+                "`pip install langchain-google-community[docai]`"
             ) from exc
         for result in results:
             gcs_bucket_name, gcs_prefix = split_gcs_uri(result.parsed_path)
@@ -271,7 +273,7 @@ class DocAIParser(BaseBlobParser):
         except ImportError as exc:
             raise ImportError(
                 "long running operations package not found, please install it with"
-                " `pip install gapic-google-longrunning`"
+                "`pip install langchain-google-community[docai]`"
             ) from exc
 
         return [
@@ -314,8 +316,8 @@ class DocAIParser(BaseBlobParser):
             from google.cloud.documentai_v1.types import OcrConfig, ProcessOptions
         except ImportError as exc:
             raise ImportError(
-                "documentai package not found, please install it with"
-                " `pip install google-cloud-documentai`"
+                "documentai package not found, please install it with "
+                "`pip install langchain-google-community[docai]`"
             ) from exc
 
         output_path = gcs_output_path or self._gcs_output_path
@@ -376,8 +378,8 @@ class DocAIParser(BaseBlobParser):
             )
         except ImportError as exc:
             raise ImportError(
-                "documentai package not found, please install it with"
-                " `pip install google-cloud-documentai`"
+                "documentai package not found, please install it with "
+                "`pip install langchain-google-community[docai]`"
             ) from exc
 
         return [
