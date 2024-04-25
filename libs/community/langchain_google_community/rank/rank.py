@@ -1,11 +1,11 @@
-from typing import Any, List, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from google.api_core import exceptions as core_exceptions
-from google.auth.credentials import Credentials
+from google.auth.credentials import Credentials  # type: ignore
 from google.cloud import discoveryengine_v1alpha
-from langchain.retrievers.document_compressors.base import BaseDocumentCompressor
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
+from langchain_core.documents.compressor import BaseDocumentCompressor
 from langchain_core.pydantic_v1 import Extra, Field
 
 from langchain_google_community.rank._sdk_manager import VertexRankSDKManager
@@ -39,9 +39,11 @@ class VertexAIRank(BaseDocumentCompressor):
             If true, the response will contain only
             record ID and score. By default, it is false,
             the response will contain record details.
-        title_field (Optional[str]): Specifies the document metadata field to use as title.
+        title_field (Optional[str]): Specifies the document metadata field
+        to use as title.
         credentials (Optional[Credentials]): Google Cloud credentials object.
-        credentials_path (Optional[str]): Path to the Google Cloud service account credentials file.
+        credentials_path (Optional[str]): Path to the Google Cloud service
+        account credentials file.
     """
 
     project_id: str = Field(default=None)
@@ -58,13 +60,13 @@ class VertexAIRank(BaseDocumentCompressor):
 
     def __init__(self, **kwargs: Any):
         """
-        Constructor for VertexAIRanker, allowing for specification of ranking configuration
-        and initialization of Google Cloud services.
+        Constructor for VertexAIRanker, allowing for specification of
+        ranking configuration and initialization of Google Cloud services.
 
         The parameters accepted are the same as the attributes listed above.
         """
         super().__init__(**kwargs)
-        self.client = kwargs.get("client")
+        self.client = kwargs.get("client")  # type: ignore
         if not self.client:
             self.sdk_manager = VertexRankSDKManager(
                 project_id=self.project_id,
@@ -75,9 +77,7 @@ class VertexAIRank(BaseDocumentCompressor):
             self.client = self.sdk_manager.get_rank_service_client()
 
     def _rerank_documents(
-        self,
-        query: str,
-        documents: Sequence[Document]
+        self, query: str, documents: Sequence[Document]
     ) -> Sequence[Document]:
         """
         Reranks documents based on the provided query.
@@ -104,7 +104,10 @@ class VertexAIRank(BaseDocumentCompressor):
             or (self.title_field and doc.metadata.get(self.title_field))
         ]
 
-        ranking_config_path = f"projects/{self.project_id}/locations/{self.location_id}/rankingConfigs/{self.ranking_config}"
+        ranking_config_path = (
+            f"projects/{self.project_id}/locations/{self.location_id}"
+            f"/rankingConfigs/{self.ranking_config}"
+        )
 
         request = discoveryengine_v1alpha.RankRequest(
             ranking_config=ranking_config_path,

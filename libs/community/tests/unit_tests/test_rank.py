@@ -1,9 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from google.api_core import exceptions as core_exceptions
 from google.cloud import discoveryengine_v1alpha
-from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_core.documents import Document
 from pytest import approx
 
@@ -12,7 +10,7 @@ from langchain_google_community.rank.rank import VertexAIRank
 
 # Fixtures for common setup
 @pytest.fixture
-def mock_rank_service_client():
+def mock_rank_service_client() -> Mock:
     mock_client = Mock(spec=discoveryengine_v1alpha.RankServiceClient)
     mock_client.rank.return_value = discoveryengine_v1alpha.RankResponse(
         records=[
@@ -26,8 +24,9 @@ def mock_rank_service_client():
     )
     return mock_client
 
+
 @pytest.fixture
-def ranker(mock_rank_service_client):
+def ranker(mock_rank_service_client: Mock) -> VertexAIRank:
     return VertexAIRank(
         project_id="test-project",
         location_id="test-location",
@@ -36,8 +35,9 @@ def ranker(mock_rank_service_client):
         client=mock_rank_service_client,
     )
 
+
 # Unit tests
-def test_vertex_ai_ranker_initialization():
+def test_vertex_ai_ranker_initialization() -> None:
     ranker = VertexAIRank(
         project_id="test-project",
         location_id="test-location",
@@ -49,13 +49,18 @@ def test_vertex_ai_ranker_initialization():
     assert ranker.ranking_config == "test-config"
     assert ranker.title_field == "source"
 
+
 @patch("langchain_google_community.rank.rank.discoveryengine_v1alpha.RankServiceClient")
-def test_rerank_documents(mock_rank_service_client_class, ranker):
+def test_rerank_documents(
+    mock_rank_service_client_class: Mock, ranker: VertexAIRank
+) -> None:
     documents = [
         Document(page_content="Document 1", metadata={"source": "Title 1"}),
         Document(page_content="Document 2", metadata={"source": "Title 2"}),
     ]
-    reranked_documents = ranker._rerank_documents(query="test query", documents=documents)
+    reranked_documents = ranker._rerank_documents(
+        query="test query", documents=documents
+    )
     print(reranked_documents)
     assert len(reranked_documents) == 2
     assert reranked_documents[0].page_content == "Document 1"
