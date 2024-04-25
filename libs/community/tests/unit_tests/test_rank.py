@@ -37,12 +37,16 @@ def ranker(mock_rank_service_client: Mock) -> VertexAIRank:
 
 
 # Unit tests
-def test_vertex_ai_ranker_initialization() -> None:
+@patch(
+    "langchain_google_community.vertex_rank.discoveryengine_v1alpha.RankServiceClient"
+)
+def test_vertex_ai_ranker_initialization(mock_rank_service_client: Mock) -> None:
     ranker = VertexAIRank(
         project_id="test-project",
         location_id="test-location",
         ranking_config="test-config",
         title_field="source",
+        client=mock_rank_service_client,
     )
     assert ranker.project_id == "test-project"
     assert ranker.location_id == "test-location"
@@ -53,9 +57,7 @@ def test_vertex_ai_ranker_initialization() -> None:
 @patch(
     "langchain_google_community.vertex_rank.discoveryengine_v1alpha.RankServiceClient"
 )
-def test_rerank_documents(
-    mock_rank_service_client_class: Mock, ranker: VertexAIRank
-) -> None:
+def test_rerank_documents(mock_rank_service_client: Mock, ranker: VertexAIRank) -> None:
     documents = [
         Document(page_content="Document 1", metadata={"source": "Title 1"}),
         Document(page_content="Document 2", metadata={"source": "Title 2"}),
