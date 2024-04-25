@@ -1,5 +1,4 @@
-"""Chain that calls Google Places API.
-"""
+"""Chain that calls Google Places API."""
 
 import logging
 from typing import Any, Dict, Optional, Type
@@ -54,7 +53,8 @@ class GooglePlacesAPIWrapper(BaseModel):
         except ImportError:
             raise ImportError(
                 "Could not import googlemaps python package. "
-                "Please install it with `pip install googlemaps`."
+                "Please, install places dependency group: "
+                "`pip install langchain-google-community[places]`"
             )
         return values
 

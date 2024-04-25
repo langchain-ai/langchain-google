@@ -66,7 +66,8 @@ class SpeechToTextLoader(BaseLoader):
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-speech python package. "
-                "Please install it with `pip install google-cloud-speech`."
+                "Please, install speech dependency group: "
+                "`pip install langchain-google-community[speech]`"
             ) from exc
 
         self.project_id = project_id
@@ -108,7 +109,8 @@ class SpeechToTextLoader(BaseLoader):
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-speech python package. "
-                "Please install it with `pip install google-cloud-speech`."
+                "Please, install speech dependency group: "
+                "`pip install langchain-google-community[speech]`"
             ) from exc
 
         request = RecognizeRequest(
