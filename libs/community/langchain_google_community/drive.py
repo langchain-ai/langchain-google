@@ -159,11 +159,9 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
             )
         except ImportError:
             raise ImportError(
-                "Install prerequisites by running: "
-                "`pip install --upgrade "
-                "google-api-python-client google-auth-httplib2 "
-                "google-auth-oauthlib` "
-                "to use the Google Drive loader."
+                "Could execute GoogleDriveLoader. "
+                "Please, install drive dependency group: "
+                "`pip install langchain-google-community[drive]`"
             )
 
         creds = None
