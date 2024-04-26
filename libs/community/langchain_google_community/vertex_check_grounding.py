@@ -13,19 +13,30 @@ class VertexCheckGroundingOutputParser(
 ):
     """
     Initializes the Vertex AI CheckGroundingOutputParser with configurable parameters.
-    Inherits from BaseOutputParser and calls the Check Grounding API to validate the
-    response against a given set of documents and returns back citations that support
-    the claims along with the cited chunks. Output is of the type
-    CheckGroundingResponse.
+
+    Calls the Check Grounding API to validate the response against a given set of
+    documents and returns back citations that support the claims along with the cited
+    chunks. Output is of the type CheckGroundingResponse.
 
     Attributes:
-        project_id (str): Google Cloud project ID.
+        project_id (str): Google Cloud project ID
         location_id (str): Location ID for the ranking service.
-        grounding_config (str): Required. The resource name of the grounding config.
-        citation_threshold (float): The threshold for determining citation necessity.
+        grounding_config (str):
+            Required. The resource name of the grounding config, such as
+            ``default_grounding_config``.
+            It is set to ``default_grounding_config`` by default if unspecified
+        citation_threshold (float):
+            The threshold (in [0,1]) used for determining whether a fact
+            must be cited for a claim in the answer candidate. Choosing
+            a higher threshold will lead to fewer but very strong
+            citations, while choosing a lower threshold may lead to more
+            but somewhat weaker citations. If unset, the threshold will
+            default to 0.6.
+        title_field (Optional[str]): Specifies the document metadata field
+        to use as title.
         credentials (Optional[Credentials]): Google Cloud credentials object.
-        credentials_path (Optional[str]): Path to the Google Cloud service account
-        credentials file.
+        credentials_path (Optional[str]): Path to the Google Cloud service
+        account credentials file.
     """
 
     project_id: str = Field(default=None)
@@ -45,6 +56,11 @@ class VertexCheckGroundingOutputParser(
         answer_with_citations: str = ""
 
     def __init__(self, **kwargs: Any):
+        """
+        Constuctor for CheckGroundingOutputParser.
+        Initializes the grounding check service client with necessary credentials
+        and configurations.
+        """
         super().__init__(**kwargs)
         self.client = kwargs.get("client")
         if not self.client:
@@ -53,6 +69,13 @@ class VertexCheckGroundingOutputParser(
     def _get_check_grounding_service_client(
         self,
     ) -> discoveryengine_v1alpha.GroundedGenerationServiceClient:
+        """
+        Returns a GroundedGenerationServiceClient instance using provided credentials.
+        Raises ImportError if necessary packages are not installed.
+
+        Returns:
+            A GroundedGenerationServiceClient instance.
+        """
         try:
             return discoveryengine_v1alpha.GroundedGenerationServiceClient(
                 credentials=(
@@ -72,6 +95,44 @@ class VertexCheckGroundingOutputParser(
     def parse(
         self, answer_candidate: str, documents: Optional[List[Document]] = None
     ) -> CheckGroundingResponse:
+        """
+        Calls the Vertex Check Grounding API for a given answer candidate and a list
+        of documents (claims) to validate whether the set of claims support the 
+        answer candidate.
+
+        Args:
+            answer_candidate (str): The candidate answer to be evaluated for grounding.
+            documents (List[Document]): The documents against which grounding is
+            checked. This will be converted to facts:
+                facts (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
+                    GroundingFact]):
+                List of facts for the grounding check.
+                We support up to 200 facts.
+        Returns:
+            Response of the type CheckGroundingResponse
+
+            Attributes:
+            support_score (float):
+                The support score for the input answer
+                candidate. Higher the score, higher is the
+                fraction of claims that are supported by the
+                provided facts. This is always set when a
+                response is returned.
+
+            cited_chunks (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
+                FactChunk]):
+                List of facts cited across all claims in the
+                answer candidate. These are derived from the
+                facts supplied in the request.
+
+            claims (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
+                CheckGroundingResponse.Claim]):
+                Claim texts and citation info across all
+                claims in the answer candidate.
+            
+            answer_with_citations (str):
+                Complete formed answer formatted with inline citations
+        """
         if documents is None:
             raise NotImplementedError("This parser requires documents for processing.")
 
