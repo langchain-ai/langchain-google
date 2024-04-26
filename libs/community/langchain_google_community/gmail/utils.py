@@ -1,4 +1,5 @@
 """Gmail tool utils."""
+
 from __future__ import annotations
 
 import logging
@@ -27,8 +28,8 @@ def import_google() -> Tuple[Request, Credentials]:
         from google.oauth2.credentials import Credentials  # noqa: F401
     except ImportError:
         raise ImportError(
-            "You need to install google-auth-httplib2 to use this toolkit. "
-            "Try running pip install --upgrade google-auth-httplib2"
+            "You need to install gmail dependencies to use this toolkit. "
+            "Try running poetry install --with gmail"
         )
     return Request, Credentials
 
@@ -43,8 +44,9 @@ def import_installed_app_flow() -> InstalledAppFlow:
         from google_auth_oauthlib.flow import InstalledAppFlow
     except ImportError:
         raise ImportError(
-            "You need to install google-auth-oauthlib to use this toolkit. "
-            "Try running pip install --upgrade google-auth-oauthlib"
+            "You need to install gmail dependencies to use this toolkit. "
+            "Please, install bigquery dependency group: "
+            "`pip install langchain-google-community[gmail]`"
         )
     return InstalledAppFlow
 
@@ -59,8 +61,8 @@ def import_googleapiclient_resource_builder() -> build_resource:
         from googleapiclient.discovery import build
     except ImportError:
         raise ImportError(
-            "You need to install googleapiclient to use this toolkit. "
-            "Try running pip install --upgrade google-api-python-client"
+            "You need to install all dependencies to use this toolkit. "
+            "Try running pip install langchain-google-community"
         )
     return build
 

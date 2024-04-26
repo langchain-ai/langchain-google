@@ -51,7 +51,7 @@ class GCSFileLoader(BaseLoader):
                 message = (
                     "UnstructuredFileLoader loader not found! Either provide a "
                     "custom loader with loader_func argument, or install "
-                    " `pip install langchain_community`"
+                    "`pip install langchain-google-community`"
                 )
                 print(message)
             return UnstructuredFileLoader(file_path)
@@ -65,7 +65,8 @@ class GCSFileLoader(BaseLoader):
         except ImportError:
             raise ImportError(
                 "Could not import google-cloud-storage python package. "
-                "Please install it with `pip install google-cloud-storage`."
+                "Please, install gcs dependency group: "
+                "`pip install langchain-google-community[gcs]`"
             )
 
         # initialize a client

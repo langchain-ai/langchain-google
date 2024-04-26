@@ -59,9 +59,9 @@ class _BaseVertexAISearchRetriever(BaseModel):
             from google.cloud import discoveryengine_v1beta  # noqa: F401
         except ImportError as exc:
             raise ImportError(
-                "google.cloud.discoveryengine is not installed."
-                "Please install it with pip install "
-                "google-cloud-discoveryengine>=0.11.0"
+                "Could not import google-cloud-discoveryengine python package. "
+                "Please, install vertexaisearch dependency group: "
+                "poetry install --with vertexaisearch"
             ) from exc
 
         values["project_id"] = get_from_dict_or_env(values, "project_id", "PROJECT_ID")
@@ -250,8 +250,9 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             from google.cloud.discoveryengine_v1beta import SearchServiceClient
         except ImportError as exc:
             raise ImportError(
-                "google.cloud.discoveryengine is not installed."
-                "Please install it with pip install google-cloud-discoveryengine"
+                "Could not import google-cloud-discoveryengine python package. "
+                "Please, install vertexaisearch dependency group: "
+                "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
 
         super().__init__(**kwargs)

@@ -24,6 +24,7 @@ from langchain_google_community.vertex_ai_search import (
     VertexAISearchRetriever,
     VertexAISearchSummaryTool,
 )
+from langchain_google_community.vertex_rank import VertexAIRank
 from langchain_google_community.vision import CloudVisionLoader, CloudVisionParser
 
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     "VertexAIMultiTurnSearchRetriever",
     "VertexAISearchRetriever",
     "VertexAISearchSummaryTool",
+    "VertexAIRank",
 ]

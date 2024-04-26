@@ -31,15 +31,16 @@ import google.generativeai as genai  # type: ignore[import]
 import proto  # type: ignore[import]
 import requests
 from google.generativeai.types import SafetySettingDict  # type: ignore[import]
+from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
 from google.generativeai.types.content_types import (  # type: ignore[import]
     FunctionDeclarationType,
-    ToolConfigDict,
     ToolDict,
 )
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -56,6 +57,7 @@ from langchain_core.messages import (
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import SecretStr, root_validator
+from langchain_core.runnables import Runnable
 from langchain_core.utils import get_from_dict_or_env
 from tenacity import (
     before_sleep_log,
@@ -67,7 +69,11 @@ from tenacity import (
 
 from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_google_genai._function_utils import (
+    _tool_choice_to_tool_config,
+    _ToolChoiceType,
+    _ToolConfigDict,
     convert_to_genai_function_declarations,
+    tool_to_dict,
 )
 from langchain_google_genai.llms import GoogleModelFamily, _BaseGoogleGenerativeAI
 
@@ -738,17 +744,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self,
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
-        tools: Optional[Sequence[ToolDict]] = None,
+        tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, ToolConfigDict]] = None,
+        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         **kwargs: Any,
     ) -> Tuple[Dict[str, Any], genai.ChatSession, genai.types.ContentDict]:
         client = self.client
         formatted_tools = None
-        raw_tools = tools if tools else functions
-        if raw_tools:
-            formatted_tools = convert_to_genai_function_declarations(raw_tools)
+        if tools:
+            formatted_tools = [
+                convert_to_genai_function_declarations(tool) for tool in tools
+            ]
+        elif functions:
+            formatted_tools = [convert_to_genai_function_declarations(functions)]
 
         if formatted_tools or safety_settings:
             client = genai.GenerativeModel(
@@ -789,3 +798,37 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             token_count = result["token_count"]
 
         return token_count
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[ToolDict, GoogleTool]],
+        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        *,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        """Bind tool-like objects to this chat model.
+
+        Assumes model is compatible with google-generativeAI tool-calling API.
+
+        Args:
+            tools: A list of tool definitions to bind to this chat model.
+                Can be a pydantic model, callable, or BaseTool. Pydantic
+                models, callables, and BaseTools will be automatically converted to
+                their schema dictionary representation.
+            **kwargs: Any additional parameters to pass to the
+                :class:`~langchain.runnable.Runnable` constructor.
+        """
+        if tool_choice and tool_config:
+            raise ValueError(
+                "Must specify at most one of tool_choice and tool_config, received "
+                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
+            )
+        # Bind dicts for easier serialization/deserialization.
+        genai_tools = [tool_to_dict(convert_to_genai_function_declarations(tools))]
+        if tool_choice:
+            all_names = [
+                f["name"] for t in genai_tools for f in t["function_declarations"]
+            ]
+            tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
+        return self.bind(tools=genai_tools, tool_config=tool_config, **kwargs)
