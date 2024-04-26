@@ -1,12 +1,14 @@
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
-from google.cloud import discoveryengine_v1alpha  # type: ignore
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
 from langchain_core.pydantic_v1 import Extra, Field
+
+if TYPE_CHECKING:
+    from google.cloud import discoveryengine_v1alpha  # type: ignore
 
 
 class VertexAIRank(BaseDocumentCompressor):
@@ -53,7 +55,7 @@ class VertexAIRank(BaseDocumentCompressor):
     title_field: Optional[str] = Field(default=None)
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
-    client: discoveryengine_v1alpha.RankServiceClient = Field(default=None)
+    client: Any
 
     def __init__(self, **kwargs: Any):
         """
@@ -67,7 +69,7 @@ class VertexAIRank(BaseDocumentCompressor):
         if not self.client:
             self.client = self._get_rank_service_client()
 
-    def _get_rank_service_client(self) -> discoveryengine_v1alpha.RankServiceClient:
+    def _get_rank_service_client(self) -> "discoveryengine_v1alpha.RankServiceClient":
         """
         Returns a RankServiceClient instance for making API calls to the
         Vertex AI Ranking service.
@@ -76,20 +78,21 @@ class VertexAIRank(BaseDocumentCompressor):
             A RankServiceClient instance.
         """
         try:
-            return discoveryengine_v1alpha.RankServiceClient(
-                credentials=(
-                    self.credentials
-                    or Credentials.from_service_account_file(self.credentials_path)
-                    if self.credentials_path
-                    else None
-                )
-            )
+            from google.cloud import discoveryengine_v1alpha  # type: ignore
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
                 "Please, install vertexaisearch dependency group: "
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
+        return discoveryengine_v1alpha.RankServiceClient(
+            credentials=(
+                self.credentials
+                or Credentials.from_service_account_file(self.credentials_path)
+                if self.credentials_path
+                else None
+            )
+        )
 
     def _rerank_documents(
         self, query: str, documents: Sequence[Document]
@@ -104,6 +107,8 @@ class VertexAIRank(BaseDocumentCompressor):
         Returns:
             A list of reranked documents.
         """
+        from google.cloud import discoveryengine_v1alpha  # type: ignore
+
         records = [
             discoveryengine_v1alpha.RankingRecord(
                 id=str(idx),
