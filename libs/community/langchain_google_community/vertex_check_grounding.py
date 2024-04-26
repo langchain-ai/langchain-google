@@ -57,7 +57,7 @@ class VertexCheckGroundingOutputParser(
 
     def __init__(self, **kwargs: Any):
         """
-        Constuctor for CheckGroundingOutputParser.
+        Constructor for CheckGroundingOutputParser.
         Initializes the grounding check service client with necessary credentials
         and configurations.
         """
