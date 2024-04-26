@@ -86,7 +86,6 @@ def test_parse(mock_check_grounding_service_client: Mock) -> None:
     ]
     answer_candidate = "Ulm, in the Kingdom of Württemberg in the German Empire"
     response = output_parser.parse(answer_candidate, documents)
-    print(type(response))
 
     assert response == VertexCheckGroundingOutputParser.CheckGroundingResponse(
         support_score=0.9919261932373047,
