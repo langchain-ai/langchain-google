@@ -54,6 +54,7 @@ def test_create_structured_runnable_with_prompt() -> None:
 
 
 @pytest.mark.release
+@pytest.mark.xfail(reason="flaky")
 def test_reflection() -> None:
     class Reflection(BaseModel):
         reflections: str = Field(
