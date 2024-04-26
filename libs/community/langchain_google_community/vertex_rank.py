@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, TYPE_CHECKING, Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
@@ -59,9 +59,6 @@ class VertexAIRank(BaseDocumentCompressor):
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
     client: Any
-=======
-    client: "discoveryengine_v1alpha.RankServiceClient" = Field(default=None)
->>>>>>> 3fde8c3 (fix deps)
 
     def __init__(self, **kwargs: Any):
         """
