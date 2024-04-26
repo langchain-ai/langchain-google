@@ -51,9 +51,9 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.output_parsers.base import OutputParserLike
-from langchain_core.output_parsers.openai_functions import (
-    JsonOutputFunctionsParser,
-    PydanticOutputFunctionsParser,
+from langchain_core.output_parsers.openai_tools import (
+    JsonOutputToolsParser,
+    PydanticToolsParser,
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
@@ -186,99 +186,123 @@ def _parse_chat_history_gemini(
         return [_convert_to_prompt(part) for part in raw_content]
 
     vertex_messages: List[Content] = []
-    convert_system_message_to_human_content = None
+    system_parts: List[Part] | None = None
     system_instruction = None
+
     for i, message in enumerate(history):
         if isinstance(message, SystemMessage):
+            if i != 0:
+                raise ValueError("SystemMessage should be the first in the history.")
             if system_instruction is not None:
                 raise ValueError(
                     "Detected more than one SystemMessage in the list of messages."
                     "Gemini APIs support the insertion of only one SystemMessage."
                 )
-            else:
-                if convert_system_message_to_human:
-                    logger.warning(
-                        "gemini models released from April 2024 support"
-                        "SystemMessages natively. For best performances,"
-                        "when working with these models,"
-                        "set convert_system_message_to_human to False"
-                    )
-                    convert_system_message_to_human_content = message
-                    continue
-                system_instruction = Content(
-                    role="user", parts=_convert_to_parts(message)
+            if convert_system_message_to_human:
+                logger.warning(
+                    "gemini models released from April 2024 support"
+                    "SystemMessages natively. For best performances,"
+                    "when working with these models,"
+                    "set convert_system_message_to_human to False"
                 )
+                system_parts = _convert_to_parts(message)
                 continue
-        elif (
-            i == 0
-            and isinstance(message, SystemMessage)
-            and convert_system_message_to_human
-        ):
-            convert_system_message_to_human_content = message
-            continue
+            system_instruction = Content(role="user", parts=_convert_to_parts(message))
+        elif isinstance(message, HumanMessage):
+            role = "user"
+            parts = _convert_to_parts(message)
+            if system_parts is not None:
+                if i != 1:
+                    raise ValueError(
+                        "System message should be immediately followed by HumanMessage"
+                    )
+                parts = system_parts + parts
+                system_parts = None
+            vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, AIMessage):
-            raw_function_call = message.additional_kwargs.get("function_call")
             role = "model"
 
             parts = []
             if message.content:
                 parts = _convert_to_parts(message)
-            if raw_function_call:
+
+            for tc in message.tool_calls:
                 function_call = FunctionCall(
                     {
-                        "name": raw_function_call["name"],
-                        "args": json.loads(raw_function_call["arguments"]),
+                        "name": tc["name"],
+                        "args": tc["args"],
                     }
                 )
                 gapic_part = GapicPart(function_call=function_call)
                 parts.append(Part._from_gapic(gapic_part))
-        elif isinstance(message, HumanMessage):
-            role = "user"
-            parts = _convert_to_parts(message)
+
+            vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
             role = "function"
-            parts = [
-                Part.from_function_response(
-                    name=message.name,
-                    response={
-                        "content": message.content,
-                    },
-                )
-            ]
+
+            part = Part.from_function_response(
+                name=message.name,
+                response={
+                    "content": message.content,
+                },
+            )
+
+            prev_content = vertex_messages[-1]
+            prev_content_is_function = prev_content and prev_content.role == "function"
+            if prev_content_is_function:
+                parts = prev_content.parts
+                parts.append(part)
+                # replacing last message
+                vertex_messages[-1] = Content(role=role, parts=parts)
+                continue
+
+            parts = [part]
+
+            vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, ToolMessage):
             role = "function"
-            if (i > 0) and isinstance(history[i - 1], AIMessage):
-                # message.name can be null for ToolMessage
-                if history[i - 1].tool_calls:  # type: ignore
-                    name = history[i - 1].tool_calls[0]["name"]  # type: ignore
-                else:
-                    name = message.name
-            else:
-                name = message.name
-            parts = [
-                Part.from_function_response(
-                    name=name,
-                    response={
-                        "content": message.content,
-                    },
-                )
-            ]
+
+            # message.name can be null for ToolMessage
+            name = message.name
+            if name is None:
+                prev_message = history[i - 1] if i > 0 else None
+                if isinstance(prev_message, AIMessage):
+                    tool_call_id = message.tool_call_id
+                    tool_call: ToolCall | None = next(
+                        (t for t in prev_message.tool_calls if t["id"] == tool_call_id),
+                        None,
+                    )
+                    if tool_call is None:
+                        raise ValueError(
+                            (
+                                "Message name is empty and can't find"
+                                + f"corresponding tool call for id: '${tool_call_id}'"
+                            )
+                        )
+                    name = tool_call["name"]
+            part = Part.from_function_response(
+                name=name,
+                response={
+                    "content": message.content,
+                },
+            )
+
+            prev_content = vertex_messages[-1]
+            prev_content_is_function = prev_content and prev_content.role == "function"
+            if prev_content_is_function:
+                parts = prev_content.parts
+                parts.append(part)
+                # replacing last message
+                vertex_messages[-1] = Content(role=role, parts=parts)
+                continue
+
+            parts = [part]
+
+            vertex_messages.append(Content(role=role, parts=parts))
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
             )
-
-        if convert_system_message_to_human_content:
-            if role == "model":
-                raise ValueError(
-                    "SystemMessage should be followed by a HumanMessage and "
-                    "not by AIMessage."
-                )
-            parts = _convert_to_parts(convert_system_message_to_human_content) + parts
-            convert_system_message_to_human_content = None
-
-        vertex_message = Content(role=role, parts=parts)
-        vertex_messages.append(vertex_message)
     return system_instruction, vertex_messages
 
 
@@ -362,9 +386,16 @@ def _parse_response_candidate(
                 raise Exception("Unexpected content type")
 
         if part.function_call:
-            # TODO: support multiple function calls
             if "function_call" in additional_kwargs:
-                raise Exception("Multiple function calls are not currently supported")
+                logger.warning(
+                    (
+                        "This model can reply with multiple "
+                        "function calls in one response. "
+                        "Please don't rely on `additional_kwargs.function_call` "
+                        "as only the last one will be saved."
+                        "Use `tool_calls` instead."
+                    )
+                )
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
@@ -388,23 +419,25 @@ def _parse_response_candidate(
                         [{"function": function_call}],
                         return_id=False,
                     )
-                    tool_calls = [
-                        ToolCall(
-                            name=tool_call["name"],
-                            args=tool_call["args"],
-                            id=tool_call.get("id", str(uuid.uuid4())),
-                        )
-                        for tool_call in tool_calls_dicts
-                    ]
+                    tool_calls.extend(
+                        [
+                            ToolCall(
+                                name=tool_call["name"],
+                                args=tool_call["args"],
+                                id=tool_call.get("id", str(uuid.uuid4())),
+                            )
+                            for tool_call in tool_calls_dicts
+                        ]
+                    )
                 except Exception as e:
-                    invalid_tool_calls = [
+                    invalid_tool_calls.append(
                         InvalidToolCall(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
                             id=function_call.get("id", str(uuid.uuid4())),
                             error=str(e),
                         )
-                    ]
+                    )
     if content is None:
         content = ""
 
@@ -417,8 +450,8 @@ def _parse_response_candidate(
 
     return AIMessage(
         content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
-        additional_kwargs=additional_kwargs,
         tool_calls=tool_calls,
+        additional_kwargs=additional_kwargs,
         invalid_tool_calls=invalid_tool_calls,
     )
 
@@ -504,7 +537,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     setting this parameter to True is discouraged.
     """
     check_stream_response_for_candidates: bool = False
-    """Retrieves all chunks from streaming response and check all of them 
+    """Retrieves all chunks from streaming response and check all of them
     have candidates. If not, retries.
     It makes streaming mode essentially useless."""
 
@@ -898,11 +931,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
         if isinstance(schema, type) and issubclass(schema, BaseModel):
-            parser: OutputParserLike = PydanticOutputFunctionsParser(
-                pydantic_schema=schema
+            parser: OutputParserLike = PydanticToolsParser(
+                tools=[schema], first_tool_only=True
             )
         else:
-            parser = JsonOutputFunctionsParser()
+            parser = JsonOutputToolsParser()
         llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
