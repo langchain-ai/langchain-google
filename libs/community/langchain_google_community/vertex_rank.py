@@ -10,6 +10,9 @@ from langchain_core.pydantic_v1 import Extra, Field
 if TYPE_CHECKING:
     from google.cloud import discoveryengine_v1alpha  # type: ignore
 
+if TYPE_CHECKING:
+    from google.cloud import discoveryengine_v1alpha  # type: ignore
+
 
 class VertexAIRank(BaseDocumentCompressor):
     """
