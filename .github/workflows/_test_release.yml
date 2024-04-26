@@ -44,7 +44,7 @@ jobs:
       # > from the publish job.
       # https://github.com/pypa/gh-action-pypi-publish#non-goals
       - name: Build project for distribution
-        run: poetry build --with test #this needs to be changed
+        run: poetry build
         working-directory: ${{ inputs.working-directory }}
 
       - name: Upload build
