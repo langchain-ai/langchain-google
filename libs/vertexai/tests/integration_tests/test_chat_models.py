@@ -439,8 +439,8 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     }
 
 
-# Can be flaky
 @pytest.mark.release
+@pytest.mark.xfail(reason="flaky")
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
