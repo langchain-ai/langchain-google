@@ -86,6 +86,7 @@ def _completion_with_retry(
                     stream=stream,
                     generation_config=generation_config,
                     safety_settings=kwargs.pop("safety_settings", None),
+                    request_options={"timeout": llm.timeout} if llm.timeout else None,
                 )
             return llm.client.generate_text(prompt=prompt, **kwargs)
         except google.api_core.exceptions.FailedPrecondition as exc:
@@ -143,6 +144,10 @@ Supported examples:
        not return the full n completions if duplicates are generated."""
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
+
+    timeout: Optional[float] = None
+    """The maximum number of seconds to wait for a response."""
+
     client_options: Optional[Dict] = Field(
         None,
         description=(
@@ -169,7 +174,6 @@ Supported examples:
             from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
-                HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
@@ -258,6 +262,9 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
 
         if values["max_output_tokens"] is not None and values["max_output_tokens"] <= 0:
             raise ValueError("max_output_tokens must be greater than zero")
+
+        if values["timeout"] is not None and values["timeout"] <= 0:
+            raise ValueError("timeout must be greater than zero")
 
         return values
 

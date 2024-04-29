@@ -61,6 +61,11 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         None,
         description="A string, one of: [`rest`, `grpc`, `grpc_asyncio`].",
     )
+    request_options: Optional[Dict] = Field(
+        None,
+        description="A dictionary of request options to pass to the Google API client."
+        "Example: `{'timeout': 10}`",
+    )
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
@@ -95,6 +100,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 content=texts,
                 task_type=task_type,
                 title=title,
+                request_options=self.request_options,
             )
         except Exception as e:
             raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e

@@ -1,4 +1,5 @@
 """Vector Store in Google Cloud BigQuery."""
+
 from __future__ import annotations
 
 import asyncio
@@ -100,8 +101,9 @@ class BigQueryVectorSearch(VectorStore):
             )
         except ModuleNotFoundError:
             raise ImportError(
-                "Please, install or upgrade the google-cloud-bigquery library: "
-                "pip install google-cloud-bigquery"
+                "Could not import google-cloud-bigquery python package. "
+                "Please, install bigquery dependency group: "
+                "`pip install langchain-google-community[bigquery]`"
             )
         self._logger = logging.getLogger(__name__)
         self._creating_index = False

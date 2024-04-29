@@ -47,6 +47,108 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
     """The file loader kwargs to use."""
     load_auth: bool = False
     """Whether to load authorization identities."""
+    load_extended_metadata: bool = False
+    """Whether to load extended metadata."""
+
+    def _get_file_size_from_id(self, id: str) -> str:
+        """Fetch the size of the file."""
+        try:
+            import googleapiclient.errors  # type: ignore[import]
+            from googleapiclient.discovery import build  # type: ignore[import]
+        except ImportError as exc:
+            raise ImportError(
+                "You must run "
+                "`pip install --upgrade "
+                "google-api-python-client` "
+                "to load authorization identities."
+            ) from exc
+
+        creds = self._load_credentials()
+        service = build("drive", "v3", credentials=creds)
+        try:
+            file = service.files().get(fileId=id, fields="size").execute()
+            return file["size"]
+        except googleapiclient.errors.HttpError:
+            print(
+                f"insufficientFilePermissions: The user does not have sufficient \
+                permissions to retrieve size for the file with fileId: {id}"
+            )
+            return "unknown"
+        except Exception as exc:
+            print(
+                f"Error occurred while fetching the size for the file with fileId: {id}"
+            )
+            print(f"Error: {exc}")
+            return "unknown"
+
+    def _get_owner_metadata_from_id(self, id: str) -> str:
+        """Fetch the owner of the file."""
+        try:
+            import googleapiclient.errors  # type: ignore[import]
+            from googleapiclient.discovery import build  # type: ignore[import]
+        except ImportError as exc:
+            raise ImportError(
+                "You must run "
+                "`pip install --upgrade "
+                "google-api-python-client` "
+                "to load authorization identities."
+            ) from exc
+
+        creds = self._load_credentials()
+        service = build("drive", "v3", credentials=creds)
+        try:
+            file = service.files().get(fileId=id, fields="owners").execute()
+            return file["owners"][0].get("emailAddress")
+        except googleapiclient.errors.HttpError:
+            print(
+                f"insufficientFilePermissions: The user does not have sufficient \
+                permissions to retrieve owner for the file with fileId: {id}"
+            )
+            return "unknown"
+        except Exception as exc:
+            print(
+                f"Error occurred while fetching the owner for the file with fileId: \
+                {id} with error: {exc}"
+            )
+            return "unknown"
+
+    def _get_file_path_from_id(self, id: str) -> str:
+        """Fetch the full path of the file starting from the root."""
+        try:
+            import googleapiclient.errors  # type: ignore[import]
+            from googleapiclient.discovery import build  # type: ignore[import]
+        except ImportError as exc:
+            raise ImportError(
+                "You must run "
+                "`pip install --upgrade "
+                "google-api-python-client` "
+                "to load authorization identities."
+            ) from exc
+
+        creds = self._load_credentials()
+        service = build("drive", "v3", credentials=creds)
+        path = []
+        current_id = id
+        while True:
+            try:
+                file = (
+                    service.files()
+                    .get(fileId=current_id, fields="name, parents")
+                    .execute()
+                )
+                path.append(file["name"])
+                if "parents" in file:
+                    current_id = file["parents"][0]
+                else:
+                    break
+            except googleapiclient.errors.HttpError:
+                print(
+                    f"insufficientFilePermissions: The user does not have sufficient\
+                    permissions to retrieve path for the file with fileId: {id}"
+                )
+                break
+        path.reverse()
+        return "/".join(path)
 
     def _get_identity_metadata_from_id(self, id: str) -> List[str]:
         """Fetch the list of people having access to ID file."""
@@ -159,11 +261,9 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
             )
         except ImportError:
             raise ImportError(
-                "Install prerequisites by running: "
-                "`pip install --upgrade "
-                "google-api-python-client google-auth-httplib2 "
-                "google-auth-oauthlib` "
-                "to use the Google Drive loader."
+                "Could execute GoogleDriveLoader. "
+                "Please, install drive dependency group: "
+                "`pip install langchain-google-community[drive]`"
             )
 
         creds = None
@@ -205,6 +305,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         sheets = spreadsheet.get("sheets", [])
         if self.load_auth:
             authorized_identities = self._get_identity_metadata_from_id(id)
+        if self.load_extended_metadata:
+            owner = self._get_owner_metadata_from_id(id)
+            size = self._get_file_size_from_id(id)
+            full_path = self._get_file_path_from_id(id)
 
         documents = []
         for sheet in sheets:
@@ -231,6 +335,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
                 }
                 if self.load_auth:
                     metadata["authorized_identities"] = authorized_identities
+                if self.load_extended_metadata:
+                    metadata["owner"] = owner
+                    metadata["size"] = size
+                    metadata["full_path"] = full_path
                 content = []
                 for j, v in enumerate(row):
                     title = header[j].strip() if len(header) > j else ""
@@ -253,6 +361,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         service = build("drive", "v3", credentials=creds)
         if self.load_auth:
             authorized_identities = self._get_identity_metadata_from_id(id)
+        if self.load_extended_metadata:
+            owner = self._get_owner_metadata_from_id(id)
+            size = self._get_file_size_from_id(id)
+            full_path = self._get_file_path_from_id(id)
 
         file = (
             service.files()
@@ -281,6 +393,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         }
         if self.load_auth:
             metadata["authorized_identities"] = authorized_identities  # type: ignore
+        if self.load_extended_metadata:
+            metadata["owner"] = owner
+            metadata["size"] = size
+            metadata["full_path"] = full_path
         return Document(page_content=text, metadata=metadata)
 
     def _load_documents_from_folder(
@@ -360,6 +476,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
 
         if self.load_auth:
             authorized_identities = self._get_identity_metadata_from_id(id)
+        if self.load_extended_metadata:
+            owner = self._get_owner_metadata_from_id(id)
+            size = self._get_file_size_from_id(id)
+            full_path = self._get_file_path_from_id(id)
 
         file = service.files().get(fileId=id, supportsAllDrives=True).execute()
         request = service.files().get_media(fileId=id)
@@ -379,6 +499,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
                     doc.metadata["title"] = f"{file.get('name')}"
                 if self.load_auth:
                     doc.metadata["authorized_identities"] = authorized_identities
+                if self.load_extended_metadata:
+                    doc.metadata["owner"] = owner
+                    doc.metadata["size"] = size
+                    doc.metadata["full_path"] = full_path
             return docs
 
         else:
@@ -396,6 +520,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
                 }
                 if self.load_auth:
                     metadata["authorized_identities"] = authorized_identities
+                if self.load_extended_metadata:
+                    metadata["owner"] = owner
+                    metadata["size"] = size
+                    metadata["full_path"] = full_path
                 docs.append(
                     Document(
                         page_content=page.extract_text(),

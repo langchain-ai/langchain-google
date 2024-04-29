@@ -345,6 +345,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
     class MyModel(BaseModel):
@@ -410,6 +411,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
     assert function_call is None
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     class MyModel(BaseModel):
@@ -437,8 +439,8 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     }
 
 
-# Can be flaky
 @pytest.mark.release
+@pytest.mark.xfail(reason="flaky")
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
     def search(

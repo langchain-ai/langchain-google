@@ -1,4 +1,5 @@
 """Retriever wrapper for Google Cloud Document AI Warehouse."""
+
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -48,8 +49,9 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
             from google.cloud.contentwarehouse_v1 import DocumentServiceClient
         except ImportError as exc:
             raise ImportError(
-                "google.cloud.contentwarehouse is not installed."
-                "Please install it with pip install google-cloud-contentwarehouse"
+                "Could not import google-cloud-documentai python package. "
+                "Please, install docai dependency group: "
+                "`pip install langchain-google-community[docai]`"
             ) from exc
 
         values["project_number"] = get_from_dict_or_env(

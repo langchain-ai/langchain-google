@@ -17,8 +17,9 @@ def _import_google_cloud_texttospeech() -> Any:
         from google.cloud import texttospeech  # type: ignore[attr-defined]
     except ImportError as e:
         raise ImportError(
-            "Cannot import google.cloud.texttospeech, please install "
-            "`pip install google-cloud-texttospeech`."
+            "Could not import google-cloud-texttospeech python package. "
+            "Please, install texttospeech dependency group: "
+            "`pip install langchain-google-community[texttospeech]`"
         ) from e
     return texttospeech
 

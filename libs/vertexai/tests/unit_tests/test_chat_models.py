@@ -29,6 +29,10 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
+from langchain_core.output_parsers.openai_tools import (
+    PydanticToolsParser,
+)
+from langchain_core.pydantic_v1 import BaseModel
 from vertexai.generative_models import (  # type: ignore
     Candidate,
     Content,
@@ -223,39 +227,50 @@ def test_parse_history_gemini_converted_message() -> None:
 
 def test_parse_history_gemini_function() -> None:
     system_input = "You're supposed to answer math questions."
-    text_question1 = "Which is bigger 2+2 or 2*2?"
-    function_name = "calculator"
-    function_call_1 = {
-        "name": function_name,
-        "arguments": json.dumps({"arg1": "2", "arg2": "2", "op": "+"}),
-    }
-    function_answer1 = json.dumps({"result": 4})
-    function_call_2 = {
-        "name": function_name,
-        "arguments": json.dumps({"arg1": "2", "arg2": "2", "op": "*"}),
-    }
-    function_answer2 = json.dumps({"result": 4})
-    text_answer1 = "They are same"
+    text_question1 = "Which is bigger 2+2, 3*3 or 4-4?"
+    fn_name_1 = "add"
+    fn_name_2 = "multiply"
+    fn_name_3 = "subtract"
+    text_answer1 = "3*3 is bigger than 2+2 and 4-4"
+    tool_call_1 = ToolCall(
+        name=fn_name_1,
+        id="1",
+        args={
+            "arg1": "2",
+            "arg2": "2",
+        },
+    )
+    tool_call_2 = ToolCall(
+        name=fn_name_2,
+        id="2",
+        args={
+            "arg1": "3",
+            "arg2": "3",
+        },
+    )
+    tool_call_3 = ToolCall(
+        name=fn_name_3,
+        id="3",
+        args={
+            "arg1": "4",
+            "arg2": "4",
+        },
+    )
 
     system_message = SystemMessage(content=system_input)
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(
         content="",
-        additional_kwargs={
-            "function_call": function_call_1,
-        },
+        tool_calls=[
+            tool_call_1,
+            tool_call_2,
+        ],
     )
-    message3 = ToolMessage(
-        name="calculator", content=function_answer1, tool_call_id="1"
-    )
-    message4 = AIMessage(
-        content="",
-        additional_kwargs={
-            "function_call": function_call_2,
-        },
-    )
-    message5 = FunctionMessage(name="calculator", content=function_answer2)
-    message6 = AIMessage(content=text_answer1)
+    message3 = ToolMessage(content="2", tool_call_id="1")
+    message4 = FunctionMessage(name=fn_name_2, content="9")
+    message5 = AIMessage(content="", tool_calls=[tool_call_3])
+    message6 = ToolMessage(content="0", tool_call_id="3")
+    message7 = AIMessage(content=text_answer1)
     messages = [
         system_message,
         message1,
@@ -264,6 +279,7 @@ def test_parse_history_gemini_function() -> None:
         message4,
         message5,
         message6,
+        message7,
     ]
     system_instructions, history = _parse_chat_history_gemini(messages)
     assert len(history) == 6
@@ -273,27 +289,32 @@ def test_parse_history_gemini_function() -> None:
 
     assert history[1].role == "model"
     assert history[1].parts[0].function_call == GAPICFunctionCall(
-        name=function_call_1["name"], args=json.loads(function_call_1["arguments"])
+        name=tool_call_1["name"], args=tool_call_1["args"]
+    )
+    assert history[1].parts[1].function_call == GAPICFunctionCall(
+        name=tool_call_2["name"], args=tool_call_2["args"]
     )
 
     assert history[2].role == "function"
     assert history[2].parts[0].function_response == GAPICFunctionResponse(
-        name=function_call_1["name"],
-        response={"content": function_answer1},
+        name=fn_name_1,
+        response={"content": message3.content},
+    )
+    assert history[2].parts[1].function_response == GAPICFunctionResponse(
+        name=message4.name,
+        response={"content": message4.content},
     )
 
     assert history[3].role == "model"
     assert history[3].parts[0].function_call == GAPICFunctionCall(
-        name=function_call_2["name"], args=json.loads(function_call_2["arguments"])
+        name=tool_call_3["name"], args=tool_call_3["args"]
     )
 
     assert history[4].role == "function"
-    assert history[2].parts[0].function_response == GAPICFunctionResponse(
-        name=function_call_2["name"],
-        response={"content": function_answer2},
+    assert history[4].parts[0].function_response == GAPICFunctionResponse(
+        name=fn_name_3,
+        response={"content": message6.content},
     )
-
-    assert history[5].role == "model"
     assert history[5].parts[0].text == text_answer1
 
 
@@ -304,7 +325,6 @@ def test_parse_history_gemini_function() -> None:
             [
                 AIMessage(
                     content="Mike age is 30",
-                    additional_kwargs={},
                 )
             ],
             [Content(role="model", parts=[Part.from_text("Mike age is 30")])],
@@ -313,7 +333,6 @@ def test_parse_history_gemini_function() -> None:
             [
                 AIMessage(
                     content=["Mike age is 30", "Arthur age is 30"],
-                    additional_kwargs={},
                 ),
             ],
             [
@@ -330,12 +349,6 @@ def test_parse_history_gemini_function() -> None:
             [
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "Information",
-                            "arguments": json.dumps({"name": "Ben"}),
-                        },
-                    },
                     tool_calls=[
                         ToolCall(
                             name="Information",
@@ -365,12 +378,6 @@ def test_parse_history_gemini_function() -> None:
             [
                 AIMessage(
                     content="Mike age is 30",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "Information",
-                            "arguments": json.dumps({"name": "Ben"}),
-                        },
-                    },
                     tool_calls=[
                         ToolCall(
                             name="Information",
@@ -401,12 +408,6 @@ def test_parse_history_gemini_function() -> None:
             [
                 AIMessage(
                     content=["Mike age is 30", "Arthur age is 30"],
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "Information",
-                            "arguments": json.dumps({"name": "Ben"}),
-                        },
-                    },
                     tool_calls=[
                         ToolCall(
                             name="Information",
@@ -505,10 +506,18 @@ def test_default_params_gemini() -> None:
         message = HumanMessage(content=user_prompt)
         _ = model.invoke([message])
         mock_generate_content.assert_called_once()
+        assert mock_generate_content.call_args.kwargs["contents"][0].role == "user"
         assert (
             mock_generate_content.call_args.kwargs["contents"][0].parts[0].text
-            == user_prompt
+            == "Hello"
         )
+        assert mock_generate_content.call_args.kwargs["generation_config"] == {
+            "candidate_count": 1,
+            "stop_sequences": None,
+        }
+        assert mock_generate_content.call_args.kwargs["tools"] is None
+        assert mock_generate_content.call_args.kwargs["tool_config"] is None
+        assert mock_generate_content.call_args.kwargs["safety_settings"] is None
 
 
 @pytest.mark.parametrize(
@@ -565,12 +574,6 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "Information",
-                        "arguments": json.dumps({"name": "Ben"}),
-                    },
-                },
                 tool_calls=[
                     ToolCall(
                         name="Information",
@@ -596,12 +599,6 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "Information",
-                        "arguments": json.dumps({"info": ["A", "B", "C"]}),
-                    },
-                },
                 tool_calls=[
                     ToolCall(
                         name="Information",
@@ -632,19 +629,6 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "Information",
-                        "arguments": json.dumps(
-                            {
-                                "people": [
-                                    {"name": "Joe", "age": 30},
-                                    {"name": "Martha"},
-                                ]
-                            }
-                        ),
-                    },
-                },
                 tool_calls=[
                     ToolCall(
                         name="Information",
@@ -675,12 +659,6 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "Information",
-                        "arguments": json.dumps({"info": [[1, 2, 3], [4, 5, 6]]}),
-                    },
-                },
                 tool_calls=[
                     ToolCall(
                         name="Information",
@@ -707,12 +685,6 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content="Mike age is 30",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "Information",
-                        "arguments": json.dumps({"name": "Ben"}),
-                    },
-                },
                 tool_calls=[
                     ToolCall(
                         name="Information",
@@ -739,16 +711,52 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content="Mike age is 30",
+                tool_calls=[
+                    ToolCall(
+                        name="Information",
+                        args={"name": "Ben"},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+        (
+            gapic_content_types.Candidate(
+                content=GAPICContent(
+                    role="model",
+                    parts=[
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
+                                name="Information",
+                                args={"name": "Ben"},
+                            ),
+                        ),
+                        GAPICPart(
+                            function_call=GAPICFunctionCall(
+                                name="Information",
+                                args={"name": "Mike"},
+                            ),
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content="",
                 additional_kwargs={
                     "function_call": {
                         "name": "Information",
-                        "arguments": json.dumps({"name": "Ben"}),
-                    },
+                        "arguments": json.dumps({"name": "Mike"}),
+                    }
                 },
                 tool_calls=[
                     ToolCall(
                         name="Information",
                         args={"name": "Ben"},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                    ToolCall(
+                        name="Information",
+                        args={"name": "Mike"},
                         id="00000000-0000-0000-0000-00000000000",
                     ),
                 ],
@@ -776,3 +784,55 @@ def test_parse_response_candidate(raw_candidate, expected) -> None:
                 res_kw = result.additional_kwargs[key]
                 exp_kw = value
                 assert res_kw == exp_kw
+
+
+def test_parser_multiple_tools():
+    class Add(BaseModel):
+        arg1: int
+        arg2: int
+
+    class Multiply(BaseModel):
+        arg1: int
+        arg2: int
+
+    with patch("langchain_google_vertexai.chat_models.GenerativeModel") as gm:
+        mock_response = MagicMock()
+        mock_response.candidates = [
+            Candidate.from_dict(
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "function_call": {
+                                    "name": "Add",
+                                    "args": {"arg1": "1", "arg2": "2"},
+                                }
+                            },
+                            {
+                                "function_call": {
+                                    "name": "Multiply",
+                                    "args": {"arg1": "3", "arg2": "3"},
+                                }
+                            },
+                        ],
+                    }
+                }
+            )
+        ]
+        mock_generate_content = MagicMock(return_value=mock_response)
+        mock_model = MagicMock()
+        mock_model.generate_content = mock_generate_content
+        gm.return_value = mock_model
+
+        model = ChatVertexAI(model_name="gemini-1.5-pro")
+        message = HumanMessage(content="Hello")
+        parser = PydanticToolsParser(tools=[Add, Multiply])
+        llm = model | parser
+        result = llm.invoke([message])
+        mock_generate_content.assert_called_once()
+        assert isinstance(result, list)
+        assert isinstance(result[0], Add)
+        assert result[0] == Add(arg1=1, arg2=2)
+        assert isinstance(result[1], Multiply)
+        assert result[1] == Multiply(arg1=3, arg2=3)

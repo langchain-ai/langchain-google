@@ -105,6 +105,12 @@ class _VertexAICommon(_VertexAIBase):
             }
             """  # noqa: E501
 
+    api_transport: Optional[str] = None
+    """The desired API transport method, can be either 'grpc' or 'rest'"""
+
+    api_endpoint: Optional[str] = None
+    """The desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"""
+
     @property
     def _llm_type(self) -> str:
         return "vertexai"
@@ -166,6 +172,8 @@ class _VertexAICommon(_VertexAIBase):
             project=values.get("project"),
             location=values.get("location"),
             credentials=values.get("credentials"),
+            api_transport=values.get("api_transport"),
+            api_endpoint=values.get("api_endpoint"),
         )
         return None
 
