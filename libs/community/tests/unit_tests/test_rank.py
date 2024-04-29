@@ -51,9 +51,7 @@ def test_vertex_ai_ranker_initialization(mock_rank_service_client: Mock) -> None
     assert ranker.title_field == "source"
 
 
-@patch(
-    "langchain_google_community.vertex_rank.discoveryengine_v1alpha.RankServiceClient"
-)
+@patch("google.cloud.discoveryengine_v1alpha.RankServiceClient")
 def test_rerank_documents(mock_rank_service_client: Mock, ranker: VertexAIRank) -> None:
     documents = [
         Document(page_content="Document 1", metadata={"source": "Title 1"}),

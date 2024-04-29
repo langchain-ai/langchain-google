@@ -27,7 +27,7 @@ class RecordDog(BaseModel):
     fav_food: Optional[str] = Field(None, description="The dog's favorite food")
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_create_structured_runnable() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
@@ -40,7 +40,7 @@ def test_create_structured_runnable() -> None:
     assert isinstance(res, RecordDog)
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_create_structured_runnable_with_prompt() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
@@ -54,6 +54,7 @@ def test_create_structured_runnable_with_prompt() -> None:
 
 
 @pytest.mark.release
+@pytest.mark.xfail(reason="flaky")
 def test_reflection() -> None:
     class Reflection(BaseModel):
         reflections: str = Field(

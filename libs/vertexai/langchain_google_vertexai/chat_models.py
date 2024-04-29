@@ -107,7 +107,6 @@ from langchain_google_vertexai.functions_utils import (
     _format_to_vertex_tool,
     _format_functions_to_vertex_tool_dict,
 )
-from google.api_core.exceptions import GoogleAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -460,7 +459,6 @@ def _completion_with_retry(
     generation_method: Callable,
     *,
     max_retries: int,
-    check_stream_response_for_candidates: bool = False,
     run_manager: Optional[CallbackManagerForLLMRun] = None,
     **kwargs: Any,
 ) -> Any:
@@ -471,19 +469,7 @@ def _completion_with_retry(
 
     @retry_decorator
     def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
-        response = generation_method(**kwargs)
-        if kwargs.get("stream") and check_stream_response_for_candidates:
-            chunks = list(response)
-            for chunk in chunks:
-                if not chunk.candidates:
-                    raise GoogleAPIError("Got 0 candidates from generations.")
-            return iter(chunks)
-        if kwargs.get("stream"):
-            return response
-        if len(response.candidates):
-            return response
-        else:
-            raise GoogleAPIError("Got 0 candidates from generations.")
+        return generation_method(**kwargs)
 
     return _completion_with_retry_inner(generation_method, **kwargs)
 
@@ -492,7 +478,6 @@ async def _acompletion_with_retry(
     generation_method: Callable,
     *,
     max_retries: int,
-    check_stream_response_for_candidates: bool = False,
     run_manager: Optional[CallbackManagerForLLMRun] = None,
     **kwargs: Any,
 ) -> Any:
@@ -505,19 +490,7 @@ async def _acompletion_with_retry(
     async def _completion_with_retry_inner(
         generation_method: Callable, **kwargs: Any
     ) -> Any:
-        response = await generation_method(**kwargs)
-        if kwargs.get("stream") and check_stream_response_for_candidates:
-            chunks = list(response)
-            for chunk in chunks:
-                if not chunk.candidates:
-                    raise GoogleAPIError("Got 0 candidates from generations.")
-            return iter(chunks)
-        if kwargs.get("stream"):
-            return response
-        if len(response.candidates):
-            return response
-        else:
-            raise GoogleAPIError("Got 0 candidates from generations.")
+        return await generation_method(**kwargs)
 
     return await _completion_with_retry_inner(generation_method, **kwargs)
 
@@ -536,10 +509,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """[Deprecated] Since new Gemini models support setting a System Message,
     setting this parameter to True is discouraged.
     """
-    check_stream_response_for_candidates: bool = False
-    """Retrieves all chunks from streaming response and check all of them
-    have candidates. If not, retries.
-    It makes streaming mode essentially useless."""
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -772,7 +741,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 max_retries=self.max_retries,
                 contents=contents,
                 stream=True,
-                check_stream_response_for_candidates=self.check_stream_response_for_candidates,
                 **params,
             )
         for response_chunk in response_iter:
@@ -826,7 +794,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 max_retries=self.max_retries,
                 contents=contents,
                 stream=True,
-                check_stream_response_for_candidates=self.check_stream_response_for_candidates,
                 **params,
             ):
                 chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
@@ -1058,18 +1025,36 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(candidate, is_gemini=True, usage_metadata=usage)
             message = _parse_response_candidate(candidate)
             generations.append(ChatGeneration(message=message, generation_info=info))
+        if not response.candidates:
+            message = AIMessage(content="")
+            if usage:
+                generation_info = {"usage_metadata": usage}
+            else:
+                generation_info = {}
+            generations.append(
+                ChatGeneration(message=message, generation_info=generation_info)
+            )
         return ChatResult(generations=generations)
 
     def _gemini_chunk_to_generation_chunk(
         self, response_chunk: GenerationResponse
     ) -> ChatGenerationChunk:
-        top_candidate = response_chunk.candidates[0]
-        message = _parse_response_candidate(top_candidate, streaming=True)
-        generation_info = get_generation_info(
-            top_candidate,
-            is_gemini=True,
-            usage_metadata=response_chunk.to_dict().get("usage_metadata"),
-        )
+        # return an empty completion message if there's no candidates
+        usage_metadata = response_chunk.to_dict().get("usage_metadata")
+        if not response_chunk.candidates:
+            message = AIMessageChunk(content="")
+            if usage_metadata:
+                generation_info = {"usage_metadata": usage_metadata}
+            else:
+                generation_info = {}
+        else:
+            top_candidate = response_chunk.candidates[0]
+            message = _parse_response_candidate(top_candidate, streaming=True)
+            generation_info = get_generation_info(
+                top_candidate,
+                is_gemini=True,
+                usage_metadata=usage_metadata,
+            )
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
