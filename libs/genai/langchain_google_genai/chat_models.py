@@ -772,10 +772,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             convert_system_message_to_human=self.convert_system_message_to_human,
         )
         message = history.pop()
-        if self.client._system_instruction != system_instruction:
+        if (
+            self.client._system_instruction != system_instruction
+            and not self.convert_system_message_to_human
+        ):
             self.client = genai.GenerativeModel(
                 model_name=self.model, system_instruction=system_instruction
             )
+            client = self.client
         chat = client.start_chat(history=history)
         return params, chat, message
 
