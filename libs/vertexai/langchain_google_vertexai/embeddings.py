@@ -46,7 +46,7 @@ class GoogleEmbeddingModelType(str, Enum):
     def _missing_(cls, value: Any) -> Optional["GoogleEmbeddingModelType"]:
         if value.lower().startswith("text"):
             return GoogleEmbeddingModelType.TEXT
-        elif "multimodalembedding" in value.lower():
+        if "multimodalembedding" in value.lower():
             return GoogleEmbeddingModelType.MULTIMODAL
         return None
 
@@ -109,6 +109,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance[
             "embeddings_task_type_supported"
         ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
+        self.instance[
+            "dimensionality_supported"
+        ] = self.client._endpoint_name.endswith("preview-0409")
 
         retry_errors: List[Type[BaseException]] = [
             ResourceExhausted,
@@ -188,18 +191,18 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return batches
 
     def _get_embeddings_with_retry(
-        self, texts: List[str], embeddings_type: Optional[str] = None
+        self, texts: List[str], embeddings_type: Optional[str] = None, dimensions: Optional[int] = None,
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
         with telemetry.tool_context_manager(self._user_agent):
             if self.model_type == GoogleEmbeddingModelType.MULTIMODAL:
-                return self._get_multimodal_embeddings_with_retry(texts)
+                return self._get_multimodal_embeddings_with_retry(texts, dimensions)
             return self._get_text_embeddings_with_retry(
-                texts, embeddings_type=embeddings_type
+                texts, embeddings_type=embeddings_type, dimensions=dimensions
             )
 
     def _get_multimodal_embeddings_with_retry(
-        self, texts: List[str]
+        self, texts: List[str], dimensions: Optional[int] = None
     ) -> List[List[float]]:
         tasks = []
         for text in texts:
@@ -207,6 +210,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 self.instance["task_executor"].submit(
                     self.instance["get_embeddings_with_retry"],
                     contextual_text=text,
+                    dimensions=dimensions,
                 )
             )
         if len(tasks) > 0:
@@ -215,7 +219,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return embeddings
 
     def _get_text_embeddings_with_retry(
-        self, texts: List[str], embeddings_type: Optional[str] = None
+        self, texts: List[str], embeddings_type: Optional[str] = None, dimensions: Optional[int] = None,
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
 
@@ -225,7 +229,12 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             ]
         else:
             requests = texts
-        embeddings = self.instance["get_embeddings_with_retry"](requests)
+
+        kwargs = {}
+        if dimensions and self.instance["dimensionality_supported"]:
+            kwargs["output_dimensionality"] = dimensions
+
+        embeddings = self.instance["get_embeddings_with_retry"](requests, **kwargs)
         return [embedding.values for embedding in embeddings]
 
     def _prepare_and_validate_batches(
@@ -309,8 +318,11 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "SEMANTIC_SIMILARITY",
                 "CLASSIFICATION",
                 "CLUSTERING",
+                "QUESTION_ANSWERING",
+                "FACT_VERIFICATION",
             ]
         ] = None,
+        dimensions: Optional[int] = None,
     ) -> List[List[float]]:
         """Embed a list of strings.
 
@@ -329,6 +341,11 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                                           for Semantic Textual Similarity (STS).
                     CLASSIFICATION - Embeddings will be used for classification.
                     CLUSTERING - Embeddings will be used for clustering.
+                    The following are only supported on preview models:
+                    QUESTION_ANSWERING
+                    FACT_VERIFICATION
+            dimensions: [int] optional. Output embeddings dimensions.
+                Only supported on preview models.
 
         Returns:
             List of embeddings, one for each text.
@@ -355,6 +372,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     self._get_embeddings_with_retry,
                     texts=batch,
                     embeddings_type=embeddings_task_type,
+                    dimensions=dimensions,
                 )
             )
         if len(tasks) > 0:
