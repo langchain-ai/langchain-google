@@ -109,9 +109,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance[
             "embeddings_task_type_supported"
         ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
-        self.instance[
-            "dimensionality_supported"
-        ] = self.client._endpoint_name.endswith("preview-0409")
+        self.instance["dimensionality_supported"] = self.client._endpoint_name.endswith(
+            "preview-0409"
+        )
 
         retry_errors: List[Type[BaseException]] = [
             ResourceExhausted,
