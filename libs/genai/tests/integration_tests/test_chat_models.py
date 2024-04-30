@@ -122,16 +122,6 @@ def test_chat_google_genai_invoke_multimodal() -> None:
         assert len(chunk.content.strip()) > 0
 
 
-def test_system_message() -> None:
-    messages = [
-        SystemMessage(content="Be a helful assistant."),
-        HumanMessage(content="Hi, how are you?"),
-    ]
-    llm = ChatGoogleGenerativeAI(model="models/gemini-1.0-pro-latest")
-    answer = llm.invoke(messages)
-    assert isinstance(answer.content, str)
-
-
 def test_chat_google_genai_invoke_multimodal_too_many_messages() -> None:
     # Only supports 1 turn...
     messages: list = [
@@ -188,8 +178,17 @@ def test_chat_google_genai_single_call_with_history() -> None:
     assert isinstance(response.content, str)
 
 
-def test_chat_google_genai_system_message() -> None:
-    model = ChatGoogleGenerativeAI(model=_MODEL, convert_system_message_to_human=True)
+@pytest.mark.parametrize(
+    "model_name,convert_system_message_to_human",
+    [(_MODEL, True), ("models/gemini-1.5-pro-latest", False)],
+)
+def test_chat_google_genai_system_message(
+    model_name: str, convert_system_message_to_human: bool
+) -> None:
+    model = ChatGoogleGenerativeAI(
+        model=model_name,
+        convert_system_message_to_human=convert_system_message_to_human,
+    )
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     system_message = SystemMessage(content="You're supposed to answer math questions.")
@@ -236,6 +235,7 @@ def test_safety_settings_gemini() -> None:
     assert len(out2.content) > 0
 
 
+@pytest.mark.xfail(reason="on the model's side")
 def test_chat_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
