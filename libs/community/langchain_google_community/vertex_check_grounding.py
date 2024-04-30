@@ -1,11 +1,13 @@
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
-from google.cloud import discoveryengine_v1alpha  # type: ignore
 from langchain_core.documents import Document
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field
+
+if TYPE_CHECKING:
+    from google.cloud import discoveryengine_v1alpha  # type: ignore
 
 
 class VertexCheckGroundingOutputParser(
@@ -43,9 +45,7 @@ class VertexCheckGroundingOutputParser(
     location_id: str = Field(default="global")
     grounding_config: str = Field(default="default_grounding_config")
     citation_threshold: Optional[float] = Field(default=0.6)
-    client: Optional[discoveryengine_v1alpha.GroundedGenerationServiceClient] = Field(
-        default=None
-    )
+    client: Any
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
 
@@ -68,7 +68,7 @@ class VertexCheckGroundingOutputParser(
 
     def _get_check_grounding_service_client(
         self,
-    ) -> discoveryengine_v1alpha.GroundedGenerationServiceClient:
+    ) -> "discoveryengine_v1alpha.GroundedGenerationServiceClient":
         """
         Returns a GroundedGenerationServiceClient instance using provided credentials.
         Raises ImportError if necessary packages are not installed.
@@ -77,20 +77,21 @@ class VertexCheckGroundingOutputParser(
             A GroundedGenerationServiceClient instance.
         """
         try:
-            return discoveryengine_v1alpha.GroundedGenerationServiceClient(
-                credentials=(
-                    self.credentials
-                    or Credentials.from_service_account_file(self.credentials_path)
-                    if self.credentials_path
-                    else None
-                )
-            )
+            from google.cloud import discoveryengine_v1alpha  # type: ignore
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
                 "Please, install vertexaisearch dependency group: "
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
+        return discoveryengine_v1alpha.GroundedGenerationServiceClient(
+            credentials=(
+                self.credentials
+                or Credentials.from_service_account_file(self.credentials_path)
+                if self.credentials_path
+                else None
+            )
+        )
 
     def parse(
         self, answer_candidate: str, documents: Optional[List[Document]] = None
@@ -133,6 +134,8 @@ class VertexCheckGroundingOutputParser(
             answer_with_citations (str):
                 Complete formed answer formatted with inline citations
         """
+        from google.cloud import discoveryengine_v1alpha  # type: ignore
+
         if documents is None:
             raise NotImplementedError("This parser requires documents for processing.")
 
