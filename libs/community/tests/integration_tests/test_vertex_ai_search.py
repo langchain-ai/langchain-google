@@ -11,9 +11,9 @@ export PROJECT_ID=... - set to your Google Cloud project ID
 export DATA_STORE_ID=... - the ID of the search engine to use for the test
 """
 
+from langchain_core.documents import Document
 import os
 import pytest
-from langchain_core.documents import Document
 
 from langchain_google_community import (
     VertexAIMultiTurnSearchRetriever,
@@ -51,7 +51,9 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
 def test_vertex_search_tool() -> None:
     data_store_id = os.environ["DATA_STORE_ID"]
     tool = VertexAISearchSummaryTool(
-        name="vertex-search", description="Vertex Search Tool", data_store_id=data_store_id
+        name="vertex-search", 
+        description="Vertex Search Tool", 
+        data_store_id=data_store_id
     )
 
     response = tool.run("How many Champion's Leagues has Real Madrid won?")

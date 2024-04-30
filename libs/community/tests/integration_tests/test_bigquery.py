@@ -1,7 +1,4 @@
-import pytest
-
 from langchain_google_community.bigquery import BigQueryLoader
-
 
 def test_bigquery_loader_no_options() -> None:
     loader = BigQueryLoader("SELECT 1 AS a, 2 AS b")
