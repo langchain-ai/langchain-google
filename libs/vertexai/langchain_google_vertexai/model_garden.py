@@ -25,7 +25,7 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from langchain_core.pydantic_v1 import root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 
 from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
@@ -33,6 +33,11 @@ from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAIC
 
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     """Large language models served from Vertex AI Model Garden."""
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
 
     def _generate(
         self,
@@ -92,9 +97,14 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     async_client: Any = None  #: :meta private:
-    model_name: Optional[str] = None  # type: ignore[assignment]
+    model_name: Optional[str] = Field(default=None, alias="model")  # type: ignore[assignment]
     "Underlying model name."
-    max_output_tokens: int = 1024
+    max_output_tokens: int = Field(default=1024, alias="max_tokens")
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:

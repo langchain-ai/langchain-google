@@ -154,6 +154,7 @@ def ranker(
     )
 
 
+@pytest.mark.skip(reason="CI/CD not ready.")
 def test_compression_retriever(
     mock_vector_store_retriever: MockVectorStoreRetriever, ranker: VertexAIRank
 ) -> None:

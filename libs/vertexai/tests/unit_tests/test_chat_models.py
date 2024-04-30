@@ -52,12 +52,24 @@ from langchain_google_vertexai.chat_models import (
 )
 
 
-def test_model_name() -> None:
+def test_init() -> None:
     for llm in [
-        ChatVertexAI(model_name="gemini-pro", project="test-project"),
-        ChatVertexAI(model="gemini-pro", project="test-project"),  # type: ignore[call-arg]
+        ChatVertexAI(
+            model_name="gemini-pro",
+            project="test-project",
+            max_output_tokens=10,
+            stop=["bar"],
+        ),
+        ChatVertexAI(
+            model="gemini-pro",
+            project="test-project",
+            max_tokens=10,
+            stop_sequences=["bar"],
+        ),
     ]:
         assert llm.model_name == "gemini-pro"
+        assert llm.max_output_tokens == 10
+        assert llm.stop == ["bar"]
 
 
 def test_tuned_model_name() -> None:
