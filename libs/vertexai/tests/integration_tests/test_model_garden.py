@@ -91,7 +91,7 @@ async def test_model_garden_agenerate(
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 2
 
-@pytest.mark.skip(reason="CI/CD not ready.")
+@pytest.mark.xfail(reason="CI issue")
 def test_anthropic() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
@@ -112,7 +112,7 @@ def test_anthropic() -> None:
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
-@pytest.mark.skip(reason="CI/CD not ready.")
+@pytest.mark.xfail(reason="CI issue")
 def test_anthropic_stream() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
@@ -128,7 +128,7 @@ def test_anthropic_stream() -> None:
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
-@pytest.mark.skip(reason="CI/CD not ready.")
+@pytest.mark.xfail(reason="CI issue")
 async def test_anthropic_async() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
