@@ -16,7 +16,13 @@ from langchain_google_vertexai.embeddings import (
 @pytest.mark.release
 def test_initialization() -> None:
     """Test embedding model initialization."""
-    VertexAIEmbeddings(model_name="textembedding-gecko@001")
+    for embeddings in [
+        VertexAIEmbeddings(
+            model_name="textembedding-gecko",
+        ),
+        VertexAIEmbeddings(model="textembedding-gecko"),
+    ]:
+        assert embeddings.model_name == "textembedding-gecko"
 
 
 @pytest.mark.release

@@ -21,7 +21,7 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from langchain_core.pydantic_v1 import BaseModel, root_validator
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai._utils import enforce_stop_tokens
@@ -115,6 +115,17 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
 
+    def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
+        """Needed for mypy typing to recognize model_name as a valid arg."""
+        if model_name:
+            kwargs["model_name"] = model_name
+        super().__init__(**kwargs)
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
     @property
     def _llm_type(self) -> str:
         return "gemma_vertexai_model_garden"
@@ -178,8 +189,14 @@ class _GemmaLocalKaggleBase(_GemmaBase):
 
     client: Any = None  #: :meta private:
     keras_backend: str = "jax"
-    model_name: str = "gemma_2b_en"
+    model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
+
+    def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
+        """Needed for mypy typing to recognize model_name as a valid arg."""
+        if model_name:
+            kwargs["model_name"] = model_name
+        super().__init__(**kwargs)
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
@@ -212,6 +229,12 @@ class _GemmaLocalKaggleBase(_GemmaBase):
 class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):
     """Local gemma chat model loaded from Kaggle."""
 
+    def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
+        """Only needed for typing."""
+        if model_name:
+            kwargs["model_name"] = model_name
+        super().__init__(**kwargs)
+
     def _generate(
         self,
         prompts: List[str],
@@ -237,6 +260,12 @@ class GemmaChatLocalKaggle(_GemmaLocalKaggleBase, BaseChatModel):
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
+
+    def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
+        """Needed for mypy typing to recognize model_name as a valid arg."""
+        if model_name:
+            kwargs["model_name"] = model_name
+        super().__init__(**kwargs)
 
     def _generate(
         self,
@@ -268,7 +297,7 @@ class _GemmaLocalHFBase(_GemmaBase):
     client: Any = None  #: :meta private:
     hf_access_token: str
     cache_dir: Optional[str] = None
-    model_name: str = "gemma_2b_en"
+    model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
 
     @root_validator()
