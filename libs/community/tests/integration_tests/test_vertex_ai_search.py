@@ -21,7 +21,7 @@ from langchain_google_community import (
     VertexAISearchSummaryTool,
 )
 
-
+@pytest.mark.skip(reason="CI/CD not ready.")
 def test_google_vertex_ai_search_get_relevant_documents() -> None:
     """Test the get_relevant_documents() method."""
     data_store_id = os.environ["DATA_STORE_ID"]
@@ -34,7 +34,7 @@ def test_google_vertex_ai_search_get_relevant_documents() -> None:
         assert doc.metadata["id"]
         assert doc.metadata["source"]
 
-
+@pytest.mark.skip(reason="CI/CD not ready.")
 def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
     """Test the get_relevant_documents() method."""
     data_store_id = os.environ["DATA_STORE_ID"]
@@ -47,7 +47,7 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
         assert doc.metadata["id"]
         assert doc.metadata["source"]
 
-
+@pytest.mark.skip(reason="CI/CD not ready.")
 def test_vertex_search_tool() -> None:
     data_store_id = os.environ["DATA_STORE_ID"]
     tool = VertexAISearchSummaryTool(
