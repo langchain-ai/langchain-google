@@ -191,7 +191,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return batches
 
     def _get_embeddings_with_retry(
-        self, texts: List[str], embeddings_type: Optional[str] = None, dimensions: Optional[int] = None,
+        self,
+        texts: List[str],
+        embeddings_type: Optional[str] = None,
+        dimensions: Optional[int] = None,
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
         with telemetry.tool_context_manager(self._user_agent):
@@ -219,7 +222,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return embeddings
 
     def _get_text_embeddings_with_retry(
-        self, texts: List[str], embeddings_type: Optional[str] = None, dimensions: Optional[int] = None,
+        self,
+        texts: List[str],
+        embeddings_type: Optional[str] = None,
+        dimensions: Optional[int] = None,
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
 
