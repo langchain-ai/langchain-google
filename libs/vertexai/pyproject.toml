@@ -16,8 +16,6 @@ python = ">=3.8.1,<4.0"
 langchain-core = "^0.1.42"
 google-cloud-aiplatform = "^1.47.0"
 google-cloud-storage = "^2.14.0"
-types-requests = "^2.31.0"
-types-protobuf = "^4.24.0.4"
 # optional dependencies
 anthropic = {extras = ["vertexai"], version = ">=0.23.0,<1", optional = true}
 
@@ -61,6 +59,8 @@ ruff = "^0.1.5"
 [tool.poetry.group.typing.dependencies]
 mypy = "^1"
 types-google-cloud-ndb = "^2.2.0.20240106"
+types-protobuf = "^4.24.0.4"
+types-requests = "^2.31.0"
 langchain-core = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core"}
 
 
