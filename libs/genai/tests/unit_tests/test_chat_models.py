@@ -62,7 +62,8 @@ def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> N
     assert captured.out == "**********"
 
 
-def test_parse_history() -> None:
+@pytest.mark.parametrize("convert_system_message_to_human", [False, True])
+def test_parse_history(convert_system_message_to_human: bool) -> None:
     system_input = "You're supposed to answer math questions."
     text_question1, text_answer1 = "How much is 2+2?", "4"
     function_name = "calculator"
@@ -107,10 +108,18 @@ def test_parse_history() -> None:
         message6,
     ]
     system_instruction, history = _parse_chat_history(
-        messages, convert_system_message_to_human=True
+        messages, convert_system_message_to_human=convert_system_message_to_human
     )
     assert len(history) == 6
-    assert history[0] == glm.Content(role="user", parts=[glm.Part(text=text_question1)])
+    if convert_system_message_to_human:
+        assert history[0] == glm.Content(
+            role="user",
+            parts=[glm.Part(text=system_input), glm.Part(text=text_question1)],
+        )
+    else:
+        assert history[0] == glm.Content(
+            role="user", parts=[glm.Part(text=text_question1)]
+        )
     assert history[1] == glm.Content(
         role="model",
         parts=[
@@ -164,7 +173,10 @@ def test_parse_history() -> None:
         ],
     )
     assert history[5] == glm.Content(role="model", parts=[glm.Part(text=text_answer1)])
-    assert system_instruction == glm.Content(parts=[glm.Part(text=system_input)])
+    if convert_system_message_to_human:
+        assert system_instruction is None
+    else:
+        assert system_instruction == glm.Content(parts=[glm.Part(text=system_input)])
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
@@ -207,7 +219,6 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     assert response.content == "test response"
 
     mock_client.assert_called_once_with(
-        credentials=None,
         transport=params["transport"],
         client_options=ANY,
         client_info=ANY,

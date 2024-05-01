@@ -88,6 +88,7 @@ from langchain_google_genai._function_utils import (
     convert_to_genai_function_declarations,
     tool_to_dict,
 )
+from langchain_google_genai._image_utils import ImageBytesLoader
 from langchain_google_genai.llms import _BaseGoogleGenerativeAI
 
 from . import _genai_extension as genaix
@@ -298,6 +299,7 @@ def _convert_to_parts(
     """Converts a list of LangChain messages into a google parts."""
     parts = []
     content = [raw_content] if isinstance(raw_content, str) else raw_content
+    image_loader = ImageBytesLoader()
     for part in content:
         if isinstance(part, str):
             parts.append(Part(text=part))
@@ -314,7 +316,7 @@ def _convert_to_parts(
                                 f"Unrecognized message image format: {img_url}"
                             )
                         img_url = img_url["url"]
-                    parts.append(Part(inline_data=_url_to_pil(img_url)))
+                    parts.append(image_loader.load_part(img_url))
                 else:
                     raise ValueError(f"Unrecognized message part type: {part['type']}")
             else:
@@ -361,6 +363,9 @@ def _parse_chat_history(
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content)
+            if i == 1 and convert_system_message_to_human and system_instruction:
+                parts = [p for p in system_instruction.parts] + parts
+                system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
             response: Any
@@ -613,6 +618,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if values.get("top_k") is not None and values["top_k"] <= 0:
             raise ValueError("top_k must be positive")
 
+        if not values["model"].startswith("models/"):
+            values["model"] = f"models/{values['model']}"
+
         additional_headers = values.get("additional_headers") or {}
         values["default_metadata"] = tuple(additional_headers.items())
         client_info = get_client_info("ChatGoogleGenerativeAI")
@@ -758,7 +766,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
             generation_method=self.client.stream_generate_content,
-            stream=True,
             **kwargs,
             metadata=self.default_metadata,
         )
@@ -795,7 +802,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         async for chunk in await _achat_with_retry(
             request=request,
             generation_method=self.async_client.stream_generate_content,
-            stream=True,
             **kwargs,
             metadata=self.default_metadata,
         ):
@@ -866,7 +872,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Returns:
             The integer number of tokens in the text.
         """
-        result = self.client.count_tokens(Content(parts=Part(text=text)))
+        result = self.client.count_tokens(
+            model=self.model, contents=[Content(parts=[Part(text=text)])]
+        )
         return result.total_tokens
 
     def bind_tools(
