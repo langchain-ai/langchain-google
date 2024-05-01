@@ -225,14 +225,57 @@ def build_semantic_retriever() -> genai.RetrieverServiceClient:
     )
 
 
-def build_generative_service() -> genai.GenerativeServiceClient:
-    credentials = _get_credentials()
+def build_generative_service(
+    credentials: Optional[credentials.Credentials] = None,
+    api_key: Optional[str] = None,
+    client_options: Optional[Dict[str, Any]] = None,
+    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
+    transport: Optional[str] = None,
+) -> genai.GenerativeServiceClient:
+    formatted_client_options = {"api_endpoint": _config.api_endpoint}
+    if client_options:
+        formatted_client_options.update(**client_options)
+    if not credentials and api_key:
+        formatted_client_options["api_key"] = api_key
+    elif not credentials and not api_key:
+        credentials = _get_credentials()
+    client_info = (
+        client_info
+        if client_info
+        else gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT)
+    )
     return genai.GenerativeServiceClient(
         credentials=credentials,
-        client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),
-        client_options=client_options_lib.ClientOptions(
-            api_endpoint=_config.api_endpoint
-        ),
+        client_info=client_info,
+        client_options=client_options_lib.ClientOptions(**formatted_client_options),
+        transport=transport if transport else "grpc",
+    )
+
+
+def build_generative_async_service(
+    credentials: Optional[credentials.Credentials],
+    api_key: Optional[str] = None,
+    client_options: Optional[Dict[str, Any]] = None,
+    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
+    transport: Optional[str] = None,
+) -> genai.GenerativeServiceAsyncClient:
+    formatted_client_options = {"api_endpoint": _config.api_endpoint}
+    if client_options:
+        formatted_client_options.update(**client_options)
+    if not credentials and api_key:
+        formatted_client_options["api_key"] = api_key
+    elif not credentials and not api_key:
+        credentials = _get_credentials()
+    client_info = (
+        client_info
+        if client_info
+        else gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT)
+    )
+    return genai.GenerativeServiceAsyncClient(
+        credentials=credentials,
+        client_info=client_info,
+        client_options=client_options_lib.ClientOptions(**formatted_client_options),
+        transport=transport if transport else "grpc",
     )
 
 
