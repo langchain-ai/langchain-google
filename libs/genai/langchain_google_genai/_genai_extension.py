@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, MutableSequence, Optional
 
 import google.ai.generativelanguage as genai
+import google.ai.generativelanguage_v1beta as genai_v1
 import langchain_core
 from google.api_core import client_options as client_options_lib
 from google.api_core import exceptions as gapi_exception
@@ -225,15 +226,66 @@ def build_semantic_retriever() -> genai.RetrieverServiceClient:
     )
 
 
-def build_generative_service() -> genai.GenerativeServiceClient:
-    credentials = _get_credentials()
-    return genai.GenerativeServiceClient(
-        credentials=credentials,
-        client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),
-        client_options=client_options_lib.ClientOptions(
-            api_endpoint=_config.api_endpoint
-        ),
+def _prepare_config(
+    credentials: Optional[credentials.Credentials] = None,
+    api_key: Optional[str] = None,
+    client_options: Optional[Dict[str, Any]] = None,
+    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
+    transport: Optional[str] = None,
+) -> Dict[str, Any]:
+    formatted_client_options = {"api_endpoint": _config.api_endpoint}
+    if client_options:
+        formatted_client_options.update(**client_options)
+    if not credentials and api_key:
+        formatted_client_options["api_key"] = api_key
+    elif not credentials and not api_key:
+        credentials = _get_credentials()
+    client_info = (
+        client_info
+        if client_info
+        else gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT)
     )
+    config = {
+        "credentials": credentials,
+        "client_info": client_info,
+        "client_options": client_options_lib.ClientOptions(**formatted_client_options),
+        "transport": transport,
+    }
+    return {k: v for k, v in config.items() if v is not None}
+
+
+def build_generative_service(
+    credentials: Optional[credentials.Credentials] = None,
+    api_key: Optional[str] = None,
+    client_options: Optional[Dict[str, Any]] = None,
+    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
+    transport: Optional[str] = None,
+) -> genai_v1.GenerativeServiceClient:
+    config = _prepare_config(
+        credentials=credentials,
+        api_key=api_key,
+        client_options=client_options,
+        transport=transport,
+        client_info=client_info,
+    )
+    return genai.GenerativeServiceClient(**config)
+
+
+def build_generative_async_service(
+    credentials: Optional[credentials.Credentials],
+    api_key: Optional[str] = None,
+    client_options: Optional[Dict[str, Any]] = None,
+    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
+    transport: Optional[str] = None,
+) -> genai_v1.GenerativeServiceAsyncClient:
+    config = _prepare_config(
+        credentials=credentials,
+        api_key=api_key,
+        client_options=client_options,
+        transport=transport,
+        client_info=client_info,
+    )
+    return genai.GenerativeServiceAsyncClient(**config)
 
 
 def list_corpora(
