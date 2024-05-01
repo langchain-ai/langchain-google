@@ -305,7 +305,8 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         endpoint = sdk_manager.get_endpoint(endpoint_id=endpoint_id)
 
         if private_service_connect_ip_address:
-            endpoint.private_service_connect_ip_address = private_service_connect_ip_address
+            endpoint.private_service_connect_ip_address = \
+                private_service_connect_ip_address
 
         return cls(
             document_storage=GCSDocumentStorage(bucket=bucket),
