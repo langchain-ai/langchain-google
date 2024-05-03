@@ -7,7 +7,7 @@ from langchain_core.pydantic_v1 import BaseModel, Extra, Field
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 
 if TYPE_CHECKING:
-    from google.cloud import discoveryengine_v1alpha
+    from google.cloud import discoveryengine_v1alpha  # type: ignore
 
 
 class VertexAICheckGroundingWrapper(
