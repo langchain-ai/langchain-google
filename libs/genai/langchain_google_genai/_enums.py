@@ -1,6 +1,6 @@
-from google.generativeai.types.safety_types import (  # type: ignore
-    HarmBlockThreshold,
-    HarmCategory,
-)
+import google.ai.generativelanguage_v1beta as genai
+
+HarmBlockThreshold = genai.SafetySetting.HarmBlockThreshold
+HarmCategory = genai.HarmCategory
 
 __all__ = ["HarmBlockThreshold", "HarmCategory"]
