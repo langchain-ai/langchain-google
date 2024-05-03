@@ -5,7 +5,7 @@ from google.cloud import discoveryengine_v1alpha
 from langchain_core.documents import Document
 
 from langchain_google_community.vertex_check_grounding import (
-    VertexCheckGroundingOutputParser,
+    VertexCheckGroundingWrapper,
 )
 
 
@@ -52,7 +52,7 @@ def mock_check_grounding_service_client() -> Mock:
 
 
 def test_parse(mock_check_grounding_service_client: Mock) -> None:
-    output_parser = VertexCheckGroundingOutputParser(
+    output_parser = VertexCheckGroundingWrapper(
         project_id="test-project",
         client=mock_check_grounding_service_client,
     )
@@ -85,9 +85,11 @@ def test_parse(mock_check_grounding_service_client: Mock) -> None:
         ),
     ]
     answer_candidate = "Ulm, in the Kingdom of Württemberg in the German Empire"
-    response = output_parser.parse(answer_candidate, documents)
+    response = output_parser.with_config(configurable={"documents": documents}).invoke(
+        answer_candidate
+    )
 
-    assert response == VertexCheckGroundingOutputParser.CheckGroundingResponse(
+    assert response == VertexCheckGroundingWrapper.CheckGroundingResponse(
         support_score=0.9919261932373047,
         cited_chunks=[
             {

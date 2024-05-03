@@ -25,7 +25,7 @@ from langchain_google_community.vertex_ai_search import (
     VertexAISearchSummaryTool,
 )
 from langchain_google_community.vertex_check_grounding import (
-    VertexCheckGroundingOutputParser,
+    VertexCheckGroundingWrapper,
 )
 from langchain_google_community.vertex_rank import VertexAIRank
 from langchain_google_community.vision import CloudVisionLoader, CloudVisionParser
@@ -55,5 +55,5 @@ __all__ = [
     "VertexAISearchRetriever",
     "VertexAISearchSummaryTool",
     "VertexAIRank",
-    "VertexCheckGroundingOutputParser",
+    "VertexCheckGroundingWrapper",
 ]

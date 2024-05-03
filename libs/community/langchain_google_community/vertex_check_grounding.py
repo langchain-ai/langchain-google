@@ -3,15 +3,15 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
 from langchain_core.documents import Document
-from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field
+from langchain_core.runnables import RunnableConfig, RunnableSerializable
 
 if TYPE_CHECKING:
-    from google.cloud import discoveryengine_v1alpha  # type: ignore
+    from google.cloud import discoveryengine_v1alpha
 
 
-class VertexCheckGroundingOutputParser(
-    BaseOutputParser["VertexCheckGroundingOutputParser.CheckGroundingResponse"]
+class VertexCheckGroundingWrapper(
+    RunnableSerializable[str, "VertexCheckGroundingWrapper.CheckGroundingResponse"]
 ):
     """
     Initializes the Vertex AI CheckGroundingOutputParser with configurable parameters.
@@ -34,8 +34,6 @@ class VertexCheckGroundingOutputParser(
             citations, while choosing a lower threshold may lead to more
             but somewhat weaker citations. If unset, the threshold will
             default to 0.6.
-        title_field (Optional[str]): Specifies the document metadata field
-        to use as title.
         credentials (Optional[Credentials]): Google Cloud credentials object.
         credentials_path (Optional[str]): Path to the Google Cloud service
         account credentials file.
@@ -77,11 +75,11 @@ class VertexCheckGroundingOutputParser(
             A GroundedGenerationServiceClient instance.
         """
         try:
-            from google.cloud import discoveryengine_v1alpha  # type: ignore
+            from google.cloud import discoveryengine_v1alpha
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
-                "Please, install vertexaisearch dependency group: "
+                "Please install vertexaisearch dependency group: "
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
         return discoveryengine_v1alpha.GroundedGenerationServiceClient(
@@ -93,8 +91,8 @@ class VertexCheckGroundingOutputParser(
             )
         )
 
-    def parse(
-        self, answer_candidate: str, documents: Optional[List[Document]] = None
+    def invoke(
+        self, input: str, config: Optional[RunnableConfig] = None
     ) -> CheckGroundingResponse:
         """
         Calls the Vertex Check Grounding API for a given answer candidate and a list
@@ -134,10 +132,10 @@ class VertexCheckGroundingOutputParser(
             answer_with_citations (str):
                 Complete formed answer formatted with inline citations
         """
-        from google.cloud import discoveryengine_v1alpha  # type: ignore
+        from google.cloud import discoveryengine_v1alpha
 
-        if documents is None:
-            raise NotImplementedError("This parser requires documents for processing.")
+        answer_candidate = input
+        documents = self.extract_documents(config)
 
         grounding_spec = discoveryengine_v1alpha.CheckGroundingSpec(
             citation_threshold=self.citation_threshold,
@@ -148,12 +146,14 @@ class VertexCheckGroundingOutputParser(
                 fact_text=doc.page_content,
                 attributes={
                     key: value
-                    for key, value in doc.metadata.items()
+                    for key, value in (
+                        doc.metadata or {}
+                    ).items()  # Use an empty dict if metadata is None
                     if key not in ["id", "relevance_score"] and value is not None
                 },
             )
             for doc in documents
-            if doc.page_content and doc.metadata
+            if doc.page_content  # Only check that page_content is not None or empty
         ]
 
         if not facts:
@@ -201,6 +201,21 @@ class VertexCheckGroundingOutputParser(
             answer_with_citations=answer_with_citations,
         )
 
+    def extract_documents(self, config: Optional[RunnableConfig]) -> List[Document]:
+        if not config:
+            raise ValueError("Configuration is required.")
+
+        potential_documents = config.get("configurable", {}).get("documents", [])
+        if not isinstance(potential_documents, list) or not all(
+            isinstance(doc, Document) for doc in potential_documents
+        ):
+            raise ValueError("Invalid documents. Each must be an instance of Document.")
+
+        if not potential_documents:
+            raise ValueError("This wrapper requires documents for processing.")
+
+        return potential_documents
+
     def combine_claims_with_citations(self, claims: List[Dict[str, Any]]) -> str:
         sorted_claims = sorted(claims, key=lambda x: x["start_pos"])
         result = []
@@ -213,12 +228,13 @@ class VertexCheckGroundingOutputParser(
             result.append(claim_text)
         return " ".join(result).strip()
 
-    def get_format_instructions(self) -> str:
-        return "The output should be of the type CheckGroundingResponse."
+    @classmethod
+    def get_lc_namespace(cls) -> List[str]:
+        return ["langchain", "utilities", "check_grounding"]
 
-    @property
-    def _type(self) -> str:
-        return "check_grounding_output_parser"
+    @classmethod
+    def is_lc_serializable(cls) -> bool:
+        return False
 
     class Config:
         extra = Extra.ignore
