@@ -10,8 +10,8 @@ if TYPE_CHECKING:
     from google.cloud import discoveryengine_v1alpha
 
 
-class VertexCheckGroundingWrapper(
-    RunnableSerializable[str, "VertexCheckGroundingWrapper.CheckGroundingResponse"]
+class VertexAICheckGroundingWrapper(
+    RunnableSerializable[str, "VertexAICheckGroundingWrapper.CheckGroundingResponse"]
 ):
     """
     Initializes the Vertex AI CheckGroundingOutputParser with configurable parameters.

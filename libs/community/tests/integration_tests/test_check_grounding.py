@@ -6,7 +6,7 @@ from google.cloud import discoveryengine_v1alpha
 from langchain_core.documents import Document
 
 from langchain_google_community.vertex_check_grounding import (
-    VertexCheckGroundingWrapper,
+    VertexAICheckGroundingWrapper,
 )
 
 
@@ -83,8 +83,8 @@ def output_parser(
     grounded_generation_service_client: (
         discoveryengine_v1alpha.GroundedGenerationServiceClient
     ),
-) -> VertexCheckGroundingWrapper:
-    return VertexCheckGroundingWrapper(
+) -> VertexAICheckGroundingWrapper:
+    return VertexAICheckGroundingWrapper(
         project_id=os.environ["PROJECT_ID"],
         location_id=os.environ.get("REGION", "global"),
         grounding_config=os.environ.get("GROUNDING_CONFIG", "default_grounding_config"),
@@ -93,7 +93,7 @@ def output_parser(
 
 
 def test_integration_parse(
-    output_parser: VertexCheckGroundingWrapper,
+    output_parser: VertexAICheckGroundingWrapper,
     input_documents: List[Document],
 ) -> None:
     answer_candidate = "Ulm, in the Kingdom of Württemberg in the German Empire"
@@ -101,7 +101,7 @@ def test_integration_parse(
         configurable={"documents": input_documents}
     ).invoke(answer_candidate)
 
-    assert isinstance(response, VertexCheckGroundingWrapper.CheckGroundingResponse)
+    assert isinstance(response, VertexAICheckGroundingWrapper.CheckGroundingResponse)
     assert response.support_score >= 0 and response.support_score <= 1
     assert len(response.cited_chunks) > 0
     for chunk in response.cited_chunks:

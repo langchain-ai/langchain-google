@@ -5,7 +5,7 @@ from google.cloud import discoveryengine_v1alpha
 from langchain_core.documents import Document
 
 from langchain_google_community.vertex_check_grounding import (
-    VertexCheckGroundingWrapper,
+    VertexAICheckGroundingWrapper,
 )
 
 
@@ -52,7 +52,7 @@ def mock_check_grounding_service_client() -> Mock:
 
 
 def test_parse(mock_check_grounding_service_client: Mock) -> None:
-    output_parser = VertexCheckGroundingWrapper(
+    output_parser = VertexAICheckGroundingWrapper(
         project_id="test-project",
         client=mock_check_grounding_service_client,
     )
@@ -89,7 +89,7 @@ def test_parse(mock_check_grounding_service_client: Mock) -> None:
         answer_candidate
     )
 
-    assert response == VertexCheckGroundingWrapper.CheckGroundingResponse(
+    assert response == VertexAICheckGroundingWrapper.CheckGroundingResponse(
         support_score=0.9919261932373047,
         cited_chunks=[
             {
