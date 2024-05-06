@@ -1,10 +1,16 @@
 """Test chat model integration."""
 import json
 from typing import Dict, List, Optional, Union
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
 import pytest
+from google.ai.generativelanguage_v1beta.types import (
+    Candidate,
+    Content,
+    GenerateContentResponse,
+    Part,
+)
 from langchain_core.messages import (
     AIMessage,
     FunctionMessage,
@@ -56,7 +62,8 @@ def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> N
     assert captured.out == "**********"
 
 
-def test_parse_history() -> None:
+@pytest.mark.parametrize("convert_system_message_to_human", [False, True])
+def test_parse_history(convert_system_message_to_human: bool) -> None:
     system_input = "You're supposed to answer math questions."
     text_question1, text_answer1 = "How much is 2+2?", "4"
     function_name = "calculator"
@@ -101,16 +108,21 @@ def test_parse_history() -> None:
         message6,
     ]
     system_instruction, history = _parse_chat_history(
-        messages, convert_system_message_to_human=True
+        messages, convert_system_message_to_human=convert_system_message_to_human
     )
     assert len(history) == 6
-    assert history[0] == {
-        "role": "user",
-        "parts": [{"text": text_question1}],
-    }
-    assert history[1] == {
-        "role": "model",
-        "parts": [
+    if convert_system_message_to_human:
+        assert history[0] == glm.Content(
+            role="user",
+            parts=[glm.Part(text=system_input), glm.Part(text=text_question1)],
+        )
+    else:
+        assert history[0] == glm.Content(
+            role="user", parts=[glm.Part(text=text_question1)]
+        )
+    assert history[1] == glm.Content(
+        role="model",
+        parts=[
             glm.Part(
                 function_call=glm.FunctionCall(
                     {
@@ -120,10 +132,10 @@ def test_parse_history() -> None:
                 )
             )
         ],
-    }
-    assert history[2] == {
-        "role": "user",
-        "parts": [
+    )
+    assert history[2] == glm.Content(
+        role="user",
+        parts=[
             glm.Part(
                 function_response=glm.FunctionResponse(
                     {
@@ -133,10 +145,10 @@ def test_parse_history() -> None:
                 )
             )
         ],
-    }
-    assert history[3] == {
-        "role": "model",
-        "parts": [
+    )
+    assert history[3] == glm.Content(
+        role="model",
+        parts=[
             glm.Part(
                 function_call=glm.FunctionCall(
                     {
@@ -146,10 +158,10 @@ def test_parse_history() -> None:
                 )
             )
         ],
-    }
-    assert history[4] == {
-        "role": "user",
-        "parts": [
+    )
+    assert history[4] == glm.Content(
+        role="user",
+        parts=[
             glm.Part(
                 function_response=glm.FunctionResponse(
                     {
@@ -159,12 +171,12 @@ def test_parse_history() -> None:
                 )
             )
         ],
-    }
-    assert history[5] == {
-        "role": "model",
-        "parts": [{"text": text_answer1}],
-    }
-    assert system_instruction == [{"text": system_input}]
+    )
+    assert history[5] == glm.Content(role="model", parts=[glm.Part(text=text_answer1)])
+    if convert_system_message_to_human:
+        assert system_instruction is None
+    else:
+        assert system_instruction == glm.Content(parts=[glm.Part(text=system_input)])
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
@@ -177,15 +189,21 @@ def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> 
     "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
 )
 def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
-    mock_configure = Mock()
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    api_endpoint = "http://127.0.0.1:8000/ai"
     params = {
         "google_api_key": "[secret]",
-        "client_options": {"api_endpoint": "http://127.0.0.1:8000/ai"},
+        "client_options": {"api_endpoint": api_endpoint},
         "transport": "rest",
         "additional_headers": headers,
     }
 
-    with patch("langchain_google_genai.chat_models.genai.configure", mock_configure):
+    with patch("google.ai.generativelanguage.GenerativeServiceClient", mock_client):
         chat = ChatGoogleGenerativeAI(model="gemini-pro", **params)
 
     expected_default_metadata: tuple = ()
@@ -195,13 +213,22 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         assert chat.additional_headers
         assert all(header in chat.additional_headers for header in headers.keys())
         expected_default_metadata = tuple(headers.items())
+        assert chat.default_metadata == expected_default_metadata
 
-    mock_configure.assert_called_once_with(
-        api_key=params["google_api_key"],
+    response = chat.invoke("test")
+    assert response.content == "test response"
+
+    mock_client.assert_called_once_with(
         transport=params["transport"],
-        client_options=params["client_options"],
-        default_metadata=expected_default_metadata,
+        client_options=ANY,
+        client_info=ANY,
     )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_key == params["google_api_key"]
+    assert call_client_options.api_endpoint == api_endpoint
+    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
+    assert "langchain-google-genai" in call_client_info.user_agent
+    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
 
 
 @pytest.mark.parametrize(
