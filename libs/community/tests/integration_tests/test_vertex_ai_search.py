@@ -11,15 +11,17 @@ export PROJECT_ID=... - set to your Google Cloud project ID
 export DATA_STORE_ID=... - the ID of the search engine to use for the test
 """
 
-from langchain_core.documents import Document
 import os
+
 import pytest
+from langchain_core.documents import Document
 
 from langchain_google_community import (
     VertexAIMultiTurnSearchRetriever,
     VertexAISearchRetriever,
     VertexAISearchSummaryTool,
 )
+
 
 @pytest.mark.skip(reason="CI/CD not ready.")
 def test_google_vertex_ai_search_get_relevant_documents() -> None:

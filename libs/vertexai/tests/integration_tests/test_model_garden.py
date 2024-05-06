@@ -15,6 +15,7 @@ from langchain_google_vertexai.model_garden import (
     VertexAIModelGarden,
 )
 
+
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],

@@ -14,7 +14,7 @@ from langchain_google_vertexai import (
 )
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_gemma_model_garden() -> None:
     """In order to run this test, you should provide endpoint names.
 

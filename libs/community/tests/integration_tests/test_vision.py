@@ -1,9 +1,10 @@
+import os
+
 from langchain_core.document_loaders.blob_loaders import Blob
 from langchain_core.documents import Document
-import os
-import pytest
 
 from langchain_google_community import CloudVisionLoader, CloudVisionParser
+
 
 def test_parse_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
