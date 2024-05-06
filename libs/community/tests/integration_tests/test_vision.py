@@ -16,6 +16,7 @@ def test_parse_image() -> None:
     assert isinstance(documents[0], Document)
     assert len(documents[0].page_content) > 1
 
+
 def test_load_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
     project = os.environ["PROJECT_ID"]

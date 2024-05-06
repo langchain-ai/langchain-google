@@ -15,6 +15,7 @@ def test_call() -> None:
     output = search.run("What was Obama's first name?")
     assert "Barack Hussein Obama II" in output
 
+
 def test_no_result_call() -> None:
     """Test that call gives no result."""
     google_api_key = os.environ["GOOGLE_API_KEY"]
@@ -26,6 +27,7 @@ def test_no_result_call() -> None:
         "NORESULTCALL_NORESULTCALL_NORESULTCALL_NORESULTCALL_NORESULTCALL_NORESULTCALL"
     )
     assert "No good Google Search Result was found" == output
+
 
 def test_result_with_params_call() -> None:
     """Test that call gives the correct answer with extra params."""

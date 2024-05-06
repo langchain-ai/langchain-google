@@ -44,6 +44,7 @@ def test_model_garden(
     print(output)
     assert llm._llm_type == "vertexai_model_garden"
 
+
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -71,6 +72,7 @@ def test_model_garden_generate(
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 2
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
@@ -91,6 +93,7 @@ async def test_model_garden_agenerate(
     output = await llm.agenerate(["What is the meaning of life?", "How much is 2+2"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 2
+
 
 @pytest.mark.xfail(reason="CI issue")
 def test_anthropic() -> None:
@@ -113,6 +116,7 @@ def test_anthropic() -> None:
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
+
 @pytest.mark.xfail(reason="CI issue")
 def test_anthropic_stream() -> None:
     project = os.environ["PROJECT_ID"]
@@ -128,6 +132,7 @@ def test_anthropic_stream() -> None:
     sync_response = model.stream([message], model="claude-3-sonnet@20240229")
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
+
 
 @pytest.mark.xfail(reason="CI issue")
 async def test_anthropic_async() -> None:

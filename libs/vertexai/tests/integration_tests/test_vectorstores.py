@@ -1,7 +1,7 @@
 """Test Vertex AI API wrapper.
-Your end-user credentials would be used to make the calls (make sure you've run 
+Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
-Additionally in order to run the test you must have set the following environment 
+Additionally in order to run the test you must have set the following environment
 variables:
 - PROJECT_ID: Id of the Google Cloud Project
 - REGION: Region of the Bucket, Index and Endpoint
