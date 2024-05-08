@@ -1,25 +1,21 @@
 """Test chat model integration."""
 
 import json
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, Mock, patch
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
-    Content as GAPICContent,
-)
-from google.cloud.aiplatform_v1beta1.types import (
-    FunctionCall as GAPICFunctionCall,
-)
-from google.cloud.aiplatform_v1beta1.types import (
-    FunctionResponse as GAPICFunctionResponse,
-)
-from google.cloud.aiplatform_v1beta1.types import (
-    Part as GAPICPart,
-)
-from google.cloud.aiplatform_v1beta1.types import (
-    content as gapic_content_types,
+    Candidate,
+    Content,
+    FunctionCall,
+    FunctionResponse,
+    GenerateContentResponse,
+    GenerationConfig,
+    HarmCategory,
+    Part,
+    SafetySetting,
 )
 from langchain_core.messages import (
     AIMessage,
@@ -33,11 +29,6 @@ from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
 from langchain_core.pydantic_v1 import BaseModel
-from vertexai.generative_models import (  # type: ignore
-    Candidate,
-    Content,
-    Part,
-)
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     InputOutputTextPair,
@@ -59,17 +50,55 @@ def test_init() -> None:
             project="test-project",
             max_output_tokens=10,
             stop=["bar"],
+            location="moon-dark1",
         ),
         ChatVertexAI(
             model="gemini-pro",
-            project="test-project",
             max_tokens=10,
             stop_sequences=["bar"],
+            location="moon-dark1",
+            project="test-proj",
         ),
     ]:
         assert llm.model_name == "gemini-pro"
         assert llm.max_output_tokens == 10
         assert llm.stop == ["bar"]
+
+
+@pytest.mark.parametrize(
+    "model,location",
+    [
+        (
+            "gemini-1.0-pro-001",
+            "moon-dark1",
+        ),
+        ("publishers/google/models/gemini-1.0-pro-001", "moon-dark2"),
+    ],
+)
+def test_init_client(model: str, location: str) -> None:
+    config = {"model": model, "location": location}
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+    with patch(
+        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        client_info = mock_prediction_service.call_args.kwargs["client_info"]
+        mock_prediction_service.assert_called_once_with(
+            client_options={"api_endpoint": f"{location}-aiplatform.googleapis.com"},
+            client_info=ANY,
+        )
+        assert "langchain-google-vertexai" in client_info.user_agent
+        assert "ChatVertexAI" in client_info.user_agent
+        assert "langchain-google-vertexai" in client_info.client_library_version
+        assert "ChatVertexAI" in client_info.client_library_version
+        assert llm.full_model_name == (
+            f"projects/test-proj/locations/{location}/publishers/google/models/gemini-1.0-pro-001"
+        )
 
 
 def test_tuned_model_name() -> None:
@@ -80,7 +109,7 @@ def test_tuned_model_name() -> None:
     )
     assert llm.model_name == "gemini-pro"
     assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
-    assert llm.client._model_name == "projects/123/locations/europe-west4/endpoints/456"
+    assert llm.full_model_name == "projects/123/locations/europe-west4/endpoints/456"
 
 
 def test_parse_examples_correct() -> None:
@@ -141,7 +170,7 @@ def test_vertexai_args_passed(stop: Optional[str]) -> None:
         mock_model.start_chat = mock_start_chat
         mg.return_value = mock_model
 
-        model = ChatVertexAI(**prompt_params)
+        model = ChatVertexAI(**prompt_params, project="test-proj")
         message = HumanMessage(content=user_prompt)
         if stop:
             response = model([message], stop=[stop])
@@ -154,10 +183,7 @@ def test_vertexai_args_passed(stop: Optional[str]) -> None:
         )
         expected_stop_sequence = [stop] if stop else None
         mock_start_chat.assert_called_once_with(
-            context=None,
-            message_history=[],
-            **prompt_params,
-            stop_sequences=expected_stop_sequence,
+            message_history=[], **prompt_params, stop_sequences=expected_stop_sequence
         )
 
 
@@ -288,30 +314,30 @@ def test_parse_history_gemini_function() -> None:
     assert history[0].parts[0].text == text_question1
 
     assert history[1].role == "model"
-    assert history[1].parts[0].function_call == GAPICFunctionCall(
+    assert history[1].parts[0].function_call == FunctionCall(
         name=tool_call_1["name"], args=tool_call_1["args"]
     )
-    assert history[1].parts[1].function_call == GAPICFunctionCall(
+    assert history[1].parts[1].function_call == FunctionCall(
         name=tool_call_2["name"], args=tool_call_2["args"]
     )
 
     assert history[2].role == "function"
-    assert history[2].parts[0].function_response == GAPICFunctionResponse(
+    assert history[2].parts[0].function_response == FunctionResponse(
         name=fn_name_1,
         response={"content": message3.content},
     )
-    assert history[2].parts[1].function_response == GAPICFunctionResponse(
+    assert history[2].parts[1].function_response == FunctionResponse(
         name=message4.name,
         response={"content": message4.content},
     )
 
     assert history[3].role == "model"
-    assert history[3].parts[0].function_call == GAPICFunctionCall(
+    assert history[3].parts[0].function_call == FunctionCall(
         name=tool_call_3["name"], args=tool_call_3["args"]
     )
 
     assert history[4].role == "function"
-    assert history[4].parts[0].function_response == GAPICFunctionResponse(
+    assert history[4].parts[0].function_response == FunctionResponse(
         name=fn_name_3,
         response={"content": message6.content},
     )
@@ -327,7 +353,7 @@ def test_parse_history_gemini_function() -> None:
                     content="Mike age is 30",
                 )
             ],
-            [Content(role="model", parts=[Part.from_text("Mike age is 30")])],
+            [Content(role="model", parts=[Part(text="Mike age is 30")])],
         ),
         (
             [
@@ -339,8 +365,8 @@ def test_parse_history_gemini_function() -> None:
                 Content(
                     role="model",
                     parts=[
-                        Part.from_text("Mike age is 30"),
-                        Part.from_text("Arthur age is 30"),
+                        Part(text="Mike age is 30"),
+                        Part(text="Arthur age is 30"),
                     ],
                 ),
             ],
@@ -359,18 +385,16 @@ def test_parse_history_gemini_function() -> None:
                 ),
             ],
             [
-                Content.from_dict(
-                    {
-                        "role": "model",
-                        "parts": [
-                            {
-                                "function_call": {
-                                    "name": "Information",
-                                    "args": {"name": "Ben"},
-                                }
-                            }
-                        ],
-                    }
+                Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="Information",
+                                args={"name": "Ben"},
+                            )
+                        )
+                    ],
                 )
             ],
         ),
@@ -388,19 +412,17 @@ def test_parse_history_gemini_function() -> None:
                 ),
             ],
             [
-                Content.from_dict(
-                    {
-                        "role": "model",
-                        "parts": [
-                            {"text": "Mike age is 30"},
-                            {
-                                "function_call": {
-                                    "name": "Information",
-                                    "args": {"name": "Ben"},
-                                }
-                            },
-                        ],
-                    }
+                Content(
+                    role="model",
+                    parts=[
+                        Part(text="Mike age is 30"),
+                        Part(
+                            function_call=FunctionCall(
+                                name="Information",
+                                args={"name": "Ben"},
+                            )
+                        ),
+                    ],
                 )
             ],
         ),
@@ -418,20 +440,18 @@ def test_parse_history_gemini_function() -> None:
                 ),
             ],
             [
-                Content.from_dict(
-                    {
-                        "role": "model",
-                        "parts": [
-                            {"text": "Mike age is 30"},
-                            {"text": "Arthur age is 30"},
-                            {
-                                "function_call": {
-                                    "name": "Information",
-                                    "args": {"name": "Ben"},
-                                }
-                            },
-                        ],
-                    }
+                Content(
+                    role="model",
+                    parts=[
+                        Part(text="Mike age is 30"),
+                        Part(text="Arthur age is 30"),
+                        Part(
+                            function_call=FunctionCall(
+                                name="Information",
+                                args={"name": "Ben"},
+                            )
+                        ),
+                    ],
                 )
             ],
         ),
@@ -439,11 +459,10 @@ def test_parse_history_gemini_function() -> None:
 )
 def test_parse_history_gemini_multi(source_history, expected_history) -> None:
     source_history.insert(0, HumanMessage(content="Hello"))
-    expected_history.insert(0, Content(role="user", parts=[Part.from_text("Hello")]))
+    expected_history.insert(0, Content(role="user", parts=[Part(text="Hello")]))
     _, result_history = _parse_chat_history_gemini(history=source_history)
     for result, expected in zip(result_history, expected_history):
-        assert result.role == expected.role
-        assert result._raw_content == expected._raw_content
+        result == expected
 
 
 def test_default_params_palm() -> None:
@@ -465,7 +484,6 @@ def test_default_params_palm() -> None:
         message = HumanMessage(content=user_prompt)
         _ = model([message])
         mock_start_chat.assert_called_once_with(
-            context=None,
             message_history=[],
             max_output_tokens=128,
             top_k=40,
@@ -475,60 +493,46 @@ def test_default_params_palm() -> None:
         )
 
 
-@dataclass
-class StubGeminiResponse:
-    """Stub gemini response from VertexAI for testing."""
-
-    text: str
-    content: Any
-    citation_metadata: Any
-    safety_ratings: List[Any] = field(default_factory=list)
-
-
 def test_default_params_gemini() -> None:
     user_prompt = "Hello"
 
-    with patch("langchain_google_vertexai.chat_models.GenerativeModel") as gm:
-        mock_response = MagicMock()
-        mock_response.candidates = [
-            StubGeminiResponse(
-                text="Goodbye",
-                content=Mock(parts=[Mock(text="Hi", function_call=None)]),
-                citation_metadata=None,
-            )
-        ]
-        mock_generate_content = MagicMock(return_value=mock_response)
-        mock_model = MagicMock()
-        mock_model.generate_content = mock_generate_content
-        gm.return_value = mock_model
+    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+        response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-pro")
+        model = ChatVertexAI(model_name="gemini-pro", project="test-project")
         message = HumanMessage(content=user_prompt)
         _ = model.invoke([message])
         mock_generate_content.assert_called_once()
-        assert mock_generate_content.call_args.kwargs["contents"][0].role == "user"
         assert (
-            mock_generate_content.call_args.kwargs["contents"][0].parts[0].text
+            mock_generate_content.call_args.kwargs["request"].contents[0].role == "user"
+        )
+        assert (
+            mock_generate_content.call_args.kwargs["request"].contents[0].parts[0].text
             == "Hello"
         )
-        assert mock_generate_content.call_args.kwargs["generation_config"] == {
-            "candidate_count": 1,
-            "stop_sequences": None,
-        }
-        assert mock_generate_content.call_args.kwargs["tools"] is None
-        assert mock_generate_content.call_args.kwargs["tool_config"] is None
-        assert mock_generate_content.call_args.kwargs["safety_settings"] is None
+        expected = GenerationConfig(candidate_count=1)
+        assert (
+            mock_generate_content.call_args.kwargs["request"].generation_config
+            == expected
+        )
+        assert mock_generate_content.call_args.kwargs["request"].tools == []
+        assert not mock_generate_content.call_args.kwargs["request"].tool_config
+        assert not mock_generate_content.call_args.kwargs["request"].safety_settings
 
 
 @pytest.mark.parametrize(
     "raw_candidate, expected",
     [
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
+                        Part(
                             text="Mike age is 30",
                         )
                     ],
@@ -540,14 +544,14 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
+                        Part(
                             text="Mike age is 30",
                         ),
-                        GAPICPart(
+                        Part(
                             text="Arthur age is 30",
                         ),
                     ],
@@ -559,12 +563,12 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
                             ),
@@ -584,12 +588,12 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={"info": ["A", "B", "C"]},
                             ),
@@ -609,12 +613,12 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={
                                     "people": [
@@ -644,12 +648,12 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={"info": [[1, 2, 3], [4, 5, 6]]},
                             ),
@@ -669,13 +673,13 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(text="Mike age is 30"),
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(text="Mike age is 30"),
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
                             ),
@@ -695,17 +699,17 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
                             ),
                         ),
-                        GAPICPart(text="Mike age is 30"),
+                        Part(text="Mike age is 30"),
                     ],
                 )
             ),
@@ -721,18 +725,18 @@ def test_default_params_gemini() -> None:
             ),
         ),
         (
-            gapic_content_types.Candidate(
-                content=GAPICContent(
+            Candidate(
+                content=Content(
                     role="model",
                     parts=[
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
                             ),
                         ),
-                        GAPICPart(
-                            function_call=GAPICFunctionCall(
+                        Part(
+                            function_call=FunctionCall(
                                 name="Information",
                                 args={"name": "Mike"},
                             ),
@@ -767,7 +771,7 @@ def test_default_params_gemini() -> None:
 def test_parse_response_candidate(raw_candidate, expected) -> None:
     with patch("langchain_google_vertexai.chat_models.uuid.uuid4") as uuid4:
         uuid4.return_value = "00000000-0000-0000-0000-00000000000"
-        response_candidate = Candidate._from_gapic(raw_candidate)
+        response_candidate = raw_candidate
         result = _parse_response_candidate(response_candidate)
         assert result.content == expected.content
         assert result.tool_calls == expected.tool_calls
@@ -795,37 +799,34 @@ def test_parser_multiple_tools():
         arg1: int
         arg2: int
 
-    with patch("langchain_google_vertexai.chat_models.GenerativeModel") as gm:
-        mock_response = MagicMock()
-        mock_response.candidates = [
-            Candidate.from_dict(
-                {
-                    "content": {
-                        "role": "model",
-                        "parts": [
-                            {
-                                "function_call": {
-                                    "name": "Add",
-                                    "args": {"arg1": "1", "arg2": "2"},
-                                }
-                            },
-                            {
-                                "function_call": {
-                                    "name": "Multiply",
-                                    "args": {"arg1": "3", "arg2": "3"},
-                                }
-                            },
+    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+        response = GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        role="model",
+                        parts=[
+                            Part(
+                                function_call=FunctionCall(
+                                    name="Add",
+                                    args={"arg1": "1", "arg2": "2"},
+                                )
+                            ),
+                            Part(
+                                function_call=FunctionCall(
+                                    name="Multiply",
+                                    args={"arg1": "3", "arg2": "3"},
+                                )
+                            ),
                         ],
-                    }
-                }
-            )
-        ]
-        mock_generate_content = MagicMock(return_value=mock_response)
-        mock_model = MagicMock()
-        mock_model.generate_content = mock_generate_content
-        gm.return_value = mock_model
+                    )
+                )
+            ]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-1.5-pro")
+        model = ChatVertexAI(model_name="gemini-1.5-pro", project="test-project")
         message = HumanMessage(content="Hello")
         parser = PydanticToolsParser(tools=[Add, Multiply])
         llm = model | parser
@@ -836,3 +837,37 @@ def test_parser_multiple_tools():
         assert result[0] == Add(arg1=1, arg2=2)
         assert isinstance(result[1], Multiply)
         assert result[1] == Multiply(arg1=3, arg2=3)
+
+
+def test_generation_config_gemini() -> None:
+    model = ChatVertexAI(model_name="gemini-pro", temperature=0.2, top_k=3)
+    generation_config = model._generation_config_gemini(
+        temperature=0.3, stop=["stop"], candidate_count=2
+    )
+    expected = GenerationConfig(
+        stop_sequences=["stop"], temperature=0.3, top_k=3, candidate_count=2
+    )
+    assert generation_config == expected
+
+
+def test_safety_settings_gemini() -> None:
+    model = ChatVertexAI(
+        model_name="gemini-pro", temperature=0.2, top_k=3, project="test-project"
+    )
+    expected_safety_setting = SafetySetting(
+        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    )
+    safety_settings = model._safety_settings_gemini([expected_safety_setting])
+    assert safety_settings == [expected_safety_setting]
+    safety_settings = model._safety_settings_gemini(
+        {"HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"}
+    )
+    assert safety_settings == [expected_safety_setting]
+    safety_settings = model._safety_settings_gemini({2: 1})
+    assert safety_settings == [expected_safety_setting]
+    threshold = SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
+    safety_settings = model._safety_settings_gemini(
+        {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}
+    )
+    assert safety_settings == [expected_safety_setting]

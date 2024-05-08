@@ -25,8 +25,6 @@ from typing import (
 )
 
 import proto  # type: ignore[import-untyped]
-from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
-from google.cloud.aiplatform_v1beta1.types.tool import FunctionCall
 from google.cloud.aiplatform import telemetry
 
 from langchain_core.callbacks import (
@@ -60,10 +58,6 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from vertexai.generative_models import (  # type: ignore
-    Candidate,
-    Content,
-    GenerativeModel,
-    Part,
     Tool as VertexTool,
 )
 from vertexai.generative_models._generative_models import (  # type: ignore
@@ -87,15 +81,25 @@ from vertexai.preview.language_models import (
     CodeChatModel as PreviewCodeChatModel,
 )
 
-from langchain_google_vertexai._base import (
-    _VertexAICommon,
+from google.cloud.aiplatform_v1beta1.types import (
+    Candidate,
+    Part,
+    HarmCategory,
+    Content,
+    FunctionCall,
+    FunctionResponse,
+    GenerateContentRequest,
+    GenerationConfig,
+    SafetySetting,
+    Tool as GapicTool,
+    ToolConfig as GapicToolConfig,
 )
+from langchain_google_vertexai._base import _VertexAICommon, GoogleModelFamily
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
-    is_codey_model,
-    is_gemini_model,
+    _format_model_name,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
@@ -109,6 +113,20 @@ from langchain_google_vertexai.functions_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_allowed_params = [
+    "temperature",
+    "top_k",
+    "top_p",
+    "response_mime_type",
+    "temperature",
+    "max_output_tokens",
+    "presence_penalty",
+    "frequency_penalty",
+    "candidate_count",
+]
+_args_not_pass_to_prediction_service = _allowed_params + ["stream", "streaming"]
 
 
 @dataclass
@@ -164,17 +182,17 @@ def _parse_chat_history_gemini(
 ) -> tuple[Content | None, list[Content]]:
     def _convert_to_prompt(part: Union[str, Dict]) -> Part:
         if isinstance(part, str):
-            return Part.from_text(part)
+            return Part(text=part)
 
         if not isinstance(part, Dict):
             raise ValueError(
                 f"Message's content is expected to be a dict, got {type(part)}!"
             )
         if part["type"] == "text":
-            return Part.from_text(part["text"])
+            return Part(text=part["text"])
         if part["type"] == "image_url":
             path = part["image_url"]["url"]
-            return ImageBytesLoader(project=project).load_part(path)
+            return ImageBytesLoader(project=project).load_gapic_part(path)
 
         raise ValueError("Only text and image_url types are supported!")
 
@@ -232,24 +250,22 @@ def _parse_chat_history_gemini(
                         "args": tc["args"],
                     }
                 )
-                gapic_part = GapicPart(function_call=function_call)
-                parts.append(Part._from_gapic(gapic_part))
+                parts.append(Part(function_call=function_call))
 
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
             role = "function"
 
-            part = Part.from_function_response(
-                name=message.name,
-                response={
-                    "content": message.content,
-                },
+            part = Part(
+                function_response=FunctionResponse(
+                    name=message.name, response={"content": message.content}
+                )
             )
 
             prev_content = vertex_messages[-1]
             prev_content_is_function = prev_content and prev_content.role == "function"
             if prev_content_is_function:
-                parts = prev_content.parts
+                parts = list(prev_content.parts)
                 parts.append(part)
                 # replacing last message
                 vertex_messages[-1] = Content(role=role, parts=parts)
@@ -279,17 +295,19 @@ def _parse_chat_history_gemini(
                             )
                         )
                     name = tool_call["name"]
-            part = Part.from_function_response(
-                name=name,
-                response={
-                    "content": message.content,
-                },
+            part = Part(
+                function_response=FunctionResponse(
+                    name=name,
+                    response={
+                        "content": message.content,
+                    },
+                )
             )
 
             prev_content = vertex_messages[-1]
             prev_content_is_function = prev_content and prev_content.role == "function"
             if prev_content_is_function:
-                parts = prev_content.parts
+                parts = list(prev_content.parts)
                 parts.append(part)
                 # replacing last message
                 vertex_messages[-1] = Content(role=role, parts=parts)
@@ -374,8 +392,8 @@ def _parse_response_candidate(
         except AttributeError:
             text = None
 
-        if text is not None:
-            if content is None:
+        if text:
+            if not content:
                 content = text
             elif isinstance(content, str):
                 content = [content, text]
@@ -404,12 +422,13 @@ def _parse_response_candidate(
             additional_kwargs["function_call"] = function_call
 
             if streaming:
+                index = function_call.get("index")
                 tool_call_chunks.append(
                     ToolCallChunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=function_call.get("id", str(uuid.uuid4())),
-                        index=function_call.get("index"),
+                        index=int(index) if index else None,
                     )
                 )
             else:
@@ -471,7 +490,14 @@ def _completion_with_retry(
     def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
         return generation_method(**kwargs)
 
-    return _completion_with_retry_inner(generation_method, **kwargs)
+    return _completion_with_retry_inner(
+        generation_method,
+        **{
+            k: v
+            for k, v in kwargs.items()
+            if v not in _args_not_pass_to_prediction_service
+        },
+    )
 
 
 async def _acompletion_with_retry(
@@ -492,7 +518,14 @@ async def _acompletion_with_retry(
     ) -> Any:
         return await generation_method(**kwargs)
 
-    return await _completion_with_retry_inner(generation_method, **kwargs)
+    return await _completion_with_retry_inner(
+        generation_method,
+        **{
+            k: v
+            for k, v in kwargs.items()
+            if v not in _args_not_pass_to_prediction_service
+        },
+    )
 
 
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
@@ -501,10 +534,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     model_name: str = Field(default="chat-bison", alias="model")
     "Underlying model name."
     examples: Optional[List[BaseMessage]] = None
-    tuned_model_name: Optional[str] = None
-    """The name of a tuned model. If tuned_model_name is passed
-    model_name will be used to determine the model family
-    """
     convert_system_message_to_human: bool = False
     """[Deprecated] Since new Gemini models support setting a System Message,
     setting this parameter to True is discouraged.
@@ -534,31 +563,42 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that the python package exists in environment."""
-        is_gemini = is_gemini_model(values["model_name"])
-        safety_settings = values["safety_settings"]
+        safety_settings = values.get("safety_settings")
         tuned_model_name = values.get("tuned_model_name")
+        values["model_family"] = GoogleModelFamily(values["model_name"])
 
-        if safety_settings and not is_gemini:
+        if values.get("full_model_name") is not None:
+            pass
+        elif values.get("tuned_model_name") is not None:
+            values["full_model_name"] = _format_model_name(
+                values["tuned_model_name"],
+                location=values["location"],
+                project=values["project"],
+            )
+        else:
+            values["full_model_name"] = _format_model_name(
+                values["model_name"],
+                location=values["location"],
+                project=values["project"],
+            )
+
+        if safety_settings and values["model_family"] not in [
+            GoogleModelFamily.GEMINI,
+            GoogleModelFamily.GEMINI_ADVANCED,
+        ]:
             raise ValueError("Safety settings are only supported for Gemini models")
-
-        cls._init_vertexai(values)
 
         if tuned_model_name:
             generative_model_name = values["tuned_model_name"]
         else:
             generative_model_name = values["model_name"]
 
-        if is_gemini:
-            values["client"] = GenerativeModel(
-                model_name=generative_model_name,
-                safety_settings=safety_settings,
-            )
-            values["client_preview"] = GenerativeModel(
-                model_name=generative_model_name,
-                safety_settings=safety_settings,
-            )
-        else:
-            if is_codey_model(values["model_name"]):
+        if values["model_family"] not in [
+            GoogleModelFamily.GEMINI,
+            GoogleModelFamily.GEMINI_ADVANCED,
+        ]:
+            cls._init_vertexai(values)
+            if values["model_family"] == GoogleModelFamily.CODEY:
                 model_cls = CodeChatModel
                 model_cls_preview = PreviewCodeChatModel
             else:
@@ -572,10 +612,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     @property
     def _is_gemini_advanced(self) -> bool:
-        try:
-            return float(self.model_name.split("-")[1]) > 1.0
-        except (ValueError, IndexError):
-            return False
+        return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
 
     def _generate(
         self,
@@ -607,17 +644,150 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return generate_from_stream(stream_iter)
         if not self._is_gemini_model:
             return self._generate_non_gemini(messages, stop=stop, **kwargs)
+        return self._generate_gemini(
+            messages=messages,
+            stop=stop,
+            run_manager=run_manager,
+            stream=stream,
+            **kwargs,
+        )
 
-        client, contents = self._gemini_client_and_contents(messages)
-        params = self._gemini_params(stop=stop, **kwargs)
-        with telemetry.tool_context_manager(self._user_agent):
-            response = _completion_with_retry(
-                client.generate_content,
-                max_retries=self.max_retries,
-                contents=contents,
-                **params,
+    def _generation_config_gemini(
+        self,
+        stop: Optional[List[str]] = None,
+        stream: bool = False,
+        **kwargs,
+    ) -> GenerationConfig:
+        """Prepares GenerationConfig part of the request.
+
+        https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#generationconfig
+        """
+        return GenerationConfig(
+            **self._prepare_params(
+                stop=stop,
+                stream=stream,
+                **{k: v for k, v in kwargs.items() if k in _allowed_params},
             )
+        )
+
+    def _safety_settings_gemini(
+        self, safety_settings: Optional[SafetySettingsType]
+    ) -> Optional[Sequence[SafetySetting]]:
+        """Prepares SafetySetting part of the request.
+
+        https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#safetysetting
+        """
+        if safety_settings is None:
+            return None
+        if isinstance(safety_settings, list):
+            return safety_settings
+        if isinstance(safety_settings, dict):
+            formatted_safety_settings = []
+            for category, threshold in safety_settings.items():
+                if isinstance(category, str):
+                    category = HarmCategory[category]  # type: ignore[misc]
+                if isinstance(threshold, str):
+                    threshold = SafetySetting.HarmBlockThreshold[threshold]  # type: ignore[misc]
+
+                formatted_safety_settings.append(
+                    SafetySetting(
+                        category=HarmCategory(category),
+                        threshold=SafetySetting.HarmBlockThreshold(threshold),
+                    )
+                )
+            return formatted_safety_settings
+        raise ValueError("safety_settings should be either")
+
+    def _prepare_request_gemini(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        stream: bool = False,
+        tools: Optional[List[Union[_VertexToolDict, VertexTool]]] = None,
+        functions: Optional[List[_FunctionDeclarationLike]] = None,
+        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
+        safety_settings: Optional[SafetySettingsType] = None,
+        **kwargs,
+    ) -> GenerateContentRequest:
+        system_instruction, contents = _parse_chat_history_gemini(messages)
+        formatted_tools = self._tools_gemini(tools=tools, functions=functions)
+        tool_config = self._tool_config_gemini(tool_config=tool_config)
+        return GenerateContentRequest(
+            contents=contents,
+            system_instruction=system_instruction,
+            tools=formatted_tools,
+            tool_config=tool_config,
+            safety_settings=self._safety_settings_gemini(safety_settings),
+            generation_config=self._generation_config_gemini(
+                stream=stream, stop=stop, **kwargs
+            ),
+            model=self.full_model_name,
+        )
+
+    def _generate_gemini(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        response = _completion_with_retry(
+            self.prediction_client.generate_content,
+            max_retries=self.max_retries,
+            request=request,
+        )
         return self._gemini_response_to_chat_result(response)
+
+    async def _agenerate_gemini(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        response = await _acompletion_with_retry(
+            self.async_prediction_client.generate_content,
+            max_retries=self.max_retries,
+            request=self._prepare_request_gemini(
+                messages=messages, stop=stop, **kwargs
+            ),
+        )
+        return self._gemini_response_to_chat_result(response)
+
+    def get_num_tokens(self, text: str) -> int:
+        """Get the number of tokens present in the text."""
+        if self._is_gemini_model:
+            # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
+            _, contents = _parse_chat_history_gemini([HumanMessage(content=text)])
+            response = self.prediction_client.count_tokens(
+                {
+                    "endpoint": self.full_model_name,
+                    "model": self.full_model_name,
+                    "contents": contents,
+                }
+            )
+            return response.total_tokens
+        else:
+            return super().get_num_tokens(text=text)
+
+    def _tools_gemini(
+        self,
+        tools: Optional[List[Union[_VertexToolDict, VertexTool, GapicTool]]] = None,
+        functions: Optional[List[_FunctionDeclarationLike]] = None,
+    ) -> Optional[Sequence[GapicTool]]:
+        if tools:
+            return [_format_to_vertex_tool(tool) for tool in tools]
+        if functions:
+            return [_format_to_vertex_tool(functions)]
+        return None
+
+    def _tool_config_gemini(
+        self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
+    ) -> Optional[GapicToolConfig]:
+        if tool_config and not isinstance(tool_config, ToolConfig):
+            return _format_tool_config(cast(_ToolConfigDict, tool_config))
+        return None
 
     def _generate_non_gemini(
         self,
@@ -684,16 +854,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if not self._is_gemini_model:
             return await self._agenerate_non_gemini(messages, stop=stop, **kwargs)
 
-        client, contents = self._gemini_client_and_contents(messages)
-        params = self._gemini_params(stop=stop, **kwargs)
-        with telemetry.tool_context_manager(self._user_agent):
-            response = await _acompletion_with_retry(
-                client.generate_content_async,
-                max_retries=self.max_retries,
-                contents=contents,
-                **params,
-            )
-        return self._gemini_response_to_chat_result(response)
+        return await self._agenerate_gemini(
+            messages=messages,
+            stop=stop,
+            run_manager=run_manager,
+            **kwargs,
+        )
 
     async def _agenerate_non_gemini(
         self,
@@ -744,17 +910,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
             return
+        yield from self._stream_gemini(
+            messages=messages, stop=stop, run_manager=run_manager, **kwargs
+        )
+        return
 
-        client, contents = self._gemini_client_and_contents(messages)
-        params = self._gemini_params(stop=stop, stream=True, **kwargs)
-        with telemetry.tool_context_manager(self._user_agent):
-            response_iter = _completion_with_retry(
-                client.generate_content,
-                max_retries=self.max_retries,
-                contents=contents,
-                stream=True,
-                **params,
-            )
+    def _stream_gemini(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        response_iter = _completion_with_retry(
+            self.prediction_client.stream_generate_content,
+            max_retries=self.max_retries,
+            request=request,
+            **kwargs,
+        )
         for response_chunk in response_iter:
             chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
             if run_manager and isinstance(chunk.message.content, str):
@@ -798,20 +972,19 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self._is_gemini_model:
             raise NotImplementedError()
-        client, contents = self._gemini_client_and_contents(messages)
-        params = self._gemini_params(stop=stop, stream=True, **kwargs)
-        with telemetry.tool_context_manager(self._user_agent):
-            async for response_chunk in await _acompletion_with_retry(
-                client.generate_content_async,
-                max_retries=self.max_retries,
-                contents=contents,
-                stream=True,
-                **params,
-            ):
-                chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
-                if run_manager and isinstance(chunk.message.content, str):
-                    await run_manager.on_llm_new_token(chunk.message.content)
-                yield chunk
+        request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+
+        response_iter = _acompletion_with_retry(
+            self.async_prediction_client.stream_generate_content,
+            max_retries=self.max_retries,
+            request=request,
+            **kwargs,
+        )
+        async for response_chunk in await response_iter:
+            chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
+            if run_manager and isinstance(chunk.message.content, str):
+                await run_manager.on_llm_new_token(chunk.message.content)
+            yield chunk
 
     def with_structured_output(
         self,
@@ -975,7 +1148,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
     ) -> Union[ChatSession, CodeChatSession]:
-        if not self.is_codey_model:
+        if self.model_family == GoogleModelFamily.CODEY:
             return self.client.start_chat(
                 context=history.context, message_history=history.history, **kwargs
             )
@@ -1011,28 +1184,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             safety_settings=safety_settings,
         )
 
-    def _gemini_client_and_contents(
-        self, messages: List[BaseMessage]
-    ) -> tuple[GenerativeModel, list[Content]]:
-        system, contents = _parse_chat_history_gemini(
-            messages,
-            project=self.project,
-            convert_system_message_to_human=self.convert_system_message_to_human,
-        )
-        # TODO: Store default client params explicitly so private params don't have to
-        # be accessed, like _safety_settings.
-        client = GenerativeModel(
-            model_name=self.model_name,
-            system_instruction=system,
-            safety_settings=self.client._safety_settings,
-        )
-        return client, contents
-
     def _gemini_response_to_chat_result(
         self, response: GenerationResponse
     ) -> ChatResult:
         generations = []
-        usage = response.to_dict().get("usage_metadata")
+        usage = proto.Message.to_dict(response.usage_metadata)
         for candidate in response.candidates:
             info = get_generation_info(candidate, is_gemini=True, usage_metadata=usage)
             message = _parse_response_candidate(candidate)
@@ -1052,7 +1208,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, response_chunk: GenerationResponse
     ) -> ChatGenerationChunk:
         # return an empty completion message if there's no candidates
-        usage_metadata = response_chunk.to_dict().get("usage_metadata")
+        usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
         if not response_chunk.candidates:
             message = AIMessageChunk(content="")
             if usage_metadata:
@@ -1065,7 +1221,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
-                usage_metadata=usage_metadata,
+                # TODO: uncomment when merging ints is fixed
+                # usage_metadata=usage_metadata,
             )
         return ChatGenerationChunk(
             message=message,
