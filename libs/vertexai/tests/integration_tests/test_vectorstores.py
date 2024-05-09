@@ -79,6 +79,7 @@ def vector_store() -> VectorSearchVectorStore:
 
     return vector_store
 
+
 @pytest.fixture
 def vector_store_private() -> VectorSearchVectorStore:
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
@@ -96,6 +97,7 @@ def vector_store_private() -> VectorSearchVectorStore:
     )
 
     return vector_store_private
+
 
 @pytest.fixture
 def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
