@@ -89,7 +89,9 @@ def vector_store_private() -> VectorSearchVectorStore:
         gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         index_id=os.environ["INDEX_ID"],
         endpoint_id=os.environ["ENDPOINT_ID"],
-        private_service_connect_ip_address=os.environ["PRIVATE_SERVICE_CONNECT_IP_ADDRESS"],
+        private_service_connect_ip_address=os.environ[
+            "PRIVATE_SERVICE_CONNECT_IP_ADDRESS"
+        ],
         embedding=embeddings,
     )
 
