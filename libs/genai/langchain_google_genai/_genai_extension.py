@@ -11,8 +11,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, MutableSequence, Optional
 
 import google.ai.generativelanguage as genai
-import google.ai.generativelanguage_v1beta as genai_v1
 import langchain_core
+from google.ai.generativelanguage_v1beta import (
+    GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
+)
+from google.ai.generativelanguage_v1beta import (
+    GenerativeServiceClient as v1betaGenerativeServiceClient,
+)
 from google.api_core import client_options as client_options_lib
 from google.api_core import exceptions as gapi_exception
 from google.api_core import gapic_v1
@@ -260,7 +265,7 @@ def build_generative_service(
     client_options: Optional[Dict[str, Any]] = None,
     client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
     transport: Optional[str] = None,
-) -> genai_v1.GenerativeServiceClient:
+) -> v1betaGenerativeServiceClient:
     config = _prepare_config(
         credentials=credentials,
         api_key=api_key,
@@ -268,7 +273,7 @@ def build_generative_service(
         transport=transport,
         client_info=client_info,
     )
-    return genai.GenerativeServiceClient(**config)
+    return v1betaGenerativeServiceClient(**config)
 
 
 def build_generative_async_service(
@@ -277,7 +282,7 @@ def build_generative_async_service(
     client_options: Optional[Dict[str, Any]] = None,
     client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
     transport: Optional[str] = None,
-) -> genai_v1.GenerativeServiceAsyncClient:
+) -> v1betaGenerativeServiceAsyncClient:
     config = _prepare_config(
         credentials=credentials,
         api_key=api_key,
@@ -285,7 +290,7 @@ def build_generative_async_service(
         transport=transport,
         client_info=client_info,
     )
-    return genai.GenerativeServiceAsyncClient(**config)
+    return v1betaGenerativeServiceAsyncClient(**config)
 
 
 def list_corpora(
