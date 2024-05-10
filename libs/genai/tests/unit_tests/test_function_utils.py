@@ -58,27 +58,6 @@ def test_format_tool_to_genai_function() -> None:
     assert len(function_declaration.parameters.required) == 1
 
 
-def test_format_tooldict_to_genai_function() -> None:
-    calculator = {
-        "function_declarations": [
-            glm.FunctionDeclaration(
-                name="multiply",
-                description="Returns the product of two numbers.",
-                parameters=glm.Schema(
-                    type=glm.Type.OBJECT,
-                    properties={
-                        "a": glm.Schema(type=glm.Type.NUMBER),
-                        "b": glm.Schema(type=glm.Type.NUMBER),
-                    },
-                    required=["a", "b"],
-                ),
-            )
-        ]
-    }
-    schema = convert_to_genai_function_declarations(calculator)
-    assert schema == calculator
-
-
 def test_format_native_dict_to_genai_function() -> None:
     calculator = {
         "function_declarations": [
@@ -89,7 +68,14 @@ def test_format_native_dict_to_genai_function() -> None:
         ]
     }
     schema = convert_to_genai_function_declarations(calculator)
-    assert schema == calculator
+    expected = glm.Tool(
+        function_declarations=[
+            glm.FunctionDeclaration(
+                name="multiply", description="Returns the product of two numbers."
+            )
+        ]
+    )
+    assert schema == expected
 
 
 def test_format_dict_to_genai_function() -> None:

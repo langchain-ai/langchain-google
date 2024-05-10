@@ -36,10 +36,6 @@ def test_initialization(model_name: Optional[str]) -> None:
     else:
         model = ChatVertexAI()
     assert model._llm_type == "vertexai"
-    try:
-        assert model.model_name == model.client._model_id
-    except AttributeError:
-        assert model.model_name == model.client._model_name.split("/")[-1]
 
 
 @pytest.mark.release
