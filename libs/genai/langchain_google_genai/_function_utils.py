@@ -62,9 +62,7 @@ def convert_to_genai_function_declarations(
     if callable(tool):
         return _convert_tool_to_genai_function(callable_as_lc_tool()(tool))
     if isinstance(tool, list):
-        return GoogleTool(
-            function_declarations=[_convert_to_genai_function(fc) for fc in tool]
-        )
+        return convert_to_genai_function_declarations({"function_declarations": tool})
     if isinstance(tool, dict) and "function_declarations" in tool:
         return GoogleTool(
             function_declarations=[
