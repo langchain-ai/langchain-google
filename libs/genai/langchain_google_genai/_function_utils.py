@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Literal,
@@ -10,15 +11,16 @@ from typing import (
     Type,
     TypedDict,
     Union,
+    cast,
 )
 
 import google.ai.generativelanguage as glm
-from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
-from google.generativeai.types.content_types import (  # type: ignore[import]
-    FunctionCallingConfigType,
-    FunctionDeclarationType,
-    ToolDict,
-    ToolType,
+from google.ai.generativelanguage import (
+    FunctionCallingConfig,
+    FunctionDeclaration,
+)
+from google.ai.generativelanguage import (
+    Tool as GoogleTool,
 )
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
@@ -36,51 +38,41 @@ TYPE_ENUM = {
 
 TYPE_ENUM_REVERSE = {v: k for k, v in TYPE_ENUM.items()}
 
+_FunctionDeclarationLike = Union[
+    BaseTool, Type[BaseModel], dict, Callable, FunctionDeclaration
+]
+
+
+class _ToolDict(TypedDict):
+    function_declarations: Sequence[_FunctionDeclarationLike]
+
 
 def convert_to_genai_function_declarations(
     tool: Union[
-        GoogleTool, ToolDict, FunctionDeclarationType, Sequence[FunctionDeclarationType]
+        GoogleTool,
+        _ToolDict,
+        _FunctionDeclarationLike,
+        Sequence[_FunctionDeclarationLike],
     ],
-) -> ToolType:
-    """Convert any tool-like object to a ToolType.
-
-    https://github.com/google-gemini/generative-ai-python/blob/668695ebe3e9de496a36eeb95cb2ed2faba9b939/google/generativeai/types/content_types.py#L574
-    """
+) -> GoogleTool:
     if isinstance(tool, GoogleTool):
-        return tool
-    # check whether a dict is supported by glm, otherwise we parse it explicitly
-    if isinstance(tool, dict):
-        first_function_declaration = tool.get("function_declarations", [None])[0]
-        if isinstance(first_function_declaration, glm.FunctionDeclaration):
-            return tool
-        schema = None
-        try:
-            schema = first_function_declaration.parameters
-        except AttributeError:
-            pass
-        if schema is None:
-            schema = first_function_declaration.get("parameters")
-        if schema is None or isinstance(schema, glm.Schema):
-            return tool
-        return glm.Tool(
+        return cast(GoogleTool, tool)
+    if isinstance(tool, type) and issubclass(tool, BaseModel):
+        return GoogleTool(function_declarations=[_convert_to_genai_function(tool)])
+    if callable(tool):
+        return _convert_tool_to_genai_function(callable_as_lc_tool()(tool))
+    if isinstance(tool, list):
+        return convert_to_genai_function_declarations({"function_declarations": tool})
+    if isinstance(tool, dict) and "function_declarations" in tool:
+        return GoogleTool(
             function_declarations=[
                 _convert_to_genai_function(fc) for fc in tool["function_declarations"]
             ],
         )
-    elif isinstance(tool, type) and issubclass(tool, BaseModel):
-        return glm.Tool(function_declarations=[_convert_to_genai_function(tool)])
-    elif callable(tool):
-        return _convert_tool_to_genai_function(callable_as_lc_tool()(tool))
-    elif isinstance(tool, list):
-        return glm.Tool(
-            function_declarations=[_convert_to_genai_function(fc) for fc in tool]
-        )
-    return glm.Tool(function_declarations=[_convert_to_genai_function(tool)])
+    return GoogleTool(function_declarations=[_convert_to_genai_function(tool)])  # type: ignore[arg-type]
 
 
-def tool_to_dict(tool: Union[glm.Tool, GoogleTool]) -> ToolDict:
-    if isinstance(tool, GoogleTool):
-        tool = tool._proto
+def tool_to_dict(tool: GoogleTool) -> _ToolDict:
     function_declarations = []
     for function_declaration_proto in tool.function_declarations:
         properties: Dict[str, Any] = {}
@@ -108,7 +100,7 @@ def tool_to_dict(tool: Union[glm.Tool, GoogleTool]) -> ToolDict:
     return {"function_declarations": function_declarations}
 
 
-def _convert_to_genai_function(fc: FunctionDeclarationType) -> glm.FunctionDeclaration:
+def _convert_to_genai_function(fc: _FunctionDeclarationLike) -> FunctionDeclaration:
     if isinstance(fc, BaseTool):
         return _convert_tool_to_genai_function(fc)
     elif isinstance(fc, type) and issubclass(fc, BaseModel):
@@ -116,10 +108,9 @@ def _convert_to_genai_function(fc: FunctionDeclarationType) -> glm.FunctionDecla
     elif callable(fc):
         return _convert_tool_to_genai_function(callable_as_lc_tool()(fc))
     elif isinstance(fc, dict):
-        return glm.FunctionDeclaration(
-            name=fc["name"],
-            description=fc.get("description"),
-            parameters={
+        formatted_fc = {"name": fc["name"], "description": fc.get("description")}
+        if "parameters" in fc:
+            formatted_fc["parameters"] = {
                 "properties": {
                     k: {
                         "type_": TYPE_ENUM[v["type"]],
@@ -127,19 +118,19 @@ def _convert_to_genai_function(fc: FunctionDeclarationType) -> glm.FunctionDecla
                     }
                     for k, v in fc["parameters"]["properties"].items()
                 },
-                "required": fc["parameters"].get("required", []),
+                "required": fc.get("parameters", []).get("required", []),
                 "type_": TYPE_ENUM[fc["parameters"]["type"]],
-            },
-        )
+            }
+        return FunctionDeclaration(**formatted_fc)
     else:
         raise ValueError(f"Unsupported function call type {fc}")
 
 
-def _convert_tool_to_genai_function(tool: BaseTool) -> glm.FunctionDeclaration:
+def _convert_tool_to_genai_function(tool: BaseTool) -> FunctionDeclaration:
     if tool.args_schema:
         schema = dereference_refs(tool.args_schema.schema())
         schema.pop("definitions", None)
-        return glm.FunctionDeclaration(
+        return FunctionDeclaration(
             name=tool.name or schema["title"],
             description=tool.description or schema["description"],
             parameters={
@@ -155,7 +146,7 @@ def _convert_tool_to_genai_function(tool: BaseTool) -> glm.FunctionDeclaration:
             },
         )
     else:
-        return glm.FunctionDeclaration(
+        return FunctionDeclaration(
             name=tool.name,
             description=tool.description,
             parameters={
@@ -170,10 +161,10 @@ def _convert_tool_to_genai_function(tool: BaseTool) -> glm.FunctionDeclaration:
 
 def _convert_pydantic_to_genai_function(
     pydantic_model: Type[BaseModel],
-) -> glm.FunctionDeclaration:
+) -> FunctionDeclaration:
     schema = dereference_refs(pydantic_model.schema())
     schema.pop("definitions", None)
-    return glm.FunctionDeclaration(
+    return FunctionDeclaration(
         name=schema["title"],
         description=schema.get("description", ""),
         parameters={
@@ -195,8 +186,13 @@ _ToolChoiceType = Union[
 ]
 
 
+class _FunctionCallingConfigDict(TypedDict):
+    mode: Union[FunctionCallingConfig.Mode, str]
+    allowed_function_names: Optional[List[str]]
+
+
 class _ToolConfigDict(TypedDict):
-    function_calling_config: FunctionCallingConfigType
+    function_calling_config: _FunctionCallingConfigDict
 
 
 def _tool_choice_to_tool_config(
