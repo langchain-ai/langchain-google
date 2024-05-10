@@ -1,5 +1,13 @@
 """Test embeddings model integration."""
 
+from unittest.mock import MagicMock, patch
+
+from google.ai.generativelanguage_v1beta.types import (
+    BatchEmbedContentsRequest,
+    BatchEmbedContentsResponse,
+    ContentEmbedding,
+    EmbedContentRequest,
+)
 from langchain_core.pydantic_v1 import SecretStr
 from pytest import CaptureFixture
 
@@ -8,15 +16,28 @@ from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
 def test_integration_initialization() -> None:
     """Test chat model initialization."""
-    GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
-        google_api_key="...",
-    )
-    GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
-        google_api_key="...",
-        task_type="retrieval_document",
-    )
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
+    ) as mock_prediction_service:
+        _ = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key="...",
+        )
+        mock_prediction_service.assert_called_once()
+        client_info = mock_prediction_service.call_args.kwargs["client_info"]
+        assert "langchain-google-genai" in client_info.user_agent
+        assert "GoogleGenerativeAIEmbeddings" in client_info.user_agent
+        assert "GoogleGenerativeAIEmbeddings" in client_info.client_library_version
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
+    ) as mock_prediction_service:
+        _ = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key="...",
+            task_type="retrieval_document",
+        )
+        mock_prediction_service.assert_called_once()
 
 
 def test_api_key_is_string() -> None:
@@ -36,3 +57,70 @@ def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> N
     captured = capsys.readouterr()
 
     assert captured.out == "**********"
+
+
+def test_embed_query() -> None:
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
+    ) as mock_prediction_service:
+        mock_embed = MagicMock()
+        mock_embed.return_value = BatchEmbedContentsResponse(
+            embeddings=[ContentEmbedding(values=[1.0, 2])]
+        )
+        mock_prediction_service.return_value.batch_embed_contents = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-test",
+            google_api_key="test-key",
+            task_type="classification",
+        )
+
+        llm.embed_query("test text", output_dimensionality=524)
+        request = BatchEmbedContentsRequest(
+            model="models/embedding-test",
+            requests=[
+                EmbedContentRequest(
+                    model="models/embedding-test",
+                    content={"parts": [{"text": "test text"}]},
+                    task_type="CLASSIFICATION",
+                    output_dimensionality=524,
+                )
+            ],
+        )
+        mock_embed.assert_called_once_with(request)
+
+
+def test_embed_documents() -> None:
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
+    ) as mock_prediction_service:
+        mock_embed = MagicMock()
+        mock_embed.return_value = BatchEmbedContentsResponse(
+            embeddings=[ContentEmbedding(values=[1.0, 2])]
+        )
+        mock_prediction_service.return_value.batch_embed_contents = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-test",
+            google_api_key="test-key",
+        )
+
+        llm.embed_documents(["test text", "test text2"], titles=["title1", "title2"])
+        request = BatchEmbedContentsRequest(
+            model="models/embedding-test",
+            requests=[
+                EmbedContentRequest(
+                    model="models/embedding-test",
+                    content={"parts": [{"text": "test text"}]},
+                    task_type="RETRIEVAL_DOCUMENT",
+                    title="title1",
+                ),
+                EmbedContentRequest(
+                    model="models/embedding-test",
+                    content={"parts": [{"text": "test text2"}]},
+                    task_type="RETRIEVAL_DOCUMENT",
+                    title="title2",
+                ),
+            ],
+        )
+        mock_embed.assert_called_once_with(request)
