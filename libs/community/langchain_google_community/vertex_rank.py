@@ -42,6 +42,8 @@ class VertexAIRank(BaseDocumentCompressor):
             If true, the response will contain only
             record ID and score. By default, it is false,
             the response will contain record details.
+        id_field (Optional[str]): Specifies a unique document metadata field
+        to use as an id.
         title_field (Optional[str]): Specifies the document metadata field
         to use as title.
         credentials (Optional[Credentials]): Google Cloud credentials object.
@@ -55,6 +57,7 @@ class VertexAIRank(BaseDocumentCompressor):
     model: str = Field(default="semantic-ranker-512@latest")
     top_n: int = Field(default=10)
     ignore_record_details_in_response: bool = Field(default=False)
+    id_field: Optional[str] = Field(default=None)
     title_field: Optional[str] = Field(default=None)
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
@@ -114,7 +117,11 @@ class VertexAIRank(BaseDocumentCompressor):
 
         records = [
             discoveryengine_v1alpha.RankingRecord(
-                id=str(idx),
+                id=(
+                    doc.metadata.get(self.id_field)
+                    if self.id_field
+                    else str(idx)
+                )
                 content=doc.page_content,
                 **(
                     {"title": doc.metadata.get(self.title_field)}
