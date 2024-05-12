@@ -121,7 +121,7 @@ class VertexAIRank(BaseDocumentCompressor):
                     doc.metadata.get(self.id_field)
                     if self.id_field
                     else str(idx)
-                )
+                ),
                 content=doc.page_content,
                 **(
                     {"title": doc.metadata.get(self.title_field)}
