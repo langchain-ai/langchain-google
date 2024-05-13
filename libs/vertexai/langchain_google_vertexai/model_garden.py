@@ -100,6 +100,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     model_name: Optional[str] = Field(default=None, alias="model")  # type: ignore[assignment]
     "Underlying model name."
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
+    access_token: Optional[str] = None
 
     class Config:
         """Configuration for this pydantic object."""
@@ -117,11 +118,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             project_id=values["project"],
             region=values["location"],
             max_retries=values["max_retries"],
+            access_token=values["access_token"],
         )
         values["async_client"] = AsyncAnthropicVertex(
             project_id=values["project"],
             region=values["location"],
             max_retries=values["max_retries"],
+            access_token=values["access_token"],
         )
         return values
 

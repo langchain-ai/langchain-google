@@ -11,8 +11,25 @@ from typing import (
     Type,
     TypedDict,
     Union,
+    cast,
 )
 
+from google.cloud.aiplatform_v1beta1.types import (
+    FunctionCallingConfig,
+    Schema,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    FunctionDeclaration as GapicFunctionDeclaration,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    Tool as GapicTool,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    ToolConfig as GapicToolConfig,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    Type as ParameterType,
+)
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
@@ -40,6 +57,35 @@ def _format_pydantic_to_vertex_function(
     }
 
 
+def _format_dict_to_function_declaration(
+    function_declaration: FunctionDescription,
+) -> Schema:
+    def _format_schema(schema: dict[str, Any]) -> Schema:
+        parameter_type = schema.get("type", schema.get("type_"))
+        title = schema.get("title")
+        formatted_parameter_type = None
+        if parameter_type:
+            if isinstance(parameter_type, str):
+                formatted_parameter_type = ParameterType[parameter_type.upper()]  # type: ignore[misc]
+            else:
+                formatted_parameter_type = cast(ParameterType, parameter_type)
+        properties = {
+            k: _format_schema(v) for k, v in schema.get("properties", {}).items()
+        }
+        return Schema(
+            description=schema.get("description"),
+            title=title,
+            properties=properties,
+            type=formatted_parameter_type,
+        )
+
+    return GapicFunctionDeclaration(
+        description=function_declaration.get("description"),
+        name=function_declaration.get("name", function_declaration.get("name")),
+        parameters=_format_schema(function_declaration.get("parameters", {})),
+    )
+
+
 def _format_base_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
     "Format tool into the Vertex function API."
     if tool.args_schema:
@@ -59,7 +105,6 @@ def _format_base_tool_to_vertex_function(tool: BaseTool) -> FunctionDescription:
                     "__arg1": {"type": "string"},
                 },
                 "required": ["__arg1"],
-                "type": "object",
             },
         }
 
@@ -109,9 +154,11 @@ def _format_functions_to_vertex_tool_dict(
 
 
 def _format_to_vertex_tool(
-    tool: Union[VertexTool, _VertexToolDict, List[_FunctionDeclarationLike]],
-) -> VertexTool:
+    tool: Union[VertexTool, GapicTool, _VertexToolDict, List[_FunctionDeclarationLike]],
+) -> GapicTool:
     if isinstance(tool, VertexTool):
+        return tool
+    if isinstance(tool, GapicTool):
         return tool
     elif isinstance(tool, (list, dict)):
         tool = (
@@ -119,23 +166,24 @@ def _format_to_vertex_tool(
             if isinstance(tool, list)
             else tool
         )
-        return VertexTool(
+        return GapicTool(
             function_declarations=[
-                FunctionDeclaration(**fd) for fd in tool["function_declarations"]
+                _format_dict_to_function_declaration(FunctionDescription(**fd))
+                for fd in tool["function_declarations"]
             ]
         )
     else:
         raise ValueError(f"Unexpected tool value:\n\n{tool=}")
 
 
-def _format_tool_config(tool_config: _ToolConfigDict) -> Union[ToolConfig, None]:
+def _format_tool_config(tool_config: _ToolConfigDict) -> Union[GapicToolConfig, None]:
     if "function_calling_config" not in tool_config:
         raise ValueError(
             "Invalid ToolConfig, missing 'function_calling_config' key. Received:\n\n"
             f"{tool_config=}"
         )
-    return ToolConfig(
-        function_calling_config=ToolConfig.FunctionCallingConfig(
+    return GapicToolConfig(
+        function_calling_config=FunctionCallingConfig(
             **tool_config["function_calling_config"]
         )
     )
@@ -242,7 +290,7 @@ class PydanticFunctionsOutputParser(BaseOutputParser):
 
 
 class _FunctionCallingConfigDict(TypedDict):
-    mode: ToolConfig.FunctionCallingConfig.Mode
+    mode: FunctionCallingConfig.Mode
     allowed_function_names: Optional[List[str]]
 
 

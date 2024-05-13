@@ -204,7 +204,10 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         "additional_headers": headers,
     }
 
-    with patch("google.ai.generativelanguage.GenerativeServiceClient", mock_client):
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
         chat = ChatGoogleGenerativeAI(model="gemini-pro", **params)
 
     expected_default_metadata: tuple = ()

@@ -2,6 +2,12 @@ from enum import Enum
 from typing import Any, Optional, Sequence
 
 import pytest
+from google.cloud.aiplatform_v1beta1.types import (
+    FunctionCallingConfig,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    ToolConfig as GapicToolConfig,
+)
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import tool
 from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
@@ -69,12 +75,16 @@ def test_format_tool_config():
     tool_config = _format_tool_config(
         {
             "function_calling_config": {
-                "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                "mode": FunctionCallingConfig.Mode.ANY,  # type: ignore[typeddict-item]
                 "allowed_function_names": ["my_fun"],
             }
         }
     )
-    assert isinstance(tool_config, ToolConfig)
+    assert tool_config == GapicToolConfig(
+        function_calling_config=FunctionCallingConfig(
+            mode=FunctionCallingConfig.Mode.ANY, allowed_function_names=["my_fun"]
+        )
+    )
 
 
 def test_get_parameters_from_schema():
