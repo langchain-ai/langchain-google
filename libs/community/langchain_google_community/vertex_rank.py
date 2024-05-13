@@ -115,6 +115,11 @@ class VertexAIRank(BaseDocumentCompressor):
         """
         from google.cloud import discoveryengine_v1alpha  # type: ignore
 
+        if self.id_field:
+            for doc in documents:
+                if self.id_field not in doc.metadata:
+                    raise KeyError(f"id_field '{self.id_field}' not found in document metadata.")
+
         records = [
             discoveryengine_v1alpha.RankingRecord(
                 id=(
