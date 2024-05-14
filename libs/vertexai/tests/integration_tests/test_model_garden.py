@@ -16,7 +16,7 @@ from langchain_google_vertexai.model_garden import (
 )
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.extended
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -29,11 +29,11 @@ def test_model_garden(
     Example:
     export FALCON_ENDPOINT_ID=...
     export LLAMA_ENDPOINT_ID=...
-    export PROJECT=...
+    export PROJECT_ID=...
     """
     endpoint_id = os.environ[endpoint_os_variable_name]
-    project = os.environ["PROJECT"]
-    location = "europe-west4"
+    project = os.environ["PROJECT_ID"]
+    location = "us-central1"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
         project=project,
@@ -46,7 +46,7 @@ def test_model_garden(
     assert llm._llm_type == "vertexai_model_garden"
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.extended
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -59,11 +59,11 @@ def test_model_garden_generate(
     Example:
     export FALCON_ENDPOINT_ID=...
     export LLAMA_ENDPOINT_ID=...
-    export PROJECT=...
+    export PROJECT_ID=...
     """
     endpoint_id = os.environ[endpoint_os_variable_name]
-    project = os.environ["PROJECT"]
-    location = "europe-west4"
+    project = os.environ["PROJECT_ID"]
+    location = "us-central1"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
         project=project,
@@ -75,7 +75,7 @@ def test_model_garden_generate(
     assert len(output.generations) == 2
 
 
-@pytest.mark.skip("CI testing not set up")
+@pytest.mark.extended
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
@@ -85,8 +85,8 @@ async def test_model_garden_agenerate(
     endpoint_os_variable_name: str, result_arg: Optional[str]
 ) -> None:
     endpoint_id = os.environ[endpoint_os_variable_name]
-    project = os.environ["PROJECT"]
-    location = "europe-west4"
+    project = os.environ["PROJECT_ID"]
+    location = "us-central1"
     llm = VertexAIModelGarden(
         endpoint_id=endpoint_id,
         project=project,
@@ -99,8 +99,9 @@ async def test_model_garden_agenerate(
 
 
 @pytest.mark.xfail(reason="CI issue")
+@pytest.mark.extended
 def test_anthropic() -> None:
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     model = ChatAnthropicVertex(
         project=project,
@@ -121,8 +122,9 @@ def test_anthropic() -> None:
 
 
 @pytest.mark.xfail(reason="CI issue")
+@pytest.mark.extended
 def test_anthropic_stream() -> None:
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     model = ChatAnthropicVertex(
         project=project,
@@ -138,8 +140,9 @@ def test_anthropic_stream() -> None:
 
 
 @pytest.mark.xfail(reason="CI issue")
+@pytest.mark.extended
 async def test_anthropic_async() -> None:
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     model = ChatAnthropicVertex(
         project=project,
