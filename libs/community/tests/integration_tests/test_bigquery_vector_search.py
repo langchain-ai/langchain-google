@@ -20,11 +20,11 @@ TEST_TABLE_NAME = "langchain_test_table"
 def store(request: pytest.FixtureRequest) -> BigQueryVectorSearch:
     """BigQueryVectorStore tests context.
 
-    In order to run this test, you define PROJECT environment variable
+    In order to run this test, you define PROJECT_ID environment variable
     with GCP project id.
 
     Example:
-    export PROJECT=...
+    export PROJECT_ID=...
     """
     from google.cloud import bigquery  # type: ignore[attr-defined]
 
@@ -32,7 +32,7 @@ def store(request: pytest.FixtureRequest) -> BigQueryVectorSearch:
         TestBigQueryVectorStore.dataset_name, exists_ok=True
     )
     TestBigQueryVectorStore.store = BigQueryVectorSearch(
-        project_id=os.environ.get("PROJECT", None),  # type: ignore[arg-type]
+        project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
         embedding=FakeEmbeddings(),
         dataset_name=TestBigQueryVectorStore.dataset_name,
         table_name=TEST_TABLE_NAME,

@@ -1,6 +1,5 @@
 import json
 import sys
-import os
 
 LANGCHAIN_DIRS = {
     "libs/genai",
