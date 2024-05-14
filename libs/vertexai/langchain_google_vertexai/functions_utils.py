@@ -59,10 +59,11 @@ def _format_pydantic_to_vertex_function(
 
 def _format_dict_to_function_declaration(
     function_declaration: FunctionDescription,
-) -> Schema:
+) -> GapicFunctionDeclaration:
     def _format_schema(schema: dict[str, Any]) -> Schema:
         parameter_type = schema.get("type", schema.get("type_"))
         title = schema.get("title")
+        required = schema.get("required")
         formatted_parameter_type = None
         if parameter_type:
             if isinstance(parameter_type, str):
@@ -77,6 +78,7 @@ def _format_dict_to_function_declaration(
             title=title,
             properties=properties,
             type=formatted_parameter_type,
+            required=required,
         )
 
     return GapicFunctionDeclaration(
