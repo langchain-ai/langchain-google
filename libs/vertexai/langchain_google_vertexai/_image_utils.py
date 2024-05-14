@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import requests
 from google.cloud import storage
+from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
 from vertexai.generative_models import Image, Part  # type: ignore
 
 
@@ -106,6 +107,10 @@ class ImageBytesLoader:
             bytes_ = self._bytes_from_file(image_string)
 
         return Part.from_image(Image.from_bytes(bytes_))
+
+    def load_gapic_part(self, image_string: str) -> GapicPart:
+        part = self.load_part(image_string)
+        return part._raw_part
 
     def _route(self, image_string: str) -> Route:
         if image_string.startswith("gs://"):

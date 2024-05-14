@@ -2,6 +2,7 @@
 
 import dataclasses
 import re
+from enum import Enum, auto
 from importlib import metadata
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -94,6 +95,16 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     )
 
 
+def _format_model_name(model: str, project: str, location: str) -> str:
+    if "/" not in model:
+        model = "publishers/google/models/" + model
+    if model.startswith("models/"):
+        model = "publishers/google/" + model
+    if model.startswith("publishers/"):
+        return f"projects/{project}/locations/{location}/{model}"
+    return model
+
+
 def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
     """Loads an Image from GCS."""
     gcs_client = storage.Client(project=project)
@@ -104,14 +115,26 @@ def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
     return Image.from_bytes(blobs[0].download_as_bytes())
 
 
-def is_codey_model(model_name: str) -> bool:
-    """Returns True if the model name is a Codey model."""
-    return "code" in model_name
+class GoogleModelFamily(str, Enum):
+    GEMINI = auto()
+    GEMINI_ADVANCED = auto()
+    CODEY = auto()
+    PALM = auto()
+
+    @classmethod
+    def _missing_(cls, value: Any) -> "GoogleModelFamily":
+        if "gemini" in value.lower():
+            return GoogleModelFamily.GEMINI
+        if "code" in value.lower():
+            return GoogleModelFamily.CODEY
+        elif "bison" in value.lower():
+            return GoogleModelFamily.PALM
+        return GoogleModelFamily.GEMINI
 
 
-def is_gemini_model(model_name: str) -> bool:
+def is_gemini_model(model_family: GoogleModelFamily) -> bool:
     """Returns True if the model name is a Gemini model."""
-    return model_name is not None and "gemini" in model_name
+    return model_family in [GoogleModelFamily.GEMINI, GoogleModelFamily.GEMINI_ADVANCED]
 
 
 def get_generation_info(

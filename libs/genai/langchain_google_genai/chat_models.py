@@ -906,7 +906,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         genai_tools = [tool_to_dict(convert_to_genai_function_declarations(tools))]
         if tool_choice:
             all_names = [
-                f["name"] for t in genai_tools for f in t["function_declarations"]
+                f["name"]  # type: ignore[index]
+                for t in genai_tools
+                for f in t["function_declarations"]
             ]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         return self.bind(tools=genai_tools, tool_config=tool_config, **kwargs)

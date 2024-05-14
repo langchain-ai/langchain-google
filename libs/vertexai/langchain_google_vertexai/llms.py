@@ -29,13 +29,10 @@ from vertexai.preview.language_models import (
     TextGenerationModel as PreviewTextGenerationModel,
 )
 
-from langchain_google_vertexai._base import (
-    _VertexAICommon,
-)
+from langchain_google_vertexai._base import GoogleModelFamily, _VertexAICommon
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
-    is_codey_model,
     is_gemini_model,
 )
 
@@ -141,15 +138,15 @@ class VertexAI(_VertexAICommon, BaseLLM):
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that the python package exists in environment."""
         tuned_model_name = values.get("tuned_model_name")
-        model_name = values["model_name"]
         safety_settings = values["safety_settings"]
-        is_gemini = is_gemini_model(values["model_name"])
+        values["model_family"] = GoogleModelFamily(values["model_name"])
+        is_gemini = is_gemini_model(values["model_family"])
         cls._init_vertexai(values)
 
         if safety_settings and (not is_gemini or tuned_model_name):
             raise ValueError("Safety settings are only supported for Gemini models")
 
-        if is_codey_model(model_name):
+        if values["model_family"] == GoogleModelFamily.CODEY:
             model_cls = CodeGenerationModel
             preview_model_cls = PreviewCodeGenerationModel
         elif is_gemini:
