@@ -9,7 +9,7 @@ TEST_FILE ?= tests/unit_tests/
 integration_test integration_tests: TEST_FILE = tests/integration_tests/
 
 test tests integration_test integration_tests:
-	poetry run pytest --release $(TEST_FILE)  -ra --tb=native
+	poetry run pytest --release $(TEST_FILE)
 
 
 ######################
