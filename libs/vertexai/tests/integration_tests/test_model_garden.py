@@ -16,6 +16,7 @@ from langchain_google_vertexai.model_garden import (
 )
 
 
+@pytest.mark.extended
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -45,6 +46,7 @@ def test_model_garden(
     assert llm._llm_type == "vertexai_model_garden"
 
 
+@pytest.mark.extended
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -73,6 +75,7 @@ def test_model_garden_generate(
     assert len(output.generations) == 2
 
 
+@pytest.mark.extended
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
@@ -96,6 +99,7 @@ async def test_model_garden_agenerate(
 
 
 @pytest.mark.xfail(reason="CI issue")
+@pytest.mark.extended
 def test_anthropic() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
@@ -118,6 +122,7 @@ def test_anthropic() -> None:
 
 
 @pytest.mark.xfail(reason="CI issue")
+@pytest.mark.extended
 def test_anthropic_stream() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
@@ -135,6 +140,7 @@ def test_anthropic_stream() -> None:
 
 
 @pytest.mark.xfail(reason="CI issue")
+@pytest.mark.extended
 async def test_anthropic_async() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"
