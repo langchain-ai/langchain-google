@@ -75,7 +75,7 @@ class VertexAICheckGroundingWrapper(
             A GroundedGenerationServiceClient instance.
         """
         try:
-            from google.cloud import discoveryengine_v1alpha
+            from google.cloud import discoveryengine_v1alpha  # type: ignore
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
@@ -132,7 +132,7 @@ class VertexAICheckGroundingWrapper(
             answer_with_citations (str):
                 Complete formed answer formatted with inline citations
         """
-        from google.cloud import discoveryengine_v1alpha
+        from google.cloud import discoveryengine_v1alpha  # type: ignore
 
         answer_candidate = input
         documents = self.extract_documents(config)
