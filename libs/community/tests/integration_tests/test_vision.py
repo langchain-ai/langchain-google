@@ -1,11 +1,13 @@
 import os
 
+import pytest
 from langchain_core.document_loaders.blob_loaders import Blob
 from langchain_core.documents import Document
 
 from langchain_google_community import CloudVisionLoader, CloudVisionParser
 
 
+@pytest.mark.extended
 def test_parse_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
     project = os.environ["PROJECT_ID"]
@@ -17,6 +19,7 @@ def test_parse_image() -> None:
     assert len(documents[0].page_content) > 1
 
 
+@pytest.mark.extended
 def test_load_image() -> None:
     gcs_path = os.environ["IMAGE_GCS_PATH"]
     project = os.environ["PROJECT_ID"]

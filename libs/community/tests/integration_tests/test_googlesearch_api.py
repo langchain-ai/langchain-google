@@ -2,9 +2,11 @@
 
 import os
 
+import pytest
 from langchain_google_community.search import GoogleSearchAPIWrapper
 
 
+@pytest.mark.extended
 def test_call() -> None:
     """Test that call gives the correct answer."""
     google_api_key = os.environ["GOOGLE_API_KEY"]
@@ -16,6 +18,7 @@ def test_call() -> None:
     assert "Barack Hussein Obama II" in output
 
 
+@pytest.mark.extended
 def test_no_result_call() -> None:
     """Test that call gives no result."""
     google_api_key = os.environ["GOOGLE_API_KEY"]
@@ -29,6 +32,7 @@ def test_no_result_call() -> None:
     assert "No good Google Search Result was found" == output
 
 
+@pytest.mark.extended
 def test_result_with_params_call() -> None:
     """Test that call gives the correct answer with extra params."""
     google_api_key = os.environ["GOOGLE_API_KEY"]
