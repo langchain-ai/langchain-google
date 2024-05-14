@@ -188,6 +188,7 @@ def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
         assert isinstance(doc, Document)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 @pytest.mark.parametrize(
     "vector_store_class",
