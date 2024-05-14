@@ -1,7 +1,7 @@
 """Test ChatGoogleVertexAI chat model."""
 
 import json
-from typing import Optional, cast
+from typing import List, Optional, cast
 
 import pytest
 from langchain_core.messages import (
@@ -436,12 +436,11 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.xfail(reason="flaky")
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
         question: str,
-    ):
+    ) -> str:
         """
         Useful for when you need to answer questions or visit websites.
         You should ask targeted questions.
@@ -453,7 +452,9 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     safety = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
-    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0409", safety_settings=safety)
+    llm = ChatVertexAI(
+        model_name="gemini-1.5-pro-preview-0409", safety_settings=safety, temperature=0
+    )
     llm_with_search = llm.bind(
         functions=tools,
     )
@@ -471,19 +472,23 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     response = llm_with_search_force.invoke([request])
 
     assert isinstance(response, AIMessage)
-    assert len(response.tool_calls) > 0
-    tool_call = response.tool_calls[0]
-    assert tool_call["name"] == "search"
+    tool_calls = response.tool_calls
+    assert len(tool_calls) == 3
 
     tool_response = search("sparrow")
-    tool_message = ToolMessage(
-        name="search",
-        content=json.dumps(tool_response),
-        tool_call_id="0",
-    )
+    tool_messages: List[BaseMessage] = []
 
-    result = llm_with_search.invoke([request, response, tool_message])
+    for tool_call in tool_calls:
+        assert tool_call["name"] == "search"
+        tool_message = ToolMessage(
+            name=tool_call["name"],
+            content=json.dumps(tool_response),
+            tool_call_id=(tool_call["id"] or ""),
+        )
+        tool_messages.append(tool_message)
+
+    result = llm_with_search.invoke([request, response, tool_message] + tool_messages)
 
     assert isinstance(result, AIMessage)
     assert "brown" in result.content
-    assert len(result.tool_calls) > 0
+    assert len(result.tool_calls) == 0

@@ -1,27 +1,55 @@
 from enum import Enum
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, cast
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
     FunctionCallingConfig,
+    FunctionDeclaration,
 )
 from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
 )
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import tool
+from langchain_core.utils.function_calling import (
+    FunctionDescription,
+    convert_to_openai_function,
+)
 from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
     ToolConfig,
 )
 
 from langchain_google_vertexai.functions_utils import (
     _format_base_tool_to_vertex_function,
+    _format_dict_to_function_declaration,
     _format_tool_config,
     _FunctionCallingConfigDict,
     _get_parameters_from_schema,
     _tool_choice_to_tool_config,
     _ToolConfigDict,
 )
+
+
+def test_format_dict_to_function_declaration():
+    @tool
+    def search(question: str) -> str:
+        "Search"
+        return question
+
+    func_desc = convert_to_openai_function(search)
+
+    schema = _format_dict_to_function_declaration(cast(FunctionDescription, func_desc))
+    expected = FunctionDeclaration(
+        name="search",
+        description="search(question: str) -> str - Search",
+        parameters={
+            "type_": "OBJECT",
+            "properties": {"question": {"type_": "STRING"}},
+            "required": ["question"],
+        },
+    )
+
+    assert schema == expected
 
 
 def test_format_tool_to_vertex_function():
