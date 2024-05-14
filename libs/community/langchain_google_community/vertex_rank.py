@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any, Optional, Sequence
+import warnings
 
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
@@ -115,29 +116,29 @@ class VertexAIRank(BaseDocumentCompressor):
         """
         from google.cloud import discoveryengine_v1alpha  # type: ignore
 
-        if self.id_field:
-            for doc in documents:
-                if self.id_field not in doc.metadata:
-                    raise KeyError(f"id_field '{self.id_field}' not found in document metadata.")
-
-        records = [
-            discoveryengine_v1alpha.RankingRecord(
-                id=(
-                    doc.metadata.get(self.id_field)
-                    if self.id_field
-                    else str(idx)
-                ),
-                content=doc.page_content,
-                **(
-                    {"title": doc.metadata.get(self.title_field)}
-                    if self.title_field
-                    else {}
-                ),
-            )
-            for idx, doc in enumerate(documents)
-            if doc.page_content
-            or (self.title_field and doc.metadata.get(self.title_field))
-        ]
+        try:
+            records = [
+                discoveryengine_v1alpha.RankingRecord(
+                    id=(
+                        doc.metadata.get(self.id_field)
+                        if self.id_field
+                        else str(idx)
+                    ),
+                    content=doc.page_content,
+                    **(
+                        {"title": doc.metadata.get(self.title_field)}
+                        if self.title_field
+                        else {}
+                    ),
+                )
+                for idx, doc in enumerate(documents)
+                if doc.page_content
+                or (self.title_field and doc.metadata.get(self.title_field))
+            ]
+        except KeyError:
+            raise warnings.warn(
+                f"id_field '{self.id_field}' not found in document metadata.")
+            
 
         ranking_config_path = (
             f"projects/{self.project_id}/locations/{self.location_id}"
