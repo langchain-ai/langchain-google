@@ -1,5 +1,5 @@
-from typing import TYPE_CHECKING, Any, Optional, Sequence
 import warnings
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
