@@ -159,7 +159,7 @@ def _format_to_vertex_tool(
     tool: Union[VertexTool, GapicTool, _VertexToolDict, List[_FunctionDeclarationLike]],
 ) -> GapicTool:
     if isinstance(tool, VertexTool):
-        return tool
+        return tool._raw_tool
     if isinstance(tool, GapicTool):
         return tool
     elif isinstance(tool, (list, dict)):
