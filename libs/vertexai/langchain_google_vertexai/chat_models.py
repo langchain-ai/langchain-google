@@ -126,7 +126,7 @@ _allowed_params = [
     "frequency_penalty",
     "candidate_count",
 ]
-_args_not_pass_to_prediction_service = _allowed_params + ["stream", "streaming"]
+_allowed_params_prediction_service = ["request", "timeout", "metadata"]
 
 
 @dataclass
@@ -490,13 +490,14 @@ def _completion_with_retry(
     def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
         return generation_method(**kwargs)
 
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if kwargs.get("is_gemini")
+        else kwargs
+    )
     return _completion_with_retry_inner(
         generation_method,
-        **{
-            k: v
-            for k, v in kwargs.items()
-            if v not in _args_not_pass_to_prediction_service
-        },
+        **params,
     )
 
 
@@ -518,13 +519,14 @@ async def _acompletion_with_retry(
     ) -> Any:
         return await generation_method(**kwargs)
 
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if kwargs.get("is_gemini")
+        else kwargs
+    )
     return await _completion_with_retry_inner(
         generation_method,
-        **{
-            k: v
-            for k, v in kwargs.items()
-            if v not in _args_not_pass_to_prediction_service
-        },
+        **params,
     )
 
 
@@ -648,7 +650,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             messages=messages,
             stop=stop,
             run_manager=run_manager,
-            stream=stream,
+            is_gemini=True,
             **kwargs,
         )
 
@@ -736,6 +738,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.prediction_client.generate_content,
             max_retries=self.max_retries,
             request=request,
+            **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
 
@@ -752,6 +755,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             request=self._prepare_request_gemini(
                 messages=messages, stop=stop, **kwargs
             ),
+            is_gemini=True,
+            **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
 
@@ -927,6 +932,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.prediction_client.stream_generate_content,
             max_retries=self.max_retries,
             request=request,
+            is_gemini=True,
             **kwargs,
         )
         for response_chunk in response_iter:
@@ -978,6 +984,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.async_prediction_client.stream_generate_content,
             max_retries=self.max_retries,
             request=request,
+            is_gemini=True,
             **kwargs,
         )
         async for response_chunk in await response_iter:
