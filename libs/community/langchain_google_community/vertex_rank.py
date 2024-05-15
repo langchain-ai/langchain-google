@@ -119,11 +119,7 @@ class VertexAIRank(BaseDocumentCompressor):
         try:
             records = [
                 discoveryengine_v1alpha.RankingRecord(
-                    id=(
-                        doc.metadata.get(self.id_field)
-                        if self.id_field
-                        else str(idx)
-                    ),
+                    id=(doc.metadata.get(self.id_field) if self.id_field else str(idx)),
                     content=doc.page_content,
                     **(
                         {"title": doc.metadata.get(self.title_field)}
@@ -136,9 +132,7 @@ class VertexAIRank(BaseDocumentCompressor):
                 or (self.title_field and doc.metadata.get(self.title_field))
             ]
         except KeyError:
-            raise warnings.warn(
-                f"id_field '{self.id_field}' not found in document metadata.")
-            
+            warnings.warn(f"id_field '{self.id_field}' not found in document metadata.")
 
         ranking_config_path = (
             f"projects/{self.project_id}/locations/{self.location_id}"
