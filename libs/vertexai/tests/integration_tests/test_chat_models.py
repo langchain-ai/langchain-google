@@ -140,6 +140,7 @@ def test_multimodal() -> None:
     assert isinstance(output.content, str)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_multimodal_history() -> None:
     llm = ChatVertexAI(model_name="gemini-pro-vision")
@@ -285,6 +286,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):

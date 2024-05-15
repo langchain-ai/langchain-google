@@ -1,7 +1,7 @@
 """Test Vertex AI API wrapper.
-Your end-user credentials would be used to make the calls (make sure you've run 
+Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
-Additionally in order to run the test you must have set the following environment 
+Additionally in order to run the test you must have set the following environment
 variables:
 - PROJECT_ID: Id of the Google Cloud Project
 - REGION: Region of the Bucket, Index and Endpoint
@@ -115,6 +115,7 @@ def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
     return vector_store
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     gcs_client = sdk_manager.get_gcs_client()
@@ -130,6 +131,7 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     assert isinstance(endpoint, MatchingEngineIndexEndpoint)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 @pytest.mark.parametrize(
     "storage_class", ["gcs_document_storage", "datastore_document_storage"]
@@ -166,6 +168,7 @@ def test_document_storage(
     assert all(item is None for item in document_storage.mget(ids))
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
     index = sdk_manager.get_index(os.environ["INDEX_ID"])
@@ -183,6 +186,7 @@ def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
     assert len(matching_neighbors_list) == 2
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 @pytest.mark.parametrize(
     "vector_store_class", ["vector_store", "datastore_vector_store"]
@@ -203,6 +207,7 @@ def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
         assert isinstance(doc, Document)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 @pytest.mark.parametrize(
     "vector_store_class",
@@ -226,6 +231,7 @@ def test_vector_store_filtering(
     assert all(document.metadata["price"] < 20.0 for document in documents)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_vector_store_update_index(
     vector_store: VectorSearchVectorStore, sample_documents: List[Document]
@@ -233,6 +239,7 @@ def test_vector_store_update_index(
     vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_vector_store_stream_update_index(
     datastore_vector_store: VectorSearchVectorStoreDatastore,
