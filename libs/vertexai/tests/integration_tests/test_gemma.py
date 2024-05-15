@@ -20,10 +20,10 @@ def test_gemma_model_garden() -> None:
 
     Example:
     export GEMMA_ENDPOINT_ID=...
-    export PROJECT=...
+    export PROJECT_ID=...
     """
     endpoint_id = os.environ["GEMMA_ENDPOINT_ID"]
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     llm = GemmaVertexAIModelGarden(
         endpoint_id=endpoint_id,
@@ -36,16 +36,16 @@ def test_gemma_model_garden() -> None:
     assert llm._llm_type == "gemma_vertexai_model_garden"
 
 
-@pytest.mark.extended
+@pytest.mark.release
 def test_gemma_chat_model_garden() -> None:
     """In order to run this test, you should provide endpoint names.
 
     Example:
     export GEMMA_ENDPOINT_ID=...
-    export PROJECT=...
+    export PROJECT_ID=...
     """
     endpoint_id = os.environ["GEMMA_ENDPOINT_ID"]
-    project = os.environ["PROJECT"]
+    project = os.environ["PROJECT_ID"]
     location = "us-central1"
     llm = GemmaChatVertexAIModelGarden(
         endpoint_id=endpoint_id,

@@ -1,4 +1,5 @@
 """Test chat model integration."""
+
 import json
 from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
