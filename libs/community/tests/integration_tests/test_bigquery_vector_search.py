@@ -76,7 +76,7 @@ class TestBigQueryVectorStore:
         },
     ]
 
-    @pytest.mark.skip(reason="CI/CD not ready.")
+    @pytest.mark.extended
     def test_semantic_search(self, store: BigQueryVectorSearch) -> None:
         """Test on semantic similarity."""
         docs = store.similarity_search("food", k=4)
@@ -86,7 +86,7 @@ class TestBigQueryVectorStore:
         assert "treat" in kinds
         assert "planet" not in kinds
 
-    @pytest.mark.skip(reason="CI/CD not ready.")
+    @pytest.mark.extended
     def test_semantic_search_filter_fruits(self, store: BigQueryVectorSearch) -> None:
         """Test on semantic similarity with metadata filter."""
         docs = store.similarity_search("food", filter={"kind": "fruit"})
@@ -95,7 +95,7 @@ class TestBigQueryVectorStore:
         assert "treat" not in kinds
         assert "planet" not in kinds
 
-    @pytest.mark.skip(reason="CI/CD not ready.")
+    @pytest.mark.extended
     def test_get_doc_by_filter(self, store: BigQueryVectorSearch) -> None:
         """Test on document retrieval with metadata filter."""
         docs = store.get_documents(filter={"kind": "fruit"})
