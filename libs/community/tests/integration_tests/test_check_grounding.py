@@ -92,6 +92,7 @@ def output_parser(
     )
 
 
+@pytest.mark.extended
 def test_integration_parse(
     output_parser: VertexAICheckGroundingWrapper,
     input_documents: List[Document],
