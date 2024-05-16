@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-community"
-version = "1.0.3"
+version = "1.0.4"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 readme = "README.md"
@@ -20,7 +20,7 @@ grpcio = "^1.62.0"
 google-cloud-bigquery = { version = "^3.21.0", optional = true }
 google-cloud-documentai = { version = "^2.26.0", optional = true }
 google-cloud-contentwarehouse = { version = "^0.7.7", optional = true }
-google-cloud-documentai-toolbox = { version  = "^0.13.3a0", optional = true }
+google-cloud-documentai-toolbox = { version = "^0.13.3a0", optional = true }
 gapic-google-longrunning = { version = "^0.11.2", optional = true }
 google-auth-httplib2 = { version = "^0.2.0", optional = true }
 google-auth-oauthlib = { version = "^1.2.0", optional = true }
@@ -35,7 +35,12 @@ beautifulsoup4 = { version = "^4.12.3", optional = true }
 
 [tool.poetry.extras]
 bigquery = ["google-cloud-bigquery"]
-docai = ["google-cloud-documentai", "google-cloud-contentwarehouse", "google-cloud-documentai-toolbox", "gapic-google-longrunning"]
+docai = [
+  "google-cloud-documentai",
+  "google-cloud-contentwarehouse",
+  "google-cloud-documentai-toolbox",
+  "gapic-google-longrunning",
+]
 drive = ["google-auth-httplib2", "google-auth-oauthlib"]
 gcs = ["google-cloud-storage"]
 speech = ["google-cloud-speech"]
