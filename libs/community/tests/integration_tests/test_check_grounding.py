@@ -2,7 +2,7 @@ import os
 from typing import List
 
 import pytest
-from google.cloud import discoveryengine_v1alpha
+from google.cloud import discoveryengine_v1alpha  # type: ignore
 from langchain_core.documents import Document
 
 from langchain_google_community.vertex_check_grounding import (
