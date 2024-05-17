@@ -724,7 +724,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config=tool_config,
             safety_settings=self._safety_settings_gemini(safety_settings),
             generation_config=self._generation_config_gemini(
-                stream=stream, stop=stop, response_mime_type=response_mime_type, **kwargs
+                stream=stream, stop=stop, **kwargs
             ),
             model=self.full_model_name,
         )

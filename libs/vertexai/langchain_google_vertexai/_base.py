@@ -193,6 +193,7 @@ class _VertexAICommon(_VertexAIBase):
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
             "candidate_count": self.n,
+            "response_mime_type": self.response_mime_type,
         }
         if not self.model_family == GoogleModelFamily.CODEY:
             params.update(
