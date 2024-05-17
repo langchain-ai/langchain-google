@@ -18,9 +18,9 @@ from langchain_core.tools import tool
 
 from langchain_google_vertexai import (
     ChatVertexAI,
+    FunctionCallingConfig,
     HarmBlockThreshold,
     HarmCategory,
-    ToolConfig,
 )
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
@@ -358,7 +358,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
         functions=[MyModel],
         tool_config={
             "function_calling_config": {
-                "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                "mode": FunctionCallingConfig.Mode.ANY,
                 "allowed_function_names": ["MyModel"],
             }
         },
@@ -395,7 +395,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
         functions=[MyModel],
         tool_config={
             "function_calling_config": {
-                "mode": ToolConfig.FunctionCallingConfig.Mode.NONE,
+                "mode": FunctionCallingConfig.Mode.NONE,
             }
         },
     )
@@ -467,7 +467,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     llm_with_search_force = llm_with_search.bind(
         tool_config={
             "function_calling_config": {
-                "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                "mode": FunctionCallingConfig.Mode.ANY,
                 "allowed_function_names": ["search"],
             }
         },
