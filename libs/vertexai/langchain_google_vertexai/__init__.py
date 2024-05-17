@@ -1,10 +1,17 @@
+from google.cloud.aiplatform_v1beta1.types import (
+    FunctionCallingConfig,
+    FunctionDeclaration,
+    Schema,
+    ToolConfig,
+    Type,
+)
+
 from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai.chains import create_structured_runnable
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
 from langchain_google_vertexai.functions_utils import (
     PydanticFunctionsOutputParser,
-    ToolConfig,
 )
 from langchain_google_vertexai.gemma import (
     GemmaChatLocalHF,
@@ -33,28 +40,32 @@ from langchain_google_vertexai.vision_models import (
 
 __all__ = [
     "ChatVertexAI",
-    "GemmaVertexAIModelGarden",
-    "GemmaChatVertexAIModelGarden",
-    "GemmaLocalKaggle",
-    "GemmaChatLocalKaggle",
-    "GemmaLocalHF",
+    "create_structured_runnable",
+    "DataStoreDocumentStorage",
+    "FunctionCallingConfig",
+    "FunctionDeclaration",
+    "GCSDocumentStorage",
     "GemmaChatLocalHF",
-    "VertexAIEmbeddings",
-    "VertexAI",
-    "VertexAIModelGarden",
+    "GemmaChatLocalKaggle",
+    "GemmaChatVertexAIModelGarden",
+    "GemmaLocalHF",
+    "GemmaLocalKaggle",
+    "GemmaVertexAIModelGarden",
     "HarmBlockThreshold",
     "HarmCategory",
     "PydanticFunctionsOutputParser",
+    "Schema",
     "ToolConfig",
-    "create_structured_runnable",
+    "Type",
+    "VectorSearchVectorStore",
+    "VectorSearchVectorStoreDatastore",
+    "VectorSearchVectorStoreGCS",
+    "VertexAI",
+    "VertexAIEmbeddings",
     "VertexAIImageCaptioning",
     "VertexAIImageCaptioningChat",
     "VertexAIImageEditorChat",
     "VertexAIImageGeneratorChat",
+    "VertexAIModelGarden",
     "VertexAIVisualQnAChat",
-    "DataStoreDocumentStorage",
-    "GCSDocumentStorage",
-    "VectorSearchVectorStore",
-    "VectorSearchVectorStoreDatastore",
-    "VectorSearchVectorStoreGCS",
 ]
