@@ -709,11 +709,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         functions: Optional[List[_FunctionDeclarationLike]] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
+        response_mime_type: Optional[str] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         tool_config = self._tool_config_gemini(tool_config=tool_config)
+        if response_mime_type is None and self.response_mime_type is not None:
+            response_mime_type = self.response_mime_type
         return GenerateContentRequest(
             contents=contents,
             system_instruction=system_instruction,
@@ -721,7 +724,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config=tool_config,
             safety_settings=self._safety_settings_gemini(safety_settings),
             generation_config=self._generation_config_gemini(
-                stream=stream, stop=stop, **kwargs
+                stream=stream, stop=stop, response_mime_type=response_mime_type, **kwargs
             ),
             model=self.full_model_name,
         )
