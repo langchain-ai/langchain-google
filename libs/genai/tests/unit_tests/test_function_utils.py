@@ -24,7 +24,7 @@ def test_format_tool_to_genai_function() -> None:
     schema = convert_to_genai_function_declarations([get_datetime])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "get_datetime"
-    assert (
+    assert (  #
         function_declaration.description
         == "get_datetime() -> str - Gets the current datetime"
     )
