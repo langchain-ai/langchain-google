@@ -115,7 +115,7 @@ def search(question: str) -> str:
 search_tool = tool(search)
 search_exp = gapic.FunctionDeclaration(
     name="search",
-    description="search(question: str) -> str - Search tool",
+    description="Search tool",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
         title="searchSchema",
@@ -225,7 +225,7 @@ SRC_EXP_MOCKS_DESC: List[
 def test_format_to_gapic_function_declaration():
     for src, exp, mocks, desc in SRC_EXP_MOCKS_DESC:
         res = _format_to_gapic_function_declaration(src)
-        assert res == exp  #
+        assert res == exp
         for m in TO_FUNCTION_DECLARATION_MOCKS:
             if m in mocks:
                 assert m.called, (
@@ -245,7 +245,7 @@ def test_format_to_gapic_tool():
     fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
     expected = gapic.Tool(function_declarations=fds)
     result = _format_to_gapic_tool(src)
-    assert result == expected  #
+    assert result == expected
 
     src_2 = src + [
         gapic.Tool(function_declarations=[search_model_exp]),
