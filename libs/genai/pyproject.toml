@@ -72,7 +72,7 @@ types-pillow = "^10.1.0.2"
 types-google-cloud-ndb = "^2.2.0.1"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
-[tool.ruff]
+[tool.ruff.lint]
 select = [
   "E", # pycodestyle
   "F", # pyflakes
