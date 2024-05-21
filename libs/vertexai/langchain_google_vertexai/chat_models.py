@@ -106,10 +106,8 @@ from langchain_google_vertexai.functions_utils import (
     _ToolConfigDict,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
-    _FunctionDeclarationLike,
-    _VertexToolDict,
-    _format_to_vertex_tool,
-    _format_functions_to_vertex_tool_dict,
+    _ToolsType,
+    _format_to_gapic_tool,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,7 +124,7 @@ _allowed_params = [
     "frequency_penalty",
     "candidate_count",
 ]
-_args_not_pass_to_prediction_service = _allowed_params + ["stream", "streaming"]
+_allowed_params_prediction_service = ["request", "timeout", "metadata"]
 
 
 @dataclass
@@ -490,13 +488,14 @@ def _completion_with_retry(
     def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
         return generation_method(**kwargs)
 
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if kwargs.get("is_gemini")
+        else kwargs
+    )
     return _completion_with_retry_inner(
         generation_method,
-        **{
-            k: v
-            for k, v in kwargs.items()
-            if v not in _args_not_pass_to_prediction_service
-        },
+        **params,
     )
 
 
@@ -518,13 +517,14 @@ async def _acompletion_with_retry(
     ) -> Any:
         return await generation_method(**kwargs)
 
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if kwargs.get("is_gemini")
+        else kwargs
+    )
     return await _completion_with_retry_inner(
         generation_method,
-        **{
-            k: v
-            for k, v in kwargs.items()
-            if v not in _args_not_pass_to_prediction_service
-        },
+        **params,
     )
 
 
@@ -648,7 +648,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             messages=messages,
             stop=stop,
             run_manager=run_manager,
-            stream=stream,
+            is_gemini=True,
             **kwargs,
         )
 
@@ -703,8 +703,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         stream: bool = False,
-        tools: Optional[List[Union[_VertexToolDict, VertexTool]]] = None,
-        functions: Optional[List[_FunctionDeclarationLike]] = None,
+        tools: Optional[_ToolsType] = None,
+        functions: Optional[_ToolsType] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
         **kwargs,
@@ -736,6 +736,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.prediction_client.generate_content,
             max_retries=self.max_retries,
             request=request,
+            **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
 
@@ -752,6 +753,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             request=self._prepare_request_gemini(
                 messages=messages, stop=stop, **kwargs
             ),
+            is_gemini=True,
+            **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
 
@@ -773,13 +776,18 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def _tools_gemini(
         self,
-        tools: Optional[List[Union[_VertexToolDict, VertexTool, GapicTool]]] = None,
-        functions: Optional[List[_FunctionDeclarationLike]] = None,
+        tools: Optional[_ToolsType] = None,
+        functions: Optional[_ToolsType] = None,
     ) -> Optional[Sequence[GapicTool]]:
+        if tools and functions:
+            logger.warning(
+                "Binding tools and functions together is not supported.",
+                "Only tools will be used",
+            )
         if tools:
-            return [_format_to_vertex_tool(tool) for tool in tools]
+            return [_format_to_gapic_tool(tools)]
         if functions:
-            return [_format_to_vertex_tool(functions)]
+            return [_format_to_gapic_tool(functions)]
         return None
 
     def _tool_config_gemini(
@@ -927,6 +935,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.prediction_client.stream_generate_content,
             max_retries=self.max_retries,
             request=request,
+            is_gemini=True,
             **kwargs,
         )
         for response_chunk in response_iter:
@@ -978,6 +987,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.async_prediction_client.stream_generate_content,
             max_retries=self.max_retries,
             request=request,
+            is_gemini=True,
             **kwargs,
         )
         async for response_chunk in await response_iter:
@@ -1102,7 +1112,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[_FunctionDeclarationLike, VertexTool]],
+        tools: _ToolsType,
         tool_config: Optional[_ToolConfigDict] = None,
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
@@ -1125,25 +1135,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
-        vertexai_tools: List[_VertexToolDict] = []
-        vertexai_functions = []
-        for schema in tools:
-            if isinstance(schema, VertexTool):
-                vertexai_tools.append(
-                    {"function_declarations": schema.to_dict()["function_declarations"]}
-                )
-            elif isinstance(schema, dict) and "function_declarations" in schema:
-                vertexai_tools.append(cast(_VertexToolDict, schema))
-            else:
-                vertexai_functions.append(schema)
-        vertexai_tools.append(_format_functions_to_vertex_tool_dict(vertexai_functions))
+        vertexai_tool = _format_to_gapic_tool(tools)
         if tool_choice:
-            all_names = [
-                f["name"] for vt in vertexai_tools for f in vt["function_declarations"]
-            ]
+            all_names = [f["name"] for f in vertexai_tool.function_declarations]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         # Bind dicts for easier serialization/deserialization.
-        return self.bind(tools=vertexai_tools, tool_config=tool_config, **kwargs)
+        return self.bind(tools=[vertexai_tool], tool_config=tool_config, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
@@ -1154,35 +1151,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         else:
             return self.client.start_chat(message_history=history.history, **kwargs)
-
-    def _gemini_params(
-        self,
-        *,
-        stop: Optional[List[str]] = None,
-        stream: bool = False,
-        tools: Optional[List[Union[_VertexToolDict, VertexTool]]] = None,
-        functions: Optional[List[_FunctionDeclarationLike]] = None,
-        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
-        safety_settings: Optional[SafetySettingsType] = None,
-        **kwargs: Any,
-    ) -> _GeminiGenerateContentKwargs:
-        generation_config = self._prepare_params(stop=stop, stream=stream, **kwargs)
-        if tools:
-            tools = [_format_to_vertex_tool(tool) for tool in tools]
-        elif functions:
-            tools = [_format_to_vertex_tool(functions)]
-        else:
-            pass
-
-        if tool_config and not isinstance(tool_config, ToolConfig):
-            tool_config = _format_tool_config(cast(_ToolConfigDict, tool_config))
-
-        return _GeminiGenerateContentKwargs(
-            generation_config=generation_config,
-            tools=tools,
-            tool_config=tool_config,
-            safety_settings=safety_settings,
-        )
 
     def _gemini_response_to_chat_result(
         self, response: GenerationResponse
