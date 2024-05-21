@@ -53,7 +53,8 @@ def test_integration_initialization() -> None:
 
 
 def test_initialization_inside_threadpool() -> None:
-    # new threads don't have a running event loop, thread pool executor easiest way to create one
+    # new threads don't have a running event loop,
+    # thread pool executor easiest way to create one
     with ThreadPoolExecutor() as executor:
         executor.submit(
             ChatGoogleGenerativeAI, model="gemini-nano", google_api_key="secret-api-key"
