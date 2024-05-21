@@ -1,6 +1,8 @@
 """Test chat model integration."""
 
+import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
 
@@ -48,6 +50,31 @@ def test_integration_initialization() -> None:
         temperature=0.7,
         candidate_count=2,
     )
+
+
+def test_initialization_inside_threadpool() -> None:
+    # new threads don't have a running event loop,
+    # thread pool executor easiest way to create one
+    with ThreadPoolExecutor() as executor:
+        executor.submit(
+            ChatGoogleGenerativeAI, model="gemini-nano", google_api_key="secret-api-key"
+        ).result()
+
+
+def test_initalization_without_async() -> None:
+    chat = ChatGoogleGenerativeAI(model="gemini-nano", google_api_key="secret-api-key")
+    assert chat.async_client is None
+
+
+def test_initialization_with_async() -> None:
+    async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
+        return ChatGoogleGenerativeAI(
+            model="gemini-nano", google_api_key="secret-api-key"
+        )
+
+    loop = asyncio.get_event_loop()
+    chat = loop.run_until_complete(initialize_chat_with_async_client())
+    assert chat.async_client is not None
 
 
 def test_api_key_is_string() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -558,6 +559,14 @@ def _response_to_result(
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
+def _is_event_loop_running() -> bool:
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     """`Google Generative AI` Chat models API.
 
@@ -639,13 +648,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             client_options=values.get("client_options"),
             transport=transport,
         )
-        values["async_client"] = genaix.build_generative_async_service(
-            credentials=values.get("credentials"),
-            api_key=google_api_key,
-            client_info=client_info,
-            client_options=values.get("client_options"),
-            transport=transport,
-        )
+
+        # NOTE: genaix.build_generative_async_service requires
+        # a running event loop, which causes an error
+        # when initialized inside a ThreadPoolExecutor.
+        # this check ensures that async client is only initialized
+        # within an asyncio event loop to avoid the error
+        if _is_event_loop_running():
+            values["async_client"] = genaix.build_generative_async_service(
+                credentials=values.get("credentials"),
+                api_key=google_api_key,
+                client_info=client_info,
+                client_options=values.get("client_options"),
+                transport=transport,
+            )
+        else:
+            values["async_client"] = None
 
         return values
 
@@ -724,6 +742,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if not self.async_client:
+            raise RuntimeError(
+                "Initialize ChatGoogleGenerativeAI with a running event loop "
+                "to use async methods."
+            )
+
         request = self._prepare_request(
             messages,
             stop=stop,
