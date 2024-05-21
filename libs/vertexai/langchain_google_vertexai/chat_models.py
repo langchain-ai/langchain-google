@@ -1137,7 +1137,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         vertexai_tool = _format_to_gapic_tool(tools)
         if tool_choice:
-            all_names = [f["name"] for f in vertexai_tool.function_declarations]
+            all_names = [f.name for f in vertexai_tool.function_declarations]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         # Bind dicts for easier serialization/deserialization.
         return self.bind(tools=[vertexai_tool], tool_config=tool_config, **kwargs)
