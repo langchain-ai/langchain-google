@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -558,6 +559,14 @@ def _response_to_result(
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
+def _is_event_loop_running():
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     """`Google Generative AI` Chat models API.
 
@@ -639,13 +648,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             client_options=values.get("client_options"),
             transport=transport,
         )
-        values["async_client"] = genaix.build_generative_async_service(
-            credentials=values.get("credentials"),
-            api_key=google_api_key,
-            client_info=client_info,
-            client_options=values.get("client_options"),
-            transport=transport,
-        )
+
+        if _is_event_loop_running():
+            values["async_client"] = genaix.build_generative_async_service(
+                credentials=values.get("credentials"),
+                api_key=google_api_key,
+                client_info=client_info,
+                client_options=values.get("client_options"),
+                transport=transport,
+            )
 
         return values
 
@@ -733,6 +744,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_config=tool_config,
             generation_config=generation_config,
         )
+
+        if not self.async_client:
+            raise RuntimeError("Initialize ChatGoogleGenerativeAI with a running event loop to use async methods.")
+
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
             **kwargs,
