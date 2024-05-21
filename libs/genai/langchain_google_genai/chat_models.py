@@ -649,6 +649,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             transport=transport,
         )
 
+        # NOTE: genaix.build_generative_async_service requires a running event loop, which causes an
+        # error when initialized inside a ThreadPoolExecutor. this check ensures that
+        # async client is only initialized within an asyncio event loop to avoid the error
         if _is_event_loop_running():
             values["async_client"] = genaix.build_generative_async_service(
                 credentials=values.get("credentials"),
@@ -657,6 +660,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 client_options=values.get("client_options"),
                 transport=transport,
             )
+        else:
+            values["async_client"] = None
 
         return values
 
@@ -735,6 +740,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if not self.async_client:
+            raise RuntimeError(
+                "Initialize ChatGoogleGenerativeAI with a running event loop "
+                "to use async methods."
+            )
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -744,13 +755,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_config=tool_config,
             generation_config=generation_config,
         )
-
-        if not self.async_client:
-            raise RuntimeError(
-                "Initialize ChatGoogleGenerativeAI with a running event loop "
-                "to use async methods."
-            )
-
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
             **kwargs,
