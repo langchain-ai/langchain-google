@@ -559,7 +559,7 @@ def _response_to_result(
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
-def _is_event_loop_running():
+def _is_event_loop_running() -> bool:
     try:
         asyncio.get_running_loop()
         return True
