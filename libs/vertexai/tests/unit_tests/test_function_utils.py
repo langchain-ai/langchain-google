@@ -115,7 +115,7 @@ def search(question: str) -> str:
 search_tool = tool(search)
 search_exp = gapic.FunctionDeclaration(
     name="search",
-    description="search(question: str) -> str - Search tool",
+    description="Search tool",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
         title="searchSchema",
