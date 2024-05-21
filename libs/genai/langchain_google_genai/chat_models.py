@@ -746,7 +746,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         if not self.async_client:
-            raise RuntimeError("Initialize ChatGoogleGenerativeAI with a running event loop to use async methods.")
+            raise RuntimeError(
+                "Initialize ChatGoogleGenerativeAI with a running event loop "
+                "to use async methods."
+            )
 
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
