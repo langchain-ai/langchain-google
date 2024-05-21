@@ -16,7 +16,8 @@ from google.api_core.exceptions import InvalidArgument
 from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
+from langchain_core.load import Serializable, load
+from langchain_core.pydantic_v1 import Extra, Field, root_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
@@ -32,7 +33,11 @@ if TYPE_CHECKING:
     )
 
 
-class _BaseVertexAISearchRetriever(BaseModel):
+def _load(dump: Dict[str, Any]) -> Any:
+    return load(dump, valid_namespaces=["langchain_google_community"])
+
+
+class _BaseVertexAISearchRetriever(Serializable):
     project_id: str
     """Google Cloud Project ID."""
     data_store_id: str
@@ -51,6 +56,13 @@ class _BaseVertexAISearchRetriever(BaseModel):
     1 - Structured data
     2 - Website data
     """
+
+    @classmethod
+    def is_lc_serializable(self) -> bool:
+        return True
+
+    def __reduce__(self) -> Any:
+        return _load, (self.to_json(),)
 
     @root_validator(pre=True)
     def validate_environment(cls, values: Dict) -> Dict:
