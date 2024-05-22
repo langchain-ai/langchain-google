@@ -268,6 +268,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         gcs_bucket_name: str,
         index_id: str,
         endpoint_id: str,
+        private_service_connect_ip_address: Optional[str] = None,
         credentials_path: Optional[str] = None,
         embedding: Optional[Embeddings] = None,
         stream_update: bool = False,
@@ -282,6 +283,8 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
             order for the index to be created.
             index_id: The id of the created index.
             endpoint_id: The id of the created endpoint.
+            private_service_connect_ip_address: The IP address of the private
+            service connect instance.
             credentials_path: (Optional) The path of the Google credentials on
             the local file system.
             embedding: The :class:`Embeddings` that will be used for
@@ -300,6 +303,11 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         bucket = sdk_manager.get_gcs_bucket(bucket_name=gcs_bucket_name)
         index = sdk_manager.get_index(index_id=index_id)
         endpoint = sdk_manager.get_endpoint(endpoint_id=endpoint_id)
+
+        if private_service_connect_ip_address:
+            endpoint.private_service_connect_ip_address = (
+                private_service_connect_ip_address
+            )
 
         return cls(
             document_storage=GCSDocumentStorage(bucket=bucket),

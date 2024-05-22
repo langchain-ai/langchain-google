@@ -3,7 +3,7 @@ from typing import List
 from unittest.mock import create_autospec
 
 import pytest
-from google.cloud import discoveryengine_v1alpha
+from google.cloud import discoveryengine_v1alpha  # type: ignore
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.pydantic_v1 import Field

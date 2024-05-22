@@ -123,6 +123,13 @@ class GoogleModelFamily(str, Enum):
 
     @classmethod
     def _missing_(cls, value: Any) -> "GoogleModelFamily":
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning
+        if value.lower() in [
+            "gemini-1.5-flash-preview-0514",
+            "gemini-1.5-pro-preview-0514",
+            "gemini-1.5-pro-preview-0409",
+        ]:
+            return GoogleModelFamily.GEMINI_ADVANCED
         if "gemini" in value.lower():
             return GoogleModelFamily.GEMINI
         if "code" in value.lower():
@@ -161,9 +168,16 @@ def get_generation_info(
                 if candidate.citation_metadata
                 else None
             ),
+            "usage_metadata": usage_metadata,
         }
-        if usage_metadata:
-            info["usage_metadata"] = usage_metadata
+        try:
+            if candidate.grounding_metadata:
+                info["grounding_metadata"] = proto.Message.to_dict(
+                    candidate.grounding_metadata
+                )
+        except AttributeError:
+            pass
+        info = {k: v for k, v in info.items() if v is not None}
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/text-chat#response_body
     else:
         info = dataclasses.asdict(candidate)
