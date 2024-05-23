@@ -64,6 +64,7 @@ async def test_aembed_documents() -> None:
     assert isinstance(result, list)
     assert isinstance(result[0], list)
 
+
 def test_invalid_model_error_handling() -> None:
     """Test error handling with an invalid model name."""
     with pytest.raises(GoogleGenerativeAIError):
