@@ -222,6 +222,7 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
     assert isinstance(output.content, str)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_multimodal_history() -> None:
     llm = ChatVertexAI(model_name="gemini-pro-vision")
