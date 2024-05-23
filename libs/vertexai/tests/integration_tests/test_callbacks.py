@@ -80,7 +80,6 @@ def test_llm_stream() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.xfail(reason="flaky")
 def test_chat_stream() -> None:
     vb = VertexAICallbackHandler()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0.0, callbacks=[vb])
