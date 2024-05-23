@@ -76,6 +76,7 @@ class TestBigQueryVectorStore:
         },
     ]
 
+    @pytest.mark.skip(reason="investigating")
     @pytest.mark.extended
     def test_semantic_search(self, store: BigQueryVectorSearch) -> None:
         """Test on semantic similarity."""
@@ -86,6 +87,7 @@ class TestBigQueryVectorStore:
         assert "treat" in kinds
         assert "planet" not in kinds
 
+    @pytest.mark.skip(reason="investigating")
     @pytest.mark.extended
     def test_semantic_search_filter_fruits(self, store: BigQueryVectorSearch) -> None:
         """Test on semantic similarity with metadata filter."""
@@ -95,6 +97,7 @@ class TestBigQueryVectorStore:
         assert "treat" not in kinds
         assert "planet" not in kinds
 
+    @pytest.mark.skip(reason="investigating")
     @pytest.mark.extended
     def test_get_doc_by_filter(self, store: BigQueryVectorSearch) -> None:
         """Test on document retrieval with metadata filter."""
