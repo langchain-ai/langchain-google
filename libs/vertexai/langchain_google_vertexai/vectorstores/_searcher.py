@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, List, Tuple, Union
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
+from google.cloud.aiplatform import telemetry
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
@@ -12,6 +13,7 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
     NumericNamespace,
 )
 
+from langchain_google_vertexai._utils import get_user_agent
 from langchain_google_vertexai.vectorstores._utils import (
     batch_update_index,
     stream_update_index,
@@ -152,13 +154,15 @@ class VectorSearchSearcher(Searcher):
 
         # No need to implement other method for private VPC, find_neighbors now works
         # with public and private.
-        response = self._endpoint.find_neighbors(
-            deployed_index_id=self._deployed_index_id,
-            queries=embeddings,
-            num_neighbors=k,
-            filter=filter_,
-            numeric_filter=numeric_filter,
-        )
+
+        with telemetry.tool_context_manager(self._get_telemetry_user_agent()):
+            response = self._endpoint.find_neighbors(
+                deployed_index_id=self._deployed_index_id,
+                queries=embeddings,
+                num_neighbors=k,
+                filter=filter_,
+                numeric_filter=numeric_filter,
+            )
 
         return self._postprocess_response(response)
 
@@ -176,3 +180,11 @@ class VectorSearchSearcher(Searcher):
             f"deployed on endpoint "
             f"{self._endpoint.display_name}."
         )
+    
+
+    def _get_telemetry_user_agent(self) -> str:
+        """Gets the User Agent."""
+        _, user_agent = get_user_agent("vertex-ai-matching-engine")
+        return user_agent
+    
+
