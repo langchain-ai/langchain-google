@@ -3,7 +3,12 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from langchain_core.messages import BaseMessage
 
-_message_type_lookups = {"human": "user", "ai": "assistant"}
+_message_type_lookups = {
+    "human": "user",
+    "ai": "assistant",
+    "AIMessageChunk": "assistant",
+    "HumanMessageChunk": "user",
+}
 
 
 def _format_image(image_url: str) -> Dict:
