@@ -206,7 +206,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 ]
                 batch_start_index += len(batch)
             else:
-                titles_batch = [None] * len(batch)
+                titles_batch = [None] * len(batch)  # type: ignore[list-item]
 
             requests = [
                 self._prepare_request(
