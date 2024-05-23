@@ -64,6 +64,16 @@ def test_init() -> None:
         assert llm.max_output_tokens == 10
         assert llm.stop == ["bar"]
 
+        ls_params = llm._get_ls_params()
+        assert ls_params == {
+            "ls_provider": "google_vertexai",
+            "ls_model_name": "gemini-pro",
+            "ls_model_type": "chat",
+            "ls_temperature": None,
+            "ls_max_tokens": 10,
+            "ls_stop": ["bar"],
+        }
+
 
 @pytest.mark.parametrize(
     "model,location",
