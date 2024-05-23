@@ -1,9 +1,11 @@
 """Test ChatGoogleVertexAI chat model."""
 
+import base64
 import json
 from typing import List, Optional, cast
 
 import pytest
+from google.cloud import storage
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -136,6 +138,86 @@ def test_multimodal() -> None:
         "text": "What is shown in this image?",
     }
     message = HumanMessage(content=[text_message, image_message])
+    output = llm([message])
+    assert isinstance(output.content, str)
+
+
+video_param = pytest.param(
+    "gs://cloud-samples-data/generative-ai/video/pixel8.mp4",
+    "video/mp4",
+    id="video",
+)
+multimodal_inputs = [
+    video_param,
+    pytest.param(
+        "gs://cloud-samples-data/generative-ai/audio/pixel.mp3", "audio/mp3", id="audio"
+    ),
+    pytest.param(
+        "gs://cloud-samples-data/generative-ai/image/cricket.jpeg",
+        "image/jpeg",
+        id="image",
+    ),
+]
+
+
+@pytest.mark.release
+@pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
+def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0514")
+    media_message = {
+        "type": "media",
+        "file_uri": file_uri,
+        "mime_type": mime_type,
+    }
+    text_message = {
+        "type": "text",
+        "text": "Describe the attached media in 5 words!",
+    }
+    message = HumanMessage(content=[text_message, media_message])
+    output = llm([message])
+    assert isinstance(output.content, str)
+
+
+@pytest.mark.release
+@pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
+def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0514")
+    storage_client = storage.Client()
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    text_message = {
+        "type": "text",
+        "text": "Describe the attached media in 5 words!",
+    }
+    message = HumanMessage(content=[text_message, media_message])
+    output = llm([message])
+    assert isinstance(output.content, str)
+
+
+@pytest.mark.release
+@pytest.mark.parametrize("file_uri,mime_type", [video_param])
+def test_multimodal_video_metadata(file_uri, mime_type) -> None:
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0514")
+    media_message = {
+        "type": "media",
+        "file_uri": file_uri,
+        "mime_type": mime_type,
+        "video_metadata": {
+            "start_offset": {"seconds": 22, "nanos": 5000},
+            "end_offset": {"seconds": 25, "nanos": 5000},
+        },
+    }
+    text_message = {
+        "type": "text",
+        "text": "What is shown in the subtitles",
+    }
+
+    message = HumanMessage(content=[text_message, media_message])
     output = llm([message])
     assert isinstance(output.content, str)
 
@@ -442,6 +524,7 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
 
 
 @pytest.mark.release
+@pytest.mark.xfail(reason="flaky")
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
     def search(

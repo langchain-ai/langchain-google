@@ -83,10 +83,12 @@ from vertexai.preview.language_models import (
 )
 
 from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
     Candidate,
     Part,
     HarmCategory,
     Content,
+    FileData,
     FunctionCall,
     FunctionResponse,
     GenerateContentRequest,
@@ -94,6 +96,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     SafetySetting,
     Tool as GapicTool,
     ToolConfig as GapicToolConfig,
+    VideoMetadata,
 )
 from langchain_google_vertexai._base import _VertexAICommon, GoogleModelFamily
 from langchain_google_vertexai._image_utils import ImageBytesLoader
@@ -193,7 +196,31 @@ def _parse_chat_history_gemini(
             path = part["image_url"]["url"]
             return ImageBytesLoader(project=project).load_gapic_part(path)
 
-        raise ValueError("Only text and image_url types are supported!")
+        # Handle media type like LangChain.js
+        # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
+        if part["type"] == "media":
+            if "mime_type" not in part:
+                raise ValueError(f"Missing mime_type in media part: {part}")
+            mime_type = part["mime_type"]
+            proto_part = Part()
+
+            if "data" in part:
+                proto_part.inline_data = Blob(data=part["data"], mime_type=mime_type)
+            elif "file_uri" in part:
+                proto_part.file_data = FileData(
+                    file_uri=part["file_uri"], mime_type=mime_type
+                )
+            else:
+                raise ValueError(
+                    f"Media part must have either data or file_uri: {part}"
+                )
+
+            if "video_metadata" in part:
+                metadata = VideoMetadata(part["video_metadata"])
+                proto_part.video_metadata = metadata
+            return proto_part
+
+        raise ValueError("Only text, image_url, and media types are supported!")
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
         raw_content = message.content
@@ -1155,7 +1182,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         vertexai_tool = _format_to_gapic_tool(tools)
         if tool_choice:
-            all_names = [f["name"] for f in vertexai_tool.function_declarations]
+            all_names = [f.name for f in vertexai_tool.function_declarations]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         # Bind dicts for easier serialization/deserialization.
         return self.bind(tools=[vertexai_tool], tool_config=tool_config, **kwargs)

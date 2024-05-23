@@ -36,6 +36,9 @@ numexpr = "^2.8.6"
 google-api-python-client = "^2.117.0"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
+[tool.codespell]
+ignore-words-list = "rouge"
+
 [tool.poetry.group.codespell]
 optional = true
 
