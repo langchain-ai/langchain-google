@@ -619,7 +619,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, stop: Optional[List[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
-        params = self._get_invocation_params(stop=stop, **kwargs)
+        params = self._prepare_params(stop=stop, **kwargs)
         ls_params = LangSmithParams(
             ls_provider="google_vertexai",
             ls_model_name=self.model_name,
