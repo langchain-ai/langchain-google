@@ -148,7 +148,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             )
         except Exception as e:
             raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e
-        return [e.values for e in result.embeddings]
+        return [list(e.values) for e in result.embeddings]
 
     def embed_query(
         self,

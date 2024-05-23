@@ -20,6 +20,7 @@ def test_embed_query_different_lengths(query: str) -> None:
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
     result = model.embed_query(query)
     assert len(result) == 768
+    assert isinstance(result, list)
 
 
 @pytest.mark.parametrize(
@@ -35,6 +36,7 @@ async def test_aembed_query_different_lengths(query: str) -> None:
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
     result = await model.aembed_query(query)
     assert len(result) == 768
+    assert isinstance(result, list)
 
 
 def test_embed_documents() -> None:
@@ -46,6 +48,8 @@ def test_embed_documents() -> None:
     assert len(result) == 2
     assert len(result[0]) == 768
     assert len(result[1]) == 768
+    assert isinstance(result, list)
+    assert isinstance(result[0], list)
 
 
 async def test_aembed_documents() -> None:
@@ -57,6 +61,8 @@ async def test_aembed_documents() -> None:
     assert len(result) == 2
     assert len(result[0]) == 768
     assert len(result[1]) == 768
+    assert isinstance(result, list)
+    assert isinstance(result[0], list)
 
 
 def test_invalid_model_error_handling() -> None:
