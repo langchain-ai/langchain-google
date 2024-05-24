@@ -70,6 +70,9 @@ cloudpickle = "^3.0.0"
 [tool.poetry.group.codespell]
 optional = true
 
+[tool.codespell]
+ignore-words-list = "rouge"
+
 [tool.poetry.group.codespell.dependencies]
 codespell = "^2.2.0"
 
