@@ -178,6 +178,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     def embed_documents(
         self,
         texts: List[str],
+        *,
         batch_size: int = _DEFAULT_BATCH_SIZE,
         task_type: Optional[str] = None,
         titles: Optional[List[str]] = None,
