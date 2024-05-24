@@ -124,3 +124,41 @@ def test_embed_documents() -> None:
             ],
         )
         mock_embed.assert_called_once_with(request)
+
+
+def test_embed_documents_with_numerous_texts() -> None:
+    TEST_CORPUS_SIZE = 100
+    TEST_BATCH_SIZE = 20
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
+    ) as mock_prediction_service:
+        mock_embed = MagicMock()
+        mock_embed.return_value = BatchEmbedContentsResponse(
+            embeddings=[ContentEmbedding(values=[1.0 for _ in range(TEST_BATCH_SIZE)])]
+        )
+        mock_prediction_service.return_value.batch_embed_contents = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-test",
+            google_api_key="test-key",
+        )
+
+        llm.embed_documents(
+            ["test text" for _ in range(TEST_CORPUS_SIZE)],
+            batch_size=TEST_BATCH_SIZE,
+            titles=["title1" for _ in range(TEST_CORPUS_SIZE)],
+        )
+        request = BatchEmbedContentsRequest(
+            model="models/embedding-test",
+            requests=[
+                EmbedContentRequest(
+                    model="models/embedding-test",
+                    content={"parts": [{"text": "test text"}]},
+                    task_type="RETRIEVAL_DOCUMENT",
+                    title="title1",
+                )
+                for _ in range(TEST_BATCH_SIZE)
+            ],
+        )
+        mock_embed.assert_called_with(request)
+        assert mock_embed.call_count == TEST_CORPUS_SIZE / TEST_BATCH_SIZE
