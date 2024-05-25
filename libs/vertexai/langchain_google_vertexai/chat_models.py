@@ -723,6 +723,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#safetysetting
         """
         if safety_settings is None:
+            if self.safety_settings:
+                return self._safety_settings_gemini(self.safety_settings)
             return None
         if isinstance(safety_settings, list):
             return safety_settings

@@ -881,3 +881,21 @@ def test_safety_settings_gemini() -> None:
         {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}
     )
     assert safety_settings == [expected_safety_setting]
+
+
+def test_safety_settings_gemini_init() -> None:
+    expected_safety_setting = [
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+        )
+    ]
+    model = ChatVertexAI(
+        model_name="gemini-pro",
+        temperature=0.2,
+        top_k=3,
+        project="test-project",
+        safety_settings=expected_safety_setting,
+    )
+    safety_settings = model._safety_settings_gemini(None)
+    assert safety_settings == expected_safety_setting
