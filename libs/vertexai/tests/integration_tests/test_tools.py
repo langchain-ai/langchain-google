@@ -225,7 +225,10 @@ def test_multiple_tools() -> None:
     google_search_api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
     google_cse_id = os.environ["GOOGLE_CSE_ID"]
     search = GoogleSearchAPIWrapper(
-        k=10, google_api_key=google_search_api_key, google_cse_id=google_cse_id
+        search_engine=None,
+        k=10,
+        google_api_key=google_search_api_key,
+        google_cse_id=google_cse_id,
     )
     tools = [
         Tool(
