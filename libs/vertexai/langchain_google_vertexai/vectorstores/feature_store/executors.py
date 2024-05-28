@@ -533,9 +533,9 @@ class FeatureOnlineStoreExecutor(BaseExecutor):
     algorithm_config: AlgorithmConfig = utils.TreeAhConfig()
     filter_columns: Optional[List[str]] = None
     crowding_column: Optional[str] = None
-    distance_measure_type: Optional[
-        DistanceMeasureType
-    ] = utils.DistanceMeasureType.DOT_PRODUCT_DISTANCE
+    distance_measure_type: Optional[DistanceMeasureType] = (
+        utils.DistanceMeasureType.DOT_PRODUCT_DISTANCE
+    )
     _env_config: EnvConfig = EnvConfig()
     _user_agent: str = ""
 

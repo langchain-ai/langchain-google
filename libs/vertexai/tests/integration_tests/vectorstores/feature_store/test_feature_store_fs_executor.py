@@ -64,7 +64,7 @@ def store_fs_executor(request: pytest.FixtureRequest) -> FeatureStore:
             not_found_ok=True,
         )
         TestFeatureStore_fs_executor.store_fs_executor.executor._feature_view.delete()
-    
+
     request.addfinalizer(teardown)
     return TestFeatureStore_fs_executor.store_fs_executor
 
