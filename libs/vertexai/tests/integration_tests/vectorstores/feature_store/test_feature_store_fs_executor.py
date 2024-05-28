@@ -31,6 +31,7 @@ def store_fs_executor(request: pytest.FixtureRequest) -> FeatureStore:
     Example:
     export PROJECT_ID=...
     """
+    from google.cloud import bigquery
 
     from langchain_google_vertexai import VertexAIEmbeddings
 
@@ -57,6 +58,11 @@ def store_fs_executor(request: pytest.FixtureRequest) -> FeatureStore:
     )
 
     def teardown() -> None:
+        bigquery.Client(location="us-central1").delete_dataset(
+            TestFeatureStore_fs_executor.store_fs_executor.dataset_name,
+            delete_contents=True,
+            not_found_ok=True,
+        )
         TestFeatureStore_fs_executor.store_fs_executor.executor._feature_view.delete()
     
     request.addfinalizer(teardown)
