@@ -64,6 +64,16 @@ def test_init() -> None:
         assert llm.max_output_tokens == 10
         assert llm.stop == ["bar"]
 
+        ls_params = llm._get_ls_params()
+        assert ls_params == {
+            "ls_provider": "google_vertexai",
+            "ls_model_name": "gemini-pro",
+            "ls_model_type": "chat",
+            "ls_temperature": None,
+            "ls_max_tokens": 10,
+            "ls_stop": ["bar"],
+        }
+
 
 @pytest.mark.parametrize(
     "model,location",
@@ -871,3 +881,21 @@ def test_safety_settings_gemini() -> None:
         {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}
     )
     assert safety_settings == [expected_safety_setting]
+
+
+def test_safety_settings_gemini_init() -> None:
+    expected_safety_setting = [
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+        )
+    ]
+    model = ChatVertexAI(
+        model_name="gemini-pro",
+        temperature=0.2,
+        top_k=3,
+        project="test-project",
+        safety_settings=expected_safety_setting,
+    )
+    safety_settings = model._safety_settings_gemini(None)
+    assert safety_settings == expected_safety_setting
