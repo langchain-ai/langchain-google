@@ -22,6 +22,9 @@ from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from vertexai.generative_models._generative_models import (  # type: ignore
+    SafetySettingsType,
+)
 from vertexai.language_models import (  # type: ignore[import-untyped]
     TextGenerationModel,
 )
@@ -32,7 +35,6 @@ from vertexai.preview.language_models import (
     CodeChatModel as PreviewCodeChatModel,
 )
 
-from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
     get_client_info,
@@ -72,6 +74,7 @@ class _VertexAIBase(BaseModel):
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
+        arbitrary_types_allowed = True
 
     @root_validator(pre=True)
     def validate_params_base(cls, values: dict) -> dict:
@@ -136,7 +139,7 @@ class _VertexAICommon(_VertexAIBase):
     """How many completions to generate for each prompt."""
     streaming: bool = False
     """Whether to stream the results or not."""
-    safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
+    safety_settings: Optional["SafetySettingsType"] = None
     """The default safety settings to use for all generations. 
     
         For example: 
