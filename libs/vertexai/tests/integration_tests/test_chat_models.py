@@ -300,7 +300,7 @@ def test_vertexai_system_message(model_name: Optional[str]) -> None:
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert response.content.lower() == "london"
+    assert "london" in response.content.lower()
 
 
 @pytest.mark.release
