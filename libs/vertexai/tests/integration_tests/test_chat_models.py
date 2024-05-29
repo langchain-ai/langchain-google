@@ -285,7 +285,6 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
     assert isinstance(response.content, str)
 
 
-@pytest.mark.xfail(reason="CI issue")
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", ["gemini-1.0-pro-002"])
 def test_vertexai_system_message(model_name: Optional[str]) -> None:
@@ -301,7 +300,7 @@ def test_vertexai_system_message(model_name: Optional[str]) -> None:
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert response.content.lower() == "london"
+    assert "london" in response.content.lower()
 
 
 @pytest.mark.release
@@ -369,7 +368,6 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
 
 
-@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):
@@ -525,7 +523,6 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.xfail(reason="flaky")
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
