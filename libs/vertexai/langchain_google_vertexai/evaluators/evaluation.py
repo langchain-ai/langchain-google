@@ -1,6 +1,6 @@
+from abc import ABC
 from typing import Any, Dict, List, Optional, Sequence
 
-import proto  # type: ignore[import-untyped]
 from google.api_core.client_options import ClientOptions
 from google.cloud.aiplatform.constants import base as constants
 from google.cloud.aiplatform_v1beta1 import (
@@ -11,12 +11,16 @@ from google.cloud.aiplatform_v1beta1.types import (
     EvaluateInstancesRequest,
     EvaluateInstancesResponse,
 )
+from google.protobuf.json_format import MessageToDict
 
 from langchain_google_vertexai._utils import (
     get_client_info,
     get_user_agent,
 )
-from langchain_google_vertexai.evaluators._core import StringEvaluator
+from langchain_google_vertexai.evaluators._core import (
+    PairwiseStringEvaluator,
+    StringEvaluator,
+)
 
 _METRICS = [
     "bleu",
@@ -33,6 +37,10 @@ _METRICS = [
     "question_answering_quality",
     "question_answering_relevance",
     "question_answering_correctness",
+]
+_PAIRWISE_METRICS = [
+    "pairwise_question_answering_quality",
+    "pairwise_summarization_quality",
 ]
 _METRICS_INPUTS = {
     "rouge1": {"rouge_type": "rouge1"},
@@ -52,6 +60,18 @@ _METRICS_ATTRS = {
     "question_answering_quality": ["prediction", "context", "instruction"],
     "question_answering_relevance": ["prediction", "instruction"],
     "question_answering_correctness": ["prediction", "instruction"],
+    "pairwise_question_answering_quality": [
+        "prediction",
+        "baseline_prediction",
+        "context",
+        "instruction",
+    ],
+    "pairwise_summarization_quality": [
+        "prediction",
+        "baseline_prediction",
+        "context",
+        "instruction",
+    ],
 }
 _METRICS_OPTIONAL_ATTRS = {
     "summarization_quality": ["reference"],
@@ -60,6 +80,8 @@ _METRICS_OPTIONAL_ATTRS = {
     "question_answering_quality": ["reference"],
     "question_answering_relevance": ["reference", "context"],
     "question_answering_correctness": ["reference", "context"],
+    "pairwise_question_answering_quality": ["reference"],
+    "pairwise_summarization_quality": ["reference"],
 }
 # a client supports multiple instances per request for these metrics
 _METRICS_MULTIPLE_INSTANCES = ["bleu", "exact_match", "rouge"]
@@ -105,14 +127,18 @@ def _parse_response(
     response: EvaluateInstancesResponse, metric: str
 ) -> List[Dict[str, Any]]:
     metric = _format_metric(metric)
-    result = proto.Message.to_dict(response)
+    result = MessageToDict(response._pb, preserving_proto_field_name=True)
     if metric in _METRICS_MULTIPLE_INSTANCES:
         return result[f"{metric}_results"][f"{metric}_metric_values"]
     return [result[f"{metric}_result"]]
 
 
-class VertexStringEvaluator(StringEvaluator):
-    """Evaluate the perplexity of a predicted string."""
+class _EvaluatorBase(ABC):
+    @property
+    def _user_agent(self) -> str:
+        """Gets the User Agent."""
+        _, user_agent = get_user_agent(f"{type(self).__name__}_{self._metric}")
+        return user_agent
 
     def __init__(self, metric: str, project_id: str, location: str = "us-central1"):
         self._metric = metric
@@ -128,6 +154,30 @@ class VertexStringEvaluator(StringEvaluator):
             client_info=get_client_info(module=self._user_agent),
         )
         self._location = self._client.common_location_path(project_id, location)
+
+    def _prepare_request(
+        self,
+        prediction: str,
+        reference: Optional[str] = None,
+        input: Optional[str] = None,
+        **kwargs: Any,
+    ) -> EvaluateInstancesRequest:
+        instance = {"prediction": prediction}
+        if reference:
+            instance["reference"] = reference
+        if input:
+            instance["context"] = input
+        instance = {**instance, **kwargs}
+        return _prepare_request(
+            [instance], metric=self._metric, location=self._location
+        )
+
+
+class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
+    """Evaluate the perplexity of a predicted string."""
+
+    def __init__(self, metric: str, **kwargs):
+        super().__init__(metric, **kwargs)
         if _format_metric(metric) not in _METRICS:
             raise ValueError(f"Metric {metric} is not supported yet!")
 
@@ -142,12 +192,6 @@ class VertexStringEvaluator(StringEvaluator):
         request = self._prepare_request(prediction, reference, input, **kwargs)
         response = self._client.evaluate_instances(request)
         return _parse_response(response, metric=self._metric)[0]
-
-    @property
-    def _user_agent(self) -> str:
-        """Gets the User Agent."""
-        _, user_agent = get_user_agent(f"{type(self).__name__}_{self._metric}")
-        return user_agent
 
     def evaluate(
         self,
@@ -180,26 +224,6 @@ class VertexStringEvaluator(StringEvaluator):
         else:
             return [self._evaluate_strings(**i) for i in instances]
 
-    def _prepare_request(
-        self,
-        prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
-        **kwargs: Any,
-    ) -> EvaluateInstancesRequest:
-        instance = {"prediction": prediction}
-        if reference:
-            instance["reference"] = reference
-        if input:
-            instance["context"] = input
-        if "instruction" in kwargs:
-            instance["instruction"] = kwargs["instruction"]
-        if "context" in kwargs:
-            instance["context"] = kwargs["context"]
-        return _prepare_request(
-            [instance], metric=self._metric, location=self._location
-        )
-
     async def _aevaluate_strings(
         self,
         *,
@@ -209,5 +233,44 @@ class VertexStringEvaluator(StringEvaluator):
         **kwargs: Any,
     ) -> dict:
         request = self._prepare_request(prediction, reference, input, **kwargs)
+        response = await self._async_client.evaluate_instances(request)
+        return _parse_response(response, metric=self._metric)[0]
+
+
+class VertexPairWiseStringEvaluator(_EvaluatorBase, PairwiseStringEvaluator):
+    """Evaluate the perplexity of a predicted string."""
+
+    def __init__(self, metric: str, **kwargs):
+        super().__init__(metric, **kwargs)
+        if _format_metric(metric) not in _PAIRWISE_METRICS:
+            raise ValueError(f"Metric {metric} is not supported yet!")
+
+    def _evaluate_string_pairs(
+        self,
+        *,
+        prediction: str,
+        prediction_b: str,
+        reference: Optional[str] = None,
+        input: Optional[str] = None,
+        **kwargs: Any,
+    ) -> dict:
+        request = self._prepare_request(
+            prediction_b, reference, input, baseline_prediction=prediction, **kwargs
+        )
+        response = self._client.evaluate_instances(request)
+        return _parse_response(response, metric=self._metric)[0]
+
+    async def _aevaluate_string_pairs(
+        self,
+        *,
+        prediction: str,
+        prediction_b: str,
+        reference: Optional[str] = None,
+        input: Optional[str] = None,
+        **kwargs: Any,
+    ) -> dict:
+        request = self._prepare_request(
+            prediction_b, reference, input, baseline_prediction=prediction, **kwargs
+        )
         response = await self._async_client.evaluate_instances(request)
         return _parse_response(response, metric=self._metric)[0]
