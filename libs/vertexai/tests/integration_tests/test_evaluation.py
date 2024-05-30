@@ -2,7 +2,10 @@ import os
 
 import pytest
 
-from langchain_google_vertexai import VertexStringEvaluator
+from langchain_google_vertexai import (
+    VertexPairWiseStringEvaluator,
+    VertexStringEvaluator,
+)
 
 
 @pytest.mark.release
@@ -49,3 +52,21 @@ async def test_aevaluate_strings() -> None:
     assert isinstance(result, dict)
     assert "score" in result
     assert "explanation" in result
+
+
+@pytest.mark.release
+async def test_evaluate_pairwise() -> None:
+    evaluator = VertexPairWiseStringEvaluator(
+        metric="pairwise_question_answering_quality",
+        project_id=os.environ["PROJECT_ID"],
+    )
+    result = evaluator.evaluate_string_pairs(
+        prediction="London",
+        prediction_b="Berlin",
+        input="What is the capital of Great Britain?",
+        instruction="Be concise",
+    )
+    assert isinstance(result, dict)
+    assert "confidence" in result
+    assert "explanation" in result
+    assert result["pairwise_choice"] == "BASELINE"
