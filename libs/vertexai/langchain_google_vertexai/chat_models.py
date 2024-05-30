@@ -104,6 +104,7 @@ from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
     _format_model_name,
+    is_gemini_model,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
@@ -610,10 +611,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 project=values["project"],
             )
 
-        if safety_settings and values["model_family"] not in [
-            GoogleModelFamily.GEMINI,
-            GoogleModelFamily.GEMINI_ADVANCED,
-        ]:
+        if safety_settings and not is_gemini_model(values["model_family"]):
             raise ValueError("Safety settings are only supported for Gemini models")
 
         if tuned_model_name:
@@ -621,10 +619,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         else:
             generative_model_name = values["model_name"]
 
-        if values["model_family"] not in [
-            GoogleModelFamily.GEMINI,
-            GoogleModelFamily.GEMINI_ADVANCED,
-        ]:
+        if not is_gemini_model(values["model_family"]):
             cls._init_vertexai(values)
             if values["model_family"] == GoogleModelFamily.CODEY:
                 model_cls = CodeChatModel
@@ -783,6 +778,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.prediction_client.generate_content,
             max_retries=self.max_retries,
             request=request,
+            metadata=self.default_metadata,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -801,6 +797,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 messages=messages, stop=stop, **kwargs
             ),
             is_gemini=True,
+            metadata=self.default_metadata,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -983,6 +980,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             max_retries=self.max_retries,
             request=request,
             is_gemini=True,
+            metadata=self.default_metadata,
             **kwargs,
         )
         for response_chunk in response_iter:
