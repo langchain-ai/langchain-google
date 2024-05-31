@@ -49,6 +49,7 @@ from langchain_core.messages import (
     ToolCallChunk,
     ToolMessage,
 )
+from langchain_core.messages.ai import UsageMetadata
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputToolsParser,
@@ -1204,14 +1205,22 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> ChatResult:
         generations = []
         usage = proto.Message.to_dict(response.usage_metadata)
+        lc_usage = UsageMetadata(  # for langchain standard field
+            input_tokens=usage.get("prompt_token_count", 0),
+            output_tokens=usage.get("candidates_token_count", 0),
+            total_tokens=usage.get("total_token_count", 0),
+        )
         for candidate in response.candidates:
             info = get_generation_info(candidate, is_gemini=True, usage_metadata=usage)
             message = _parse_response_candidate(candidate)
+            if isinstance(message, AIMessage):
+                message.usage_metadata = lc_usage
             generations.append(ChatGeneration(message=message, generation_info=info))
         if not response.candidates:
             message = AIMessage(content="")
             if usage:
                 generation_info = {"usage_metadata": usage}
+                message.usage_metadata = lc_usage
             else:
                 generation_info = {}
             generations.append(
@@ -1224,8 +1233,23 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> ChatGenerationChunk:
         # return an empty completion message if there's no candidates
         usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
+
+        # Gather langchain (standard) usage metadata
+        input_tokens = usage_metadata.get("prompt_token_count", 0)
+        output_tokens = usage_metadata.get("candidates_token_count", 0)
+        total_tokens = usage_metadata.get("total_token_count", 0)
+        if all(count == 0 for count in [input_tokens, output_tokens, total_tokens]):
+            lc_usage = None
+        else:
+            lc_usage = UsageMetadata(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+            )
         if not response_chunk.candidates:
             message = AIMessageChunk(content="")
+            if lc_usage:
+                message.usage_metadata = lc_usage
             if usage_metadata:
                 generation_info = {"usage_metadata": usage_metadata}
             else:
@@ -1233,6 +1257,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         else:
             top_candidate = response_chunk.candidates[0]
             message = _parse_response_candidate(top_candidate, streaming=True)
+            if lc_usage:
+                message.usage_metadata = lc_usage
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,

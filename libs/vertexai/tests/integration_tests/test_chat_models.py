@@ -10,6 +10,7 @@ from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     BaseMessage,
+    BaseMessageChunk,
     HumanMessage,
     SystemMessage,
     ToolMessage,
@@ -27,6 +28,13 @@ from langchain_google_vertexai import (
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 model_names_to_test = [None, "codechat-bison", "chat-bison", _DEFAULT_MODEL_NAME]
+
+
+def _check_usage_metadata(message: AIMessage) -> None:
+    assert message.usage_metadata is not None
+    assert message.usage_metadata["input_tokens"] > 0
+    assert message.usage_metadata["output_tokens"] > 0
+    assert message.usage_metadata["total_tokens"] > 0
 
 
 @pytest.mark.release
@@ -51,6 +59,8 @@ def test_vertexai_single_call(model_name: Optional[str]) -> None:
     response = model([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
+    if model_name == "gemini-1.0-pro-001":
+        _check_usage_metadata(response)
 
 
 @pytest.mark.release
@@ -71,11 +81,14 @@ async def test_vertexai_agenerate(model_name: str) -> None:
     message = HumanMessage(content="Hello")
     response = await model.agenerate([[message]])
     assert isinstance(response, LLMResult)
-    assert isinstance(response.generations[0][0].message, AIMessage)  # type: ignore
+    async_generation = cast(ChatGeneration, response.generations[0][0])
+    output_message = async_generation.message
+    assert isinstance(output_message, AIMessage)
+    if model_name == "gemini-1.0-pro-001":
+        _check_usage_metadata(output_message)
 
     sync_response = model.generate([[message]])
     sync_generation = cast(ChatGeneration, sync_response.generations[0][0])
-    async_generation = cast(ChatGeneration, response.generations[0][0])
 
     usage_metadata = sync_generation.generation_info["usage_metadata"]  # type: ignore
     assert int(usage_metadata["prompt_token_count"]) > 0
@@ -92,8 +105,18 @@ def test_vertexai_stream(model_name: str) -> None:
     message = HumanMessage(content="Hello")
 
     sync_response = model.stream([message])
+    full: Optional[BaseMessageChunk] = None
+    chunks_with_usage_metadata = 0
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
+        if chunk.usage_metadata:
+            chunks_with_usage_metadata += 1
+        full = chunk if full is None else full + chunk
+    if model_name == "gemini-1.0-pro-001":
+        if chunks_with_usage_metadata != 1:
+            pytest.fail("Expected exactly one chunk with usage metadata")
+        assert isinstance(full, AIMessageChunk)
+        _check_usage_metadata(full)
 
 
 @pytest.mark.release
@@ -101,8 +124,17 @@ async def test_vertexai_astream() -> None:
     model = ChatVertexAI(temperature=0, model_name=_DEFAULT_MODEL_NAME)
     message = HumanMessage(content="Hello")
 
+    full: Optional[BaseMessageChunk] = None
+    chunks_with_usage_metadata = 0
     async for chunk in model.astream([message]):
         assert isinstance(chunk, AIMessageChunk)
+        if chunk.usage_metadata:
+            chunks_with_usage_metadata += 1
+        full = chunk if full is None else full + chunk
+    if chunks_with_usage_metadata != 1:
+        pytest.fail("Expected exactly one chunk with usage metadata")
+    assert isinstance(full, AIMessageChunk)
+    _check_usage_metadata(full)
 
 
 @pytest.mark.release
@@ -138,8 +170,10 @@ def test_multimodal() -> None:
         "text": "What is shown in this image?",
     }
     message = HumanMessage(content=[text_message, image_message])
-    output = llm([message])
+    output = llm.invoke([message])
     assert isinstance(output.content, str)
+    assert isinstance(output, AIMessage)
+    _check_usage_metadata(output)
 
 
 video_param = pytest.param(
