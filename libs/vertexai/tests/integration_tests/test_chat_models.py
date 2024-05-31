@@ -113,7 +113,7 @@ def test_vertexai_stream(model_name: str) -> None:
         if chunk.usage_metadata:
             chunks_with_usage_metadata += 1
         full = chunk if full is None else full + chunk
-    if model_name == "gemini-1.0-pro-001":
+    if model._is_gemini_model:
         if chunks_with_usage_metadata != 1:
             pytest.fail("Expected exactly one chunk with usage metadata")
         assert isinstance(full, AIMessageChunk)
