@@ -1287,5 +1287,5 @@ def _get_usage_metadata_non_gemini(raw_metadata: dict) -> Optional[UsageMetadata
         return UsageMetadata(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            total_tokens = input_tokens + output_tokens,
+            total_tokens=input_tokens + output_tokens,
         )
