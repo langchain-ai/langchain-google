@@ -154,8 +154,8 @@ class VectorSearchSearcher(Searcher):
 
         # No need to implement other method for private VPC, find_neighbors now works
         # with public and private.
-
-        with telemetry.tool_context_manager(self._get_telemetry_user_agent()):
+        _, user_agent = get_user_agent("vertex-ai-matching-engine")
+        with telemetry.tool_context_manager(user_agent):
             response = self._endpoint.find_neighbors(
                 deployed_index_id=self._deployed_index_id,
                 queries=embeddings,
@@ -180,11 +180,3 @@ class VectorSearchSearcher(Searcher):
             f"deployed on endpoint "
             f"{self._endpoint.display_name}."
         )
-    
-
-    def _get_telemetry_user_agent(self) -> str:
-        """Gets the User Agent."""
-        _, user_agent = get_user_agent("vertex-ai-matching-engine")
-        return user_agent
-    
-
