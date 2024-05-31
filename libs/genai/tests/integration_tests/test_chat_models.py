@@ -1,13 +1,14 @@
 """Test ChatGoogleGenerativeAI chat model."""
 
 import json
-from typing import Generator
+from typing import Generator, Optional
 
 import pytest
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     BaseMessage,
+    BaseMessageChunk,
     HumanMessage,
     SystemMessage,
     ToolMessage,
@@ -27,20 +28,50 @@ _VISION_MODEL = "gemini-pro-vision"
 _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV8/xCIVQTuIKGSoTi2IijhqFYpQIdQKrTqYXPoFTRqSFBdHwbXg4Mdi1cHFWVcHV0EQ/ABxdXFSdJES/5cUWsR4cNyPd/ced+8Af6PCVDM4DqiaZaSTCSGbWxW6XxHECPoRQ0hipj4niil4jq97+Ph6F+dZ3uf+HL1K3mSATyCeZbphEW8QT29aOud94ggrSQrxOXHMoAsSP3JddvmNc9FhP8+MGJn0PHGEWCh2sNzBrGSoxFPEUUXVKN+fdVnhvMVZrdRY6578heG8trLMdZrDSGIRSxAhQEYNZVRgIU6rRoqJNO0nPPxDjl8kl0yuMhg5FlCFCsnxg//B727NwuSEmxROAF0vtv0xCnTvAs26bX8f23bzBAg8A1da219tADOfpNfbWvQI6NsGLq7bmrwHXO4Ag0+6ZEiOFKDpLxSA9zP6phwwcAv0rLm9tfZx+gBkqKvUDXBwCIwVKXvd492hzt7+PdPq7wdzbXKn5swsVgAAA8lJREFUeJx90dtPHHUUB/Dz+81vZhb2wrDI3soUKBSRcisF21iqqCRNY01NTE0k8aHpi0k18VJfjOFvUF9M44MmGrHFQqSQiKSmFloL5c4CXW6Fhb0vO3ufvczMzweiBGI9+eW8ffI95/yQqqrwv4UxBgCfJ9w/2NfSVB+Nyn6/r+vdLo7H6FkYY6yoABR2PJujj34MSo/d/nHeVLYbydmIp/bEO0fEy/+NMcbTU4/j4Vs6Lr0ccKeYuUKWS4ABVCVHmRdszbfvTgfjR8kz5Jjs+9RREl9Zy2lbVK9wU3/kWLJLCXnqza1bfVe7b9jLbIeTMcYu13Jg/aMiPrCwVFcgtDiMhnxwJ/zXVDwSdVCVMRV7nqzl2i9e/fKrw8mqSp84e2sFj3Oj8/SrF/MaicmyYhAaXu58NPAbeAeyzY0NLecmh2+ODN3BewYBAkAY43giI3kebrnsRmvV9z2D4ciOa3EBAf31Tp9sMgdxMTFm6j74/Ogb70VCYQKAAIDCXkOAIC6pkYBWdwwnpHEdf6L9dJtJKPh95DZhzFKMEWRAGL927XpWTmMA+s8DAOBYAoR483l/iHZ/8bXoODl8b9UfyH72SXepzbyRJNvjFGHKMlhvMBze+cH9+4lEuOOlU2X1tVkFTU7Om03q080NDGXV1cflRpHwaaoiiiildB8jhDLZ7HDfz2Yidba6Vn2L4fhzFrNRKy5OZ2QOZ1U5W8VtqlVH/iUHcM933zZYWS7Wtj66zZr65bzGJQt0glHgudi9XVzEl4vKw2kUPhO020oPYI1qYc+2Xc0bRXFwTLY0VXa2VibD/lBaIXm1UChN5JSRUcQQ1Tk/47Cf3x8bY7y17Y17PVYTG1UkLPBFcqik7Zoa9JcLYoHBqHhXNgd6gS1k9EJ1TQ2l9EDy1saErmQ2kGpwGC2MLOtCM8nZEV1K0tKJtEksSm26J/rHg2zzmabKisq939nHzqUH7efzd4f/nPGW6NP8ybNFrOsWQhpoCuuhnJ4hAnPhFam01K4oQMjBg/mzBjVhuvw2O++KKT+BIVxJKzQECBDLF2qu2WTMmCovtDQ1f8iyoGkUADBCCGPsdnvTW2OtFm01VeB06msvdWlpPZU0wJRG85ns84umU3k+VyxeEcWqvYUBAGsUrbvme4be99HFeisP/pwUOIZaOqQX31ISgrKmZhLHtXNXuJq68orrr5/9mBCglCLAGGPyy81votEbcjlKLrC9E8mhH3wdHRdcyyvjidSlxjftPJpD+o25JYvRHGFoZDdks1mBQhxJu9uxvwEiXuHnHbLd1AAAAABJRU5ErkJggg=="""  # noqa: E501
 
 
+def _check_usage_metadata(message: AIMessage) -> None:
+    assert message.usage_metadata is not None
+    assert message.usage_metadata["input_tokens"] > 0
+    assert message.usage_metadata["output_tokens"] > 0
+    assert message.usage_metadata["total_tokens"] > 0
+    assert (
+        message.usage_metadata["input_tokens"] + message.usage_metadata["output_tokens"]
+    ) == message.usage_metadata["total_tokens"]
+
+
 def test_chat_google_genai_stream() -> None:
     """Test streaming tokens from Gemini."""
     llm = ChatGoogleGenerativeAI(model=_MODEL)
 
+    full: Optional[BaseMessageChunk] = None
+    chunks_with_usage_metadata = 0
     for token in llm.stream("This is a test. Say 'foo'"):
+        assert isinstance(token, AIMessageChunk)
         assert isinstance(token.content, str)
+        if token.usage_metadata:
+            chunks_with_usage_metadata += 1
+        full = token if full is None else full + token
+    if chunks_with_usage_metadata != 1:
+        pytest.fail("Expected exactly one chunk with usage metadata")
+    assert isinstance(full, AIMessageChunk)
+    _check_usage_metadata(full)
 
 
 async def test_chat_google_genai_astream() -> None:
     """Test streaming tokens from Gemini."""
     llm = ChatGoogleGenerativeAI(model=_MODEL)
 
+    full: Optional[BaseMessageChunk] = None
+    chunks_with_usage_metadata = 0
     async for token in llm.astream("This is a test. Say 'foo'"):
+        assert isinstance(token, AIMessageChunk)
         assert isinstance(token.content, str)
+        if token.usage_metadata:
+            chunks_with_usage_metadata += 1
+        full = token if full is None else full + token
+    if chunks_with_usage_metadata != 1:
+        pytest.fail("Expected exactly one chunk with usage metadata")
+    assert isinstance(full, AIMessageChunk)
+    _check_usage_metadata(full)
 
 
 async def test_chat_google_genai_abatch() -> None:
@@ -79,7 +110,9 @@ async def test_chat_google_genai_ainvoke() -> None:
     llm = ChatGoogleGenerativeAI(model=_MODEL)
 
     result = await llm.ainvoke("This is a test. Say 'foo'", config={"tags": ["foo"]})
+    assert isinstance(result, AIMessage)
     assert isinstance(result.content, str)
+    _check_usage_metadata(result)
 
 
 def test_chat_google_genai_invoke() -> None:
@@ -91,8 +124,10 @@ def test_chat_google_genai_invoke() -> None:
         config=dict(tags=["foo"]),
         generation_config=dict(top_k=2, top_p=1, temperature=0.7),
     )
+    assert isinstance(result, AIMessage)
     assert isinstance(result.content, str)
     assert not result.content.startswith(" ")
+    _check_usage_metadata(result)
 
 
 def test_chat_google_genai_invoke_multimodal() -> None:
