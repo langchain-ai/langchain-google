@@ -35,6 +35,10 @@ def _check_usage_metadata(message: AIMessage) -> None:
     assert message.usage_metadata["input_tokens"] > 0
     assert message.usage_metadata["output_tokens"] > 0
     assert message.usage_metadata["total_tokens"] > 0
+    assert (
+        message.usage_metadata["input_tokens"]
+        + message.usage_metadata["output_tokens"]
+    ) == message.usage_metadata["total_tokens"]
 
 
 @pytest.mark.release
@@ -59,8 +63,7 @@ def test_vertexai_single_call(model_name: Optional[str]) -> None:
     response = model([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    if model_name == "gemini-1.0-pro-001":
-        _check_usage_metadata(response)
+    _check_usage_metadata(response)
 
 
 @pytest.mark.release
@@ -84,8 +87,7 @@ async def test_vertexai_agenerate(model_name: str) -> None:
     async_generation = cast(ChatGeneration, response.generations[0][0])
     output_message = async_generation.message
     assert isinstance(output_message, AIMessage)
-    if model_name == "gemini-1.0-pro-001":
-        _check_usage_metadata(output_message)
+    _check_usage_metadata(output_message)
 
     sync_response = model.generate([[message]])
     sync_generation = cast(ChatGeneration, sync_response.generations[0][0])
