@@ -304,7 +304,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     arguments_str = function_call.get("arguments")
     assert arguments_str
     arguments = json.loads(arguments_str)
-    assert arguments == {
+    assert arguments == {  #
         "name": "Erick",
         "age": 27.0,
     }
