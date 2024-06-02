@@ -8,15 +8,7 @@ https://developers.generativeai.google/guide
 
 import asyncio
 from functools import partial
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-)
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import google.ai.generativelanguage as genai
 from langchain_core.documents import Document
@@ -26,11 +18,7 @@ from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrou
 from langchain_core.vectorstores import VectorStore
 
 from . import _genai_extension as genaix
-from .genai_aqa import (
-    AqaInput,
-    AqaOutput,
-    GenAIAqa,
-)
+from .genai_aqa import AqaInput, AqaOutput, GenAIAqa
 
 
 class ServerSideEmbedding(Embeddings):

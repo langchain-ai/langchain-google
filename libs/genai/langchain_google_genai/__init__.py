@@ -58,11 +58,7 @@ embeddings.embed_query("hello, world!")
 from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
-from langchain_google_genai.genai_aqa import (
-    AqaInput,
-    AqaOutput,
-    GenAIAqa,
-)
+from langchain_google_genai.genai_aqa import AqaInput, AqaOutput, GenAIAqa
 from langchain_google_genai.google_vector_store import (
     DoesNotExistsException,
     GoogleVectorStore,

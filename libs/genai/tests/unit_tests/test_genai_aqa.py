@@ -3,10 +3,7 @@ from unittest.mock import MagicMock, patch
 import google.ai.generativelanguage as genai
 import pytest
 
-from langchain_google_genai import (
-    AqaInput,
-    GenAIAqa,
-)
+from langchain_google_genai import AqaInput, GenAIAqa
 from langchain_google_genai import _genai_extension as genaix
 
 # Make sure the tests do not hit actual production servers.

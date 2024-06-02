@@ -15,13 +15,8 @@ from typing import (
 )
 
 import google.ai.generativelanguage as glm
-from google.ai.generativelanguage import (
-    FunctionCallingConfig,
-    FunctionDeclaration,
-)
-from google.ai.generativelanguage import (
-    Tool as GoogleTool,
-)
+from google.ai.generativelanguage import FunctionCallingConfig, FunctionDeclaration
+from google.ai.generativelanguage import Tool as GoogleTool
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool

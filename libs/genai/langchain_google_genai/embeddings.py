@@ -11,10 +11,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
 from langchain_core.utils import get_from_dict_or_env
 
-from langchain_google_genai._common import (
-    GoogleGenerativeAIError,
-    get_client_info,
-)
+from langchain_google_genai._common import GoogleGenerativeAIError, get_client_info
 from langchain_google_genai._genai_extension import build_generative_service
 
 _MAX_TOKENS_PER_BATCH = 20000
