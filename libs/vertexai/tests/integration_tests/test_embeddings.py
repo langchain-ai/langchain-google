@@ -98,24 +98,18 @@ def test_langchain_google_vertexai_multimodal_model() -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "number_of_docs",
-    [1, 8],
-)
-@pytest.mark.parametrize(
     "model_name, embeddings_dim",
     [("text-embedding-004", 768), ("text-multilingual-embedding-002", 1408)],
 )
 def test_langchain_google_vertexai_embedding_with_output_dimensionality(
-    number_of_docs: int, model_name: str, embeddings_dim: int
+    model_name: str, embeddings_dim: int
 ) -> None:
-    documents = ["foo bar"] * number_of_docs
     model = VertexAIEmbeddings(model_name)
     output = model.embed(
-        texts=documents,
+        texts=["foo bar"],
         dimensions=embeddings_dim,
     )
-    output = model.embed_documents(documents)
-    assert len(output) == number_of_docs
+    assert len(output) == 1
     for embedding in output:
         assert len(embedding) == embeddings_dim
     assert model.model_name == model.client._model_id
