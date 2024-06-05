@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-community"
-version = "1.0.3"
+version = "1.0.4"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 readme = "README.md"
@@ -12,15 +12,15 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain-core = ">=0.1.33,<0.3"
-langchain-community = ">=0.0.28"
+langchain-core = "^0.2.0"
+langchain-community = "^0.2.1"
 google-api-core = "^2.17.1"
 google-api-python-client = "^2.122.0"
 grpcio = "^1.62.0"
 google-cloud-bigquery = { version = "^3.21.0", optional = true }
 google-cloud-documentai = { version = "^2.26.0", optional = true }
 google-cloud-contentwarehouse = { version = "^0.7.7", optional = true }
-google-cloud-documentai-toolbox = { version  = "^0.13.3a0", optional = true }
+google-cloud-documentai-toolbox = { version = "^0.13.3a0", optional = true }
 gapic-google-longrunning = { version = "^0.11.2", optional = true }
 google-auth-httplib2 = { version = "^0.2.0", optional = true }
 google-auth-oauthlib = { version = "^1.2.0", optional = true }
@@ -35,7 +35,12 @@ beautifulsoup4 = { version = "^4.12.3", optional = true }
 
 [tool.poetry.extras]
 bigquery = ["google-cloud-bigquery"]
-docai = ["google-cloud-documentai", "google-cloud-contentwarehouse", "google-cloud-documentai-toolbox", "gapic-google-longrunning"]
+docai = [
+  "google-cloud-documentai",
+  "google-cloud-contentwarehouse",
+  "google-cloud-documentai-toolbox",
+  "gapic-google-longrunning",
+]
 drive = ["google-auth-httplib2", "google-auth-oauthlib"]
 gcs = ["google-cloud-storage"]
 speech = ["google-cloud-speech"]
@@ -60,9 +65,13 @@ google-cloud-documentai = "^2.24.2"
 google-cloud-documentai-toolbox = "^0.13.3a0"
 google-cloud-bigquery = "^3.19.0"
 google-cloud-discoveryengine = "^0.11.11"
+cloudpickle = "^3.0.0"
 
 [tool.poetry.group.codespell]
 optional = true
+
+[tool.codespell]
+ignore-words-list = "rouge"
 
 [tool.poetry.group.codespell.dependencies]
 codespell = "^2.2.0"
@@ -105,6 +114,7 @@ select = [
 
 [tool.mypy]
 disallow_untyped_defs = "True"
+ignore_missing_imports = "True"
 
 [tool.coverage.run]
 omit = ["tests/*"]

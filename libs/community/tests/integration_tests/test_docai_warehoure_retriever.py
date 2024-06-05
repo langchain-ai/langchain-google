@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from langchain_google_community import DocumentAIWarehouseRetriever
 
 
+@pytest.mark.extended
 @pytest.mark.skip(reason="CI/CD not ready.")
 def test_google_documentai_warehoure_retriever() -> None:
     """In order to run this test, you should provide a project_id and user_ldap.

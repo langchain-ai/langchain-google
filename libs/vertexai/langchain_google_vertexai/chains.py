@@ -6,6 +6,7 @@ from typing import (
     Union,
 )
 
+import google.cloud.aiplatform_v1beta1.types as gapic
 from langchain_core.output_parsers import (
     BaseGenerationOutputParser,
     BaseOutputParser,
@@ -14,9 +15,6 @@ from langchain_core.output_parsers import (
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable
-from vertexai.generative_models._generative_models import (  # type: ignore
-    ToolConfig,
-)
 
 from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
 
@@ -59,7 +57,7 @@ def _create_structured_runnable_extra_step(
             functions=functions,
             tool_config={
                 "function_calling_config": {
-                    "mode": ToolConfig.FunctionCallingConfig.Mode.ANY,
+                    "mode": gapic.FunctionCallingConfig.Mode.ANY,
                     "allowed_function_names": names,
                 }
             },

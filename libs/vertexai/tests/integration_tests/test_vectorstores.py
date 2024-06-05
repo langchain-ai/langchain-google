@@ -81,6 +81,25 @@ def vector_store() -> VectorSearchVectorStore:
 
 
 @pytest.fixture
+def vector_store_private() -> VectorSearchVectorStore:
+    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
+
+    vector_store_private = VectorSearchVectorStore.from_components(
+        project_id=os.environ["PROJECT_ID"],
+        region=os.environ["REGION"],
+        gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
+        index_id=os.environ["INDEX_ID"],
+        endpoint_id=os.environ["ENDPOINT_ID"],
+        private_service_connect_ip_address=os.environ[
+            "PRIVATE_SERVICE_CONNECT_IP_ADDRESS"
+        ],
+        embedding=embeddings,
+    )
+
+    return vector_store_private
+
+
+@pytest.fixture
 def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 

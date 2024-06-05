@@ -34,6 +34,7 @@ from langchain_core.callbacks import (
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
+    LangSmithParams,
     generate_from_stream,
 )
 from langchain_core.messages import (
@@ -48,6 +49,7 @@ from langchain_core.messages import (
     ToolCallChunk,
     ToolMessage,
 )
+from langchain_core.messages.ai import UsageMetadata
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputToolsParser,
@@ -82,10 +84,12 @@ from vertexai.preview.language_models import (
 )
 
 from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
     Candidate,
     Part,
     HarmCategory,
     Content,
+    FileData,
     FunctionCall,
     FunctionResponse,
     GenerateContentRequest,
@@ -93,6 +97,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     SafetySetting,
     Tool as GapicTool,
     ToolConfig as GapicToolConfig,
+    VideoMetadata,
 )
 from langchain_google_vertexai._base import _VertexAICommon, GoogleModelFamily
 from langchain_google_vertexai._image_utils import ImageBytesLoader
@@ -100,16 +105,15 @@ from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
     _format_model_name,
+    is_gemini_model,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
     _ToolConfigDict,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
-    _FunctionDeclarationLike,
-    _VertexToolDict,
-    _format_to_vertex_tool,
-    _format_functions_to_vertex_tool_dict,
+    _ToolsType,
+    _format_to_gapic_tool,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,7 +130,7 @@ _allowed_params = [
     "frequency_penalty",
     "candidate_count",
 ]
-_args_not_pass_to_prediction_service = _allowed_params + ["stream", "streaming"]
+_allowed_params_prediction_service = ["request", "timeout", "metadata"]
 
 
 @dataclass
@@ -194,7 +198,31 @@ def _parse_chat_history_gemini(
             path = part["image_url"]["url"]
             return ImageBytesLoader(project=project).load_gapic_part(path)
 
-        raise ValueError("Only text and image_url types are supported!")
+        # Handle media type like LangChain.js
+        # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
+        if part["type"] == "media":
+            if "mime_type" not in part:
+                raise ValueError(f"Missing mime_type in media part: {part}")
+            mime_type = part["mime_type"]
+            proto_part = Part()
+
+            if "data" in part:
+                proto_part.inline_data = Blob(data=part["data"], mime_type=mime_type)
+            elif "file_uri" in part:
+                proto_part.file_data = FileData(
+                    file_uri=part["file_uri"], mime_type=mime_type
+                )
+            else:
+                raise ValueError(
+                    f"Media part must have either data or file_uri: {part}"
+                )
+
+            if "video_metadata" in part:
+                metadata = VideoMetadata(part["video_metadata"])
+                proto_part.video_metadata = metadata
+            return proto_part
+
+        raise ValueError("Only text, image_url, and media types are supported!")
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
         raw_content = message.content
@@ -490,13 +518,14 @@ def _completion_with_retry(
     def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
         return generation_method(**kwargs)
 
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if kwargs.get("is_gemini")
+        else kwargs
+    )
     return _completion_with_retry_inner(
         generation_method,
-        **{
-            k: v
-            for k, v in kwargs.items()
-            if v not in _args_not_pass_to_prediction_service
-        },
+        **params,
     )
 
 
@@ -518,13 +547,14 @@ async def _acompletion_with_retry(
     ) -> Any:
         return await generation_method(**kwargs)
 
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if kwargs.get("is_gemini")
+        else kwargs
+    )
     return await _completion_with_retry_inner(
         generation_method,
-        **{
-            k: v
-            for k, v in kwargs.items()
-            if v not in _args_not_pass_to_prediction_service
-        },
+        **params,
     )
 
 
@@ -582,10 +612,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 project=values["project"],
             )
 
-        if safety_settings and values["model_family"] not in [
-            GoogleModelFamily.GEMINI,
-            GoogleModelFamily.GEMINI_ADVANCED,
-        ]:
+        if safety_settings and not is_gemini_model(values["model_family"]):
             raise ValueError("Safety settings are only supported for Gemini models")
 
         if tuned_model_name:
@@ -593,10 +620,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         else:
             generative_model_name = values["model_name"]
 
-        if values["model_family"] not in [
-            GoogleModelFamily.GEMINI,
-            GoogleModelFamily.GEMINI_ADVANCED,
-        ]:
+        if not is_gemini_model(values["model_family"]):
             cls._init_vertexai(values)
             if values["model_family"] == GoogleModelFamily.CODEY:
                 model_cls = CodeChatModel
@@ -613,6 +637,23 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _is_gemini_advanced(self) -> bool:
         return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
+
+    def _get_ls_params(
+        self, stop: Optional[List[str]] = None, **kwargs: Any
+    ) -> LangSmithParams:
+        """Get standard params for tracing."""
+        params = self._prepare_params(stop=stop, **kwargs)
+        ls_params = LangSmithParams(
+            ls_provider="google_vertexai",
+            ls_model_name=self.model_name,
+            ls_model_type="chat",
+            ls_temperature=params.get("temperature", self.temperature),
+        )
+        if ls_max_tokens := params.get("max_output_tokens", self.max_output_tokens):
+            ls_params["ls_max_tokens"] = ls_max_tokens
+        if ls_stop := stop or params.get("stop", None) or self.stop:
+            ls_params["ls_stop"] = ls_stop
+        return ls_params
 
     def _generate(
         self,
@@ -648,7 +689,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             messages=messages,
             stop=stop,
             run_manager=run_manager,
-            stream=stream,
+            is_gemini=True,
             **kwargs,
         )
 
@@ -678,6 +719,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#safetysetting
         """
         if safety_settings is None:
+            if self.safety_settings:
+                return self._safety_settings_gemini(self.safety_settings)
             return None
         if isinstance(safety_settings, list):
             return safety_settings
@@ -703,8 +746,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         stream: bool = False,
-        tools: Optional[List[Union[_VertexToolDict, VertexTool]]] = None,
-        functions: Optional[List[_FunctionDeclarationLike]] = None,
+        tools: Optional[_ToolsType] = None,
+        functions: Optional[_ToolsType] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
         **kwargs,
@@ -736,6 +779,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.prediction_client.generate_content,
             max_retries=self.max_retries,
             request=request,
+            metadata=self.default_metadata,
+            **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
 
@@ -752,6 +797,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             request=self._prepare_request_gemini(
                 messages=messages, stop=stop, **kwargs
             ),
+            is_gemini=True,
+            metadata=self.default_metadata,
+            **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
 
@@ -773,13 +821,18 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def _tools_gemini(
         self,
-        tools: Optional[List[Union[_VertexToolDict, VertexTool, GapicTool]]] = None,
-        functions: Optional[List[_FunctionDeclarationLike]] = None,
+        tools: Optional[_ToolsType] = None,
+        functions: Optional[_ToolsType] = None,
     ) -> Optional[Sequence[GapicTool]]:
+        if tools and functions:
+            logger.warning(
+                "Binding tools and functions together is not supported.",
+                "Only tools will be used",
+            )
         if tools:
-            return [_format_to_vertex_tool(tool) for tool in tools]
+            return [_format_to_gapic_tool(tools)]
         if functions:
-            return [_format_to_vertex_tool(functions)]
+            return [_format_to_gapic_tool(functions)]
         return None
 
     def _tool_config_gemini(
@@ -813,13 +866,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 message=question.content,
                 **msg_params,
             )
+        usage_metadata = response.raw_prediction_response.metadata
+        lc_usage = _get_usage_metadata_non_gemini(usage_metadata)
         generations = [
             ChatGeneration(
-                message=AIMessage(content=candidate.text),
+                message=AIMessage(content=candidate.text, usage_metadata=lc_usage),
                 generation_info=get_generation_info(
                     candidate,
                     self._is_gemini_model,
-                    usage_metadata=response.raw_prediction_response.metadata,
+                    usage_metadata=usage_metadata,
                 ),
             )
             for candidate in response.candidates
@@ -885,13 +940,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 max_retries=self.max_retries,
                 **msg_params,
             )
+        usage_metadata = response.raw_prediction_response.metadata
+        lc_usage = _get_usage_metadata_non_gemini(usage_metadata)
         generations = [
             ChatGeneration(
-                message=AIMessage(content=candidate.text),
+                message=AIMessage(content=candidate.text, usage_metadata=lc_usage),
                 generation_info=get_generation_info(
                     candidate,
                     self._is_gemini_model,
-                    usage_metadata=response.raw_prediction_response.metadata,
+                    usage_metadata=usage_metadata,
                 ),
             )
             for candidate in response.candidates
@@ -927,6 +984,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.prediction_client.stream_generate_content,
             max_retries=self.max_retries,
             request=request,
+            is_gemini=True,
+            metadata=self.default_metadata,
             **kwargs,
         )
         for response_chunk in response_iter:
@@ -978,6 +1037,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             self.async_prediction_client.stream_generate_content,
             max_retries=self.max_retries,
             request=request,
+            is_gemini=True,
             **kwargs,
         )
         async for response_chunk in await response_iter:
@@ -1102,7 +1162,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[_FunctionDeclarationLike, VertexTool]],
+        tools: _ToolsType,
         tool_config: Optional[_ToolConfigDict] = None,
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
@@ -1125,25 +1185,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
-        vertexai_tools: List[_VertexToolDict] = []
-        vertexai_functions = []
-        for schema in tools:
-            if isinstance(schema, VertexTool):
-                vertexai_tools.append(
-                    {"function_declarations": schema.to_dict()["function_declarations"]}
-                )
-            elif isinstance(schema, dict) and "function_declarations" in schema:
-                vertexai_tools.append(cast(_VertexToolDict, schema))
-            else:
-                vertexai_functions.append(schema)
-        vertexai_tools.append(_format_functions_to_vertex_tool_dict(vertexai_functions))
+        vertexai_tool = _format_to_gapic_tool(tools)
         if tool_choice:
-            all_names = [
-                f["name"] for vt in vertexai_tools for f in vt["function_declarations"]
-            ]
+            all_names = [f.name for f in vertexai_tool.function_declarations]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         # Bind dicts for easier serialization/deserialization.
-        return self.bind(tools=vertexai_tools, tool_config=tool_config, **kwargs)
+        return self.bind(tools=[vertexai_tool], tool_config=tool_config, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
@@ -1155,48 +1202,23 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         else:
             return self.client.start_chat(message_history=history.history, **kwargs)
 
-    def _gemini_params(
-        self,
-        *,
-        stop: Optional[List[str]] = None,
-        stream: bool = False,
-        tools: Optional[List[Union[_VertexToolDict, VertexTool]]] = None,
-        functions: Optional[List[_FunctionDeclarationLike]] = None,
-        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
-        safety_settings: Optional[SafetySettingsType] = None,
-        **kwargs: Any,
-    ) -> _GeminiGenerateContentKwargs:
-        generation_config = self._prepare_params(stop=stop, stream=stream, **kwargs)
-        if tools:
-            tools = [_format_to_vertex_tool(tool) for tool in tools]
-        elif functions:
-            tools = [_format_to_vertex_tool(functions)]
-        else:
-            pass
-
-        if tool_config and not isinstance(tool_config, ToolConfig):
-            tool_config = _format_tool_config(cast(_ToolConfigDict, tool_config))
-
-        return _GeminiGenerateContentKwargs(
-            generation_config=generation_config,
-            tools=tools,
-            tool_config=tool_config,
-            safety_settings=safety_settings,
-        )
-
     def _gemini_response_to_chat_result(
         self, response: GenerationResponse
     ) -> ChatResult:
         generations = []
         usage = proto.Message.to_dict(response.usage_metadata)
+        lc_usage = _get_usage_metadata_gemini(usage)
         for candidate in response.candidates:
             info = get_generation_info(candidate, is_gemini=True, usage_metadata=usage)
             message = _parse_response_candidate(candidate)
+            if isinstance(message, AIMessage):
+                message.usage_metadata = lc_usage
             generations.append(ChatGeneration(message=message, generation_info=info))
         if not response.candidates:
             message = AIMessage(content="")
             if usage:
                 generation_info = {"usage_metadata": usage}
+                message.usage_metadata = lc_usage
             else:
                 generation_info = {}
             generations.append(
@@ -1209,8 +1231,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> ChatGenerationChunk:
         # return an empty completion message if there's no candidates
         usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
+
+        # Gather langchain (standard) usage metadata
+        lc_usage = _get_usage_metadata_gemini(usage_metadata)
         if not response_chunk.candidates:
             message = AIMessageChunk(content="")
+            if lc_usage:
+                message.usage_metadata = lc_usage
             if usage_metadata:
                 generation_info = {"usage_metadata": usage_metadata}
             else:
@@ -1218,6 +1245,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         else:
             top_candidate = response_chunk.candidates[0]
             message = _parse_response_candidate(top_candidate, streaming=True)
+            if lc_usage:
+                message.usage_metadata = lc_usage
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
@@ -1227,4 +1256,34 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
+        )
+
+
+def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
+    """Get UsageMetadata from raw response metadata."""
+    input_tokens = raw_metadata.get("prompt_token_count", 0)
+    output_tokens = raw_metadata.get("candidates_token_count", 0)
+    total_tokens = raw_metadata.get("total_token_count", 0)
+    if all(count == 0 for count in [input_tokens, output_tokens, total_tokens]):
+        return None
+    else:
+        return UsageMetadata(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+        )
+
+
+def _get_usage_metadata_non_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
+    """Get UsageMetadata from raw response metadata."""
+    token_usage = raw_metadata.get("tokenMetadata", {})
+    input_tokens = token_usage.get("inputTokenCount", {}).get("totalTokens", 0)
+    output_tokens = token_usage.get("outputTokenCount", {}).get("totalTokens", 0)
+    if input_tokens == 0 and output_tokens == 0:
+        return None
+    else:
+        return UsageMetadata(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
         )

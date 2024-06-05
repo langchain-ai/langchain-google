@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple
 
 import vertexai  # type: ignore[import-untyped]
 from google.api_core.client_options import ClientOptions
@@ -22,6 +22,9 @@ from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from vertexai.generative_models._generative_models import (  # type: ignore
+    SafetySettingsType,
+)
 from vertexai.language_models import (  # type: ignore[import-untyped]
     TextGenerationModel,
 )
@@ -32,7 +35,6 @@ from vertexai.preview.language_models import (
     CodeChatModel as PreviewCodeChatModel,
 )
 
-from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
     get_client_info,
@@ -52,7 +54,7 @@ class _VertexAIBase(BaseModel):
     async_client: Any = None  #: :meta private:
     project: Optional[str] = None
     "The default GCP project to use when making Vertex API calls."
-    location: str = _DEFAULT_LOCATION
+    location: str = Field(default=_DEFAULT_LOCATION)
     "The default location to use when making API calls."
     request_parallelism: int = 5
     "The amount of parallelism allowed for requests issued to VertexAI models. "
@@ -64,14 +66,28 @@ class _VertexAIBase(BaseModel):
     "Optional list of stop words to use when generating."
     model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
-    model_family: Optional[GoogleModelFamily] = None
-    full_model_name: Optional[str] = None
-    """The full name of the model's endpoint."""
+    model_family: Optional[GoogleModelFamily] = None  #: :meta private:
+    full_model_name: Optional[str] = None  #: :meta private:
+    "The full name of the model's endpoint."
+    client_options: Optional["ClientOptions"] = Field(
+        default=None, exclude=True
+    )  #: :meta private:
+    api_endpoint: Optional[str] = None
+    "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
+    default_metadata: Sequence[Tuple[str, str]] = Field(
+        default_factory=list
+    )  #: :meta private:
+    additional_headers: Optional[Dict[str, str]] = Field(default=None)
+    "A key-value dictionary representing additional headers for the model call"
+    client_cert_source: Optional[Callable[[], Tuple[bytes, bytes]]] = None
+    "A callback which returns client certificate bytes and private key bytes both "
+    "in PEM format."
 
     class Config:
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
+        arbitrary_types_allowed = True
 
     @root_validator(pre=True)
     def validate_params_base(cls, values: dict) -> dict:
@@ -79,17 +95,25 @@ class _VertexAIBase(BaseModel):
             values["model_name"] = values.pop("model")
         if values.get("project") is None:
             values["project"] = initializer.global_config.project
+        if values.get("api_endpoint"):
+            api_endpoint = values["api-endpoint"]
+        else:
+            location = values.get("location", cls.__fields__["location"].default)
+            api_endpoint = f"{location}-{constants.PREDICTION_API_BASE_PATH}"
+        client_options = ClientOptions(api_endpoint=api_endpoint)
+        if values.get("client_cert_source"):
+            client_options.client_cert_source = values["client_cert_source"]
+        values["client_options"] = client_options
+        additional_headers = values.get("additional_headers", {})
+        values["default_metadata"] = tuple(additional_headers.items())
         return values
 
     @property
     def prediction_client(self) -> v1beta1PredictionServiceClient:
         """Returns PredictionServiceClient."""
         if self.client is None:
-            client_options = {
-                "api_endpoint": f"{self.location}-{constants.PREDICTION_API_BASE_PATH}"
-            }
             self.client = v1beta1PredictionServiceClient(
-                client_options=client_options,
+                client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
             )
         return self.client
@@ -98,11 +122,8 @@ class _VertexAIBase(BaseModel):
     def async_prediction_client(self) -> v1beta1PredictionServiceAsyncClient:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
-            client_options = {
-                "api_endpoint": f"{self.location}-{constants.PREDICTION_API_BASE_PATH}"
-            }
             self.async_client = v1beta1PredictionServiceAsyncClient(
-                client_options=ClientOptions(**client_options),
+                client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
             )
         return self.async_client
@@ -136,7 +157,7 @@ class _VertexAICommon(_VertexAIBase):
     """How many completions to generate for each prompt."""
     streaming: bool = False
     """Whether to stream the results or not."""
-    safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
+    safety_settings: Optional["SafetySettingsType"] = None
     """The default safety settings to use for all generations. 
     
         For example: 
@@ -154,8 +175,6 @@ class _VertexAICommon(_VertexAIBase):
 
     api_transport: Optional[str] = None
     """The desired API transport method, can be either 'grpc' or 'rest'"""
-    api_endpoint: Optional[str] = None
-    """The desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"""
     tuned_model_name: Optional[str] = None
     """The name of a tuned model. If tuned_model_name is passed
     model_name will be used to determine the model family
