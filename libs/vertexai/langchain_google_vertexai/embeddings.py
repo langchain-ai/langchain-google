@@ -51,6 +51,48 @@ class GoogleEmbeddingModelType(str, Enum):
         return None
 
 
+class GoogleEmbeddingModelVersion(str, Enum):
+    EMBEDDINGS_JUNE_2023 = auto()
+    EMBEDDINGS_NOV_2023 = auto()
+    EMBEDDINGS_DEC_2023 = auto()
+    EMBEDDINGS_MAY_2024 = auto()
+
+    @classmethod
+    def _missing_(cls, value: Any) -> "GoogleEmbeddingModelVersion":
+        if "textembedding-gecko@001" in value.lower():
+            return GoogleEmbeddingModelVersion.EMBEDDINGS_JUNE_2023
+        if (
+            "textembedding-gecko@002" in value.lower()
+            or "textembedding-gecko-multilingual@001" in value.lower()
+        ):
+            return GoogleEmbeddingModelVersion.EMBEDDINGS_NOV_2023
+        if "textembedding-gecko@003" in value.lower():
+            return GoogleEmbeddingModelVersion.EMBEDDINGS_DEC_2023
+        if (
+            "text-embedding-004" in value.lower()
+            or "text-multilingual-embedding-002" in value.lower()
+            or "text-embedding-preview-0409" in value.lower()
+            or "text-multilingual-embedding-preview-0409" in value.lower()
+        ):
+            return GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024
+
+        return GoogleEmbeddingModelVersion.EMBEDDINGS_JUNE_2023
+
+    @property
+    def task_type_supported(self) -> bool:
+        """
+        Checks if the model generation supports task type.
+        """
+        return self != GoogleEmbeddingModelVersion.EMBEDDINGS_JUNE_2023
+
+    @property
+    def output_dimensionality_supported(self) -> bool:
+        """
+        Checks if the model generation supports output dimensionality.
+        """
+        return self == GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024
+
+
 class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     """Google Cloud VertexAI embedding models."""
 
@@ -106,12 +148,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["task_executor"] = ThreadPoolExecutor(
             max_workers=request_parallelism
         )
-        self.instance[
-            "embeddings_task_type_supported"
-        ] = not self.client._endpoint_name.endswith("/textembedding-gecko@001")
-        self.instance["dimensionality_supported"] = self.client._endpoint_name.endswith(
-            "preview-0409"
-        )
+        self.instance["model_version"] = GoogleEmbeddingModelVersion(model_name)
 
         retry_errors: List[Type[BaseException]] = [
             ResourceExhausted,
@@ -201,7 +238,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             if self.model_type == GoogleEmbeddingModelType.MULTIMODAL:
                 return self._get_multimodal_embeddings_with_retry(texts, dimensions)
             return self._get_text_embeddings_with_retry(
-                texts, embeddings_type=embeddings_type, dimensions=dimensions
+                texts, embeddings_type=embeddings_type, output_dimensionality=dimensions
             )
 
     def _get_multimodal_embeddings_with_retry(
@@ -225,11 +262,11 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self,
         texts: List[str],
         embeddings_type: Optional[str] = None,
-        dimensions: Optional[int] = None,
+        output_dimensionality: Optional[int] = None,
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
 
-        if embeddings_type and self.instance["embeddings_task_type_supported"]:
+        if embeddings_type and self.instance["model_version"].task_type_supported:
             requests = [
                 TextEmbeddingInput(text=t, task_type=embeddings_type) for t in texts
             ]
@@ -237,8 +274,11 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             requests = texts
 
         kwargs = {}
-        if dimensions and self.instance["dimensionality_supported"]:
-            kwargs["output_dimensionality"] = dimensions
+        if (
+            output_dimensionality
+            and self.instance["model_version"].output_dimensionality_supported
+        ):
+            kwargs["output_dimensionality"] = output_dimensionality
 
         embeddings = self.instance["get_embeddings_with_retry"](requests, **kwargs)
         return [embedding.values for embedding in embeddings]
