@@ -99,7 +99,7 @@ def test_langchain_google_vertexai_multimodal_model() -> None:
 @pytest.mark.release
 @pytest.mark.parametrize(
     "model_name, embeddings_dim",
-    [("text-embedding-004", 768), ("text-multilingual-embedding-002", 1408)],
+    [("text-embedding-004", 768), ("text-multilingual-embedding-002", 768)],
 )
 def test_langchain_google_vertexai_embedding_with_output_dimensionality(
     model_name: str, embeddings_dim: int
