@@ -148,7 +148,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["task_executor"] = ThreadPoolExecutor(
             max_workers=request_parallelism
         )
-        self.instance["model_version"] = GoogleEmbeddingModelVersion(model_name)
 
         retry_errors: List[Type[BaseException]] = [
             ResourceExhausted,
@@ -166,6 +165,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     @property
     def model_type(self) -> str:
         return GoogleEmbeddingModelType(self.model_name)
+
+    @property
+    def model_version(self) -> GoogleEmbeddingModelVersion:
+        return GoogleEmbeddingModelVersion(self.model_name)
 
     @staticmethod
     def _split_by_punctuation(text: str) -> List[str]:
@@ -266,7 +269,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
 
-        if embeddings_type and self.instance["model_version"].task_type_supported:
+        if embeddings_type and self.model_version.task_type_supported:
             requests = [
                 TextEmbeddingInput(text=t, task_type=embeddings_type) for t in texts
             ]
@@ -274,10 +277,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             requests = texts
 
         kwargs = {}
-        if (
-            output_dimensionality
-            and self.instance["model_version"].output_dimensionality_supported
-        ):
+        if output_dimensionality and self.model_version.output_dimensionality_supported:
             kwargs["output_dimensionality"] = output_dimensionality
 
         embeddings = self.instance["get_embeddings_with_retry"](requests, **kwargs)
