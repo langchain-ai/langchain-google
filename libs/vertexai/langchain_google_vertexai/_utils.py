@@ -138,6 +138,8 @@ class GoogleModelFamily(str, Enum):
             return GoogleModelFamily.PALM
         if "medlm-large" in value.lower():
             return GoogleModelFamily.PALM
+        elif "medlm" in value.lower():
+            return GoogleModelFamily.PALM
         return GoogleModelFamily.GEMINI
 
 
