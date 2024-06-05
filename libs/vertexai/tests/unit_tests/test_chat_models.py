@@ -898,3 +898,88 @@ def test_safety_settings_gemini_init() -> None:
     )
     safety_settings = model._safety_settings_gemini(None)
     assert safety_settings == expected_safety_setting
+
+
+def test_multiple_fc() -> None:
+    prompt = (
+        "I'm trying to decide whether to go to London or Zurich this weekend. How "
+        "hot are those cities? How about Singapore? Or maybe Tokyo. I want to go "
+        "somewhere not that cold but not too hot either. Suggest me."
+    )
+    raw_history = [
+        HumanMessage(content=prompt),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "get_weather", "args": {"location": "Munich"}, "id": "1"},
+                {"name": "get_weather", "args": {"location": "London"}, "id": "2"},
+                {"name": "get_weather", "args": {"location": "Berlin"}, "id": "3"},
+            ],
+        ),
+        ToolMessage(
+            name="get_weather",
+            tool_call_id="1",
+            content='{"condition": "sunny", "temp_c": -23.9}',
+        ),
+        ToolMessage(
+            name="get_weather",
+            tool_call_id="2",
+            content='{"condition": "sunny", "temp_c": -30.0}',
+        ),
+        ToolMessage(
+            name="get_weather",
+            tool_call_id="3",
+            content='{"condition": "rainy", "temp_c": 25.2}',
+        ),
+    ]
+    _, history = _parse_chat_history_gemini(raw_history)
+    expected = [
+        Content(
+            parts=[Part(text=prompt)],
+            role="user",
+        ),
+        Content(
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="get_weather", args={"location": "Munich"}
+                    )
+                ),
+                Part(
+                    function_call=FunctionCall(
+                        name="get_weather", args={"location": "London"}
+                    )
+                ),
+                Part(
+                    function_call=FunctionCall(
+                        name="get_weather", args={"location": "Berlin"}
+                    )
+                ),
+            ],
+            role="model",
+        ),
+        Content(
+            parts=[
+                Part(
+                    function_response=FunctionResponse(
+                        name="get_weather",
+                        response={"condition": "sunny", "temp_c": -23.9},
+                    )
+                ),
+                Part(
+                    function_response=FunctionResponse(
+                        name="get_weather",
+                        response={"condition": "sunny", "temp_c": -30.0},
+                    )
+                ),
+                Part(
+                    function_response=FunctionResponse(
+                        name="get_weather",
+                        response={"condition": "rainy", "temp_c": 25.2},
+                    )
+                ),
+            ],
+            role="function",
+        ),
+    ]
+    assert history == expected
