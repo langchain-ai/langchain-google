@@ -30,6 +30,8 @@ EXPECTED_ALL = [
     "VertexAIImageGeneratorChat",
     "VertexAIModelGarden",
     "VertexAIVisualQnAChat",
+    "VertexPairWiseStringEvaluator",
+    "VertexStringEvaluator",
 ]
 
 

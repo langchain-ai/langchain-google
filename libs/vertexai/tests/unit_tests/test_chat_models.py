@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
@@ -64,6 +64,16 @@ def test_init() -> None:
         assert llm.max_output_tokens == 10
         assert llm.stop == ["bar"]
 
+        ls_params = llm._get_ls_params()
+        assert ls_params == {
+            "ls_provider": "google_vertexai",
+            "ls_model_name": "gemini-pro",
+            "ls_model_type": "chat",
+            "ls_temperature": None,
+            "ls_max_tokens": 10,
+            "ls_stop": ["bar"],
+        }
+
 
 @pytest.mark.parametrize(
     "model,location",
@@ -87,11 +97,10 @@ def test_init_client(model: str, location: str) -> None:
         mock_prediction_service.return_value.generate_content.return_value = response
 
         llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
         client_info = mock_prediction_service.call_args.kwargs["client_info"]
-        mock_prediction_service.assert_called_once_with(
-            client_options={"api_endpoint": f"{location}-aiplatform.googleapis.com"},
-            client_info=ANY,
-        )
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        assert client_options.api_endpoint == f"{location}-aiplatform.googleapis.com"
         assert "langchain-google-vertexai" in client_info.user_agent
         assert "ChatVertexAI" in client_info.user_agent
         assert "langchain-google-vertexai" in client_info.client_library_version
@@ -871,3 +880,21 @@ def test_safety_settings_gemini() -> None:
         {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}
     )
     assert safety_settings == [expected_safety_setting]
+
+
+def test_safety_settings_gemini_init() -> None:
+    expected_safety_setting = [
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+        )
+    ]
+    model = ChatVertexAI(
+        model_name="gemini-pro",
+        temperature=0.2,
+        top_k=3,
+        project="test-project",
+        safety_settings=expected_safety_setting,
+    )
+    safety_settings = model._safety_settings_gemini(None)
+    assert safety_settings == expected_safety_setting
