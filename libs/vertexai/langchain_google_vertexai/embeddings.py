@@ -253,7 +253,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 self.instance["task_executor"].submit(
                     self.instance["get_embeddings_with_retry"],
                     contextual_text=text,
-                    dimensions=dimensions,
+                    dimension=dimensions,
                 )
             )
         if len(tasks) > 0:
