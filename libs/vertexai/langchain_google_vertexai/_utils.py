@@ -135,9 +135,7 @@ class GoogleModelFamily(str, Enum):
         if "code" in value.lower():
             return GoogleModelFamily.CODEY
         elif "bison" in value.lower():
-            return GoogleModelFamily.PALM
-        if "medlm-large" in value.lower():
-            return GoogleModelFamily.PALM
+            return GoogleModelFamily.PALM        
         elif "medlm" in value.lower():
             return GoogleModelFamily.PALM
         return GoogleModelFamily.GEMINI
