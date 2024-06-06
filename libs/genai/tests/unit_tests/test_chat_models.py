@@ -1,6 +1,8 @@
 """Test chat model integration."""
 
+import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
 
@@ -32,7 +34,7 @@ from langchain_google_genai.chat_models import (
 
 def test_integration_initialization() -> None:
     """Test chat model initialization."""
-    ChatGoogleGenerativeAI(
+    llm = ChatGoogleGenerativeAI(
         model="gemini-nano",
         google_api_key="...",
         top_k=2,
@@ -40,6 +42,28 @@ def test_integration_initialization() -> None:
         temperature=0.7,
         n=2,
     )
+    ls_params = llm._get_ls_params()
+    assert ls_params == {
+        "ls_provider": "google_genai",
+        "ls_model_name": "models/gemini-nano",
+        "ls_model_type": "chat",
+        "ls_temperature": 0.7,
+    }
+
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-nano",
+        google_api_key="...",
+        max_output_tokens=10,
+    )
+    ls_params = llm._get_ls_params()
+    assert ls_params == {
+        "ls_provider": "google_genai",
+        "ls_model_name": "models/gemini-nano",
+        "ls_model_type": "chat",
+        "ls_temperature": 0.7,
+        "ls_max_tokens": 10,
+    }
+
     ChatGoogleGenerativeAI(
         model="gemini-nano",
         google_api_key="...",
@@ -48,6 +72,31 @@ def test_integration_initialization() -> None:
         temperature=0.7,
         candidate_count=2,
     )
+
+
+def test_initialization_inside_threadpool() -> None:
+    # new threads don't have a running event loop,
+    # thread pool executor easiest way to create one
+    with ThreadPoolExecutor() as executor:
+        executor.submit(
+            ChatGoogleGenerativeAI, model="gemini-nano", google_api_key="secret-api-key"
+        ).result()
+
+
+def test_initalization_without_async() -> None:
+    chat = ChatGoogleGenerativeAI(model="gemini-nano", google_api_key="secret-api-key")
+    assert chat.async_client is None
+
+
+def test_initialization_with_async() -> None:
+    async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
+        return ChatGoogleGenerativeAI(
+            model="gemini-nano", google_api_key="secret-api-key"
+        )
+
+    loop = asyncio.get_event_loop()
+    chat = loop.run_until_complete(initialize_chat_with_async_client())
+    assert chat.async_client is not None
 
 
 def test_api_key_is_string() -> None:
