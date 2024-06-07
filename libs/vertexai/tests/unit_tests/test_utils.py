@@ -36,8 +36,23 @@ from langchain_google_vertexai._utils import GoogleModelFamily
                 "gemini-1.5-flash-preview-0514",
                 "gemini-1.5-pro-preview-0514",
                 "gemini-1.5-pro-preview-0409",
+                "gemini-1.5-flash-001",
+                "gemini-1.5-pro-001",
             ],
             GoogleModelFamily.GEMINI_ADVANCED,
+        ),
+        (
+            [
+                "medlm-medium",
+                "medlm-large",                
+            ],
+            GoogleModelFamily.PALM,
+        ),
+        (
+            [
+                "medlm-medium@latest",
+            ],
+            GoogleModelFamily.GEMINI,
         ),
     ],
 )

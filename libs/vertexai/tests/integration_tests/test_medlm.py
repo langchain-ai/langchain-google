@@ -17,6 +17,11 @@ def test_invoke() -> None:
     result = model.invoke("How you can help me?")
     assert isinstance(result, str)
 
+@pytest.mark.extended
+def test_invoke_medlm_medium() -> None:
+    model = VertexAI(model_name="medlm-medium")
+    result = model.invoke("How you can help me?")
+    assert isinstance(result, str)
 
 @pytest.mark.extended
 def test_invoke_chat() -> None:

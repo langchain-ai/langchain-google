@@ -138,6 +138,8 @@ class GoogleModelFamily(str, Enum):
             return GoogleModelFamily.GEMINI
         if "code" in model_name:
             return GoogleModelFamily.CODEY
+        if "medlm-medium@latest" in model_name:
+            return GoogleModelFamily.GEMINI
         if "bison" in model_name or "medlm" in model_name:
             return GoogleModelFamily.PALM
         return GoogleModelFamily.GEMINI
