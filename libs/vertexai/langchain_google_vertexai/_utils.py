@@ -135,14 +135,13 @@ class GoogleModelFamily(str, Enum):
         }
         if model_name in gemini_advanced_models:
             return GoogleModelFamily.GEMINI_ADVANCED
-        elif "gemini" in model_name:
+        if "gemini" in model_name:
             return GoogleModelFamily.GEMINI
-        elif "code" in model_name:
+        if "code" in model_name:
             return GoogleModelFamily.CODEY
-        elif "bison" in model_name or "medlm" in model_name:
+        if "bison" in model_name or "medlm" in model_name:
             return GoogleModelFamily.PALM
-        else:
-            return GoogleModelFamily.GEMINI
+        return GoogleModelFamily.GEMINI
 
 def is_gemini_model(model_family: GoogleModelFamily) -> bool:
     """Returns True if the model name is a Gemini model."""
