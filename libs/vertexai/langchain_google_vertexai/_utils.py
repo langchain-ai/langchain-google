@@ -131,7 +131,7 @@ class GoogleModelFamily(str, Enum):
             "gemini-1.5-pro-preview-0514",
             "gemini-1.5-pro-preview-0409",
             "gemini-1.5-flash-001",
-            "gemini-1.5-pro-001"
+            "gemini-1.5-pro-001",
         }
         if model_name in gemini_advanced_models:
             return GoogleModelFamily.GEMINI_ADVANCED
