@@ -8,7 +8,7 @@ from langchain_google_vertexai import (
 )
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_evaluate() -> None:
     evaluator = VertexStringEvaluator(
         metric="bleu", project_id=os.environ["PROJECT_ID"]
@@ -28,7 +28,7 @@ def test_evaluate() -> None:
     assert result[1]["score"] < 1.0
 
 
-@pytest.mark.release
+@pytest.mark.extended
 def test_evaluate_strings() -> None:
     evaluator = VertexStringEvaluator(
         metric="safety", project_id=os.environ["PROJECT_ID"]
@@ -39,7 +39,7 @@ def test_evaluate_strings() -> None:
     assert "explanation" in result
 
 
-@pytest.mark.release
+@pytest.mark.extended
 async def test_aevaluate_strings() -> None:
     evaluator = VertexStringEvaluator(
         metric="question_answering_quality", project_id=os.environ["PROJECT_ID"]
@@ -54,7 +54,7 @@ async def test_aevaluate_strings() -> None:
     assert "explanation" in result
 
 
-@pytest.mark.release
+@pytest.mark.extended
 async def test_evaluate_pairwise() -> None:
     evaluator = VertexPairWiseStringEvaluator(
         metric="pairwise_question_answering_quality",
