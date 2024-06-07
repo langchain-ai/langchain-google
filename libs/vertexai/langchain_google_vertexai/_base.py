@@ -74,6 +74,8 @@ class _VertexAIBase(BaseModel):
     )  #: :meta private:
     api_endpoint: Optional[str] = None
     "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
+    api_transport: Optional[str] = None
+    """The desired API transport method, can be either 'grpc' or 'rest'"""
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
     )  #: :meta private:
@@ -115,6 +117,7 @@ class _VertexAIBase(BaseModel):
             self.client = v1beta1PredictionServiceClient(
                 client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
+                transport=self.api_transport
             )
         return self.client
 
@@ -122,10 +125,19 @@ class _VertexAIBase(BaseModel):
     def async_prediction_client(self) -> v1beta1PredictionServiceAsyncClient:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
-            self.async_client = v1beta1PredictionServiceAsyncClient(
+
+            async_client_kwargs: dict[str, Any] = dict(
                 client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
             )
+
+            if self.api_transport is not None:
+                async_client_kwargs["transport"] = self.api_transport
+        
+            self.async_client = v1beta1PredictionServiceAsyncClient(
+                **async_client_kwargs
+            )
+
         return self.async_client
 
     @property
@@ -173,8 +185,6 @@ class _VertexAICommon(_VertexAIBase):
             }
             """  # noqa: E501
 
-    api_transport: Optional[str] = None
-    """The desired API transport method, can be either 'grpc' or 'rest'"""
     tuned_model_name: Optional[str] = None
     """The name of a tuned model. If tuned_model_name is passed
     model_name will be used to determine the model family
