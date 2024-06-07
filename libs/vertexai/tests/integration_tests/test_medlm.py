@@ -32,7 +32,7 @@ def test_invoke_medlm_large_error() -> None:
 
 @pytest.mark.extended
 def test_invoke_medlm_medium() -> None:
-    model = ChatVertexAI(model_name="medlm-medium")
+    model = VertexAI(model_name="medlm-medium")
     result = model.invoke("How you can help me?")
     assert isinstance(result, str)
 
