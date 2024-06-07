@@ -116,6 +116,7 @@ def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
 
 
 class GoogleModelFamily(str, Enum):
+    """Determine the GoogleModelFamily for a given model."""
     GEMINI = auto()
     GEMINI_ADVANCED = auto()
     CODEY = auto()
@@ -132,7 +133,6 @@ class GoogleModelFamily(str, Enum):
             "gemini-1.5-flash-001",
             "gemini-1.5-pro-001"
         }
-        
         if model_name in gemini_advanced_models:
             return GoogleModelFamily.GEMINI_ADVANCED
         elif "gemini" in model_name:
