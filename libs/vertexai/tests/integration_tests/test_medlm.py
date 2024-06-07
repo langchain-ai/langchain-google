@@ -21,10 +21,24 @@ def test_invoke_medlm_large() -> None:
 
 
 @pytest.mark.extended
+def test_invoke_medlm_large_error() -> None:
+    with pytest.raises(TypeError):
+        model = ChatVertexAI(model_name="medlm-large")
+        model.invoke("How you can help me?")
+
+
+@pytest.mark.extended
 def test_invoke_medlm_medium() -> None:
-    model = VertexAI(model_name="medlm-medium")
+    model = ChatVertexAI(model_name="medlm-medium")
     result = model.invoke("How you can help me?")
     assert isinstance(result, str)
+
+
+@pytest.mark.extended
+def test_invoke_medlm_medium_error() -> None:
+    with pytest.raises(TypeError):
+        model = ChatVertexAI(model_name="medlm-medium")
+        model.invoke("How you can help me?")
 
 
 @pytest.mark.extended
