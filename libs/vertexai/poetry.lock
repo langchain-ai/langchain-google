@@ -1289,7 +1289,7 @@ develop = false
 
 [package.dependencies]
 jsonpatch = "^1.33"
-langsmith = "^0.1.65"
+langsmith = "^0.1.66"
 packaging = "^23.2"
 pydantic = ">=1,<3"
 PyYAML = ">=5.3"
@@ -1329,13 +1329,13 @@ subdirectory = "libs/text-splitters"
 
 [[package]]
 name = "langsmith"
-version = "0.1.65"
+version = "0.1.66"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langsmith-0.1.65-py3-none-any.whl", hash = "sha256:ab4487029240e69cca30da1065f1e9138e5a7ca2bbe8c697f0bd7d5839f71cf7"},
-    {file = "langsmith-0.1.65.tar.gz", hash = "sha256:d3c2eb2391478bd79989f02652cf66e29a7959d677614b6993a47cef43f7f43b"},
+    {file = "langsmith-0.1.66-py3-none-any.whl", hash = "sha256:978decc04839ae70ed24dba2b10904be1b9d170906ddc4be284418876f8cfc5c"},
+    {file = "langsmith-0.1.66.tar.gz", hash = "sha256:7cd7d317f5b35929e2ce6f1ec7f3c9bd8028634c125793cd0c9a155f4f69bfa4"},
 ]
 
 [package.dependencies]
