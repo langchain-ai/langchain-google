@@ -1,6 +1,9 @@
 """Test MedlLM models.
 - medlm-large & medlm-medium are PALM family, should return str.
-- medlm-medium@latest is part of GEMINI family, should return str for VertexAI/Text Completion, AIMessage for ChatVertexAI/Chat Completion"""
+- medlm-medium@latest is part of GEMINI family, 
+    - should return str for VertexAI/Text Completion, 
+    - should returnAIMessage for ChatVertexAI/Chat Completion"""
+
 
 import pytest
 from langchain_core.messages import (
