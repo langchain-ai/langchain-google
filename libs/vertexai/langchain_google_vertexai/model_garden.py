@@ -39,6 +39,10 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
         allow_population_by_field_name = True
 
+    # Needed so that mypy doesn't flag missing aliased init args.
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
     def _generate(
         self,
         prompts: List[str],
@@ -106,6 +110,10 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
+
+    # Needed so that mypy doesn't flag missing aliased init args.
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:

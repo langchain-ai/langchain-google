@@ -753,7 +753,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         See ``ChatVertexAI.bind_tools()`` method for more.
 
     Structured output:
-
         .. code-block:: python
 
             from typing import Optional
@@ -801,6 +800,58 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting a clear and mild day. The lush green grass indicates recent rainfall or sufficient moisture. The absence of strong shadows suggests that the sun is high in the sky, possibly late afternoon. Overall, the image conveys a sense of tranquility and warmth, characteristic of a beautiful summer day. \n'
 
+    Video input:
+        **NOTE**: Currently only supported for ``gemini-...-vision`` models.
+
+        .. code-block:: python
+
+            llm = ChatVertexAI(model="gemini-1.0-pro-vision")
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "What's in the video?",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/video/animals.mp4",
+                                "mime_type": "video/mp4",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+             'The video is about a new feature in Google Photos called "Zoomable Selfies". The feature allows users to take selfies with animals at the zoo. The video shows several examples of people taking selfies with animals, including a tiger, an elephant, and a sea otter. The video also shows how the feature works. Users simply need to open the Google Photos app and select the "Zoomable Selfies" option. Then, they need to choose an animal from the list of available animals. The app will then guide the user through the process of taking the selfie.'
+
+    Audio input:
+        .. code-block:: python
+
+            from langchain_core.messages import HumanMessage
+
+            llm = ChatVertexAI(model="gemini-1.5-flash-001")
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "What's this audio about?",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/generative-ai/audio/pixel.mp3",
+                                "mime_type": "audio/mpeg",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+            "This audio is an interview with two product managers from Google who work on Pixel feature drops. They discuss how feature drops are important for showcasing how Google devices are constantly improving and getting better. They also discuss some of the highlights of the January feature drop and the new features coming in the March drop for Pixel phones and Pixel watches. The interview concludes with discussion of how user feedback is extremely important to them in deciding which features to include in the feature drops. "
+
     Token usage:
         .. code-block:: python
 
@@ -835,6 +886,43 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
              'usage_metadata': {'prompt_token_count': 17,
               'candidates_token_count': 7,
               'total_token_count': 24}}
+
+    Safety settings
+        .. code-block:: python
+
+            from langchain_google_vertexai import HarmBlockThreshold, HarmCategory
+
+            llm = ChatVertexAI(
+                model="gemini-1.5-pro",
+                safety_settings={
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                },
+            )
+
+            llm.invoke(messages).response_metadata
+
+        .. code-block:: python
+
+            {'is_blocked': False,
+             'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_HARASSMENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False}],
+             'usage_metadata': {'prompt_token_count': 17,
+              'candidates_token_count': 7,
+              'total_token_count': 24}}
+
     """  # noqa: E501
 
     model_name: str = Field(default="chat-bison", alias="model")
