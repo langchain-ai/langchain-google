@@ -600,7 +600,242 @@ async def _acompletion_with_retry(
 
 
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
-    """`Vertex AI` Chat large language models API."""
+    """Google Cloud Vertex AI chat model integration.
+
+    Setup:
+        You must have the langchain-google-vertexai Python package installed
+        .. code-block:: bash
+
+            pip install -U langchain-google-vertexai
+
+        And either:
+            - Have credentials configured for your environment (gcloud, workload identity, etc...)
+            - Store the path to a service account JSON file as the GOOGLE_APPLICATION_CREDENTIALS environment variable
+
+        This codebase uses the google.auth library which first looks for the application
+        credentials variable mentioned above, and then looks for system-level auth.
+
+        For more information, see:
+        https://cloud.google.com/docs/authentication/application-default-credentials#GAC
+        and https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth.
+
+    Key init args — completion params:
+        model: str
+            Name of ChatVertexAI model to use. e.g. "gemini-1.5-flash-001",
+            "gemini-1.5-pro-001", etc.
+        temperature: Optional[float]
+            Sampling temperature.
+        max_tokens: Optional[int]
+            Max number of tokens to generate.
+        stop: Optional[List[str]]
+            Default stop sequences.
+        safety_settings: Optional[Dict[vertexai.generative_models.HarmCategory, vertexai.generative_models.HarmBlockThreshold]]
+            The default safety settings to use for all generations.
+
+    Key init args — client params:
+        max_retries: int
+            Max number of retries.
+        credentials: Optional[google.auth.credentials.Credentials]
+            The default custom credentials to use when making API calls. If not
+            provided, credentials will be ascertained from the environment.
+        project: Optional[str]
+            The default GCP project to use when making Vertex API calls.
+        location: str = "us-central1"
+            The default location to use when making API calls.
+        request_parallelism: int = 5
+            The amount of parallelism allowed for requests issued to VertexAI models.
+            Default is 5.
+        base_url: Optional[str]
+            Base URL for API requests.
+
+    See full list of supported init args and their descriptions in the params section.
+
+    Instantiate:
+        .. code-block:: python
+
+            from langchain_google_vertexai import ChatVertexAI
+
+            llm = ChatVertexAI(
+                model="gemini-1.5-flash-001",
+                temperature=0,
+                max_tokens=None,
+                max_retries=6,
+                stop=None,
+                # other params...
+            )
+
+    Invoke:
+        .. code-block:: python
+
+            messages = [
+                ("system", "You are a helpful translator. Translate the user sentence to French."),
+                ("human", "I love programming."),
+            ]
+            llm.invoke(messages)
+
+        .. code-block:: python
+
+            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+
+    Stream:
+        .. code-block:: python
+
+            for chunk in llm.stream(messages):
+                print(chunk)
+
+        .. code-block:: python
+
+            AIMessageChunk(content='J', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content="'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content='', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+
+        .. code-block:: python
+
+            stream = llm.stream(messages)
+            full = next(stream)
+            for chunk in stream:
+                full += chunk
+            full
+
+        .. code-block:: python
+
+            AIMessageChunk(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
+
+    Async:
+        .. code-block:: python
+
+            await llm.ainvoke(messages)
+
+            # stream:
+            # async for chunk in (await llm.astream(messages))
+
+            # batch:
+            # await llm.abatch([messages])
+
+        .. code-block:: python
+
+            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+
+    Tool calling:
+        .. code-block:: python
+
+            from langchain_core.pydantic_v1 import BaseModel, Field
+
+            class GetWeather(BaseModel):
+                '''Get the current weather in a given location'''
+
+                location: str = Field(..., description="The city and state, e.g. San Francisco, CA")
+
+            class GetPopulation(BaseModel):
+                '''Get the current population in a given location'''
+
+                location: str = Field(..., description="The city and state, e.g. San Francisco, CA")
+
+            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
+            ai_msg = llm_with_tools.invoke("Which city is hotter today and which is bigger: LA or NY?")
+            ai_msg.tool_calls
+
+        .. code-block:: python
+
+            [{'name': 'GetWeather',
+              'args': {'location': 'Los Angeles, CA'},
+              'id': '2a2401fa-40db-470d-83ce-4e52de910d9e'},
+             {'name': 'GetWeather',
+              'args': {'location': 'New York City, NY'},
+              'id': '96761deb-ab7f-4ef9-b4b4-6d44562fc46e'},
+             {'name': 'GetPopulation',
+              'args': {'location': 'Los Angeles, CA'},
+              'id': '9147d532-abee-43a2-adb5-12f164300484'},
+             {'name': 'GetPopulation',
+              'args': {'location': 'New York City, NY'},
+              'id': 'c43374ea-bde5-49ca-8487-5b83ebeea1e6'}]
+
+        See ``ChatVertexAI.bind_tools()`` method for more.
+
+    Structured output:
+
+        .. code-block:: python
+
+            from typing import Optional
+
+            from langchain_core.pydantic_v1 import BaseModel, Field
+
+            class Joke(BaseModel):
+                '''Joke to tell user.'''
+
+                setup: str = Field(description="The setup of the joke")
+                punchline: str = Field(description="The punchline to the joke")
+                rating: Optional[int] = Field(description="How funny the joke is, from 1 to 10")
+
+            structured_llm = llm.with_structured_output(Joke)
+            structured_llm.invoke("Tell me a joke about cats")
+
+        .. code-block:: python
+
+            Joke(setup='What do you call a cat that loves to bowl?', punchline='An alley cat!', rating=None)
+
+        See ``ChatVertexAI.with_structured_output()`` for more.
+
+    Image input:
+        .. code-block:: python
+
+            import base64
+            import httpx
+            from langchain_core.messages import HumanMessage
+
+            image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+            image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the weather in this image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                    },
+                ],
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting a clear and mild day. The lush green grass indicates recent rainfall or sufficient moisture. The absence of strong shadows suggests that the sun is high in the sky, possibly late afternoon. Overall, the image conveys a sense of tranquility and warmth, characteristic of a beautiful summer day. \n'
+
+    Token usage:
+        .. code-block:: python
+
+            ai_msg = llm.invoke(messages)
+            ai_msg.usage_metadata
+
+        .. code-block:: python
+
+            {'input_tokens': 17, 'output_tokens': 7, 'total_tokens': 24}
+
+    Response metadata
+        .. code-block:: python
+
+            ai_msg = llm.invoke(messages)
+            ai_msg.response_metadata
+
+        .. code-block:: python
+
+            {'is_blocked': False,
+             'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_HARASSMENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False}],
+             'usage_metadata': {'prompt_token_count': 17,
+              'candidates_token_count': 7,
+              'total_token_count': 24}}
+    """  # noqa: E501
 
     model_name: str = Field(default="chat-bison", alias="model")
     "Underlying model name."
