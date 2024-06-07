@@ -116,7 +116,6 @@ def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
 
 
 class GoogleModelFamily(str, Enum):
-    """Determine the GoogleModelFamily for a given model."""
     GEMINI = auto()
     GEMINI_ADVANCED = auto()
     CODEY = auto()
