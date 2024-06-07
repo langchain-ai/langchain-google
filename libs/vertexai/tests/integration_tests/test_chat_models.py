@@ -618,21 +618,14 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
 
 @pytest.mark.extended
 def test_prediction_client_transport():
-
-    model = ChatVertexAI(
-        model_name=_DEFAULT_MODEL_NAME
-    )
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
 
     assert model.prediction_client.transport.kind == "grpc"
 
     # Not implemented for async_grpc
-    #assert model.async_prediction_client.transport.kind == "async_grpc"
-    
-    model = ChatVertexAI(
-        model_name=_DEFAULT_MODEL_NAME, api_transport="rest"
-    )
+    # assert model.async_prediction_client.transport.kind == "async_grpc"
+
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, api_transport="rest")
 
     assert model.prediction_client.transport.kind == "rest"
     assert model.async_prediction_client.transport.kind == "rest"
-
-    

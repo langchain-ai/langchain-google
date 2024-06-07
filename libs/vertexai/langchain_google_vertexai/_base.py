@@ -117,7 +117,7 @@ class _VertexAIBase(BaseModel):
             self.client = v1beta1PredictionServiceClient(
                 client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
-                transport=self.api_transport
+                transport=self.api_transport,
             )
         return self.client
 
@@ -125,7 +125,6 @@ class _VertexAIBase(BaseModel):
     def async_prediction_client(self) -> v1beta1PredictionServiceAsyncClient:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
-
             async_client_kwargs: dict[str, Any] = dict(
                 client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
@@ -133,7 +132,7 @@ class _VertexAIBase(BaseModel):
 
             if self.api_transport is not None:
                 async_client_kwargs["transport"] = self.api_transport
-        
+
             self.async_client = v1beta1PredictionServiceAsyncClient(
                 **async_client_kwargs
             )
