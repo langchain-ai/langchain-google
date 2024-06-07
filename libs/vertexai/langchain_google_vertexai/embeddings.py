@@ -265,6 +265,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     first_result = self._get_embeddings_with_retry(
                         first_batch, embeddings_type
                     )
+                    batches = batches[1:]
                     break
                 except InvalidArgument:
                     had_failure = True
