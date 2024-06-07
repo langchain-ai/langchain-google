@@ -12,6 +12,8 @@ from langchain_google_vertexai._utils import GoogleModelFamily
             [
                 "chat-bison@001",
                 "text-bison@002",
+                "medlm-medium",
+                "medlm-large",
             ],
             GoogleModelFamily.PALM,
         ),
@@ -28,6 +30,7 @@ from langchain_google_vertexai._utils import GoogleModelFamily
                 "gemini-1.0-pro-002",
                 "gemini-1.0-pro-vision-001",
                 "gemini-1.0-pro-vision",
+                "medlm-medium@latest",
             ],
             GoogleModelFamily.GEMINI,
         ),
@@ -40,19 +43,6 @@ from langchain_google_vertexai._utils import GoogleModelFamily
                 "gemini-1.5-pro-001",
             ],
             GoogleModelFamily.GEMINI_ADVANCED,
-        ),
-        (
-            [
-                "medlm-medium",
-                "medlm-large",                
-            ],
-            GoogleModelFamily.PALM,
-        ),
-        (
-            [
-                "medlm-medium@latest",
-            ],
-            GoogleModelFamily.GEMINI,
         ),
     ],
 )
