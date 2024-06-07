@@ -609,6 +609,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """[Deprecated] Since new Gemini models support setting a System Message,
     setting this parameter to True is discouraged.
     """
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only 
+        supported in Gemini 1.5 and later models. Supported mimetype: 
+            * "text/plain": (default) Text output. 
+            * "application/json": JSON response in the candidates.
+       The model also needs to be prompted to output the appropriate response 
+       type, otherwise the behavior is undefined. This is a preview feature.
+    """
+
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
@@ -678,7 +687,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _is_gemini_advanced(self) -> bool:
         return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
-
+    
+    @property
+    def _default_params(self) -> Dict[str, Any]:
+        updated_params = super()._default_params
+        if self.response_mime_type is not None:    
+            updated_params["response_mime_type"] = self.response_mime_type
+        return updated_params
+    
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
@@ -791,14 +807,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         functions: Optional[_ToolsType] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
-        response_mime_type: Optional[str] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         tool_config = self._tool_config_gemini(tool_config=tool_config)
-        if response_mime_type is None and self.response_mime_type is not None:
-            response_mime_type = self.response_mime_type
         return GenerateContentRequest(
             contents=contents,
             system_instruction=system_instruction,

@@ -155,13 +155,6 @@ class _VertexAICommon(_VertexAIBase):
     "the environment."
     n: int = 1
     """How many completions to generate for each prompt."""
-    response_mime_type: Optional[str] = None
-    """Optional. Output response mimetype of the generated candidate text. Only 
-        supported in Gemini 1.5 and later models. Supported mimetype: 
-            * "text/plain": (default) Text output. 
-            * "application/json": JSON response in the candidates.
-       The model needs to be prompted to output the appropriate response type, 
-       otherwise the behavior is undefined. This is a preview feature."""
     streaming: bool = False
     """Whether to stream the results or not."""
     safety_settings: Optional["SafetySettingsType"] = None
@@ -215,7 +208,6 @@ class _VertexAICommon(_VertexAIBase):
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
             "candidate_count": self.n,
-            "response_mime_type": self.response_mime_type,
         }
         if not self.model_family == GoogleModelFamily.CODEY:
             params.update(
