@@ -25,7 +25,7 @@ def test_invoke_medlm_large() -> None:
 
 @pytest.mark.extended
 def test_invoke_medlm_large_error() -> None:
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         model = ChatVertexAI(model_name="medlm-large")
         model.invoke("How you can help me?")
 
@@ -39,7 +39,7 @@ def test_invoke_medlm_medium() -> None:
 
 @pytest.mark.extended
 def test_invoke_medlm_medium_error() -> None:
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         model = ChatVertexAI(model_name="medlm-medium")
         model.invoke("How you can help me?")
 
