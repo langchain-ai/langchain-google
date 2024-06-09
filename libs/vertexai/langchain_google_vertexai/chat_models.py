@@ -435,15 +435,13 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -693,7 +691,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if self.response_mime_type is not None:
             updated_params["response_mime_type"] = self.response_mime_type
         return updated_params
-    
+
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
