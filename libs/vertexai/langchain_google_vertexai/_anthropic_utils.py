@@ -3,7 +3,8 @@ from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.messages import BaseMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.tools import BaseTool
-
+from langchain_core.messages.ai import UsageMetadata
+import anthropic
 from typing import (
     Any,
     Callable,
@@ -23,6 +24,7 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
     HumanMessage,
+    AIMessageChunk,
     SystemMessage,
     ToolCall,
     ToolMessage,
@@ -233,3 +235,50 @@ def _lc_tool_calls_to_anthropic_tool_use_blocks(
             )
         )
     return blocks
+
+
+def _make_message_chunk_from_anthropic_event(
+    event: anthropic.types.RawMessageStreamEvent,
+    *,
+    stream_usage: bool = True,
+) -> Optional[AIMessageChunk]:
+    """Convert Anthropic event to AIMessageChunk.
+
+    Note that not all events will result in a message chunk. In these cases
+    we return None.
+    """
+    message_chunk: Optional[AIMessageChunk] = None
+    if event.type == "message_start" and stream_usage:
+        input_tokens = event.message.usage.input_tokens
+        message_chunk = AIMessageChunk(
+            content="",
+            usage_metadata=UsageMetadata(
+                input_tokens=input_tokens,
+                output_tokens=0,
+                total_tokens=input_tokens,
+            ),
+        )
+    # See https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/lib/streaming/_messages.py  # noqa: E501
+    elif event.type == "content_block_delta" and event.delta.type == "text_delta":
+        text = event.delta.text
+        message_chunk = AIMessageChunk(content=text)
+    elif event.type == "message_delta" and stream_usage:
+        output_tokens = event.usage.output_tokens
+        message_chunk = AIMessageChunk(
+            content="",
+            usage_metadata=UsageMetadata(
+                input_tokens=0,
+                output_tokens=output_tokens,
+                total_tokens=output_tokens,
+            ),
+        )
+    else:
+        pass
+
+    return message_chunk
+
+
+def _tools_in_params(params: dict) -> bool:
+    return "tools" in params or (
+        "extra_body" in params and params["extra_body"].get("tools")
+    )

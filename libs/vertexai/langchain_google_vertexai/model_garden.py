@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from operator import itemgetter
 from typing import (
     Any,
@@ -52,7 +53,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
-from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic, convert_to_anthropic_tool
+from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic, convert_to_anthropic_tool, _make_message_chunk_from_anthropic_event, _tools_in_params
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
 from _anthropic_parsers import ToolsOutputParser, extract_tool_calls
 
@@ -126,6 +127,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     "Underlying model name."
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
     access_token: Optional[str] = None
+    stream_usage: bool = True  #Whether to include usage metadata in streaming output. If True, additional message chunks will be generated during the stream including usage metadata
 
     class Config:
         """Configuration for this pydantic object."""
@@ -256,14 +258,46 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
+        *,
+        stream_usage: Optional[bool] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        if stream_usage is None:
+            stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        with self.client.messages.stream(**params) as stream:
-            for text in stream.text_stream:
-                chunk = ChatGenerationChunk(message=AIMessageChunk(content=text))
-                if run_manager:
-                    run_manager.on_llm_new_token(text, chunk=chunk)
+        if _tools_in_params(params):
+            result = self._generate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            message = result.generations[0].message
+            if isinstance(message, AIMessage) and message.tool_calls is not None:
+                tool_call_chunks = [
+                    {
+                        "name": tool_call["name"],
+                        "args": json.dumps(tool_call["args"]),
+                        "id": tool_call["id"],
+                        "index": idx,
+                    }
+                    for idx, tool_call in enumerate(message.tool_calls)
+                ]
+                message_chunk = AIMessageChunk(
+                    content=message.content,
+                    tool_call_chunks=tool_call_chunks,  # type: ignore[arg-type]
+                    usage_metadata=message.usage_metadata,
+                )
+                yield ChatGenerationChunk(message=message_chunk)
+            else:
+                yield cast(ChatGenerationChunk, result.generations[0])
+            return
+        stream = self.client.messages.create(**params, stream=True)
+        for event in stream:
+            msg = _make_message_chunk_from_anthropic_event(
+                event, stream_usage=stream_usage
+            )
+            if msg is not None:
+                chunk = ChatGenerationChunk(message=msg)
+                if run_manager and isinstance(msg.content, str):
+                    run_manager.on_llm_new_token(msg.content, chunk=chunk)
                 yield chunk
 
     async def _astream(
@@ -271,14 +305,46 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        *,
+        stream_usage: Optional[bool] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        if stream_usage is None:
+            stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        async with self.async_client.messages.stream(**params) as stream:
-            async for text in stream.text_stream:
-                chunk = ChatGenerationChunk(message=AIMessageChunk(content=text))
-                if run_manager:
-                    await run_manager.on_llm_new_token(text, chunk=chunk)
+        if _tools_in_params(params):
+            result = await self._agenerate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            message = result.generations[0].message
+            if isinstance(message, AIMessage) and message.tool_calls is not None:
+                tool_call_chunks = [
+                    {
+                        "name": tool_call["name"],
+                        "args": json.dumps(tool_call["args"]),
+                        "id": tool_call["id"],
+                        "index": idx,
+                    }
+                    for idx, tool_call in enumerate(message.tool_calls)
+                ]
+                message_chunk = AIMessageChunk(
+                    content=message.content,
+                    tool_call_chunks=tool_call_chunks,  # type: ignore[arg-type]
+                    usage_metadata=message.usage_metadata,
+                )
+                yield ChatGenerationChunk(message=message_chunk)
+            else:
+                yield cast(ChatGenerationChunk, result.generations[0])
+            return
+        stream = await self.async_client.messages.create(**params, stream=True)
+        async for event in stream:
+            msg = _make_message_chunk_from_anthropic_event(
+                event, stream_usage=stream_usage
+            )
+            if msg is not None:
+                chunk = ChatGenerationChunk(message=msg)
+                if run_manager and isinstance(msg.content, str):
+                    await run_manager.on_llm_new_token(msg.content, chunk=chunk)
                 yield chunk
 
 
