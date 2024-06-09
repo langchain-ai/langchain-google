@@ -18,7 +18,6 @@ from typing import (
     cast,
 )
 
-from langchain_google_vertexai._anthropic_parsers import ToolsOutputParser, extract_tool_calls
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -50,6 +49,10 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 
+from langchain_google_vertexai._anthropic_parsers import (
+    ToolsOutputParser,
+    extract_tool_calls,
+)
 from langchain_google_vertexai._anthropic_utils import (
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
@@ -129,7 +132,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     "Underlying model name."
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
     access_token: Optional[str] = None
-    stream_usage: bool = True  #Whether to include usage metadata in streaming output
+    stream_usage: bool = True  # Whether to include usage metadata in streaming output
 
     class Config:
         """Configuration for this pydantic object."""
@@ -349,7 +352,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                     await run_manager.on_llm_new_token(msg.content, chunk=chunk)
                 yield chunk
 
-
     def bind_tools(
         self,
         tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
@@ -376,7 +378,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 f"str, or None."
             )
         return self.bind(tools=formatted_tools, **kwargs)
-
 
     def with_structured_output(
         self,
@@ -406,5 +407,3 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return RunnableMap(raw=llm) | parser_with_fallback
         else:
             return llm | output_parser
-    
-

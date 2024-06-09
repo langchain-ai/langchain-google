@@ -147,21 +147,19 @@ def _format_messages_anthropic(
         else:
             content = message.content
 
-        formatted_messages.append(
-            {
-                "role": role,
-                "content": content
-            }
-        )
+        formatted_messages.append({"role": role, "content": content})
     return system_message, formatted_messages
-    
+
+
 class AnthropicTool(TypedDict):
     name: str
     description: str
     input_schema: Dict[str, Any]
 
+
 def convert_to_anthropic_tool(
-    tool: Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool],) -> AnthropicTool:
+    tool: Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool],
+) -> AnthropicTool:
     # already in Anthropic tool format
     if isinstance(tool, dict) and all(
         k in tool for k in ("name", "description", "input_schema")
@@ -210,7 +208,6 @@ def _merge_messages(
         else:
             merged.append(curr)
     return merged
-
 
 
 class _AnthropicToolUse(TypedDict):
