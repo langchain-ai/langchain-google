@@ -618,7 +618,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
        type, otherwise the behavior is undefined. This is a preview feature.
     """
 
-
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -687,11 +686,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _is_gemini_advanced(self) -> bool:
         return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
-    
+
     @property
     def _default_params(self) -> Dict[str, Any]:
         updated_params = super()._default_params
-        if self.response_mime_type is not None:    
+        if self.response_mime_type is not None:
             updated_params["response_mime_type"] = self.response_mime_type
         return updated_params
     
