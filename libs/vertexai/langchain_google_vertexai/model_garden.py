@@ -1,8 +1,23 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
-
+from operator import itemgetter
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    List,
+    Sequence,
+    Literal,
+    Optional,
+    Tuple,
+    Iterator,
+    Type,
+    TypedDict,
+    Union,
+    cast,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -17,7 +32,12 @@ from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
 )
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.outputs import (
     ChatGeneration,
     ChatGenerationChunk,
@@ -25,11 +45,16 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from langchain_core.pydantic_v1 import Field, root_validator
-
-from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic
+from langchain_core.runnables import (
+    Runnable,
+    RunnableMap,
+    RunnablePassthrough,
+)
+from langchain_core.tools import BaseTool
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic, convert_to_anthropic_tool
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
-
+from _anthropic_parsers import ToolsOutputParser, extract_tool_calls
 
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     """Large language models served from Vertex AI Model Garden."""
@@ -170,8 +195,20 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         }
         if len(content) == 1 and content[0]["type"] == "text":
             msg = AIMessage(content=content[0]["text"])
+        elif any(block["type"] == "tool_use" for block in content):
+            tool_calls = extract_tool_calls(content)
+            msg = AIMessage(
+                content=content,
+                tool_calls=tool_calls,
+            )
         else:
             msg = AIMessage(content=content)
+        # Collect token usage
+        msg.usage_metadata = {
+            "input_tokens": data.usage.input_tokens,
+            "output_tokens": data.usage.output_tokens,
+            "total_tokens": data.usage.input_tokens + data.usage.output_tokens,
+        }
         return ChatResult(
             generations=[ChatGeneration(message=msg)],
             llm_output=llm_output,
@@ -243,3 +280,63 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 if run_manager:
                     await run_manager.on_llm_new_token(text, chunk=chunk)
                 yield chunk
+
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
+        *,
+        tool_choice: Optional[
+            Union[Dict[str, str], Literal["any", "auto"], str]
+        ] = None,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        """Bind tool-like objects to this chat model"""
+
+        formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
+        if not tool_choice:
+            pass
+        elif isinstance(tool_choice, dict):
+            kwargs["tool_choice"] = tool_choice
+        elif isinstance(tool_choice, str) and tool_choice in ("any", "auto"):
+            kwargs["tool_choice"] = {"type": tool_choice}
+        elif isinstance(tool_choice, str):
+            kwargs["tool_choice"] = {"type": "tool", "name": tool_choice}
+        else:
+            raise ValueError(
+                f"Unrecognized 'tool_choice' type {tool_choice=}. Expected dict, "
+                f"str, or None."
+            )
+        return self.bind(tools=formatted_tools, **kwargs)
+
+
+    def with_structured_output(
+        self,
+        schema: Union[Dict, Type[BaseModel]],
+        *,
+        include_raw: bool = False,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
+        """Model wrapper that returns outputs formatted to match the given schema."""
+
+        llm = self.bind_tools([schema], tool_choice="any")
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            output_parser = ToolsOutputParser(
+                first_tool_only=True, pydantic_schemas=[schema]
+            )
+        else:
+            output_parser = ToolsOutputParser(first_tool_only=True, args_only=True)
+
+        if include_raw:
+            parser_assign = RunnablePassthrough.assign(
+                parsed=itemgetter("raw") | output_parser, parsing_error=lambda _: None
+            )
+            parser_none = RunnablePassthrough.assign(parsed=lambda _: None)
+            parser_with_fallback = parser_assign.with_fallbacks(
+                [parser_none], exception_key="parsing_error"
+            )
+            return RunnableMap(raw=llm) | parser_with_fallback
+        else:
+            return llm | output_parser
+    
+
