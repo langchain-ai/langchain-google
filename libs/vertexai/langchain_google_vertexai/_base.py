@@ -84,6 +84,10 @@ class _VertexAIBase(BaseModel):
     client_cert_source: Optional[Callable[[], Tuple[bytes, bytes]]] = None
     "A callback which returns client certificate bytes and private key bytes both "
     "in PEM format."
+    credentials: Any = Field(default=None, exclude=True)
+    "The default custom credentials (google.auth.credentials.Credentials) to use "
+    "when making API calls. If not provided, credentials will be ascertained from "
+    "the environment."
 
     class Config:
         """Configuration for this pydantic object."""
@@ -115,6 +119,7 @@ class _VertexAIBase(BaseModel):
         """Returns PredictionServiceClient."""
         if self.client is None:
             self.client = v1beta1PredictionServiceClient(
+                credentials=self.credentials,
                 client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
                 transport=self.api_transport,
@@ -128,6 +133,7 @@ class _VertexAIBase(BaseModel):
             async_client_kwargs: dict[str, Any] = dict(
                 client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
+                credentials=self.credentials,
             )
 
             if self.api_transport is not None:
@@ -160,10 +166,6 @@ class _VertexAICommon(_VertexAIBase):
     top_k: Optional[int] = None
     "How the model selects tokens for output, the next token is selected from "
     "among the top-k most probable tokens. Top-k is ignored for Codey models."
-    credentials: Any = Field(default=None, exclude=True)
-    "The default custom credentials (google.auth.credentials.Credentials) to use "
-    "when making API calls. If not provided, credentials will be ascertained from "
-    "the environment."
     n: int = 1
     """How many completions to generate for each prompt."""
     streaming: bool = False
