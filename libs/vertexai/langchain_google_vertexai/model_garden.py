@@ -129,7 +129,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     "Underlying model name."
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
     access_token: Optional[str] = None
-    stream_usage: bool = True  #Whether to include usage metadata in streaming output. If True, additional message chunks will be generated during the stream including usage metadata
+    stream_usage: bool = True  #Whether to include usage metadata in streaming output
 
     class Config:
         """Configuration for this pydantic object."""
