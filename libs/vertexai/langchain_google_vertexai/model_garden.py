@@ -8,21 +8,22 @@ from typing import (
     AsyncIterator,
     Callable,
     Dict,
+    Iterator,
     List,
-    Sequence,
     Literal,
     Optional,
-    Tuple,
-    Iterator,
+    Sequence,
     Type,
-    TypedDict,
     Union,
     cast,
 )
+
+from _anthropic_parsers import ToolsOutputParser, extract_tool_calls
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     agenerate_from_stream,
@@ -33,12 +34,7 @@ from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     BaseMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolCall,
-    ToolMessage,
 )
-from langchain_core.language_models import LanguageModelInput
 from langchain_core.outputs import (
     ChatGeneration,
     ChatGenerationChunk,
@@ -46,16 +42,22 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
     RunnableMap,
     RunnablePassthrough,
 )
 from langchain_core.tools import BaseTool
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
-from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic, convert_to_anthropic_tool, _make_message_chunk_from_anthropic_event, _tools_in_params
+
+from langchain_google_vertexai._anthropic_utils import (
+    _format_messages_anthropic,
+    _make_message_chunk_from_anthropic_event,
+    _tools_in_params,
+    convert_to_anthropic_tool,
+)
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
-from _anthropic_parsers import ToolsOutputParser, extract_tool_calls
+
 
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     """Large language models served from Vertex AI Model Garden."""

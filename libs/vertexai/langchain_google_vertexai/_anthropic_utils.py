@@ -1,10 +1,4 @@
 import re
-from langchain_core.pydantic_v1 import BaseModel
-from langchain_core.messages import BaseMessage
-from langchain_core.utils.function_calling import convert_to_openai_tool
-from langchain_core.tools import BaseTool
-from langchain_core.messages.ai import UsageMetadata
-import anthropic
 from typing import (
     Any,
     Callable,
@@ -12,23 +6,28 @@ from typing import (
     List,
     Literal,
     Optional,
+    Sequence,
     Tuple,
     Type,
-    Sequence,
     TypedDict,
     Union,
     cast,
 )
 
+import anthropic
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     HumanMessage,
-    AIMessageChunk,
     SystemMessage,
     ToolCall,
     ToolMessage,
 )
+from langchain_core.messages.ai import UsageMetadata
+from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 _message_type_lookups = {
     "human": "user",
