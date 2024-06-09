@@ -18,7 +18,7 @@ from typing import (
     cast,
 )
 
-from _anthropic_parsers import ToolsOutputParser, extract_tool_calls
+from langchain_google_vertexai._anthropic_parsers import ToolsOutputParser, extract_tool_calls
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
