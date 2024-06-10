@@ -1,5 +1,6 @@
 import re
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -14,7 +15,6 @@ from typing import (
     cast,
 )
 
-import anthropic
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -28,6 +28,9 @@ from langchain_core.messages.ai import UsageMetadata
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
+
+if TYPE_CHECKING:
+    from anthropic.types import RawMessageStreamEvent
 
 _message_type_lookups = {
     "human": "user",
@@ -234,7 +237,7 @@ def _lc_tool_calls_to_anthropic_tool_use_blocks(
 
 
 def _make_message_chunk_from_anthropic_event(
-    event: anthropic.types.RawMessageStreamEvent,
+    event: "RawMessageStreamEvent",
     *,
     stream_usage: bool = True,
 ) -> Optional[AIMessageChunk]:
