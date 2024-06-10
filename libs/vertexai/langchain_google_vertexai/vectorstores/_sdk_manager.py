@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from google.cloud import aiplatform, storage
 from google.cloud.aiplatform import telemetry
@@ -6,7 +6,7 @@ from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
     MatchingEngineIndexEndpoint,
 )
-from google.oauth2.service_account import Credentials  # type: ignore
+from google.oauth2.service_account import Credentials
 
 if TYPE_CHECKING:
     from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
@@ -42,7 +42,7 @@ class VectorSearchSDKManager:
         self._region = region
 
         if credentials is not None:
-            self._credentials = credentials
+            self._credentials: Optional[Credentials] = credentials
         elif credentials_path is not None:
             self._credentials = Credentials.from_service_account_file(credentials_path)
         else:
