@@ -1289,9 +1289,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
-                # TODO: uncomment when merging ints is fixed
-                # usage_metadata=usage_metadata,
+                usage_metadata=usage_metadata,
             )
+            # is_blocked is part of "safety_ratings" list
+            # but if it's True/False then chunks can't be marged
+            generation_info.pop("is_blocked", None)
+            # remove 0 so that chunks can be merged
+            generation_info["usage_metadata"] = {
+                k: v for k, v in generation_info["usage_metadata"].items() if v
+            }
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
