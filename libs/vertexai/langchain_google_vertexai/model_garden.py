@@ -51,7 +51,7 @@ from langchain_core.tools import BaseTool
 
 from langchain_google_vertexai._anthropic_parsers import (
     ToolsOutputParser,
-    extract_tool_calls,
+    _extract_tool_calls,
 )
 from langchain_google_vertexai._anthropic_utils import (
     _format_messages_anthropic,
@@ -141,7 +141,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
-        from anthropic import (
+        from anthropic import (  # type: ignore
             AnthropicVertex,
             AsyncAnthropicVertex,
         )
@@ -196,14 +196,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def _format_output(self, data: Any, **kwargs: Any) -> ChatResult:
         data_dict = data.model_dump()
-        content = data_dict["content"]
+        content = [c for c in data_dict["content"] if c["type"] != "tool_use"]
+        content = content[0]["text"] if len(content) == 1 else content
         llm_output = {
             k: v for k, v in data_dict.items() if k not in ("content", "role", "type")
         }
-        if len(content) == 1 and content[0]["type"] == "text":
-            msg = AIMessage(content=content[0]["text"])
-        elif any(block["type"] == "tool_use" for block in content):
-            tool_calls = extract_tool_calls(content)
+        tool_calls = _extract_tool_calls(data_dict["content"])
+        if tool_calls:
             msg = AIMessage(
                 content=content,
                 tool_calls=tool_calls,

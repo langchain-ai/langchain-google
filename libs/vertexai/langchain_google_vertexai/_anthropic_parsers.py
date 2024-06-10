@@ -31,7 +31,7 @@ class ToolsOutputParser(BaseGenerationOutputParser):
             tool_calls: List = []
         else:
             content: List = message.content
-            _tool_calls = [dict(tc) for tc in extract_tool_calls(content)]
+            _tool_calls = [dict(tc) for tc in _extract_tool_calls(content)]
             # Map tool call id to index
             id_to_index = {
                 block["id"]: i
@@ -58,12 +58,11 @@ class ToolsOutputParser(BaseGenerationOutputParser):
         return cls_(**tool_call["args"])
 
 
-def extract_tool_calls(content: List[dict]) -> List[ToolCall]:
+def _extract_tool_calls(content: List[dict]) -> List[ToolCall]:
     tool_calls = []
     for block in content:
-        if block["type"] != "tool_use":
-            continue
-        tool_calls.append(
-            ToolCall(name=block["name"], args=block["input"], id=block["id"])
-        )
+        if block["type"] == "tool_use":
+            tool_calls.append(
+                ToolCall(name=block["name"], args=block["input"], id=block["id"])
+            )
     return tool_calls
