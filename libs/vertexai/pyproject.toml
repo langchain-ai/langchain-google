@@ -35,6 +35,7 @@ types-protobuf = "^4.24.0.4"
 numexpr = "^2.8.6"
 google-api-python-client = "^2.117.0"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
+langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests"}
 
 [tool.codespell]
 ignore-words-list = "rouge"

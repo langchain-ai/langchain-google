@@ -184,7 +184,7 @@ def _parse_chat_history_gemini(
     project: Optional[str] = None,
     convert_system_message_to_human: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
-    def _convert_to_prompt(part: Union[str, Dict]) -> Part:
+    def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
             return Part(text=part)
 
@@ -194,6 +194,11 @@ def _parse_chat_history_gemini(
             )
         if part["type"] == "text":
             return Part(text=part["text"])
+        if part["type"] == "tool_use":
+            if part.get("text"):
+                return Part(text=part["text"])
+            else:
+                return None
         if part["type"] == "image_url":
             path = part["image_url"]["url"]
             return ImageBytesLoader(project=project).load_gapic_part(path)
@@ -228,7 +233,12 @@ def _parse_chat_history_gemini(
         raw_content = message.content
         if isinstance(raw_content, str):
             raw_content = [raw_content]
-        return [_convert_to_prompt(part) for part in raw_content]
+        result = []
+        for raw_part in raw_content:
+            part = _convert_to_prompt(raw_part)
+            if part:
+                result.append(part)
+        return result
 
     vertex_messages: List[Content] = []
     system_parts: List[Part] | None = None
@@ -1304,9 +1314,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
-                # TODO: uncomment when merging ints is fixed
-                # usage_metadata=usage_metadata,
+                usage_metadata=usage_metadata,
             )
+            # is_blocked is part of "safety_ratings" list
+            # but if it's True/False then chunks can't be marged
+            generation_info.pop("is_blocked", None)
+            # remove 0 so that chunks can be merged
+            generation_info["usage_metadata"] = {
+                k: v for k, v in generation_info["usage_metadata"].items() if v
+            }
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
