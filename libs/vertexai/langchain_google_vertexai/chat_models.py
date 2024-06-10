@@ -800,6 +800,29 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting a clear and mild day. The lush green grass indicates recent rainfall or sufficient moisture. The absence of strong shadows suggests that the sun is high in the sky, possibly late afternoon. Overall, the image conveys a sense of tranquility and warmth, characteristic of a beautiful summer day. \n'
 
+        You can also point to GCS files which is faster / more efficient because bytes are transferred back and forth.
+
+        .. code-block:: python
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "What's in the image?",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/generative-ai/image/scones.jpg",
+                                "mime_type": "image/jpeg",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+            'The image is of five blueberry scones arranged on a piece of baking paper. \n\nHere is a list of what is in the picture:\n* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  \n* **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk.\n* **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.\n* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.\n* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.\n* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. \n\nThe image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting. \n'
+
     Video input:
         **NOTE**: Currently only supported for ``gemini-...-vision`` models.
 
