@@ -1,12 +1,28 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
+import json
+from operator import itemgetter
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+    cast,
+)
 
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     agenerate_from_stream,
@@ -25,9 +41,24 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from langchain_core.pydantic_v1 import Field, root_validator
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from langchain_core.runnables import (
+    Runnable,
+    RunnableMap,
+    RunnablePassthrough,
+)
+from langchain_core.tools import BaseTool
 
-from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic
+from langchain_google_vertexai._anthropic_parsers import (
+    ToolsOutputParser,
+    _extract_tool_calls,
+)
+from langchain_google_vertexai._anthropic_utils import (
+    _format_messages_anthropic,
+    _make_message_chunk_from_anthropic_event,
+    _tools_in_params,
+    convert_to_anthropic_tool,
+)
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
 
 
@@ -38,6 +69,10 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
+
+    # Needed so that mypy doesn't flag missing aliased init args.
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def _generate(
         self,
@@ -101,15 +136,20 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     "Underlying model name."
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
     access_token: Optional[str] = None
+    stream_usage: bool = True  # Whether to include usage metadata in streaming output
 
     class Config:
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
 
+    # Needed so that mypy doesn't flag missing aliased init args.
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
-        from anthropic import (  # type: ignore[import-not-found]
+        from anthropic import (  # type: ignore
             AnthropicVertex,
             AsyncAnthropicVertex,
         )
@@ -164,14 +204,25 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def _format_output(self, data: Any, **kwargs: Any) -> ChatResult:
         data_dict = data.model_dump()
-        content = data_dict["content"]
+        content = [c for c in data_dict["content"] if c["type"] != "tool_use"]
+        content = content[0]["text"] if len(content) == 1 else content
         llm_output = {
             k: v for k, v in data_dict.items() if k not in ("content", "role", "type")
         }
-        if len(content) == 1 and content[0]["type"] == "text":
-            msg = AIMessage(content=content[0]["text"])
+        tool_calls = _extract_tool_calls(data_dict["content"])
+        if tool_calls:
+            msg = AIMessage(
+                content=content,
+                tool_calls=tool_calls,
+            )
         else:
             msg = AIMessage(content=content)
+        # Collect token usage
+        msg.usage_metadata = {
+            "input_tokens": data.usage.input_tokens,
+            "output_tokens": data.usage.output_tokens,
+            "total_tokens": data.usage.input_tokens + data.usage.output_tokens,
+        }
         return ChatResult(
             generations=[ChatGeneration(message=msg)],
             llm_output=llm_output,
@@ -219,14 +270,46 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
+        *,
+        stream_usage: Optional[bool] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        if stream_usage is None:
+            stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        with self.client.messages.stream(**params) as stream:
-            for text in stream.text_stream:
-                chunk = ChatGenerationChunk(message=AIMessageChunk(content=text))
-                if run_manager:
-                    run_manager.on_llm_new_token(text, chunk=chunk)
+        if _tools_in_params(params):
+            result = self._generate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            message = result.generations[0].message
+            if isinstance(message, AIMessage) and message.tool_calls is not None:
+                tool_call_chunks = [
+                    {
+                        "name": tool_call["name"],
+                        "args": json.dumps(tool_call["args"]),
+                        "id": tool_call["id"],
+                        "index": idx,
+                    }
+                    for idx, tool_call in enumerate(message.tool_calls)
+                ]
+                message_chunk = AIMessageChunk(
+                    content=message.content,
+                    tool_call_chunks=tool_call_chunks,  # type: ignore[arg-type]
+                    usage_metadata=message.usage_metadata,
+                )
+                yield ChatGenerationChunk(message=message_chunk)
+            else:
+                yield cast(ChatGenerationChunk, result.generations[0])
+            return
+        stream = self.client.messages.create(**params, stream=True)
+        for event in stream:
+            msg = _make_message_chunk_from_anthropic_event(
+                event, stream_usage=stream_usage
+            )
+            if msg is not None:
+                chunk = ChatGenerationChunk(message=msg)
+                if run_manager and isinstance(msg.content, str):
+                    run_manager.on_llm_new_token(msg.content, chunk=chunk)
                 yield chunk
 
     async def _astream(
@@ -234,12 +317,100 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        *,
+        stream_usage: Optional[bool] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        if stream_usage is None:
+            stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        async with self.async_client.messages.stream(**params) as stream:
-            async for text in stream.text_stream:
-                chunk = ChatGenerationChunk(message=AIMessageChunk(content=text))
-                if run_manager:
-                    await run_manager.on_llm_new_token(text, chunk=chunk)
+        if _tools_in_params(params):
+            result = await self._agenerate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            message = result.generations[0].message
+            if isinstance(message, AIMessage) and message.tool_calls is not None:
+                tool_call_chunks = [
+                    {
+                        "name": tool_call["name"],
+                        "args": json.dumps(tool_call["args"]),
+                        "id": tool_call["id"],
+                        "index": idx,
+                    }
+                    for idx, tool_call in enumerate(message.tool_calls)
+                ]
+                message_chunk = AIMessageChunk(
+                    content=message.content,
+                    tool_call_chunks=tool_call_chunks,  # type: ignore[arg-type]
+                    usage_metadata=message.usage_metadata,
+                )
+                yield ChatGenerationChunk(message=message_chunk)
+            else:
+                yield cast(ChatGenerationChunk, result.generations[0])
+            return
+        stream = await self.async_client.messages.create(**params, stream=True)
+        async for event in stream:
+            msg = _make_message_chunk_from_anthropic_event(
+                event, stream_usage=stream_usage
+            )
+            if msg is not None:
+                chunk = ChatGenerationChunk(message=msg)
+                if run_manager and isinstance(msg.content, str):
+                    await run_manager.on_llm_new_token(msg.content, chunk=chunk)
                 yield chunk
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
+        *,
+        tool_choice: Optional[
+            Union[Dict[str, str], Literal["any", "auto"], str]
+        ] = None,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        """Bind tool-like objects to this chat model"""
+
+        formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
+        if not tool_choice:
+            pass
+        elif isinstance(tool_choice, dict):
+            kwargs["tool_choice"] = tool_choice
+        elif isinstance(tool_choice, str) and tool_choice in ("any", "auto"):
+            kwargs["tool_choice"] = {"type": tool_choice}
+        elif isinstance(tool_choice, str):
+            kwargs["tool_choice"] = {"type": "tool", "name": tool_choice}
+        else:
+            raise ValueError(
+                f"Unrecognized 'tool_choice' type {tool_choice=}. Expected dict, "
+                f"str, or None."
+            )
+        return self.bind(tools=formatted_tools, **kwargs)
+
+    def with_structured_output(
+        self,
+        schema: Union[Dict, Type[BaseModel]],
+        *,
+        include_raw: bool = False,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
+        """Model wrapper that returns outputs formatted to match the given schema."""
+
+        llm = self.bind_tools([schema], tool_choice="any")
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            output_parser = ToolsOutputParser(
+                first_tool_only=True, pydantic_schemas=[schema]
+            )
+        else:
+            output_parser = ToolsOutputParser(first_tool_only=True, args_only=True)
+
+        if include_raw:
+            parser_assign = RunnablePassthrough.assign(
+                parsed=itemgetter("raw") | output_parser, parsing_error=lambda _: None
+            )
+            parser_none = RunnablePassthrough.assign(parsed=lambda _: None)
+            parser_with_fallback = parser_assign.with_fallbacks(
+                [parser_none], exception_key="parsing_error"
+            )
+            return RunnableMap(raw=llm) | parser_with_fallback
+        else:
+            return llm | output_parser

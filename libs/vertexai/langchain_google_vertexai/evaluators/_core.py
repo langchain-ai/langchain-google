@@ -2,6 +2,7 @@
 
 Remove after interfaces will be moved to lc-core.
 """
+
 from __future__ import annotations
 
 import logging

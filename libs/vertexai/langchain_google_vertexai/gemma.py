@@ -103,6 +103,10 @@ class GemmaVertexAIModelGarden(VertexAIModelGarden):
     def _llm_type(self) -> str:
         return "gemma_vertexai_model_garden"
 
+    # Needed so that mypy doesn't flag missing aliased init args.
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
 
 class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseChatModel):
     allowed_model_args: Optional[List[str]] = [

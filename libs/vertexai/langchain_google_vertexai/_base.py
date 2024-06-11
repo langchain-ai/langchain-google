@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple
 
 import vertexai  # type: ignore[import-untyped]
 from google.api_core.client_options import ClientOptions
@@ -54,7 +54,7 @@ class _VertexAIBase(BaseModel):
     async_client: Any = None  #: :meta private:
     project: Optional[str] = None
     "The default GCP project to use when making Vertex API calls."
-    location: str = _DEFAULT_LOCATION
+    location: str = Field(default=_DEFAULT_LOCATION)
     "The default location to use when making API calls."
     request_parallelism: int = 5
     "The amount of parallelism allowed for requests issued to VertexAI models. "
@@ -66,9 +66,28 @@ class _VertexAIBase(BaseModel):
     "Optional list of stop words to use when generating."
     model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
-    model_family: Optional[GoogleModelFamily] = None
-    full_model_name: Optional[str] = None
-    """The full name of the model's endpoint."""
+    model_family: Optional[GoogleModelFamily] = None  #: :meta private:
+    full_model_name: Optional[str] = None  #: :meta private:
+    "The full name of the model's endpoint."
+    client_options: Optional["ClientOptions"] = Field(
+        default=None, exclude=True
+    )  #: :meta private:
+    api_endpoint: Optional[str] = Field(None, alias="base_url")
+    "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
+    api_transport: Optional[str] = None
+    """The desired API transport method, can be either 'grpc' or 'rest'"""
+    default_metadata: Sequence[Tuple[str, str]] = Field(
+        default_factory=list
+    )  #: :meta private:
+    additional_headers: Optional[Dict[str, str]] = Field(default=None)
+    "A key-value dictionary representing additional headers for the model call"
+    client_cert_source: Optional[Callable[[], Tuple[bytes, bytes]]] = None
+    "A callback which returns client certificate bytes and private key bytes both "
+    "in PEM format."
+    credentials: Any = Field(default=None, exclude=True)
+    "The default custom credentials (google.auth.credentials.Credentials) to use "
+    "when making API calls. If not provided, credentials will be ascertained from "
+    "the environment."
 
     class Config:
         """Configuration for this pydantic object."""
@@ -82,18 +101,28 @@ class _VertexAIBase(BaseModel):
             values["model_name"] = values.pop("model")
         if values.get("project") is None:
             values["project"] = initializer.global_config.project
+        if values.get("api_endpoint"):
+            api_endpoint = values["api-endpoint"]
+        else:
+            location = values.get("location", cls.__fields__["location"].default)
+            api_endpoint = f"{location}-{constants.PREDICTION_API_BASE_PATH}"
+        client_options = ClientOptions(api_endpoint=api_endpoint)
+        if values.get("client_cert_source"):
+            client_options.client_cert_source = values["client_cert_source"]
+        values["client_options"] = client_options
+        additional_headers = values.get("additional_headers", {})
+        values["default_metadata"] = tuple(additional_headers.items())
         return values
 
     @property
     def prediction_client(self) -> v1beta1PredictionServiceClient:
         """Returns PredictionServiceClient."""
         if self.client is None:
-            client_options = {
-                "api_endpoint": f"{self.location}-{constants.PREDICTION_API_BASE_PATH}"
-            }
             self.client = v1beta1PredictionServiceClient(
-                client_options=client_options,
+                credentials=self.credentials,
+                client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
+                transport=self.api_transport,
             )
         return self.client
 
@@ -101,13 +130,19 @@ class _VertexAIBase(BaseModel):
     def async_prediction_client(self) -> v1beta1PredictionServiceAsyncClient:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
-            client_options = {
-                "api_endpoint": f"{self.location}-{constants.PREDICTION_API_BASE_PATH}"
-            }
-            self.async_client = v1beta1PredictionServiceAsyncClient(
-                client_options=ClientOptions(**client_options),
+            async_client_kwargs: dict[str, Any] = dict(
+                client_options=self.client_options,
                 client_info=get_client_info(module=self._user_agent),
+                credentials=self.credentials,
             )
+
+            if self.api_transport is not None:
+                async_client_kwargs["transport"] = self.api_transport
+
+            self.async_client = v1beta1PredictionServiceAsyncClient(
+                **async_client_kwargs
+            )
+
         return self.async_client
 
     @property
@@ -131,10 +166,6 @@ class _VertexAICommon(_VertexAIBase):
     top_k: Optional[int] = None
     "How the model selects tokens for output, the next token is selected from "
     "among the top-k most probable tokens. Top-k is ignored for Codey models."
-    credentials: Any = Field(default=None, exclude=True)
-    "The default custom credentials (google.auth.credentials.Credentials) to use "
-    "when making API calls. If not provided, credentials will be ascertained from "
-    "the environment."
     n: int = 1
     """How many completions to generate for each prompt."""
     streaming: bool = False
@@ -155,10 +186,6 @@ class _VertexAICommon(_VertexAIBase):
             }
             """  # noqa: E501
 
-    api_transport: Optional[str] = None
-    """The desired API transport method, can be either 'grpc' or 'rest'"""
-    api_endpoint: Optional[str] = None
-    """The desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"""
     tuned_model_name: Optional[str] = None
     """The name of a tuned model. If tuned_model_name is passed
     model_name will be used to determine the model family
