@@ -184,7 +184,7 @@ def _parse_chat_history_gemini(
     project: Optional[str] = None,
     convert_system_message_to_human: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
-    def _convert_to_prompt(part: Union[str, Dict]) -> Part:
+    def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
             return Part(text=part)
 
@@ -194,6 +194,11 @@ def _parse_chat_history_gemini(
             )
         if part["type"] == "text":
             return Part(text=part["text"])
+        if part["type"] == "tool_use":
+            if part.get("text"):
+                return Part(text=part["text"])
+            else:
+                return None
         if part["type"] == "image_url":
             path = part["image_url"]["url"]
             return ImageBytesLoader(project=project).load_gapic_part(path)
@@ -228,7 +233,12 @@ def _parse_chat_history_gemini(
         raw_content = message.content
         if isinstance(raw_content, str):
             raw_content = [raw_content]
-        return [_convert_to_prompt(part) for part in raw_content]
+        result = []
+        for raw_part in raw_content:
+            part = _convert_to_prompt(raw_part)
+            if part:
+                result.append(part)
+        return result
 
     vertex_messages: List[Content] = []
     system_parts: List[Part] | None = None
@@ -609,6 +619,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """[Deprecated] Since new Gemini models support setting a System Message,
     setting this parameter to True is discouraged.
     """
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only 
+        supported in Gemini 1.5 and later models. Supported mimetype: 
+            * "text/plain": (default) Text output. 
+            * "application/json": JSON response in the candidates.
+       The model also needs to be prompted to output the appropriate response 
+       type, otherwise the behavior is undefined. This is a preview feature.
+    """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
@@ -678,6 +696,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _is_gemini_advanced(self) -> bool:
         return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
+
+    @property
+    def _default_params(self) -> Dict[str, Any]:
+        updated_params = super()._default_params
+        if self.response_mime_type is not None:
+            updated_params["response_mime_type"] = self.response_mime_type
+        return updated_params
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
@@ -1291,9 +1316,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
-                # TODO: uncomment when merging ints is fixed
-                # usage_metadata=usage_metadata,
+                usage_metadata=usage_metadata,
             )
+            # is_blocked is part of "safety_ratings" list
+            # but if it's True/False then chunks can't be marged
+            generation_info.pop("is_blocked", None)
+            # remove 0 so that chunks can be merged
+            generation_info["usage_metadata"] = {
+                k: v for k, v in generation_info["usage_metadata"].items() if v
+            }
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
