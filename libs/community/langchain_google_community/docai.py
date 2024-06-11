@@ -1,3 +1,4 @@
+# @title Document AI Langchain Integration
 """Module contains a PDF parser based on Document AI from Google Cloud.
 
 You need to install two libraries to use this parser:
@@ -47,6 +48,7 @@ class DocAIParser(BaseBlobParser):
         self,
         *,
         client: Optional["DocumentProcessorServiceClient"] = None,
+        project_id: Optional[str] = None,
         location: Optional[str] = None,
         gcs_output_path: Optional[str] = None,
         processor_name: Optional[str] = None,
@@ -95,12 +97,19 @@ class DocAIParser(BaseBlobParser):
                     "`pip install langchain-google-community[docai]`"
                 ) from exc
             options = ClientOptions(
-                api_endpoint=f"{location}-documentai.googleapis.com"
+                quota_project_id=project_id,
+                api_endpoint=f"{location}-documentai.googleapis.com",
             )
             self._client = DocumentProcessorServiceClient(
                 client_options=options,
                 client_info=get_client_info(module="document-ai"),
             )
+            # get processor type
+            self._processor_type = self._client.get_processor(name=processor_name).type
+            if self._processor_type == "LAYOUT_PARSER_PROCESSOR":
+                self._use_layout_parser = True
+            else:
+                self._use_layout_parser = False
 
     def lazy_parse(self, blob: Blob) -> Iterator[Document]:
         """Parses a blob lazily.
@@ -119,6 +128,8 @@ class DocAIParser(BaseBlobParser):
         enable_native_pdf_parsing: bool = True,
         field_mask: Optional[str] = None,
         page_range: Optional[List[int]] = None,
+        chunk_size: int = 500,
+        include_ancestor_headings: bool = True,
     ) -> Iterator[Document]:
         """Parses a blob lazily using online processing.
 
@@ -130,11 +141,13 @@ class DocAIParser(BaseBlobParser):
                 suggested: "text,pages.pageNumber,pages.layout"
             page_range: list of page numbers to parse. If `None`,
                 entire document will be parsed.
+            chunk_size: the maximum number of characters per chunk.
+            include_ancestor_headings: whether or not to include ancestor
+                headings when splitting.
         """
         try:
             from google.cloud import documentai
             from google.cloud.documentai_v1.types import (  # type: ignore[import, attr-defined]
-                IndividualPageSelector,
                 OcrConfig,
                 ProcessOptions,
             )
@@ -153,14 +166,37 @@ class DocAIParser(BaseBlobParser):
                 "documentai_toolbox package not found, please install it with "
                 "`pip install langchain-google-community[docai]`"
             ) from exc
-        ocr_config = (
-            OcrConfig(enable_native_pdf_parsing=enable_native_pdf_parsing)
-            if enable_native_pdf_parsing
-            else None
-        )
-        individual_page_selector = (
-            IndividualPageSelector(pages=page_range) if page_range else None
-        )
+
+        if self._use_layout_parser:
+            layout_config = ProcessOptions.LayoutConfig(
+                chunking_config=ProcessOptions.LayoutConfig.ChunkingConfig(
+                    chunk_size=chunk_size,
+                    include_ancestor_headings=include_ancestor_headings,
+                )
+            )
+            individual_page_selector = (
+                ProcessOptions.IndividualPageSelector(pages=page_range)
+                if page_range
+                else None
+            )
+            process_options = ProcessOptions(
+                layout_config=layout_config,
+                individual_page_selector=individual_page_selector,
+            )
+        else:
+            ocr_config = (
+                OcrConfig(enable_native_pdf_parsing=enable_native_pdf_parsing)
+                if enable_native_pdf_parsing
+                else None
+            )
+            individual_page_selector = (
+                ProcessOptions.IndividualPageSelector(pages=page_range)
+                if page_range
+                else None
+            )
+            process_options = ProcessOptions(
+                ocr_config=ocr_config, individual_page_selector=individual_page_selector
+            )
 
         response = self._client.process_document(
             documentai.ProcessRequest(
@@ -169,24 +205,34 @@ class DocAIParser(BaseBlobParser):
                     gcs_uri=blob.path,
                     mime_type=blob.mimetype or "application/pdf",
                 ),
-                process_options=ProcessOptions(
-                    ocr_config=ocr_config,
-                    individual_page_selector=individual_page_selector,
-                ),
+                process_options=process_options,
                 skip_human_review=True,
                 field_mask=field_mask,
             )
         )
-        yield from (
-            Document(
-                page_content=_text_from_layout(page.layout, response.document.text),
-                metadata={
-                    "page": page.page_number,
-                    "source": blob.path,
-                },
+
+        if self._use_layout_parser:
+            yield from (
+                Document(
+                    page_content=chunk.content,
+                    metadata={
+                        "chunk_id": chunk.chunk_id,
+                        "source": blob.path,
+                    },
+                )
+                for chunk in response.document.chunked_document.chunks
             )
-            for page in response.document.pages
-        )
+        else:
+            yield from (
+                Document(
+                    page_content=_text_from_layout(page.layout, response.document.text),
+                    metadata={
+                        "page": page.page_number,
+                        "source": blob.path,
+                    },
+                )
+                for page in response.document.pages
+            )
 
     def batch_parse(
         self,
@@ -194,6 +240,8 @@ class DocAIParser(BaseBlobParser):
         gcs_output_path: Optional[str] = None,
         timeout_sec: int = 3600,
         check_in_interval_sec: int = 60,
+        chunk_size: int = 500,
+        include_ancestor_headings: bool = True,
     ) -> Iterator[Document]:
         """Parses a list of blobs lazily.
 
@@ -202,7 +250,11 @@ class DocAIParser(BaseBlobParser):
             gcs_output_path: a path on Google Cloud Storage to store parsing results.
             timeout_sec: a timeout to wait for Document AI to complete, in seconds.
             check_in_interval_sec: an interval to wait until next check
-                whether parsing operations have been completed, in seconds
+                whether parsing operations have been completed, in seconds.
+            chunk_size: the maximum number of characters per chunk.
+            include_ancestor_headings: whether or not to include ancestor
+                headings when splitting.
+
         This is a long-running operation. A recommended way is to decouple
             parsing from creating LangChain Documents:
             >>> operations = parser.docai_parse(blobs, gcs_path)
@@ -219,7 +271,12 @@ class DocAIParser(BaseBlobParser):
             raise ValueError(
                 "An output path on Google Cloud Storage should be provided."
             )
-        operations = self.docai_parse(blobs, gcs_output_path=output_path)
+        operations = self.docai_parse(
+            blobs,
+            gcs_output_path=output_path,
+            chunk_size=chunk_size,
+            include_ancestor_headings=include_ancestor_headings,
+        )
         operation_names = [op.operation.name for op in operations]
         logger.debug(
             "Started parsing with Document AI, submitted operations %s", operation_names
@@ -255,15 +312,31 @@ class DocAIParser(BaseBlobParser):
             ) from exc
         for result in results:
             gcs_bucket_name, gcs_prefix = split_gcs_uri(result.parsed_path)
-            shards = _get_shards(gcs_bucket_name, gcs_prefix)
-            yield from (
-                Document(
-                    page_content=_text_from_layout(page.layout, shard.text),
-                    metadata={"page": page.page_number, "source": result.source_path},
+            shards = _get_shards(gcs_bucket_name, gcs_prefix + "/")
+            if self._use_layout_parser:
+                yield from (
+                    Document(
+                        page_content=chunk.content,
+                        metadata={
+                            "chunk_id": chunk.chunk_id,
+                            "source": result.source_path,
+                        },
+                    )
+                    for shard in shards
+                    for chunk in shard.chunked_document.chunks
                 )
-                for shard in shards
-                for page in shard.pages
-            )
+            else:
+                yield from (
+                    Document(
+                        page_content=_text_from_layout(page.layout, shard.text),
+                        metadata={
+                            "page": page.page_number,
+                            "source": result.source_path,
+                        },
+                    )
+                    for shard in shards
+                    for page in shard.pages
+                )
 
     def operations_from_names(self, operation_names: List[str]) -> List["Operation"]:
         """Initializes Long-Running Operations from their names."""
@@ -294,6 +367,8 @@ class DocAIParser(BaseBlobParser):
         batch_size: int = 1000,
         enable_native_pdf_parsing: bool = True,
         field_mask: Optional[str] = None,
+        chunk_size: Optional[int] = 500,
+        include_ancestor_headings: Optional[bool] = True,
     ) -> List["Operation"]:
         """Runs Google Document AI PDF Batch Processing on a list of blobs.
 
@@ -306,6 +381,9 @@ class DocAIParser(BaseBlobParser):
             field_mask: a comma-separated list of which fields to include in the
                 Document AI response.
                 suggested: "text,pages.pageNumber,pages.layout"
+            chunk_size: the maximum number of characters per chunk.
+            include_ancestor_headings: whether or not to include ancestor
+                headings when splitting.
 
         Document AI has a 1000 file limit per batch, so batches larger than that need
         to be split into multiple requests.
@@ -350,15 +428,22 @@ class DocAIParser(BaseBlobParser):
                 )
             )
 
-            process_options = (
-                ProcessOptions(
+            if self._use_layout_parser:
+                layout_config = ProcessOptions.LayoutConfig(
+                    chunking_config=ProcessOptions.LayoutConfig.ChunkingConfig(
+                        chunk_size=chunk_size,
+                        include_ancestor_headings=include_ancestor_headings,
+                    )
+                )
+                process_options = ProcessOptions(layout_config=layout_config)
+            else:
+                process_options = ProcessOptions(
                     ocr_config=OcrConfig(
                         enable_native_pdf_parsing=enable_native_pdf_parsing
                     )
+                    if enable_native_pdf_parsing
+                    else None
                 )
-                if enable_native_pdf_parsing
-                else None
-            )
             operations.append(
                 self._client.batch_process_documents(
                     documentai.BatchProcessRequest(
