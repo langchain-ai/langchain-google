@@ -124,19 +124,23 @@ class GoogleModelFamily(str, Enum):
     @classmethod
     def _missing_(cls, value: Any) -> "GoogleModelFamily":
         # https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning
-        if value.lower() in [
+        model_name = value.lower()
+        gemini_advanced_models = {
             "gemini-1.5-flash-preview-0514",
             "gemini-1.5-pro-preview-0514",
             "gemini-1.5-pro-preview-0409",
-        ]:
+            "gemini-1.5-flash-001",
+            "gemini-1.5-pro-001",
+        }
+        if model_name in gemini_advanced_models:
             return GoogleModelFamily.GEMINI_ADVANCED
-        if "gemini" in value.lower():
+        if "gemini" in model_name:
             return GoogleModelFamily.GEMINI
-        if "code" in value.lower():
+        if "code" in model_name:
             return GoogleModelFamily.CODEY
-        elif "bison" in value.lower():
-            return GoogleModelFamily.PALM
-        if "medlm-large" in value.lower():
+        if "medlm-medium@latest" in model_name:
+            return GoogleModelFamily.GEMINI
+        if "bison" in model_name or "medlm" in model_name:
             return GoogleModelFamily.PALM
         return GoogleModelFamily.GEMINI
 

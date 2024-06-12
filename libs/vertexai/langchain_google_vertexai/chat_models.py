@@ -184,7 +184,7 @@ def _parse_chat_history_gemini(
     project: Optional[str] = None,
     convert_system_message_to_human: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
-    def _convert_to_prompt(part: Union[str, Dict]) -> Part:
+    def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
             return Part(text=part)
 
@@ -194,6 +194,11 @@ def _parse_chat_history_gemini(
             )
         if part["type"] == "text":
             return Part(text=part["text"])
+        if part["type"] == "tool_use":
+            if part.get("text"):
+                return Part(text=part["text"])
+            else:
+                return None
         if part["type"] == "image_url":
             path = part["image_url"]["url"]
             return ImageBytesLoader(project=project).load_gapic_part(path)
@@ -228,7 +233,12 @@ def _parse_chat_history_gemini(
         raw_content = message.content
         if isinstance(raw_content, str):
             raw_content = [raw_content]
-        return [_convert_to_prompt(part) for part in raw_content]
+        result = []
+        for raw_part in raw_content:
+            part = _convert_to_prompt(raw_part)
+            if part:
+                result.append(part)
+        return result
 
     vertex_messages: List[Content] = []
     system_parts: List[Part] | None = None
@@ -600,7 +610,353 @@ async def _acompletion_with_retry(
 
 
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
-    """`Vertex AI` Chat large language models API."""
+    """Google Cloud Vertex AI chat model integration.
+
+    Setup:
+        You must have the langchain-google-vertexai Python package installed
+        .. code-block:: bash
+
+            pip install -U langchain-google-vertexai
+
+        And either:
+            - Have credentials configured for your environment (gcloud, workload identity, etc...)
+            - Store the path to a service account JSON file as the GOOGLE_APPLICATION_CREDENTIALS environment variable
+
+        This codebase uses the google.auth library which first looks for the application
+        credentials variable mentioned above, and then looks for system-level auth.
+
+        For more information, see:
+        https://cloud.google.com/docs/authentication/application-default-credentials#GAC
+        and https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth.
+
+    Key init args — completion params:
+        model: str
+            Name of ChatVertexAI model to use. e.g. "gemini-1.5-flash-001",
+            "gemini-1.5-pro-001", etc.
+        temperature: Optional[float]
+            Sampling temperature.
+        max_tokens: Optional[int]
+            Max number of tokens to generate.
+        stop: Optional[List[str]]
+            Default stop sequences.
+        safety_settings: Optional[Dict[vertexai.generative_models.HarmCategory, vertexai.generative_models.HarmBlockThreshold]]
+            The default safety settings to use for all generations.
+
+    Key init args — client params:
+        max_retries: int
+            Max number of retries.
+        credentials: Optional[google.auth.credentials.Credentials]
+            The default custom credentials to use when making API calls. If not
+            provided, credentials will be ascertained from the environment.
+        project: Optional[str]
+            The default GCP project to use when making Vertex API calls.
+        location: str = "us-central1"
+            The default location to use when making API calls.
+        request_parallelism: int = 5
+            The amount of parallelism allowed for requests issued to VertexAI models.
+            Default is 5.
+        base_url: Optional[str]
+            Base URL for API requests.
+
+    See full list of supported init args and their descriptions in the params section.
+
+    Instantiate:
+        .. code-block:: python
+
+            from langchain_google_vertexai import ChatVertexAI
+
+            llm = ChatVertexAI(
+                model="gemini-1.5-flash-001",
+                temperature=0,
+                max_tokens=None,
+                max_retries=6,
+                stop=None,
+                # other params...
+            )
+
+    Invoke:
+        .. code-block:: python
+
+            messages = [
+                ("system", "You are a helpful translator. Translate the user sentence to French."),
+                ("human", "I love programming."),
+            ]
+            llm.invoke(messages)
+
+        .. code-block:: python
+
+            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+
+    Stream:
+        .. code-block:: python
+
+            for chunk in llm.stream(messages):
+                print(chunk)
+
+        .. code-block:: python
+
+            AIMessageChunk(content='J', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content="'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content='', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+
+        .. code-block:: python
+
+            stream = llm.stream(messages)
+            full = next(stream)
+            for chunk in stream:
+                full += chunk
+            full
+
+        .. code-block:: python
+
+            AIMessageChunk(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
+
+    Async:
+        .. code-block:: python
+
+            await llm.ainvoke(messages)
+
+            # stream:
+            # async for chunk in (await llm.astream(messages))
+
+            # batch:
+            # await llm.abatch([messages])
+
+        .. code-block:: python
+
+            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+
+    Tool calling:
+        .. code-block:: python
+
+            from langchain_core.pydantic_v1 import BaseModel, Field
+
+            class GetWeather(BaseModel):
+                '''Get the current weather in a given location'''
+
+                location: str = Field(..., description="The city and state, e.g. San Francisco, CA")
+
+            class GetPopulation(BaseModel):
+                '''Get the current population in a given location'''
+
+                location: str = Field(..., description="The city and state, e.g. San Francisco, CA")
+
+            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
+            ai_msg = llm_with_tools.invoke("Which city is hotter today and which is bigger: LA or NY?")
+            ai_msg.tool_calls
+
+        .. code-block:: python
+
+            [{'name': 'GetWeather',
+              'args': {'location': 'Los Angeles, CA'},
+              'id': '2a2401fa-40db-470d-83ce-4e52de910d9e'},
+             {'name': 'GetWeather',
+              'args': {'location': 'New York City, NY'},
+              'id': '96761deb-ab7f-4ef9-b4b4-6d44562fc46e'},
+             {'name': 'GetPopulation',
+              'args': {'location': 'Los Angeles, CA'},
+              'id': '9147d532-abee-43a2-adb5-12f164300484'},
+             {'name': 'GetPopulation',
+              'args': {'location': 'New York City, NY'},
+              'id': 'c43374ea-bde5-49ca-8487-5b83ebeea1e6'}]
+
+        See ``ChatVertexAI.bind_tools()`` method for more.
+
+    Structured output:
+        .. code-block:: python
+
+            from typing import Optional
+
+            from langchain_core.pydantic_v1 import BaseModel, Field
+
+            class Joke(BaseModel):
+                '''Joke to tell user.'''
+
+                setup: str = Field(description="The setup of the joke")
+                punchline: str = Field(description="The punchline to the joke")
+                rating: Optional[int] = Field(description="How funny the joke is, from 1 to 10")
+
+            structured_llm = llm.with_structured_output(Joke)
+            structured_llm.invoke("Tell me a joke about cats")
+
+        .. code-block:: python
+
+            Joke(setup='What do you call a cat that loves to bowl?', punchline='An alley cat!', rating=None)
+
+        See ``ChatVertexAI.with_structured_output()`` for more.
+
+    Image input:
+        .. code-block:: python
+
+            import base64
+            import httpx
+            from langchain_core.messages import HumanMessage
+
+            image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+            image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the weather in this image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                    },
+                ],
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting a clear and mild day. The lush green grass indicates recent rainfall or sufficient moisture. The absence of strong shadows suggests that the sun is high in the sky, possibly late afternoon. Overall, the image conveys a sense of tranquility and warmth, characteristic of a beautiful summer day. \n'
+
+        You can also point to GCS files which is faster / more efficient because bytes are transferred back and forth.
+
+        .. code-block:: python
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "What's in the image?",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/generative-ai/image/scones.jpg",
+                                "mime_type": "image/jpeg",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+            'The image is of five blueberry scones arranged on a piece of baking paper. \n\nHere is a list of what is in the picture:\n* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  \n* **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk.\n* **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.\n* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.\n* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.\n* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. \n\nThe image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting. \n'
+
+    Video input:
+        **NOTE**: Currently only supported for ``gemini-...-vision`` models.
+
+        .. code-block:: python
+
+            llm = ChatVertexAI(model="gemini-1.0-pro-vision")
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "What's in the video?",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/video/animals.mp4",
+                                "mime_type": "video/mp4",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+             'The video is about a new feature in Google Photos called "Zoomable Selfies". The feature allows users to take selfies with animals at the zoo. The video shows several examples of people taking selfies with animals, including a tiger, an elephant, and a sea otter. The video also shows how the feature works. Users simply need to open the Google Photos app and select the "Zoomable Selfies" option. Then, they need to choose an animal from the list of available animals. The app will then guide the user through the process of taking the selfie.'
+
+    Audio input:
+        .. code-block:: python
+
+            from langchain_core.messages import HumanMessage
+
+            llm = ChatVertexAI(model="gemini-1.5-flash-001")
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "What's this audio about?",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/generative-ai/audio/pixel.mp3",
+                                "mime_type": "audio/mpeg",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+            "This audio is an interview with two product managers from Google who work on Pixel feature drops. They discuss how feature drops are important for showcasing how Google devices are constantly improving and getting better. They also discuss some of the highlights of the January feature drop and the new features coming in the March drop for Pixel phones and Pixel watches. The interview concludes with discussion of how user feedback is extremely important to them in deciding which features to include in the feature drops. "
+
+    Token usage:
+        .. code-block:: python
+
+            ai_msg = llm.invoke(messages)
+            ai_msg.usage_metadata
+
+        .. code-block:: python
+
+            {'input_tokens': 17, 'output_tokens': 7, 'total_tokens': 24}
+
+    Response metadata
+        .. code-block:: python
+
+            ai_msg = llm.invoke(messages)
+            ai_msg.response_metadata
+
+        .. code-block:: python
+
+            {'is_blocked': False,
+             'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_HARASSMENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False}],
+             'usage_metadata': {'prompt_token_count': 17,
+              'candidates_token_count': 7,
+              'total_token_count': 24}}
+
+    Safety settings
+        .. code-block:: python
+
+            from langchain_google_vertexai import HarmBlockThreshold, HarmCategory
+
+            llm = ChatVertexAI(
+                model="gemini-1.5-pro",
+                safety_settings={
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                },
+            )
+
+            llm.invoke(messages).response_metadata
+
+        .. code-block:: python
+
+            {'is_blocked': False,
+             'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_HARASSMENT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False},
+              {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+               'probability_label': 'NEGLIGIBLE',
+               'blocked': False}],
+             'usage_metadata': {'prompt_token_count': 17,
+              'candidates_token_count': 7,
+              'total_token_count': 24}}
+
+    """  # noqa: E501
 
     model_name: str = Field(default="chat-bison", alias="model")
     "Underlying model name."
@@ -608,6 +964,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     convert_system_message_to_human: bool = False
     """[Deprecated] Since new Gemini models support setting a System Message,
     setting this parameter to True is discouraged.
+    """
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only 
+        supported in Gemini 1.5 and later models. Supported mimetype: 
+            * "text/plain": (default) Text output. 
+            * "application/json": JSON response in the candidates.
+       The model also needs to be prompted to output the appropriate response 
+       type, otherwise the behavior is undefined. This is a preview feature.
     """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
@@ -678,6 +1042,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _is_gemini_advanced(self) -> bool:
         return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
+
+    @property
+    def _default_params(self) -> Dict[str, Any]:
+        updated_params = super()._default_params
+        if self.response_mime_type is not None:
+            updated_params["response_mime_type"] = self.response_mime_type
+        return updated_params
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
@@ -1291,9 +1662,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
-                # TODO: uncomment when merging ints is fixed
-                # usage_metadata=usage_metadata,
+                usage_metadata=usage_metadata,
             )
+            # is_blocked is part of "safety_ratings" list
+            # but if it's True/False then chunks can't be marged
+            generation_info.pop("is_blocked", None)
+            # remove 0 so that chunks can be merged
+            generation_info["usage_metadata"] = {
+                k: v for k, v in generation_info["usage_metadata"].items() if v
+            }
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
