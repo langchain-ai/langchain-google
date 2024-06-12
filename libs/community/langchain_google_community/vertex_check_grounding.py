@@ -85,7 +85,7 @@ class VertexAICheckGroundingWrapper(
         return discoveryengine_v1alpha.GroundedGenerationServiceClient(
             credentials=(
                 self.credentials
-                or Credentials.from_service_account_file(self.credentials_path)
+                or Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
                 if self.credentials_path
                 else None
             )
