@@ -74,7 +74,7 @@ langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdir
 [tool.poetry.extras]
 anthropic = ["anthropic"]
 
-[tool.ruff]
+[tool.ruff.lint]
 select = [
   "E", # pycodestyle
   "F", # pyflakes
