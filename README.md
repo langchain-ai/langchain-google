@@ -167,7 +167,7 @@ If codespell is incorrectly flagging a word, you can skip spellcheck for that wo
 [tool.codespell]
 ...
 # Add here:
-ignore-words-list = 'momento,collison,ned,foor,reworkd,parth,whats,aapply,mysogyny,unsecure'
+ignore-words-list =...
 ```
 
 ## Working with Optional Dependencies
@@ -201,6 +201,7 @@ Integration tests run once a day, and they require more setup, so they should be
 
 Unit tests cover modular logic that does not require calls to outside APIs.
 If you add new logic, please add a unit test.
+In unit tests we check pre/post processing and mocking all external dependencies.
 
 To install dependencies for unit tests:
 
@@ -252,6 +253,7 @@ make integration_tests
 ```
 
 #### Annotating integration tests
+
 We annotate integration tests to separate those tests which heavily rely on GCP infrastructure. Especially for running those tests we have created a separate GCP project with all necessary infrastructure parts provisioned. To run the extended integration tests locally you will need to provision a GCP project and pass its configuration via env variables.
 
 Test annotations:
