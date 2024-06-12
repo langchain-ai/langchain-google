@@ -31,7 +31,7 @@ It's essential that we maintain great documentation and testing. If you:
 We are a small, progress-oriented team. If there's something you'd like to add or change, opening a pull request is the
 best way to get our attention.
 
-### Dependency Management: Poetry and other env/dependency managers
+## Dependency Management: Poetry and other env/dependency managers
 
 This project utilizes [Poetry](https://python-poetry.org/) v1.7.1+ as a dependency manager.
 
@@ -42,7 +42,7 @@ Install Poetry: **[documentation on how to install it](https://python-poetry.org
 ❗Note: If you use `Conda` or `Pyenv` as your environment/package manager, after installing Poetry,
 tell Poetry to use the virtualenv python environment (`poetry config virtualenvs.prefer-active-python true`)
 
-### Different packages
+## Different packages
 
 This repository contains three packages with Google integrations with LangChain:
 - [langchain-google-genai](https://pypi.org/project/langchain-google-genai/) implements integrations of Google [Generative AI](https://ai.google.dev/) models.
@@ -52,7 +52,7 @@ This repository contains three packages with Google integrations with LangChain:
 Each of these has its own development environment. Docs are run from the top-level makefile, but development
 is split across separate test & release flows.
 
-### Repository Structure
+## Repository Structure
 
 If you plan on contributing to LangChain-Google code or documentation, it can be useful
 to understand the high level structure of the repository.
@@ -64,11 +64,11 @@ Here's the structure visualized as a tree:
 ```text
 .
 ├── libs
-│   ├── community # Main package
+│   ├── community
 │   │   ├── tests/unit_tests # Unit tests (present in each package not shown for brevity)
 │   │   ├── tests/integration_tests # Integration tests (present in each package not shown for brevity)
-│   ├── genai # Third-party integrations
-│   ├── vertexai # Base interfaces for key abstractions
+│   ├── genai
+│   ├── vertexai
 ```
 
 The root directory also contains the following files:
@@ -78,7 +78,7 @@ The root directory also contains the following files:
 
 There are other files in the root directory level, but their presence should be self-explanatory. Feel free to browse around!
 
-### Local Development Dependencies
+## Local Development Dependencies
 
 Install development requirements (for running langchain, running examples, linting, formatting, tests, and coverage):
 
@@ -98,11 +98,7 @@ If you are still seeing this bug on v1.6.1+, you may also try disabling "modern 
 (`poetry config installer.modern-installation false`) and re-installing requirements.
 See [this `debugpy` issue](https://github.com/microsoft/debugpy/issues/1246) for more details.
 
-### Formatting and Linting
-
-Run these locally before submitting a PR; the CI system will check also.
-
-#### Code Formatting
+## Code Formatting
 
 Formatting for this project is done via [ruff](https://docs.astral.sh/ruff/rules/).
 
@@ -121,7 +117,7 @@ make format_diff
 
 This is especially useful when you have made changes to a subset of the project and want to ensure your changes are properly formatted without affecting the rest of the codebase.
 
-#### Linting
+## Linting
 
 Linting for this project is done via a combination of [ruff](https://docs.astral.sh/ruff/rules/) and [mypy](http://mypy-lang.org/).
 
@@ -148,7 +144,7 @@ This can be very helpful when you've made changes to only certain parts of the p
 
 We recognize linting can be annoying - if you do not want to do it, please contact a project maintainer, and they can help you with it. We do not want this to be a blocker for good code getting contributed.
 
-#### Spellcheck
+## Spellcheck
 
 Spellchecking for this project is done via [codespell](https://github.com/codespell-project/codespell).
 Note that `codespell` finds common typos, so it could have false-positive (correctly spelled but rarely used) and false-negatives (not finding misspelled) words.
@@ -186,7 +182,6 @@ that most users won't have it installed.
 Users who do not have the dependency installed should be able to **import** your code without
 any side effects (no warnings, no errors, no exceptions).
 
-[TODO: check]
 To introduce the dependency to a library, please do the following:
 
 1. Open extended_testing_deps.txt and add the dependency
@@ -194,26 +189,7 @@ To introduce the dependency to a library, please do the following:
 test makes use of lightweight fixtures to test the logic of the code.
 3. Please use the `@pytest.mark.requires(package_name)` decorator for any unit tests that require the dependency.
 
-[TODO: check]
-## Adding a Jupyter Notebook
-
-If you are adding a Jupyter Notebook example, you'll want to install the optional `dev` dependencies.
-
-To install dev dependencies:
-
-```bash
-poetry install --with dev
-```
-
-Launch a notebook:
-
-```bash
-poetry run jupyter notebook
-```
-
-When you run `poetry install`, the `langchain` package is installed as editable in the virtualenv, so your new logic can be imported into the notebook.
-
-# Testing
+## Testing
 
 All of our packages have unit tests and integration tests, and we favor unit tests over integration tests.
 
@@ -221,7 +197,7 @@ Unit tests run on every pull request, so they should be fast and reliable.
 
 Integration tests run once a day, and they require more setup, so they should be reserved for confirming interface points with external services.
 
-## Unit Tests
+### Unit Tests
 
 Unit tests cover modular logic that does not require calls to outside APIs.
 If you add new logic, please add a unit test.
@@ -250,7 +226,7 @@ To run a specific test:
 TEST_FILE=tests/unit_tests/test_imports.py make test
 ```
 
-## Integration Tests
+### Integration Tests
 
 Integration tests cover logic that requires making calls to outside APIs (often integration with other services).
 If you add support for a new external API, please add a new integration test.
@@ -275,13 +251,21 @@ To run integration tests:
 make integration_tests
 ```
 
+#### Annotating integration tests
+We annotate integration tests to separate those tests which heavily rely on GCP infrastructure. Especially for running those tests we have created a separate GCP project with all necessary infrastructure parts provisioned. To run the extended integration tests locally you will need to provision a GCP project and pass its configuration via env variables.
+
+Test annotations:
+1. Tests without annotations will be executed on every run of the integration tests pipeline.
+2. Tests with release annotation ( @pytest.mark.release ) will be run with the release pipeline.
+3. Tests with extended annotation ( @pytest.mark.extended ) will be run on each PR.
+
 ### Prepare
 
 The integration tests use several search engines and databases. The tests
 aim to verify the correct behavior of the engines and databases according to
 their specifications and requirements.
 
-To run some integration tests, you will need Google Cloud Platform project (GCP project) configured.
+To run some integration tests, you will need GCP project configured.
 The configuration of the GCP project required for integration testing is stored in the [terraform folder]() within each library.
 
 ### Prepare environment variables for local testing:
@@ -301,7 +285,7 @@ start "" htmlcov/index.html || open htmlcov/index.html
 
 ```
 
-## Coverage
+### Coverage
 
 Code coverage (i.e. the amount of code that is covered by unit tests) helps identify areas of the code that are potentially more or less brittle.
 
