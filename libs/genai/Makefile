@@ -14,6 +14,14 @@ test tests integration_test integration_tests:
 check_imports: $(shell find langchain_google_genai -name '*.py')
 	poetry run python ./scripts/check_imports.py $^
 
+# Run unit tests and generate a coverage report.
+coverage:
+	poetry run pytest --cov \
+		--cov-config=.coveragerc \
+		--cov-report xml \
+		--cov-report term-missing:skip-covered \
+		$(TEST_FILE)
+
 ######################
 # LINTING AND FORMATTING
 ######################
