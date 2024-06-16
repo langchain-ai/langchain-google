@@ -404,3 +404,35 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     tool_call_chunk = gathered.tool_call_chunks[0]
     assert tool_call_chunk["name"] == "my_tool"
     assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
+
+
+def test_chat_google_genai_function_calling_with_structured_output() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    safety = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    }
+    llm = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety)
+    model = llm.with_structured_output(MyModel)
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+
+    response = model.invoke([message])
+    assert isinstance(response, MyModel)
+    assert response == MyModel(name="Erick", age=27)
+
+    model = llm.with_structured_output(
+        {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
+    )
+    response = model.invoke([message])
+    expected = [
+        {
+            "type": "MyModel",
+            "args": {
+                "name": "Erick",
+                "age": 27,
+            },
+        }
+    ]
+    assert response == expected

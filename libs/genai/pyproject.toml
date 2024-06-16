@@ -61,6 +61,7 @@ types-google-cloud-ndb = "^2.2.0.1"
 types-pillow = "^10.1.0.2"
 types-protobuf = "^4.24.0.20240302"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
+numpy = "^1.26.2"
 
 [tool.poetry.group.dev]
 optional = true
