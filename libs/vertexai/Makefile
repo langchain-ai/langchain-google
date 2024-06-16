@@ -11,6 +11,13 @@ integration_test integration_tests: TEST_FILE = tests/integration_tests/
 test tests integration_test integration_tests:
 	poetry run pytest --release $(TEST_FILE)
 
+# Run unit tests and generate a coverage report.
+coverage:
+	poetry run pytest --cov \
+		--cov-config=.coveragerc \
+		--cov-report xml \
+		--cov-report term-missing:skip-covered \
+		$(TEST_FILE)
 
 ######################
 # LINTING AND FORMATTING
