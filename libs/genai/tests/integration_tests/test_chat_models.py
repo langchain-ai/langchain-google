@@ -405,6 +405,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert tool_call_chunk["name"] == "my_tool"
     assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
 
+
 def test_chat_google_genai_function_calling_with_structured_output() -> None:
     class MyModel(BaseModel):
         name: str
