@@ -439,14 +439,14 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         if embeddings is not None and queries is not None:
             raise ValueError(
-                "Only one parameter between 'embeddings' or 'queries' must be provided"
+                "Only one parameter between 'embeddings' or 'queries' must be provided."
             )
 
         if queries is not None:
             embeddings = self.embedding.embed_documents(queries)
 
         if embeddings is None:
-            raise ValueError("Could not obtain embeddings - value is None")
+            raise ValueError("Could not obtain embeddings - value is None.")
 
         table_ref = self._create_temp_bq_table(
             embeddings=embeddings, expire_hours_temp_table=expire_hours_temp_table
@@ -538,6 +538,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             job_id: The BigQuery Job id.
 
         Returns:
-            A dictionary of job statistics for a given job.
+            A dictionary of job statistics for a given job. You can check out more
+            details at [BigQuery Jobs]
+            (https://cloud.google.com/bigquery/docs/reference/rest/v2/Job#JobStatistics2).
         """
         return self._bq_client.get_job(job_id)._properties["statistics"]
