@@ -1339,7 +1339,7 @@ subdirectory = "libs/core"
 
 [[package]]
 name = "langchain-standard-tests"
-version = "0.1.0"
+version = "0.1.1"
 description = "Standard tests for LangChain implementations"
 optional = false
 python-versions = ">=3.8.1,<4.0"
@@ -1354,7 +1354,7 @@ pytest = ">=7,<9"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "058a64c563571615e4a022433266fb14c1666490"
+resolved_reference = "6605ae22f6001d7428eca57c55d9f22c521abe6f"
 subdirectory = "libs/standard-tests"
 
 [[package]]
