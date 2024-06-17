@@ -1,5 +1,11 @@
 from langchain_google_community.bigquery import BigQueryLoader
 from langchain_google_community.bigquery_vector_search import BigQueryVectorSearch
+from langchain_google_community.bq_storage_vectorstores.bigquery import (
+    BigQueryVectorStore,
+)
+from langchain_google_community.bq_storage_vectorstores.featurestore import (
+    VertexFSVectorStore,
+)
 from langchain_google_community.docai import DocAIParser, DocAIParsingResults
 from langchain_google_community.documentai_warehouse import DocumentAIWarehouseRetriever
 from langchain_google_community.drive import GoogleDriveLoader
@@ -32,6 +38,7 @@ from langchain_google_community.vision import CloudVisionLoader, CloudVisionPars
 
 __all__ = [
     "BigQueryLoader",
+    "BigQueryVectorStore",
     "BigQueryVectorSearch",
     "CloudVisionLoader",
     "CloudVisionParser",
@@ -56,6 +63,7 @@ __all__ = [
     "VertexAISearchSummaryTool",
     "VertexAIRank",
     "VertexAICheckGroundingWrapper",
+    "VertexFSVectorStore",
 ]
 
 
