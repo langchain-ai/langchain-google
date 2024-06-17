@@ -8,6 +8,7 @@ import os
 import uuid
 import warnings
 from io import BytesIO
+from operator import itemgetter
 from typing import (
     Any,
     AsyncIterator,
@@ -19,6 +20,7 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Type,
     Union,
     cast,
 )
@@ -65,10 +67,15 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.messages.ai import UsageMetadata
-from langchain_core.output_parsers.openai_tools import parse_tool_calls
+from langchain_core.output_parsers.base import OutputParserLike
+from langchain_core.output_parsers.openai_tools import (
+    JsonOutputToolsParser,
+    PydanticToolsParser,
+    parse_tool_calls,
+)
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.pydantic_v1 import Field, SecretStr, root_validator
-from langchain_core.runnables import Runnable
+from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
+from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils import get_from_dict_or_env
 from tenacity import (
     before_sleep_log,
@@ -936,6 +943,33 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             model=self.model, contents=[Content(parts=[Part(text=text)])]
         )
         return result.total_tokens
+
+    def with_structured_output(
+        self,
+        schema: Union[Dict, Type[BaseModel]],
+        *,
+        include_raw: bool = False,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
+        if kwargs:
+            raise ValueError(f"Received unsupported arguments {kwargs}")
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            parser: OutputParserLike = PydanticToolsParser(
+                tools=[schema], first_tool_only=True
+            )
+        else:
+            parser = JsonOutputToolsParser()
+        llm = self.bind_tools([schema], tool_choice=False)
+        if include_raw:
+            parser_with_fallback = RunnablePassthrough.assign(
+                parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
+            ).with_fallbacks(
+                [RunnablePassthrough.assign(parsed=lambda _: None)],
+                exception_key="parsing_error",
+            )
+            return {"raw": llm} | parser_with_fallback
+        else:
+            return llm | parser
 
     def bind_tools(
         self,
