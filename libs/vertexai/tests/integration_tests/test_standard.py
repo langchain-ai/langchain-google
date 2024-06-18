@@ -31,9 +31,9 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         function_result = json.dumps({"result": 3})
 
         messages_string_content = [
-            HumanMessage("What is 1 + 2"),
+            HumanMessage(content="What is 1 + 2"),
             AIMessage(
-                "",
+                content="",
                 tool_calls=[
                     {
                         "name": function_name,
@@ -43,12 +43,12 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
                 ],
             ),
             ToolMessage(
-                function_result,
+                content=function_result,
                 name=function_name,
                 tool_call_id="abc123",
             ),
-            AIMessage(function_result),
-            HumanMessage("What is 3 + 4"),
+            AIMessage(content=function_result),
+            HumanMessage(content="What is 3 + 4"),
         ]
         result_string_content = model_with_tools.invoke(messages_string_content)
         assert isinstance(result_string_content, AIMessage)
