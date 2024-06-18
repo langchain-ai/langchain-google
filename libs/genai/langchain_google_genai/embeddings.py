@@ -86,6 +86,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         google_api_key = get_from_dict_or_env(
             values, "google_api_key", "GOOGLE_API_KEY"
         )
+        if isinstance(google_api_key, SecretStr):
+            google_api_key = google_api_key.get_secret_value()
         client_info = get_client_info("GoogleGenerativeAIEmbeddings")
 
         values["client"] = build_generative_service(
