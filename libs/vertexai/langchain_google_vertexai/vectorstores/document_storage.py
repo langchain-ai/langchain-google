@@ -39,8 +39,11 @@ class GCSDocumentStorage(DocumentStorage):
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
         """
-        for key, value in key_value_pairs:
-            self._set_one(key, value)
+        max_batch_size = 100
+        for i in range(0,len(key_value_pairs),max_batch_size):
+            with self._bucket.batch():
+                for key, value in key_value_pairs[i,i+max_batch_size]:
+                    self._set_one(key, value)
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
