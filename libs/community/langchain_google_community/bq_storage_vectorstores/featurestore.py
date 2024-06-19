@@ -13,7 +13,7 @@ from google.api_core.exceptions import (
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import ConfigDict
+from langchain_core.pydantic_v1 import ConfigDict
 
 from langchain_google_community._utils import get_client_info, get_user_agent
 from langchain_google_community.bq_storage_vectorstores._base import (
