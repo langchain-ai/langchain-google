@@ -609,7 +609,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
         )
         tool_messages.append(tool_message)
 
-    result = llm_with_search.invoke([request, response, tool_message] + tool_messages)
+    result = llm_with_search.invoke([request, response] + tool_messages)
 
     assert isinstance(result, AIMessage)
     assert "brown" in result.content
