@@ -7,14 +7,14 @@ from datetime import timedelta
 from functools import partial
 from importlib.util import find_spec
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 import numpy as np
 from google.cloud.exceptions import NotFound
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import BaseModel, ConfigDict
+from langchain_core.pydantic_v1 import BaseModel, ConfigDict, root_validator
 from langchain_core.vectorstores import VectorStore
 
 from langchain_google_community._utils import get_client_info
@@ -73,7 +73,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _table_schema: Any = None
     _bq_client: Any = None
     _logger: Any = None
-    _full_table_id: Any = None
+    _full_table_id: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -113,8 +113,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     ) -> list[list[list[Any]]]:
         raise NotImplementedError()
 
-    def __init__(self, **kwargs: Any) -> None:
-        """Constructor for FeatureStore."""
+    @root_validator(pre=False, skip_on_failure=True)
+    def validate_vals(cls, values: dict) -> dict:
         try:
             import pandas  # noqa: F401
             from google.cloud import bigquery  # type: ignore[attr-defined]
@@ -127,28 +127,38 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 "Please, install feature store dependency group: "
                 "`pip install langchain-google-community[featurestore]`"
             )
-        kwargs["_logger"] = base.Logger(__name__)
-        super().__init__(**kwargs)
-        self._bq_client = bigquery.Client(
-            project=self.project_id,
-            location=self.location,
-            credentials=self.credentials,
+        values["_logger"] = base.Logger(__name__)
+        values["_bq_client"] = bigquery.Client(
+            project=values["project_id"],
+            location=values["location"],
+            credentials=values["credentials"],
             client_info=get_client_info(module="bigquery-vector-search"),
         )
-        if self.embedding_dimension is None:
-            self.embedding_dimension = len(self.embedding.embed_query("test"))
-        self._full_table_id = (
-            f"{self.project_id}." f"{self.dataset_name}." f"{self.table_name}"
+        if values["embedding_dimension"] is None:
+            values["embedding_dimension"] = len(values["embedding"].embed_query("test"))
+        values["_full_table_id"] = (
+            f"{values['project_id']}."
+            f"{values['dataset_name']}."
+            f"{values['table_name']}"
         )
-        self._initialize_bq_table()
-        self._validate_bq_table()
-        self._logger.info(
-            f"BigQuery table {self._full_table_id} "
+
+        values["_bq_client"].create_dataset(
+            dataset=values["dataset_name"], exists_ok=True
+        )
+        values["_bq_client"].create_dataset(
+            dataset=f"{values['dataset_name']}_temp", exists_ok=True
+        )
+        table_ref = bigquery.TableReference.from_string(values["_full_table_id"])
+        values["_bq_client"].create_table(table_ref, exists_ok=True)
+        values["logger"].info(
+            f"BigQuery table {values['_full_table_id']} "
             f"initialized/validated as persistent storage. "
             f"Access via BigQuery console:\n "
-            f"https://console.cloud.google.com/bigquery?project={self.project_id}"
-            f"&ws=!1m5!1m4!4m3!1s{self.project_id}!2s{self.dataset_name}!3s{self.table_name}"
+            f"https://console.cloud.google.com/bigquery?project={values['project_id']}"
+            f"&ws=!1m5!1m4!4m3!1s{values['project_id']}!2s{values['dataset_name']}!3s"
+            f"{values['table_name']}"
         )
+        return values
 
     @property
     def embeddings(self) -> Optional[Embeddings]:
@@ -156,12 +166,12 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
     @property
     def full_table_id(self) -> str:
-        return self._full_table_id
+        return cast(str, self._full_table_id)
 
     def _validate_bq_table(self) -> Any:
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
-        table_ref = bigquery.TableReference.from_string(self._full_table_id)
+        table_ref = bigquery.TableReference.from_string(self.full_table_id)
 
         try:
             table = self._bq_client.get_table(
