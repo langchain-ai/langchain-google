@@ -3711,4 +3711,4 @@ vision = ["google-cloud-vision"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "205bd8c3e769804f9d779696de8b2dd619bd1344ff0d48d09dd3e821cd58cf89"
+content-hash = "9ce8554c584ecc84907f337fa4c1cca76ea945fa68e7f34a841e28e0debf7018"
