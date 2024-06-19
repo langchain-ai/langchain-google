@@ -28,7 +28,6 @@ pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
-langchain-text-splitters = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/text-splitters" }
 types-requests = "^2.31.0.20231231"
 types-protobuf = "^4.24.0.4"
 numexpr = "^2.8.6"

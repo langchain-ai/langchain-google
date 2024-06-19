@@ -1370,19 +1370,17 @@ name = "langchain-text-splitters"
 version = "0.2.1"
 description = "LangChain text splitting utilities"
 optional = false
-python-versions = ">=3.8.1,<4.0"
-files = []
-develop = false
+python-versions = "<4.0,>=3.8.1"
+files = [
+    {file = "langchain_text_splitters-0.2.1-py3-none-any.whl", hash = "sha256:c2774a85f17189eaca50339629d2316d13130d4a8d9f1a1a96f3a03670c4a138"},
+    {file = "langchain_text_splitters-0.2.1.tar.gz", hash = "sha256:06853d17d7241ecf5c97c7b6ef01f600f9b0fb953dd997838142a527a4f32ea4"},
+]
 
 [package.dependencies]
-langchain-core = "^0.2.0"
+langchain-core = ">=0.2.0,<0.3.0"
 
-[package.source]
-type = "git"
-url = "https://github.com/langchain-ai/langchain.git"
-reference = "HEAD"
-resolved_reference = "68e0ae32864ae9251e447d7c580d9330131721e1"
-subdirectory = "libs/text-splitters"
+[package.extras]
+extended-testing = ["beautifulsoup4 (>=4.12.3,<5.0.0)", "lxml (>=4.9.3,<6.0)"]
 
 [[package]]
 name = "langsmith"
@@ -2769,4 +2767,4 @@ anthropic = ["anthropic"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "a29855dd0ac291c2700d2f13dbcc108ae3c871dd1194cbaac1eab13ffb0f96a6"
+content-hash = "7787455b7180eafe80b00d4629cd11e405623ad63f8ec5c444600221fe36f0b2"
