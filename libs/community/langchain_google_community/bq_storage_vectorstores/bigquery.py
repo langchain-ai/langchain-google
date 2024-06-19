@@ -111,7 +111,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         job = self._bq_client.query(  # type: ignore[union-attr]
             f"""
-                    SELECT * FROM `{self._full_table_id}` WHERE {id_expr}
+                    SELECT * FROM `{self.full_table_id}` WHERE {id_expr}
                     {where_filter_expr}
                     """,
             job_config=job_config,
@@ -138,7 +138,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         if self._have_index or self._creating_index:
             return
 
-        table = self._bq_client.get_table(self._full_table_id)  # type: ignore[union-attr]
+        table = self._bq_client.get_table(self.full_table_id)  # type: ignore[union-attr]
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
             self._logger.debug("Not enough rows to create a vector index.")
             return
@@ -180,7 +180,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Returns:
         None
         """
-        table = self._bq_client.get_table(self._full_table_id)  # type: ignore[union-attr]
+        table = self._bq_client.get_table(self.full_table_id)  # type: ignore[union-attr]
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
             return
 
@@ -189,7 +189,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             sql = f"""
                 CREATE VECTOR INDEX IF NOT EXISTS
                 `{index_name}`
-                ON `{self._full_table_id}`
+                ON `{self.full_table_id}`
                 ({self.text_embedding_field})
                 OPTIONS(distance_type="{self.distance_type}", index_type="IVF")
             """
@@ -304,7 +304,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         full_query = f"""{embeddings_query}
         {select_clause}
         FROM VECTOR_SEARCH(
-            TABLE `{self._full_table_id}`,
+            TABLE `{self.full_table_id}`,
             "text_embedding",
             (SELECT row_num, {self.text_embedding_field} from embeddings),
             distance_type => "{self.distance_type}",

@@ -478,7 +478,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 self._vertexai.resources.preview.FeatureViewBigQuerySource
             )
             big_query_source = FeatureViewBigQuerySource(
-                uri=f"bq://{self._full_table_id}",
+                uri=f"bq://{self.full_table_id}",
                 entity_id_columns=[self.doc_id_field],
             )
             index_config = self._utils.IndexConfig(
