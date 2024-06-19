@@ -126,7 +126,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 "Please, install feature store dependency group: "
                 "`pip install langchain-google-community[featurestore]`"
             )
-        self._logger = base.Logger(__name__)
+        kwargs["_logger"] = base.Logger(__name__)
         super().__init__(**kwargs)
         self._pd = pd
         self._bigquery = bigquery
