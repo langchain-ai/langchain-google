@@ -2762,4 +2762,4 @@ anthropic = ["anthropic"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "f3c40f2f06ed2bc8c7c2770db45ed9a3315c4d6f5bd96cff8fd81500273ea431"
+content-hash = "b4c91176b7c7639cdad8997249abada888a61c505c93aaa54cb5d09d751ef63d"
