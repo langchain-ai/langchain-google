@@ -72,6 +72,9 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _extra_fields: Union[Dict[str, str], None] = None
     _table_schema: Any = None
 
+    class Config:
+        arbitrary_types_allowed = True
+
     @abstractmethod
     def sync_data(self) -> None:
         raise NotImplementedError()
