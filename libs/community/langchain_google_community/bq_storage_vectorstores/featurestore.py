@@ -13,7 +13,6 @@ from google.api_core.exceptions import (
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import ConfigDict
 
 from langchain_google_community._utils import get_client_info, get_user_agent
 from langchain_google_community.bq_storage_vectorstores._base import (
@@ -76,7 +75,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             DOT_PRODUCT_DISTANCE).
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
     online_store_name: Union[str, None] = None
     online_store_location: Union[str, None] = None
     online_store_type: Literal["bigtable", "optimized"] = "optimized"
@@ -91,10 +89,12 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     distance_measure_type: Optional[str] = None
     _user_agent: str = ""
 
-    def model_post_init(self, __context: Any) -> None:
-        super().model_post_init(__context)
+    def __init__(self, **kwargs: Any) -> None:
+        """Constructor for FeatureStore."""
+        super().__init__(**kwargs)
         import vertexai
         from google.cloud import aiplatform
+        from google.cloud.aiplatform_v1beta1 import FeatureOnlineStoreAdminServiceClient
         from google.cloud.aiplatform_v1beta1.types import (
             NearestNeighborQuery,
             feature_online_store_service,
@@ -124,8 +124,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         )
         self.online_store_name = self.online_store_name or self.dataset_name
         self.view_name = self.view_name or self.table_name
-        self.location = self.location or self.location
-        from google.cloud.aiplatform_v1beta1 import FeatureOnlineStoreAdminServiceClient
 
         api_endpoint = f"{self.location}-aiplatform.googleapis.com"
         self._admin_client = FeatureOnlineStoreAdminServiceClient(
