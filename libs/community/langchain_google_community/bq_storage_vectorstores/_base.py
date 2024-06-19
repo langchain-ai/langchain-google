@@ -114,7 +114,6 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
     def __init__(self, **kwargs: Any) -> None:
         """Constructor for FeatureStore."""
-        super().__init__(**kwargs)
         try:
             import pandas as pd  # type: ignore[import-untyped]
             from google.cloud import bigquery  # type: ignore[attr-defined]
@@ -128,6 +127,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 "`pip install langchain-google-community[featurestore]`"
             )
         self._logger = base.Logger(__name__)
+        super().__init__(**kwargs)
         self._pd = pd
         self._bigquery = bigquery
         self._bq_client = bigquery.Client(
