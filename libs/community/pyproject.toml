@@ -91,6 +91,10 @@ optional = true
 
 [tool.poetry.group.test_integration.dependencies]
 pillow = "^10.1.0"
+numpy = [
+  { version = "^1", python = "<3.12" },
+  { version = "^1.26.0", python = ">=3.12" },
+]
 
 
 
