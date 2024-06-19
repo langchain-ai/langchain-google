@@ -102,7 +102,7 @@ class _VertexAIBase(BaseModel):
         if values.get("project") is None:
             values["project"] = initializer.global_config.project
         if values.get("api_endpoint"):
-            api_endpoint = values["api-endpoint"]
+            api_endpoint = values["api_endpoint"]
         else:
             location = values.get("location", cls.__fields__["location"].default)
             api_endpoint = f"{location}-{constants.PREDICTION_API_BASE_PATH}"
