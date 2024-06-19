@@ -111,8 +111,9 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     ) -> list[list[list[Any]]]:
         raise NotImplementedError()
 
-    def model_post_init(self, __context) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, **kwargs: Any) -> None:
         """Constructor for FeatureStore."""
+        super().__init__(**kwargs)
         try:
             import pandas as pd  # type: ignore[import-untyped]
             from google.cloud import bigquery  # type: ignore[attr-defined]

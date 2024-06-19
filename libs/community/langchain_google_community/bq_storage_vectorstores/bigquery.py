@@ -3,9 +3,7 @@ from datetime import datetime, timedelta
 from threading import Lock, Thread
 from typing import Any, Dict, List, Literal, Optional, Type, Union
 
-from google.api_core.exceptions import (
-    ClientError,
-)
+from google.api_core.exceptions import ClientError
 from google.cloud.bigquery.table import Table
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -56,9 +54,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     _have_index: bool = False
     _last_index_check: datetime = datetime.min
 
-    def model_post_init(self, __context: Any) -> None:
-        # Initialize attributes after model creation
-        super().model_post_init(__context)
+    def __init__(self, **kwargs: Any) -> None:
+        """Constructor for FeatureStore."""
+        super().__init__(**kwargs)
         self._creating_index = False
         self._have_index = False
         self._last_index_check = datetime.min
