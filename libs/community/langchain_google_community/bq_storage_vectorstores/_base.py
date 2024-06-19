@@ -116,7 +116,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     def __init__(self, **kwargs: Any) -> None:
         """Constructor for FeatureStore."""
         try:
-            import pandas  # noqa: E401
+            import pandas  # noqa: F401
             from google.cloud import bigquery  # type: ignore[attr-defined]
             from google.cloud.aiplatform import base
 
