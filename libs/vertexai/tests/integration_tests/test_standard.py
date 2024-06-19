@@ -62,3 +62,15 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {"model_name": "gemini-1.5-pro-001"}
+
+    @property
+    def supports_image_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_video_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_audio_inputs(self) -> bool:
+        return True
