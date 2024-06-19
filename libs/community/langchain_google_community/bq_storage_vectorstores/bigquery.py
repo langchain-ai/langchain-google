@@ -4,6 +4,7 @@ from threading import Lock, Thread
 from typing import Any, Dict, List, Literal, Optional, Type, Union
 
 from google.api_core.exceptions import ClientError
+from google.cloud import bigquery  # type: ignore[attr-defined]
 from google.cloud.bigquery.table import Table
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -90,9 +91,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """
 
         if ids and len(ids) > 0:
-            job_config = self._bigquery.QueryJobConfig(
+            job_config = bigquery.QueryJobConfig(
                 query_parameters=[
-                    self._bigquery.ArrayQueryParameter("ids", "STRING", ids),
+                    bigquery.ArrayQueryParameter("ids", "STRING", ids),
                 ]
             )
             id_expr = f"{self.doc_id_field} IN UNNEST(@ids)"
@@ -155,7 +156,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 f" table_name = '{self.table_name}'"
             )
             job = self._bq_client.query(  # type: ignore[union-attr]
-                check_query, api_method=self._bigquery.enums.QueryApiMethod.QUERY
+                check_query, api_method=bigquery.enums.QueryApiMethod.QUERY
             )
             if job.result().total_rows == 0:
                 # Need to create an index. Make it in a separate thread.
@@ -324,19 +325,19 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter=filter, k=k, num_embeddings=len(embeddings)
         )
 
-        job_config = self._bigquery.QueryJobConfig(
+        job_config = bigquery.QueryJobConfig(
             query_parameters=[
-                self._bigquery.ArrayQueryParameter(f"emb_{i}", "FLOAT64", emb)
+                bigquery.ArrayQueryParameter(f"emb_{i}", "FLOAT64", emb)
                 for i, emb in enumerate(embeddings)
             ],
             use_query_cache=True,
-            priority=self._bigquery.QueryPriority.INTERACTIVE,
+            priority=bigquery.QueryPriority.INTERACTIVE,
         )
 
         results = self._bq_client.query(  # type: ignore[union-attr]
             full_query,
             job_config=job_config,
-            api_method=self._bigquery.enums.QueryApiMethod.QUERY,
+            api_method=bigquery.enums.QueryApiMethod.QUERY,
         )
         return list(results)
 
@@ -346,7 +347,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         expire_hours_temp_table: int = 12,
     ) -> Table:
         """Create temporary table to store query embeddings prior to batch search"""
-        df = self._pd.DataFrame([])
+        import pandas as pd
+
+        df = pd.DataFrame([])
+
         df[self.text_embedding_field] = embeddings
         table_id = (
             f"{self.project_id}."
@@ -355,11 +359,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         )
 
         schema = [
-            self._bigquery.SchemaField(
-                self.text_embedding_field, "FLOAT64", mode="REPEATED"
-            )
+            bigquery.SchemaField(self.text_embedding_field, "FLOAT64", mode="REPEATED")
         ]
-        table_ref = self._bigquery.Table(table_id, schema=schema)
+        table_ref = bigquery.Table(table_id, schema=schema)
         table = self._bq_client.create_table(table_ref)
         table.expires = datetime.now() + timedelta(hours=expire_hours_temp_table)
         table = self._bq_client.update_table(table, ["expires"])
@@ -458,15 +460,15 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             fields_to_exclude=[self.text_embedding_field],
         )
 
-        job_config = self._bigquery.QueryJobConfig(
+        job_config = bigquery.QueryJobConfig(
             use_query_cache=True,
-            priority=self._bigquery.QueryPriority.INTERACTIVE,
+            priority=bigquery.QueryPriority.INTERACTIVE,
         )
 
         search_results = self._bq_client.query(  # type: ignore[union-attr]
             full_query,
             job_config=job_config,
-            api_method=self._bigquery.enums.QueryApiMethod.QUERY,
+            api_method=bigquery.enums.QueryApiMethod.QUERY,
         )
 
         return self._create_langchain_documents(

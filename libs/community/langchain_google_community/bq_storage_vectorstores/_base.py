@@ -73,8 +73,6 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _table_schema: Any = None
     _bq_client: Any = None
     _logger: Any = None
-    _pd: Any = None
-    _bigquery: Any = None
     _full_table_id: Any = None
 
     class Config:
@@ -118,7 +116,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     def __init__(self, **kwargs: Any) -> None:
         """Constructor for FeatureStore."""
         try:
-            import pandas as pd  # type: ignore[import-untyped]
+            import pandas  # noqa: E401
             from google.cloud import bigquery  # type: ignore[attr-defined]
             from google.cloud.aiplatform import base
 
@@ -131,8 +129,6 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
             )
         kwargs["_logger"] = base.Logger(__name__)
         super().__init__(**kwargs)
-        self._pd = pd
-        self._bigquery = bigquery
         self._bq_client = bigquery.Client(
             project=self.project_id,
             location=self.location,
@@ -163,7 +159,9 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         return self._full_table_id
 
     def _validate_bq_table(self) -> Any:
-        table_ref = self._bigquery.TableReference.from_string(self._full_table_id)
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
+        table_ref = bigquery.TableReference.from_string(self._full_table_id)
 
         try:
             table = self._bq_client.get_table(
@@ -228,11 +226,13 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
     def _initialize_bq_table(self) -> Any:
         """Validates or creates the BigQuery table."""
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
         self._bq_client.create_dataset(dataset=self.dataset_name, exists_ok=True)
         self._bq_client.create_dataset(
             dataset=f"{self.dataset_name}_temp", exists_ok=True
         )
-        table_ref = self._bigquery.TableReference.from_string(self._full_table_id)
+        table_ref = bigquery.TableReference.from_string(self._full_table_id)
         self._bq_client.create_table(table_ref, exists_ok=True)
         return table_ref
 
@@ -276,6 +276,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
+        import pandas as pd
+
         ids = [uuid.uuid4().hex for _ in texts]
         if metadatas is None:
             metadatas = [{} for _ in texts]
@@ -293,7 +295,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         table = self._bq_client.get_table(
             self._full_table_id
         )  # Attempt to retrieve the table information
-        df = self._pd.DataFrame(values_dict)
+        df = pd.DataFrame(values_dict)
         job = self._bq_client.load_table_from_dataframe(df, table)
         job.result()
         self._validate_bq_table()
@@ -312,11 +314,13 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
             Optional[bool]: True if deletion is successful,
             False otherwise, None if not implemented.
         """
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
         if not ids or len(ids) == 0:
             return True
 
-        job_config = self._bigquery.QueryJobConfig(
-            query_parameters=[self._bigquery.ArrayQueryParameter("ids", "STRING", ids)],
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ArrayQueryParameter("ids", "STRING", ids)],
         )
         self._bq_client.query(
             f"""
