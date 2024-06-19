@@ -149,7 +149,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         )
         table_ref = bigquery.TableReference.from_string(full_table_id)
         values["_bq_client"].create_table(table_ref, exists_ok=True)
-        values["logger"].info(
+        values["_logger"].info(
             f"BigQuery table {full_table_id} "
             f"initialized/validated as persistent storage. "
             f"Access via BigQuery console:\n "
