@@ -14,8 +14,8 @@ from google.cloud.exceptions import NotFound
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.vectorstores import VectorStore
 from langchain_core.pydantic_v1 import BaseModel, ConfigDict
+from langchain_core.vectorstores import VectorStore
 
 from langchain_google_community._utils import get_client_info
 from langchain_google_community.bq_storage_vectorstores.utils import (
