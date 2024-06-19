@@ -72,6 +72,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _extra_fields: Union[Dict[str, str], None] = None
     _table_schema: Any = None
     _bq_client: Any = None
+    _logger: Any = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -121,20 +122,19 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
             find_spec("pyarrow")
             find_spec("db_types")
-            self._logger = base.Logger(__name__)
-            self._pd = pd
-            self._bigquery = bigquery
         except ModuleNotFoundError:
             raise ImportError(
                 "Please, install feature store dependency group: "
                 "`pip install langchain-google-community[featurestore]`"
             )
-        client_info = get_client_info(module="bigquery-vector-search")
+        self._logger = base.Logger(__name__)
+        self._pd = pd
+        self._bigquery = bigquery
         self._bq_client = bigquery.Client(
             project=self.project_id,
             location=self.location,
             credentials=self.credentials,
-            client_info=client_info,
+            client_info=get_client_info(module="bigquery-vector-search"),
         )
         if self.embedding_dimension is None:
             self.embedding_dimension = len(self.embedding.embed_query("test"))
