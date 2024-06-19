@@ -136,11 +136,10 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         )
         if values["embedding_dimension"] is None:
             values["embedding_dimension"] = len(values["embedding"].embed_query("test"))
-        values["_full_table_id"] = (
-            f"{values['project_id']}."
-            f"{values['dataset_name']}."
-            f"{values['table_name']}"
+        full_table_id = (
+            f"{values['project_id']}.{values['dataset_name']}.{values['table_name']}"
         )
+        values["_full_table_id"] = full_table_id
 
         values["_bq_client"].create_dataset(
             dataset=values["dataset_name"], exists_ok=True
@@ -148,10 +147,10 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         values["_bq_client"].create_dataset(
             dataset=f"{values['dataset_name']}_temp", exists_ok=True
         )
-        table_ref = bigquery.TableReference.from_string(values["_full_table_id"])
+        table_ref = bigquery.TableReference.from_string(full_table_id)
         values["_bq_client"].create_table(table_ref, exists_ok=True)
         values["logger"].info(
-            f"BigQuery table {values['_full_table_id']} "
+            f"BigQuery table {full_table_id} "
             f"initialized/validated as persistent storage. "
             f"Access via BigQuery console:\n "
             f"https://console.cloud.google.com/bigquery?project={values['project_id']}"
@@ -175,11 +174,11 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
         try:
             table = self._bq_client.get_table(
-                self._full_table_id
+                self.full_table_id
             )  # Attempt to retrieve the table information
         except NotFound:
             self._logger.debug(
-                f"Couldn't find table {self._full_table_id}. "
+                f"Couldn't find table {self.full_table_id}. "
                 f"Table will be created once documents are added"
             )
             return
@@ -231,7 +230,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                         expected_types=[type],
                         expected_modes=["NULLABLE", "REQUIRED"],
                     )
-            self._logger.debug(f"Table {self._full_table_id} validated")
+            self._logger.debug(f"Table {self.full_table_id} validated")
         return table_ref
 
     def _initialize_bq_table(self) -> Any:
@@ -242,7 +241,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         self._bq_client.create_dataset(
             dataset=f"{self.dataset_name}_temp", exists_ok=True
         )
-        table_ref = bigquery.TableReference.from_string(self._full_table_id)
+        table_ref = bigquery.TableReference.from_string(self.full_table_id)
         self._bq_client.create_table(table_ref, exists_ok=True)
         return table_ref
 
@@ -303,7 +302,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
             values_dict.append(record)  # type: ignore[arg-type]
 
         table = self._bq_client.get_table(
-            self._full_table_id
+            self.full_table_id
         )  # Attempt to retrieve the table information
         df = pd.DataFrame(values_dict)
         job = self._bq_client.load_table_from_dataframe(df, table)
@@ -334,7 +333,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         )
         self._bq_client.query(
             f"""
-                    DELETE FROM `{self._full_table_id}` WHERE {self.doc_id_field}
+                    DELETE FROM `{self.full_table_id}` WHERE {self.doc_id_field}
                     IN UNNEST(@ids)
                     """,
             job_config=job_config,
