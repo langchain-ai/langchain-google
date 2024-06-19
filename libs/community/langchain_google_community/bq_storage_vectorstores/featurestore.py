@@ -119,9 +119,9 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             self.distance_measure_type = utils.DistanceMeasureType.DOT_PRODUCT_DISTANCE
 
         vertexai.init(project=self.project_id, location=self.location)
-        _, self._user_agent = get_user_agent(
-            f"{USER_AGENT_PREFIX}-{type(self).__name__}"
-        )
+        self._user_agent = get_user_agent(f"{USER_AGENT_PREFIX}-{type(self).__name__}")[
+            1
+        ]
         self.online_store_name = self.online_store_name or self.dataset_name
         self.view_name = self.view_name or self.table_name
 
