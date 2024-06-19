@@ -73,6 +73,9 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _table_schema: Any = None
     _bq_client: Any = None
     _logger: Any = None
+    _pd: Any = None
+    _bigquery: Any = None
+    _full_table_id: Any = None
 
     class Config:
         arbitrary_types_allowed = True
