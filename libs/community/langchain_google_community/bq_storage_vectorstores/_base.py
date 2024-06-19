@@ -71,6 +71,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     embedding_dimension: Optional[int] = None
     _extra_fields: Union[Dict[str, str], None] = None
     _table_schema: Any = None
+    _bq_client: Any = None
 
     class Config:
         arbitrary_types_allowed = True
