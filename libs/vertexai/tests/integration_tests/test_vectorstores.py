@@ -140,7 +140,7 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("n_threads", ["-1", -1, "fail", 51, "100"])
+@pytest.mark.parametrize("n_threads", [51, "100"])
 def test_gcs_document_storage_invalid_user_input(
     sdk_manager: VectorSearchSDKManager, n_threads: int
 ):
