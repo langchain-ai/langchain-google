@@ -203,7 +203,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     def _init_store(self) -> None:
         from google.cloud.aiplatform_v1beta1 import FeatureOnlineStoreServiceClient
 
-        self.online_store = self._createonline_store()
+        self.online_store = self._create_online_store()
         gca_resource = self.online_store.gca_resource
         endpoint = gca_resource.dedicated_serving_endpoint.public_endpoint_domain_name
         self._search_client = FeatureOnlineStoreServiceClient(
@@ -484,7 +484,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             )
         return result.nearest_neighbors.neighbors
 
-    def _createonline_store(self) -> Any:
+    def _create_online_store(self) -> Any:
         # Search for existing Online store
         import vertexai
         from google.cloud.aiplatform_v1beta1.types import (
