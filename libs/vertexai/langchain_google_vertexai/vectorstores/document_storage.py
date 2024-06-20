@@ -126,7 +126,6 @@ class GCSDocumentStorage(DocumentStorage):
                 None instead.
         """
         if self._threaded:
-            # donwload_docs = self.GcsThreadedDocumentGenerator(keys, self)
             download_docs = [
                 (self._bucket.blob(self._get_blob_name(key)), io.BytesIO())
                 for key in keys
