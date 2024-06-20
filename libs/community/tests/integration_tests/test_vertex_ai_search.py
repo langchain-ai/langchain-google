@@ -58,7 +58,7 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
 @pytest.mark.extended
 def test_vertex_search_tool() -> None:
     data_store_id = os.environ["DATA_STORE_ID"]
-    tool = VertexAISearchSummaryTool(
+    tool = VertexAISearchSummaryTool(  # type: ignore[call-arg, call-arg, call-arg]
         name="vertex-search",
         description="Vertex Search Tool",
         data_store_id=data_store_id,
