@@ -132,7 +132,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             values["online_store_type"],
             values["min_node_count"],
             values["max_node_count"],
-            values["cpu_utilization"],
+            values["cpu_utilization_target"],
             values["_admin_client"],
         )
         gca_resource = values["online_store"].gca_resource
