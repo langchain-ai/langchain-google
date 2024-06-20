@@ -54,7 +54,7 @@ def store_fs_vectorstore(request: pytest.FixtureRequest) -> VertexFSVectorStore:
             not_found_ok=True,
         )
         fs_vs = TestVertexFSVectorStore_fs_vectorstore.store_fs_vectorstore
-        fs_vs._feature_view.delete()  # type: ignore[union-attr]
+        fs_vs.feature_view.delete()  # type: ignore[union-attr]
 
     request.addfinalizer(teardown)
     return TestVertexFSVectorStore_fs_vectorstore.store_fs_vectorstore
