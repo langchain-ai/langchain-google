@@ -166,6 +166,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             else:
                 values["_logger"].debug("Vector index already exists.")
                 values["_have_index"] = True
+            return values
 
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
@@ -521,14 +522,12 @@ def _create_bq_index(
     logger: Any,
 ) -> bool:
     """
-    Create a BQ Vector Index if doesn't exists, if the number of rows is above
+    Create a BQ Vector Index if doesn't exist, if the number of rows is above
     MIN_INDEX_ROWS constant
-    Returns:
-    None
     """
     table = bq_client.get_table(full_table_id)  # type: ignore[union-attr]
     if (table.num_rows or 0) < MIN_INDEX_ROWS:
-        return
+        return False
 
     index_name = f"{table_name}_langchain_index"
     try:

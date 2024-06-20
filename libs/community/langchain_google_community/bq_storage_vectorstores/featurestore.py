@@ -90,6 +90,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     distance_measure_type: Optional[str] = None
     _user_agent: str = ""
     _feature_view: Any = None
+    _admin_client: Any = None
 
     @root_validator(pre=False, skip_on_failure=True)
     def _initialize_bq_vector_index(cls, values: dict) -> dict:
@@ -195,6 +196,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             f"{values['online_store_type']} Vector Search. \n"
             "Optional batch serving available via .to_bq_vector_store() method."
         )
+        return values
 
     def _init_store(self) -> None:
         from google.cloud.aiplatform_v1beta1 import FeatureOnlineStoreServiceClient
