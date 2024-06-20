@@ -291,10 +291,6 @@ def test_vector_store_stream_update_index(
         documents=sample_documents, is_complete_overwrite=True
     )
 
-def test_stupid(
-):
-    assert 1==1
-
 
 @pytest.fixture
 def sample_documents() -> List[Document]:
