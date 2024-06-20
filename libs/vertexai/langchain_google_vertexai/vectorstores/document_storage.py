@@ -6,7 +6,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
-    Generator,
     Iterator,
     List,
     Optional,
@@ -56,10 +55,11 @@ class GCSDocumentStorage(DocumentStorage):
         self._prefix = prefix
         self._threaded = threaded
         self._n_threads = n_threads
-        if threaded == True:
+        if threaded:
             if not (int(n_threads) > 0 and int(n_threads) <= 50):
                 raise ValueError(
-                    "n_threads must be a valid integer, greater than 0 and lower than or equal to 50"
+                    "n_threads must be a valid integer," \
+                    " greater than 0 and lower than or equal to 50"
                 )
 
     def _prepare_doc_for_bulk_upload(
