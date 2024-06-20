@@ -87,8 +87,6 @@ ignore-words-list = "rouge"
 [tool.poetry.group.codespell.dependencies]
 codespell = "^2.2.0"
 
-
-
 [tool.poetry.group.test_integration]
 optional = true
 
@@ -100,13 +98,11 @@ numpy = [
 ]
 
 
-
 [tool.poetry.group.lint]
 optional = true
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.5"
-
 
 
 [tool.poetry.group.typing.dependencies]
