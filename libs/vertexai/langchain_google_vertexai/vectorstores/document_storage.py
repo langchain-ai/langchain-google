@@ -16,7 +16,7 @@ from typing import (
 
 from google.api_core.exceptions import NotFound
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
-from google.cloud.storage import (  # type: ignore[attr-defined, unused-ignore]
+from google.cloud.storage import (  # type: ignore[attr-defined, unused-ignore, import-untyped]
     Blob,
     transfer_manager,
 )
@@ -93,7 +93,7 @@ class GCSDocumentStorage(DocumentStorage):
                 max_workers=self._n_threads,
             )
 
-            for i, result in enumerate(results):
+            for result in results:
                 # The results list is either `None` or an exception for each filename in
                 # the input list, in order.
                 if isinstance(result, Exception):
@@ -114,8 +114,9 @@ class GCSDocumentStorage(DocumentStorage):
             data_json = json.loads(data)
             return Document(**data_json)
         else:
-            raise Exception("Unexpected result type when batch getting"\
-                            " multiple files from GCS")
+            raise Exception(
+                "Unexpected result type when batch getting multiple files from GCS"
+            )
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
