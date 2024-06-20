@@ -99,9 +99,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             FeatureOnlineStoreAdminServiceClient,
             FeatureOnlineStoreServiceClient,
         )
-        from google.cloud.aiplatform_v1beta1.types import (
-            feature_online_store as feature_online_store_pb2,
-        )
         from vertexai.resources.preview.feature_store import (
             utils,  # type: ignore[import-untyped]
         )
@@ -127,71 +124,26 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             client_options={"api_endpoint": api_endpoint},
             client_info=get_client_info(module=values["_user_agent"]),
         )
-        stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
-            project=values["project_id"], location=values["location"]
+        values["online_store"] = _create_online_store(
+            values["project_id"],
+            values["location"],
+            values["online_store_name"],
+            values["_logger"],
+            values["online_store_type"],
+            values["min_node_count"],
+            values["max_node_count"],
+            values["cpu_utilization"],
+            values["_admin_client"],
         )
-        for store in stores_list:
-            if store.name == values["online_store_name"]:
-                values["online_store"] = store
-
-        if not values.get("online_store"):
-            values["_logger"].info("Creating feature store online store")
-            # Create it otherwise
-            if values["online_store_type"] == "bigtable":
-                online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                    bigtable=feature_online_store_pb2.FeatureOnlineStore.Bigtable(
-                        auto_scaling=feature_online_store_pb2.FeatureOnlineStore.Bigtable.AutoScaling(
-                            min_node_count=values["min_node_count"],
-                            max_node_count=values["max_node_count"],
-                            cpu_utilization_target=values["cpu_utilization_target"],
-                        )
-                    ),
-                    embedding_management=feature_online_store_pb2.FeatureOnlineStore.EmbeddingManagement(
-                        enabled=True
-                    ),
-                )
-                create_store_lro = values["_admin_client"].create_feature_online_store(
-                    parent=f"projects/{values['project_id']}/locations/{values['location']}",
-                    feature_online_store_id=values["online_store_name"],
-                    feature_online_store=online_store_config,
-                )
-                values["_logger"].info(create_store_lro.result())
-            elif values["online_store_type"] == "optimized":
-                online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                    optimized=feature_online_store_pb2.FeatureOnlineStore.Optimized()
-                )
-                create_store_lro = values["_admin_client"].create_feature_online_store(
-                    parent=f"projects/{values['project_id']}/locations/{values['location']}",
-                    feature_online_store_id=values["online_store_name"],
-                    feature_online_store=online_store_config,
-                )
-                values["_logger"].info(create_store_lro.result())
-                values["_logger"].info(create_store_lro.result())
-
-            else:
-                raise ValueError(
-                    f"{values['online_store_type']} not allowed. "
-                    f"Accepted values are 'bigtable' or 'optimized'."
-                )
-            stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
-                project=values["project_id"], location=values["location"]
-            )
-            for store in stores_list:
-                if store.name == values["online_store_name"]:
-                    values["online_store"] = store
         gca_resource = values["online_store"].gca_resource
         endpoint = gca_resource.dedicated_serving_endpoint.public_endpoint_domain_name
         values["_search_client"] = FeatureOnlineStoreServiceClient(
             client_options={"api_endpoint": endpoint},
             client_info=get_client_info(module=values["_user_agent"]),
         )
-
-        fv_list = vertexai.resources.preview.FeatureView.list(
-            feature_online_store_id=values["online_store"].gca_resource.name
+        values["feature_view"] = _get_feature_view(
+            values["online_store"], values["view_name"]
         )
-        for fv in fv_list:
-            if fv.name == values["view_name"]:
-                values["feature_view"] = fv
 
         values["_logger"].info(
             "VertexFSVectorStore initialized with Feature Store "
@@ -486,62 +438,17 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
 
     def _create_online_store(self) -> Any:
         # Search for existing Online store
-        import vertexai
-        from google.cloud.aiplatform_v1beta1.types import (
-            feature_online_store as feature_online_store_pb2,
+        return _create_online_store(
+            self.project_id,
+            self.location,
+            self.online_store_name,
+            self._logger,
+            self.online_store_type,
+            self.min_node_count,
+            self.max_node_count,
+            self.cpu_utilization_target,
+            self._admin_client,
         )
-
-        stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
-            project=self.project_id, location=self.location
-        )
-        for store in stores_list:
-            if store.name == self.online_store_name:
-                return store
-
-        self._logger.info("Creating feature store online store")
-        # Create it otherwise
-        if self.online_store_type == "bigtable":
-            online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                bigtable=feature_online_store_pb2.FeatureOnlineStore.Bigtable(
-                    auto_scaling=feature_online_store_pb2.FeatureOnlineStore.Bigtable.AutoScaling(
-                        min_node_count=self.min_node_count,
-                        max_node_count=self.max_node_count,
-                        cpu_utilization_target=self.cpu_utilization_target,
-                    )
-                ),
-                embedding_management=feature_online_store_pb2.FeatureOnlineStore.EmbeddingManagement(
-                    enabled=True
-                ),
-            )
-            create_store_lro = self._admin_client.create_feature_online_store(
-                parent=f"projects/{self.project_id}/locations/{self.location}",
-                feature_online_store_id=self.online_store_name,
-                feature_online_store=online_store_config,
-            )
-            self._logger.info(create_store_lro.result())
-        elif self.online_store_type == "optimized":
-            online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                optimized=feature_online_store_pb2.FeatureOnlineStore.Optimized()
-            )
-            create_store_lro = self._admin_client.create_feature_online_store(
-                parent=f"projects/{self.project_id}/locations/{self.location}",
-                feature_online_store_id=self.online_store_name,
-                feature_online_store=online_store_config,
-            )
-            self._logger.info(create_store_lro.result())
-            self._logger.info(create_store_lro.result())
-
-        else:
-            raise ValueError(
-                f"{self.online_store_type} not allowed. "
-                f"Accepted values are 'bigtable' or 'optimized'."
-            )
-        stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
-            project=self.project_id, location=self.location
-        )
-        for store in stores_list:
-            if store.name == self.online_store_name:
-                return store
 
     def _create_feature_view(self) -> Any:
         import vertexai
@@ -579,15 +486,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
 
     def _get_feature_view(self) -> Any | None:
         # Search for existing Feature view
-        import vertexai
-
-        fv_list = vertexai.resources.preview.FeatureView.list(
-            feature_online_store_id=self.online_store.gca_resource.name
-        )
-        for fv in fv_list:
-            if fv.name == self.view_name:
-                return fv
-        return None
+        return _get_feature_view(self.online_store, self.view_name)
 
     @classmethod
     def from_texts(
@@ -640,3 +539,86 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         all_params = {**base_params, **kwargs}
         bq_obj = BigQueryVectorStore(**all_params)
         return bq_obj
+
+
+def _create_online_store(
+    project_id: str,
+    location: str,
+    online_store_name: Optional[str],
+    _logger: Any,
+    online_store_type: Optional[str],
+    min_node_count: int,
+    max_node_count: int,
+    cpu_utilization_target: Any,
+    _admin_client: Any,
+) -> Any:
+    # Search for existing Online store
+    import vertexai
+    from google.cloud.aiplatform_v1beta1.types import (
+        feature_online_store as feature_online_store_pb2,
+    )
+
+    stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
+        project=project_id, location=location
+    )
+    for store in stores_list:
+        if store.name == online_store_name:
+            return store
+
+    _logger.info("Creating feature store online store")
+    # Create it otherwise
+    if online_store_type == "bigtable":
+        online_store_config = feature_online_store_pb2.FeatureOnlineStore(
+            bigtable=feature_online_store_pb2.FeatureOnlineStore.Bigtable(
+                auto_scaling=feature_online_store_pb2.FeatureOnlineStore.Bigtable.AutoScaling(
+                    min_node_count=min_node_count,
+                    max_node_count=max_node_count,
+                    cpu_utilization_target=cpu_utilization_target,
+                )
+            ),
+            embedding_management=feature_online_store_pb2.FeatureOnlineStore.EmbeddingManagement(
+                enabled=True
+            ),
+        )
+        create_store_lro = _admin_client.create_feature_online_store(
+            parent=f"projects/{project_id}/locations/{location}",
+            feature_online_store_id=online_store_name,
+            feature_online_store=online_store_config,
+        )
+        _logger.info(create_store_lro.result())
+    elif online_store_type == "optimized":
+        online_store_config = feature_online_store_pb2.FeatureOnlineStore(
+            optimized=feature_online_store_pb2.FeatureOnlineStore.Optimized()
+        )
+        create_store_lro = _admin_client.create_feature_online_store(
+            parent=f"projects/{project_id}/locations/{location}",
+            feature_online_store_id=online_store_name,
+            feature_online_store=online_store_config,
+        )
+        _logger.info(create_store_lro.result())
+        _logger.info(create_store_lro.result())
+
+    else:
+        raise ValueError(
+            f"{online_store_type} not allowed. "
+            f"Accepted values are 'bigtable' or 'optimized'."
+        )
+    stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
+        project=project_id, location=location
+    )
+    for store in stores_list:
+        if store.name == online_store_name:
+            return store
+
+
+def _get_feature_view(online_store: Any, view_name: Optional[str]) -> Any:
+    # Search for existing Feature view
+    import vertexai
+
+    fv_list = vertexai.resources.preview.FeatureView.list(
+        feature_online_store_id=online_store.gca_resource.name
+    )
+    for fv in fv_list:
+        if fv.name == view_name:
+            return fv
+    return None
