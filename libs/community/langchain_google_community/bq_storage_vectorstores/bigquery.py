@@ -8,6 +8,7 @@ from google.cloud import bigquery  # type: ignore[attr-defined]
 from google.cloud.bigquery.table import Table
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.pydantic_v1 import root_validator
 
 from langchain_google_community.bq_storage_vectorstores._base import (
     BaseBigQueryVectorStore,
@@ -54,19 +55,6 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     _creating_index: bool = False
     _have_index: bool = False
     _last_index_check: datetime = datetime.min
-
-    def __init__(self, **kwargs: Any) -> None:
-        """Constructor for FeatureStore."""
-        super().__init__(**kwargs)
-        self._creating_index = False
-        self._have_index = False
-        self._last_index_check = datetime.min
-        self._initialize_bq_vector_index()
-        self._logger.info(
-            "BigQueryVectorStore initialized with BigQuery VectorSearch. \n"
-            "Optional online serving available via .to_vertex_fs_vector_store() "
-            "method."
-        )
 
     def sync_data(self) -> None:
         pass
@@ -130,75 +118,54 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             docs.append(doc)
         return docs
 
-    def _initialize_bq_vector_index(self) -> Any:
+    @root_validator(pre=False, skip_on_failure=True)
+    def _initialize_bq_vector_index(cls, values: dict) -> dict:
         """
         A vector index in BigQuery table enables efficient
         approximate vector search.
         """
-        if self._have_index or self._creating_index:
-            return
+        if values["_have_index"] or values["_creating_index"]:
+            return values
 
-        table = self._bq_client.get_table(self.full_table_id)  # type: ignore[union-attr]
+        table = values["_bq_client"].get_table(values["_full_table_id"])  # type: ignore[union-attr]
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
-            self._logger.debug("Not enough rows to create a vector index.")
-            return
+            values["_logger"].debug("Not enough rows to create a vector index.")
+            return values
 
-        if datetime.utcnow() - self._last_index_check < INDEX_CHECK_INTERVAL:
-            return
+        if datetime.utcnow() - values["_last_index_check"] < INDEX_CHECK_INTERVAL:
+            return values
 
         with _vector_table_lock:
-            self._last_index_check = datetime.utcnow()
+            values["_last_index_check"] = datetime.utcnow()
             # Check if index exists, create if necessary
             check_query = (
-                f"SELECT 1 FROM `{self.project_id}."
-                f"{self.dataset_name}"
+                f"SELECT 1 FROM `{values['project_id']}."
+                f"{values['dataset_name']}"
                 ".INFORMATION_SCHEMA.VECTOR_INDEXES` WHERE"
-                f" table_name = '{self.table_name}'"
+                f" table_name = '{values['table_name']}'"
             )
-            job = self._bq_client.query(  # type: ignore[union-attr]
+            job = values["_bq_client"].query(  # type: ignore[union-attr]
                 check_query, api_method=bigquery.enums.QueryApiMethod.QUERY
             )
             if job.result().total_rows == 0:
                 # Need to create an index. Make it in a separate thread.
-                self._create_bq_index_in_background()
+                values["_logger"].debug("Trying to create a vector index.")
+                Thread(
+                    target=_create_bq_index,
+                    kwargs={
+                        "bq_client": values["_bq_client"],
+                        "table_name": values["table_name"],
+                        "full_table_id": values["_full_table_id"],
+                        "text_embedding_field": values["text_embedding_field"],
+                        "distance_type": values["distance_type"],
+                        "logger": values["_logger"],
+                    },
+                    daemon=True,
+                ).start()
+
             else:
-                self._logger.debug("Vector index already exists.")
-                self._have_index = True
-
-    def _create_bq_index_in_background(self) -> None:
-        if self._have_index or self._creating_index:
-            return
-
-        self._creating_index = True
-        self._logger.debug("Trying to create a vector index.")
-        Thread(target=self._create_bq_index, daemon=True).start()
-
-    def _create_bq_index(self) -> None:
-        """
-        Create a BQ Vector Index if doesn't exists, if the number of rows is above
-        MIN_INDEX_ROWS constant
-        Returns:
-        None
-        """
-        table = self._bq_client.get_table(self.full_table_id)  # type: ignore[union-attr]
-        if (table.num_rows or 0) < MIN_INDEX_ROWS:
-            return
-
-        index_name = f"{self.table_name}_langchain_index"
-        try:
-            sql = f"""
-                CREATE VECTOR INDEX IF NOT EXISTS
-                `{index_name}`
-                ON `{self.full_table_id}`
-                ({self.text_embedding_field})
-                OPTIONS(distance_type="{self.distance_type}", index_type="IVF")
-            """
-            self._bq_client.query(sql).result()  # type: ignore[union-attr]
-            self._have_index = True
-        except ClientError as ex:
-            self._logger.debug("Vector index creation failed (%s).", ex.args[0])
-        finally:
-            self._creating_index = False
+                values["_logger"].debug("Vector index already exists.")
+                values["_have_index"] = True
 
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
@@ -543,3 +510,37 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             (https://cloud.google.com/bigquery/docs/reference/rest/v2/Job#JobStatistics2).
         """
         return self._bq_client.get_job(job_id)._properties["statistics"]
+
+
+def _create_bq_index(
+    bq_client: Any,
+    table_name: str,
+    full_table_id: str,
+    text_embedding_field: str,
+    distance_type: str,
+    logger: Any,
+) -> bool:
+    """
+    Create a BQ Vector Index if doesn't exists, if the number of rows is above
+    MIN_INDEX_ROWS constant
+    Returns:
+    None
+    """
+    table = bq_client.get_table(full_table_id)  # type: ignore[union-attr]
+    if (table.num_rows or 0) < MIN_INDEX_ROWS:
+        return
+
+    index_name = f"{table_name}_langchain_index"
+    try:
+        sql = f"""
+            CREATE VECTOR INDEX IF NOT EXISTS
+            `{index_name}`
+            ON `{full_table_id}`
+            ({text_embedding_field})
+            OPTIONS(distance_type="{distance_type}", index_type="IVF")
+        """
+        bq_client.query(sql).result()  # type: ignore[union-attr]
+        return True
+    except ClientError as ex:
+        logger.debug("Vector index creation failed (%s).", ex.args[0])
+        return False
