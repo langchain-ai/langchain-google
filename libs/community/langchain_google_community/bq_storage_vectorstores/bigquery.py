@@ -119,12 +119,12 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         return docs
 
     @root_validator(pre=False, skip_on_failure=True)
-    def _initialize_bq_vector_index(cls, values: dict) -> dict:
+    def initialize_bq_vector_index(cls, values: dict) -> dict:
         """
         A vector index in BigQuery table enables efficient
         approximate vector search.
         """
-        if values["_have_index"] or values["_creating_index"]:
+        if values.get("_have_index") or values.get("_creating_index"):
             return values
 
         table = values["_bq_client"].get_table(values["_full_table_id"])  # type: ignore[union-attr]
