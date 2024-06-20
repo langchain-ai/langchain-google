@@ -1,4 +1,5 @@
 import re
+import warnings
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -185,8 +186,13 @@ def _merge_messages(
     for curr in messages:
         curr = curr.copy(deep=True)
         if isinstance(curr, ToolMessage):
-            if isinstance(curr.content, str):
-                curr = HumanMessage(
+            if isinstance(curr.content, list) and all(
+                isinstance(block, dict) and block.get("type") == "tool_result"
+                for block in curr.content
+            ):
+                curr = HumanMessage(curr.content)  # type: ignore[misc]
+            else:
+                curr = HumanMessage(  # type: ignore[misc]
                     [
                         {
                             "type": "tool_result",
@@ -195,8 +201,6 @@ def _merge_messages(
                         }
                     ]
                 )
-            else:
-                curr = HumanMessage(curr.content)
         last = merged[-1] if merged else None
         if isinstance(last, HumanMessage) and isinstance(curr, HumanMessage):
             if isinstance(last.content, str):
@@ -240,27 +244,67 @@ def _make_message_chunk_from_anthropic_event(
     event: "RawMessageStreamEvent",
     *,
     stream_usage: bool = True,
+    coerce_content_to_string: bool,
 ) -> Optional[AIMessageChunk]:
     """Convert Anthropic event to AIMessageChunk.
-
     Note that not all events will result in a message chunk. In these cases
     we return None.
     """
     message_chunk: Optional[AIMessageChunk] = None
+    # See https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/lib/streaming/_messages.py  # noqa: E501
     if event.type == "message_start" and stream_usage:
         input_tokens = event.message.usage.input_tokens
         message_chunk = AIMessageChunk(
-            content="",
+            content="" if coerce_content_to_string else [],
             usage_metadata=UsageMetadata(
                 input_tokens=input_tokens,
                 output_tokens=0,
                 total_tokens=input_tokens,
             ),
         )
-    # See https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/lib/streaming/_messages.py  # noqa: E501
-    elif event.type == "content_block_delta" and event.delta.type == "text_delta":
-        text = event.delta.text
-        message_chunk = AIMessageChunk(content=text)
+    elif (
+        event.type == "content_block_start"
+        and event.content_block is not None
+        and event.content_block.type == "tool_use"
+    ):
+        if coerce_content_to_string:
+            warnings.warn("Received unexpected tool content block.")
+        content_block = event.content_block.model_dump()
+        content_block["index"] = event.index
+        tool_call_chunk = {
+            "index": event.index,
+            "id": event.content_block.id,
+            "name": event.content_block.name,
+            "args": "",
+        }
+        message_chunk = AIMessageChunk(
+            content=[content_block],
+            tool_call_chunks=[tool_call_chunk],  # type: ignore
+        )
+    elif event.type == "content_block_delta":
+        if event.delta.type == "text_delta":
+            if coerce_content_to_string:
+                text = event.delta.text
+                message_chunk = AIMessageChunk(content=text)
+            else:
+                content_block = event.delta.model_dump()
+                content_block["index"] = event.index
+                content_block["type"] = "text"
+                message_chunk = AIMessageChunk(content=[content_block])
+        elif event.delta.type == "input_json_delta":
+            content_block = event.delta.model_dump()
+            content_block["index"] = event.index
+            content_block["type"] = "tool_use"
+            tool_call_chunk = {
+                "index": event.index,
+                "id": None,
+                "name": None,
+                "args": event.delta.partial_json,
+            }
+            message_chunk = AIMessageChunk(
+                content=[content_block],
+                tool_call_chunks=[tool_call_chunk],  # type: ignore
+            )
     elif event.type == "message_delta" and stream_usage:
         output_tokens = event.usage.output_tokens
         message_chunk = AIMessageChunk(
@@ -273,7 +317,6 @@ def _make_message_chunk_from_anthropic_event(
         )
     else:
         pass
-
     return message_chunk
 
 
