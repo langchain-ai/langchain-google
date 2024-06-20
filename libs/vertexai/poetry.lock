@@ -1314,7 +1314,7 @@ tenacity = "^8.1.0,!=8.4.0"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "68e0ae32864ae9251e447d7c580d9330131721e1"
+resolved_reference = "ad50702934b07810305572cca7919dd3c5ff7949"
 subdirectory = "libs/langchain"
 
 [[package]]
@@ -1341,7 +1341,7 @@ tenacity = "^8.1.0,!=8.4.0"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "68e0ae32864ae9251e447d7c580d9330131721e1"
+resolved_reference = "ad50702934b07810305572cca7919dd3c5ff7949"
 subdirectory = "libs/core"
 
 [[package]]
@@ -1362,7 +1362,7 @@ pytest = ">=7,<9"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "68e0ae32864ae9251e447d7c580d9330131721e1"
+resolved_reference = "ad50702934b07810305572cca7919dd3c5ff7949"
 subdirectory = "libs/standard-tests"
 
 [[package]]

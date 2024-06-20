@@ -191,13 +191,17 @@ def _merge_messages(
                 isinstance(block, dict) and block.get("type") == "tool_result"
                 for block in curr.content
             ):
-                curr = HumanMessage(curr.content)  # type: ignore[misc]
+                curr = HumanMessage(curr.content)
             else:
+<<<<<<< HEAD
                 curr = HumanMessage(  # type: ignore[misc]
 =======
             if isinstance(curr.content, str):
                 curr = HumanMessage(
 >>>>>>> 11222da (fmt)
+=======
+                curr = HumanMessage(
+>>>>>>> dc47dc4 (fmt)
                     [
                         {
                             "type": "tool_result",
