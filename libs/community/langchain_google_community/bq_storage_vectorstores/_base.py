@@ -70,7 +70,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     credentials: Optional[Any] = None
     embedding_dimension: Optional[int] = None
     _extra_fields: Union[Dict[str, str], None] = None
-    _table_schema: Any = None
+    table_schema: Any = None
     _bq_client: Any = None
     _logger: Any = None
     _full_table_id: Optional[str] = None
@@ -173,9 +173,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         table_ref = bigquery.TableReference.from_string(self.full_table_id)
 
         try:
-            table = self._bq_client.get_table(
-                self.full_table_id
-            )  # Attempt to retrieve the table information
+            # Attempt to retrieve the table information
+            self._bq_client.get_table(self.full_table_id)
         except NotFound:
             self._logger.debug(
                 f"Couldn't find table {self.full_table_id}. "
@@ -186,7 +185,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         table = self._bq_client.get_table(table_ref)
         schema = table.schema.copy()
         if schema:  ## Check if table has a schema
-            self._table_schema = {field.name: field.field_type for field in schema}
+            self.table_schema = {field.name: field.field_type for field in schema}
             columns = {c.name: c for c in schema}
             validate_column_in_bq_schema(
                 column_name=self.doc_id_field,
