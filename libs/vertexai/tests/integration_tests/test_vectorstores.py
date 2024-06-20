@@ -55,10 +55,14 @@ def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStor
     bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
 
+
 @pytest.fixture
-def gcs_document_storage_unthreaded(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStorage:
+def gcs_document_storage_unthreaded(
+    sdk_manager: VectorSearchSDKManager,
+) -> GCSDocumentStorage:
     bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests", threaded=False)
+
 
 @pytest.fixture
 def datastore_document_storage(
@@ -134,35 +138,43 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     endpoint = sdk_manager.get_endpoint(endpoint_id=os.environ["ENDPOINT_ID"])
     assert isinstance(endpoint, MatchingEngineIndexEndpoint)
 
-@pytest.mark.extended
-@pytest.mark.parametrize(
-    "n_threads", ["-1", -1, "fail", 51, "100"]
-)
-def test_gcs_document_storage_invalid_user_input(
-    sdk_manager: VectorSearchSDKManager,
-    n_threads: int
-):
-    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
-    with pytest.raises(ValueError) as excinfo:  
-        GCSDocumentStorage(bucket=bucket, prefix="integration_tests", threaded=True, n_threads=n_threads)
-    assert isinstance(excinfo.value, ValueError)
 
 @pytest.mark.extended
-@pytest.mark.parametrize(
-    "n_threads", ["1", 1, 50]
-)
-def test_gcs_document_storage_valid_user_input(
-    sdk_manager: VectorSearchSDKManager,
-    n_threads: int
+@pytest.mark.parametrize("n_threads", ["-1", -1, "fail", 51, "100"])
+def test_gcs_document_storage_invalid_user_input(
+    sdk_manager: VectorSearchSDKManager, n_threads: int
 ):
     bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
-    doc_store = GCSDocumentStorage(bucket=bucket, prefix="integration_tests", threaded=True, n_threads=n_threads)
+    with pytest.raises(ValueError) as excinfo:
+        GCSDocumentStorage(
+            bucket=bucket,
+            prefix="integration_tests",
+            threaded=True,
+            n_threads=n_threads,
+        )
+    assert isinstance(excinfo.value, ValueError)
+
+
+@pytest.mark.extended
+@pytest.mark.parametrize("n_threads", ["1", 1, 50])
+def test_gcs_document_storage_valid_user_input(
+    sdk_manager: VectorSearchSDKManager, n_threads: int
+):
+    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    doc_store = GCSDocumentStorage(
+        bucket=bucket, prefix="integration_tests", threaded=True, n_threads=n_threads
+    )
     assert isinstance(doc_store, GCSDocumentStorage)
 
 
 @pytest.mark.extended
 @pytest.mark.parametrize(
-    "storage_class", ["gcs_document_storage", "gcs_document_storage_unthreaded", "datastore_document_storage"]
+    "storage_class",
+    [
+        "gcs_document_storage",
+        "gcs_document_storage_unthreaded",
+        "datastore_document_storage",
+    ],
 )
 def test_document_storage(
     storage_class: str,
@@ -171,18 +183,18 @@ def test_document_storage(
     document_storage: DocumentStorage = request.getfixturevalue(storage_class)
 
     weirdly_encoded_texts = [
-        'ユーザー別サイト',
-        '简体中文',
-        '크로스 플랫폼으로',
-        'מדורים מבוקשים',
-        'أفضل البحوث',
-        'Σὲ γνωρίζω ἀπὸ',
-        'Десятую Международную',
-        'แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช',
-        '∮ E⋅da = Q, n → ∞, ∑ f(i) = ∏ g(i)',
-        'français langue étrangère',
-        'mañana olé y vamos Messi!'
-        ]
+        "ユーザー別サイト",
+        "简体中文",
+        "크로스 플랫폼으로",
+        "מדורים מבוקשים",
+        "أفضل البحوث",
+        "Σὲ γνωρίζω ἀπὸ",
+        "Десятую Международную",
+        "แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช",
+        "∮ E⋅da = Q, n → ∞, ∑ f(i) = ∏ g(i)",
+        "français langue étrangère",
+        "mañana olé y vamos Messi!",
+    ]
 
     N = 10
     documents = [
@@ -192,7 +204,7 @@ def test_document_storage(
         )
         for i, text in enumerate(weirdly_encoded_texts * N)
     ]
-    ids = [str(uuid4()) for i in range(N*len(weirdly_encoded_texts))]
+    ids = [str(uuid4()) for i in range(N * len(weirdly_encoded_texts))]
 
     # Test batch storage and retrieval
     document_storage.mset(list(zip(ids, documents)))
