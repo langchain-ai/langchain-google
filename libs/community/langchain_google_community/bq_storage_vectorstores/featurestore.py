@@ -100,7 +100,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             FeatureOnlineStoreServiceClient,
         )
         from google.cloud.aiplatform_v1beta1.types import (
-            feature_online_store as feature_online_store_pb2,
+            featureonline_store as featureonline_store_pb2,
         )
         from vertexai.resources.preview.feature_store import (
             utils,  # type: ignore[import-untyped]
@@ -138,32 +138,32 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             values["_logger"].info("Creating feature store online store")
             # Create it otherwise
             if values["online_store_type"] == "bigtable":
-                online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                    bigtable=feature_online_store_pb2.FeatureOnlineStore.Bigtable(
-                        auto_scaling=feature_online_store_pb2.FeatureOnlineStore.Bigtable.AutoScaling(
+                online_store_config = featureonline_store_pb2.FeatureOnlineStore(
+                    bigtable=featureonline_store_pb2.FeatureOnlineStore.Bigtable(
+                        auto_scaling=featureonline_store_pb2.FeatureOnlineStore.Bigtable.AutoScaling(
                             min_node_count=values["min_node_count"],
                             max_node_count=values["max_node_count"],
                             cpu_utilization_target=values["cpu_utilization_target"],
                         )
                     ),
-                    embedding_management=feature_online_store_pb2.FeatureOnlineStore.EmbeddingManagement(
+                    embedding_management=featureonline_store_pb2.FeatureOnlineStore.EmbeddingManagement(
                         enabled=True
                     ),
                 )
-                create_store_lro = values["_admin_client"].create_feature_online_store(
+                create_store_lro = values["_admin_client"].create_featureonline_store(
                     parent=f"projects/{values['project_id']}/locations/{values['location']}",
-                    feature_online_store_id=values["online_store_name"],
-                    feature_online_store=online_store_config,
+                    featureonline_store_id=values["online_store_name"],
+                    featureonline_store=online_store_config,
                 )
                 values["_logger"].info(create_store_lro.result())
             elif values["online_store_type"] == "optimized":
-                online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                    optimized=feature_online_store_pb2.FeatureOnlineStore.Optimized()
+                online_store_config = featureonline_store_pb2.FeatureOnlineStore(
+                    optimized=featureonline_store_pb2.FeatureOnlineStore.Optimized()
                 )
-                create_store_lro = values["_admin_client"].create_feature_online_store(
+                create_store_lro = values["_admin_client"].create_featureonline_store(
                     parent=f"projects/{values['project_id']}/locations/{values['location']}",
-                    feature_online_store_id=values["online_store_name"],
-                    feature_online_store=online_store_config,
+                    featureonline_store_id=values["online_store_name"],
+                    featureonline_store=online_store_config,
                 )
                 values["_logger"].info(create_store_lro.result())
                 values["_logger"].info(create_store_lro.result())
@@ -178,8 +178,8 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             )
             for store in stores_list:
                 if store.name == values["online_store_name"]:
-                    values["_online_store"] = store
-        gca_resource = values["_online_store"].gca_resource
+                    values["online_store"] = store
+        gca_resource = values["online_store"].gca_resource
         endpoint = gca_resource.dedicated_serving_endpoint.public_endpoint_domain_name
         values["_search_client"] = FeatureOnlineStoreServiceClient(
             client_options={"api_endpoint": endpoint},
@@ -187,7 +187,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         )
 
         fv_list = vertexai.resources.preview.FeatureView.list(
-            feature_online_store_id=values["_online_store"].gca_resource.name
+            featureonline_store_id=values["online_store"].gca_resource.name
         )
         for fv in fv_list:
             if fv.name == values["view_name"]:
@@ -203,8 +203,8 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     def _init_store(self) -> None:
         from google.cloud.aiplatform_v1beta1 import FeatureOnlineStoreServiceClient
 
-        self._online_store = self._create_online_store()
-        gca_resource = self._online_store.gca_resource
+        self.online_store = self._createonline_store()
+        gca_resource = self.online_store.gca_resource
         endpoint = gca_resource.dedicated_serving_endpoint.public_endpoint_domain_name
         self._search_client = FeatureOnlineStoreServiceClient(
             client_options={"api_endpoint": endpoint},
@@ -458,7 +458,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         from google.cloud import aiplatform
         from google.cloud.aiplatform_v1beta1.types import (
             NearestNeighborQuery,
-            feature_online_store_service,
+            featureonline_store_service,
         )
 
         if embedding:
@@ -476,7 +476,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         )
         with aiplatform.telemetry.tool_context_manager(self._user_agent):
             result = self._search_client.search_nearest_entities(
-                request=feature_online_store_service.SearchNearestEntitiesRequest(
+                request=featureonline_store_service.SearchNearestEntitiesRequest(
                     feature_view=self._feature_view.gca_resource.name,  # type: ignore[union-attr]
                     query=query,
                     return_full_entity=True,  # returning entities with metadata
@@ -484,11 +484,11 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             )
         return result.nearest_neighbors.neighbors
 
-    def _create_online_store(self) -> Any:
+    def _createonline_store(self) -> Any:
         # Search for existing Online store
         import vertexai
         from google.cloud.aiplatform_v1beta1.types import (
-            feature_online_store as feature_online_store_pb2,
+            featureonline_store as featureonline_store_pb2,
         )
 
         stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
@@ -501,32 +501,32 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         self._logger.info("Creating feature store online store")
         # Create it otherwise
         if self.online_store_type == "bigtable":
-            online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                bigtable=feature_online_store_pb2.FeatureOnlineStore.Bigtable(
-                    auto_scaling=feature_online_store_pb2.FeatureOnlineStore.Bigtable.AutoScaling(
+            online_store_config = featureonline_store_pb2.FeatureOnlineStore(
+                bigtable=featureonline_store_pb2.FeatureOnlineStore.Bigtable(
+                    auto_scaling=featureonline_store_pb2.FeatureOnlineStore.Bigtable.AutoScaling(
                         min_node_count=self.min_node_count,
                         max_node_count=self.max_node_count,
                         cpu_utilization_target=self.cpu_utilization_target,
                     )
                 ),
-                embedding_management=feature_online_store_pb2.FeatureOnlineStore.EmbeddingManagement(
+                embedding_management=featureonline_store_pb2.FeatureOnlineStore.EmbeddingManagement(
                     enabled=True
                 ),
             )
-            create_store_lro = self._admin_client.create_feature_online_store(
+            create_store_lro = self._admin_client.create_featureonline_store(
                 parent=f"projects/{self.project_id}/locations/{self.location}",
-                feature_online_store_id=self.online_store_name,
-                feature_online_store=online_store_config,
+                featureonline_store_id=self.online_store_name,
+                featureonline_store=online_store_config,
             )
             self._logger.info(create_store_lro.result())
         elif self.online_store_type == "optimized":
-            online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-                optimized=feature_online_store_pb2.FeatureOnlineStore.Optimized()
+            online_store_config = featureonline_store_pb2.FeatureOnlineStore(
+                optimized=featureonline_store_pb2.FeatureOnlineStore.Optimized()
             )
-            create_store_lro = self._admin_client.create_feature_online_store(
+            create_store_lro = self._admin_client.create_featureonline_store(
                 parent=f"projects/{self.project_id}/locations/{self.location}",
-                feature_online_store_id=self.online_store_name,
-                feature_online_store=online_store_config,
+                featureonline_store_id=self.online_store_name,
+                featureonline_store=online_store_config,
             )
             self._logger.info(create_store_lro.result())
             self._logger.info(create_store_lro.result())
@@ -568,7 +568,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 distance_measure_type=self.distance_measure_type,
                 algorithm_config=self.algorithm_config,
             )
-            return self._online_store.create_feature_view(
+            return self.online_store.create_feature_view(
                 name=self.view_name,
                 source=big_query_source,
                 sync_config=self.cron_schedule,
@@ -582,7 +582,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         import vertexai
 
         fv_list = vertexai.resources.preview.FeatureView.list(
-            feature_online_store_id=self._online_store.gca_resource.name
+            featureonline_store_id=self.online_store.gca_resource.name
         )
         for fv in fv_list:
             if fv.name == self.view_name:
