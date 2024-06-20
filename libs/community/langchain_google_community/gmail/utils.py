@@ -31,7 +31,7 @@ def import_google() -> Tuple[Request, Credentials]:
             "You need to install gmail dependencies to use this toolkit. "
             "Try running poetry install --with gmail"
         )
-    return Request, Credentials
+    return Request, Credentials  # type: ignore[return-value]
 
 
 def import_installed_app_flow() -> InstalledAppFlow:
@@ -93,7 +93,7 @@ def get_gmail_credentials(
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            creds.refresh(Request())  # type: ignore[call-arg]
         else:
             # https://developers.google.com/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application # noqa
             flow = InstalledAppFlow.from_client_secrets_file(

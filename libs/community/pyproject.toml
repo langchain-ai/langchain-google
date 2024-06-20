@@ -12,7 +12,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain-core = "^0.2.0"
+langchain-core = "^0.2.7"
 langchain-community = "^0.2.1"
 google-api-core = "^2.17.1"
 google-api-python-client = "^2.122.0"
@@ -32,6 +32,13 @@ google-cloud-translate = { version = "^3.15.3", optional = true }
 google-cloud-discoveryengine = { version = "^0.11.11", optional = true }
 google-cloud-vision = { version = "^3.7.2", optional = true }
 beautifulsoup4 = { version = "^4.12.3", optional = true }
+pandas = { version = ">= 1.0.0", optional = true }
+google-cloud-bigquery-storage = { version = ">=2.6.0,<3",  optional = true }
+pyarrow = { version = ">= 6.0.1", optional = true }
+db-dtypes = { version = "^1.2.0", optional = true }
+google-cloud-aiplatform = { version = "^1.47.0", optional = true }
+pydantic = { version = "^2.7.2", optional = true }
+tenacity = "~8.3.0"
 
 [tool.poetry.extras]
 bigquery = ["google-cloud-bigquery"]
@@ -50,6 +57,7 @@ translate = ["google-cloud-translate"]
 vertexaisearch = ["google-cloud-discoveryengine"]
 vision = ["google-cloud-vision"]
 gmail = ["google-auth-httplib2", "google-auth-oauthlib", "beautifulsoup4"]
+featurestore = ["google-cloud-bigquery-storage", "pandas", "pyarrow","db-dtypes", "google-cloud-aiplatform", "pydantic"]
 
 [tool.poetry.group.test]
 optional = true
@@ -76,17 +84,23 @@ ignore-words-list = "rouge"
 [tool.poetry.group.codespell.dependencies]
 codespell = "^2.2.0"
 
+
+
 [tool.poetry.group.test_integration]
 optional = true
 
 [tool.poetry.group.test_integration.dependencies]
 pillow = "^10.1.0"
 
+
+
 [tool.poetry.group.lint]
 optional = true
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.5"
+
+
 
 [tool.poetry.group.typing.dependencies]
 mypy = "^0.991"
@@ -95,6 +109,8 @@ types-google-cloud-ndb = "^2.2.0.1"
 types-pillow = "^10.1.0.2"
 types-protobuf = "^4.24.0.20240302"
 types-beautifulsoup4 = "^4.12.0"
+
+
 
 [tool.poetry.group.dev]
 optional = true

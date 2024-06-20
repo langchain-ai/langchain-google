@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from operator import itemgetter
 from typing import (
     Any,
@@ -15,7 +14,6 @@ from typing import (
     Sequence,
     Type,
     Union,
-    cast,
 )
 
 from langchain_core.callbacks.manager import (
@@ -31,7 +29,6 @@ from langchain_core.language_models.chat_models import (
 from langchain_core.language_models.llms import BaseLLM
 from langchain_core.messages import (
     AIMessage,
-    AIMessageChunk,
     BaseMessage,
 )
 from langchain_core.outputs import (
@@ -277,34 +274,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if stream_usage is None:
             stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        if _tools_in_params(params):
-            result = self._generate(
-                messages, stop=stop, run_manager=run_manager, **kwargs
-            )
-            message = result.generations[0].message
-            if isinstance(message, AIMessage) and message.tool_calls is not None:
-                tool_call_chunks = [
-                    {
-                        "name": tool_call["name"],
-                        "args": json.dumps(tool_call["args"]),
-                        "id": tool_call["id"],
-                        "index": idx,
-                    }
-                    for idx, tool_call in enumerate(message.tool_calls)
-                ]
-                message_chunk = AIMessageChunk(
-                    content=message.content,
-                    tool_call_chunks=tool_call_chunks,  # type: ignore[arg-type]
-                    usage_metadata=message.usage_metadata,
-                )
-                yield ChatGenerationChunk(message=message_chunk)
-            else:
-                yield cast(ChatGenerationChunk, result.generations[0])
-            return
         stream = self.client.messages.create(**params, stream=True)
+        coerce_content_to_string = not _tools_in_params(params)
         for event in stream:
             msg = _make_message_chunk_from_anthropic_event(
-                event, stream_usage=stream_usage
+                event,
+                stream_usage=stream_usage,
+                coerce_content_to_string=coerce_content_to_string,
             )
             if msg is not None:
                 chunk = ChatGenerationChunk(message=msg)
@@ -324,34 +300,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if stream_usage is None:
             stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        if _tools_in_params(params):
-            result = await self._agenerate(
-                messages, stop=stop, run_manager=run_manager, **kwargs
-            )
-            message = result.generations[0].message
-            if isinstance(message, AIMessage) and message.tool_calls is not None:
-                tool_call_chunks = [
-                    {
-                        "name": tool_call["name"],
-                        "args": json.dumps(tool_call["args"]),
-                        "id": tool_call["id"],
-                        "index": idx,
-                    }
-                    for idx, tool_call in enumerate(message.tool_calls)
-                ]
-                message_chunk = AIMessageChunk(
-                    content=message.content,
-                    tool_call_chunks=tool_call_chunks,  # type: ignore[arg-type]
-                    usage_metadata=message.usage_metadata,
-                )
-                yield ChatGenerationChunk(message=message_chunk)
-            else:
-                yield cast(ChatGenerationChunk, result.generations[0])
-            return
         stream = await self.async_client.messages.create(**params, stream=True)
+        coerce_content_to_string = not _tools_in_params(params)
         async for event in stream:
             msg = _make_message_chunk_from_anthropic_event(
-                event, stream_usage=stream_usage
+                event,
+                stream_usage=stream_usage,
+                coerce_content_to_string=coerce_content_to_string,
             )
             if msg is not None:
                 chunk = ChatGenerationChunk(message=msg)
