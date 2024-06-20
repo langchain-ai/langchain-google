@@ -69,7 +69,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     doc_id_field: str = "doc_id"
     credentials: Optional[Any] = None
     embedding_dimension: Optional[int] = None
-    _extra_fields: Union[Dict[str, str], None] = None
+    extra_fields: Union[Dict[str, str], None] = None
     table_schema: Any = None
     _bq_client: Any = None
     _logger: Any = None
@@ -205,7 +205,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 expected_types=["FLOAT", "FLOAT64"],
                 expected_modes=["REPEATED"],
             )
-            if self._extra_fields is None:
+            if self.extra_fields is None:
                 extra_fields = {}
                 for column in schema:
                     if column.name not in [
@@ -220,9 +220,9 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                                 f"REPEATED fields are not supported in this context."
                             )
                         extra_fields[column.name] = column.field_type
-                self._extra_fields = extra_fields
+                self.extra_fields = extra_fields
             else:
-                for field, type in self._extra_fields.items():
+                for field, type in self.extra_fields.items():
                     validate_column_in_bq_schema(
                         column_name=field,
                         columns=columns,
