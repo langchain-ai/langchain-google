@@ -11,6 +11,7 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Union,
 )
 
 from google.api_core.exceptions import NotFound
@@ -58,7 +59,7 @@ class GCSDocumentStorage(DocumentStorage):
         if threaded:
             if not (int(n_threads) > 0 and int(n_threads) <= 50):
                 raise ValueError(
-                    "n_threads must be a valid integer," \
+                    "n_threads must be a valid integer,"
                     " greater than 0 and lower than or equal to 50"
                 )
 
@@ -101,18 +102,20 @@ class GCSDocumentStorage(DocumentStorage):
             for key, value in key_value_pairs:
                 self._set_one(key, value)
 
-    def _convert_bytes_to_doc(self, doc: io.BytesIO, result: Any) -> Document:
+    def _convert_bytes_to_doc(
+        self, doc: io.BytesIO, result: Any
+    ) -> Union[Document, None]:
         if isinstance(result, NotFound):
             return None
         elif result is None:
             doc.seek(0)
-            data = doc.read()
-            data = data.decode("utf-8")
-            data = json.loads(data)
-            retVal = Document(**data)
-            return retVal
+            raw_doc = doc.read()
+            data = raw_doc.decode("utf-8")
+            data_json = json.loads(data)
+            return Document(**data_json)
         else:
-            raise Exception("Unexpected result type when batch getting files from GCS")
+            raise Exception("Unexpected result type when batch getting"\
+                            " multiple files from GCS")
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
