@@ -228,7 +228,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         if filter:
             filter_expressions = []
             for column, value in filter.items():
-                if self._table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
+                if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
                     filter_expressions.append(f"base.{column} = {value}")
                 else:
                     filter_expressions.append(f"base.{column} = '{value}'")
