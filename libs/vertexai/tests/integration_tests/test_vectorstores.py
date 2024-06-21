@@ -45,7 +45,7 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 @pytest.fixture
 def sdk_manager() -> VectorSearchSDKManager:
     sdk_manager = VectorSearchSDKManager(
-        project_id=os.environ["PROJECT_ID"], region=os.environ["REGION"]
+        project_id=os.environ["PROJECT_ID"], region=os.environ.get("REGION", "us-central1")
     )
     return sdk_manager
 
@@ -78,7 +78,7 @@ def vector_store() -> VectorSearchVectorStore:
 
     vector_store = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
+        region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         index_id=os.environ["INDEX_ID"],
         endpoint_id=os.environ["ENDPOINT_ID"],
@@ -94,7 +94,7 @@ def vector_store_private() -> VectorSearchVectorStore:
 
     vector_store_private = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
+        region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         index_id=os.environ["INDEX_ID"],
         endpoint_id=os.environ["ENDPOINT_ID"],
@@ -113,7 +113,7 @@ def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
 
     vector_store = VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
+        region=os.environ.get("REGION", "us-central1"),
         index_id=os.environ["STREAM_INDEX_ID_DATASTORE"],
         endpoint_id=os.environ["STREAM_ENDPOINT_ID_DATASTORE"],
         embedding=embeddings,
@@ -140,7 +140,7 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("n_threads", [51, "100"])
+@pytest.mark.parametrize("n_threads", ["-1",-1,51, "100"])
 def test_gcs_document_storage_invalid_user_input(
     sdk_manager: VectorSearchSDKManager, n_threads: int
 ):
