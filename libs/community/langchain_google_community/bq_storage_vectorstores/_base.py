@@ -80,7 +80,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
     @abstractmethod
     def sync_data(self) -> None:
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     def get_documents(
@@ -101,7 +101,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def _similarity_search_by_vectors_with_scores_and_embeddings(
@@ -111,7 +111,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         k: int = 5,
         batch_size: Union[int, None] = None,
     ) -> list[list[list[Any]]]:
-        raise NotImplementedError()
+        ...
 
     @root_validator(pre=False, skip_on_failure=True)
     def validate_vals(cls, values: dict) -> dict:
