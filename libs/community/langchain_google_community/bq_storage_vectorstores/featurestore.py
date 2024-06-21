@@ -399,7 +399,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
 
     def _search_embedding(
         self,
-        embedding: Optional[Any] = None,
+        embedding: Any = None,
         entity_id: Optional[str] = None,
         k: int = 5,
         string_filters: Optional[List[dict]] = None,
