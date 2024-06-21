@@ -1533,7 +1533,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             .. code-block:: python
 
                 from langchain_core.pydantic_v1 import BaseModel
-                from langchain_core.utils.function_calling import convert_to_openai_tool
+                from langchain_core.utils.function_calling import convert_to_openai_function
                 from langchain_google_vertexai import ChatVertexAI
 
                 class AnswerWithJustification(BaseModel):
@@ -1541,7 +1541,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     answer: str
                     justification: str
 
-                dict_schema = convert_to_openai_tool(AnswerWithJustification)
+                dict_schema = convert_to_openai_function(AnswerWithJustification)
                 llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
                 structured_llm = llm.with_structured_output(dict_schema)
 
