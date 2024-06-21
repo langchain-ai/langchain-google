@@ -495,6 +495,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         )
 
         base_params = self.dict(include=BaseBigQueryVectorStore.__fields__.keys())
+        base_params["embedding"] = self.embedding
         all_params = {**base_params, **kwargs}
         fs_obj = VertexFSVectorStore(**all_params)
         return fs_obj
