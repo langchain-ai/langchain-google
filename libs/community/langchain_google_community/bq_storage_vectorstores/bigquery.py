@@ -41,8 +41,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         table_name: BigQuery table name.
         location: BigQuery region/location.
         content_field: Name of the column storing document content (default: "content").
-        text_embedding_field: Name of the column storing text embeddings (default:
-            "text_embedding").
+        embedding_field: Name of the column storing text embeddings (default:
+            "embedding").
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
@@ -109,7 +109,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             metadata = {}
             for field in row.keys():
                 if field not in [
-                    self.text_embedding_field,
+                    self.embedding_field,
                     self.content_field,
                 ]:
                     metadata[field] = row[field]
@@ -156,7 +156,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                         "bq_client": values["_bq_client"],
                         "table_name": values["table_name"],
                         "full_table_id": values["_full_table_id"],
-                        "text_embedding_field": values["text_embedding_field"],
+                        "embedding_field": values["embedding_field"],
                         "distance_type": values["distance_type"],
                         "logger": values["_logger"],
                     },
@@ -240,7 +240,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         if table_to_query is not None:
             embeddings_query = f"""
             with embeddings as (
-            SELECT {self.text_embedding_field}, ROW_NUMBER() OVER() as row_num
+            SELECT {self.embedding_field}, ROW_NUMBER() OVER() as row_num
             from `{table_to_query}`
             )"""
 
@@ -249,10 +249,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
             for i in range(num_embeddings):
                 embeddings_query += (
-                    f"SELECT {i} as row_num, @emb_{i} AS text_embedding"
+                    f"SELECT {i} as row_num, @emb_{i} AS {self.embedding_field}"
                     if i == 0
                     else f"\nUNION ALL\n"
-                    f"SELECT {i} as row_num, @emb_{i} AS text_embedding"
+                    f"SELECT {i} as row_num, @emb_{i} AS {self.embedding_field}"
                 )
             embeddings_query += "\n)\n"
 
@@ -273,8 +273,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         {select_clause}
         FROM VECTOR_SEARCH(
             TABLE `{self.full_table_id}`,
-            "text_embedding",
-            (SELECT row_num, {self.text_embedding_field} from embeddings),
+            "{self.embedding_field}",
+            (SELECT row_num, {self.embedding_field} from embeddings),
             distance_type => "{self.distance_type}",
             top_k => {k}
         )
@@ -319,7 +319,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         df = pd.DataFrame([])
 
-        df[self.text_embedding_field] = embeddings
+        df[self.embedding_field] = embeddings
         table_id = (
             f"{self.project_id}."
             f"{self.dataset_name}_temp."
@@ -327,7 +327,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         )
 
         schema = [
-            bigquery.SchemaField(self.text_embedding_field, "FLOAT64", mode="REPEATED")
+            bigquery.SchemaField(self.embedding_field, "FLOAT64", mode="REPEATED")
         ]
         table_ref = bigquery.Table(table_id, schema=schema)
         table = self._bq_client.create_table(table_ref)
@@ -351,7 +351,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         metadata_fields = [
             x
             for x in result_fields
-            if x not in [self.text_embedding_field, self.content_field, "row_num"]
+            if x not in [self.embedding_field, self.content_field, "row_num"]
         ]
         documents = []
         for result in search_results:
@@ -367,7 +367,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 document_record = [
                     document,
                     metadata["score"],
-                    result[self.text_embedding_field],  # type: ignore
+                    result[self.embedding_field],  # type: ignore
                 ]
             else:
                 document_record = [document, metadata["score"]]
@@ -425,7 +425,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             k=k,
             num_embeddings=len(embeddings),
             table_to_query=table_ref,
-            fields_to_exclude=[self.text_embedding_field],
+            fields_to_exclude=[self.embedding_field],
         )
 
         job_config = bigquery.QueryJobConfig(
@@ -518,7 +518,7 @@ def _create_bq_index(
     bq_client: Any,
     table_name: str,
     full_table_id: str,
-    text_embedding_field: str,
+    embedding_field: str,
     distance_type: str,
     logger: Any,
 ) -> bool:
@@ -536,7 +536,7 @@ def _create_bq_index(
             CREATE VECTOR INDEX IF NOT EXISTS
             `{index_name}`
             ON `{full_table_id}`
-            ({text_embedding_field})
+            ({embedding_field})
             OPTIONS(distance_type="{distance_type}", index_type="IVF")
         """
         bq_client.query(sql).result()  # type: ignore[union-attr]

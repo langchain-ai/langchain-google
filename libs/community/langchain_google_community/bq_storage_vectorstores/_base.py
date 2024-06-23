@@ -44,8 +44,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         table_name: BigQuery table name.
         location: BigQuery region/location.
         content_field: Name of the column storing document content (default: "content").
-        text_embedding_field: Name of the column storing text embeddings (default:
-            "text_embedding").
+        embedding_field: Name of the column storing text embeddings (default:
+            "embedding").
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
@@ -65,7 +65,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     table_name: str
     location: str
     content_field: str = "content"
-    text_embedding_field: str = "text_embedding"
+    embedding_field: str = "embedding"
     doc_id_field: str = "doc_id"
     credentials: Optional[Any] = None
     embedding_dimension: Optional[int] = None
@@ -200,7 +200,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 expected_modes=["NULLABLE", "REQUIRED"],
             )
             validate_column_in_bq_schema(
-                column_name=self.text_embedding_field,
+                column_name=self.embedding_field,
                 columns=columns,
                 expected_types=["FLOAT", "FLOAT64"],
                 expected_modes=["REPEATED"],
@@ -211,7 +211,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                     if column.name not in [
                         self.doc_id_field,
                         self.content_field,
-                        self.text_embedding_field,
+                        self.embedding_field,
                     ]:
                         # Check for unsupported REPEATED mode
                         if column.mode == "REPEATED":
@@ -295,7 +295,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
             record = {
                 self.doc_id_field: idx,
                 self.content_field: text,
-                self.text_embedding_field: emb,
+                self.embedding_field: emb,
             }
             record.update(metadata_dict)
             values_dict.append(record)  # type: ignore[arg-type]

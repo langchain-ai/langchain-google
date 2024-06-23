@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from datetime import timedelta
 from subprocess import TimeoutExpired
-from typing import Any, Dict, List, Literal, MutableSequence, Optional, Type, Union
+from typing import Any, Dict, List, MutableSequence, Optional, Type, Union
 
 import proto  # type: ignore[import-untyped]
 from google.api_core.exceptions import (
@@ -49,8 +49,8 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         table_name: BigQuery table name.
         location: BigQuery region/location.
         content_field: Name of the column storing document content (default: "content").
-        text_embedding_field: Name of the column storing text embeddings (default:
-            "text_embedding").
+        embedding_field: Name of the column storing text embeddings (default:
+            "embedding").
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
@@ -59,8 +59,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             store. Defaults to the dataset name.
         online_store_location (str, optional): Location of the online store. Default
             to "location" parameter.
-        online_store_type (Literal["optimized"]): Type of online store. Currently only
-            "optimized" is accepted.
         view_name (str, optional): Name of the Feature View. Defaults to the table name.
         cron_schedule (str, optional): Cron schedule for data syncing.
         algorithm_config (Any, optional): Algorithm configuration for indexing.
@@ -72,7 +70,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
 
     online_store_name: Union[str, None] = None
     online_store_location: Union[str, None] = None
-    online_store_type: Literal["optimized"] = "optimized"
     view_name: Union[str, None] = None
     cron_schedule: Union[str, None] = None
     algorithm_config: Optional[Any] = None
@@ -119,7 +116,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             project_id=values["project_id"],
             location=values["location"],
             online_store_name=values["online_store_name"],
-            online_store_type=values["online_store_type"],
             _admin_client=values["_admin_client"],
             _logger=values["_logger"],
         )
@@ -134,8 +130,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         )
 
         values["_logger"].info(
-            "VertexFSVectorStore initialized with Feature Store "
-            f"{values['online_store_type']} Vector Search. \n"
+            "VertexFSVectorStore initialized with Feature Store Vector Search. \n"
             "Optional batch serving available via .to_bq_vector_store() method."
         )
         return values
@@ -297,7 +292,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 metadata, content = {}, None
                 for feature in result.to_dict()["features"]:
                     if feature["name"] not in [
-                        self.text_embedding_field,
+                        self.embedding_field,
                         self.content_field,
                     ]:
                         metadata[feature["name"]] = list(feature["value"].values())[0]
@@ -357,14 +352,14 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
 
             for feature in result.entity_key_values.key_values.features:
                 if feature.name not in [
-                    self.text_embedding_field,
+                    self.embedding_field,
                     self.content_field,
                 ]:
                     dict_values = proto.Message.to_dict(feature.value)
                     col_type, value = next(iter(dict_values.items()))
                     value = cast_proto_type(column=col_type, value=value)
                     metadata[feature.name] = value
-                if feature.name == self.text_embedding_field:
+                if feature.name == self.embedding_field:
                     embedding = feature.value.double_array_value.values
                 if feature.name == self.content_field:
                     dict_values = proto.Message.to_dict(feature.value)
@@ -431,7 +426,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 project_id=self.project_id,
                 location=self.location,
                 online_store_name=self.online_store_name,
-                online_store_type=self.online_store_type,
                 _admin_client=self._admin_client,
                 _logger=self._logger,
             )
@@ -454,7 +448,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 entity_id_columns=[self.doc_id_field],
             )
             index_config = utils.IndexConfig(
-                embedding_column=self.text_embedding_field,
+                embedding_column=self.embedding_field,
                 crowding_column=self.crowding_column,
                 filter_columns=self.filter_columns,
                 dimensions=self.embedding_dimension,
@@ -533,7 +527,6 @@ def _create_online_store(
     location: str,
     online_store_name: str,
     _logger: Any,
-    online_store_type: str,
     _admin_client: Any,
 ) -> Any:
     # Search for existing Online store
@@ -551,22 +544,17 @@ def _create_online_store(
 
     _logger.info("Creating feature store online store")
     # Create it otherwise
-    if online_store_type == "optimized":
-        online_store_config = feature_online_store_pb2.FeatureOnlineStore(
-            optimized=feature_online_store_pb2.FeatureOnlineStore.Optimized()
-        )
-        create_store_lro = _admin_client.create_feature_online_store(
-            parent=f"projects/{project_id}/locations/{location}",
-            feature_online_store_id=online_store_name,
-            feature_online_store=online_store_config,
-        )
-        _logger.info(create_store_lro.result())
-        _logger.info(create_store_lro.result())
 
-    else:
-        raise ValueError(
-            f"{online_store_type} not allowed. Accepted values is 'optimized'."
-        )
+    online_store_config = feature_online_store_pb2.FeatureOnlineStore(
+        optimized=feature_online_store_pb2.FeatureOnlineStore.Optimized()
+    )
+    create_store_lro = _admin_client.create_feature_online_store(
+        parent=f"projects/{project_id}/locations/{location}",
+        feature_online_store_id=online_store_name,
+        feature_online_store=online_store_config,
+    )
+    _logger.info(create_store_lro.result())
+    _logger.info(create_store_lro.result())
     stores_list = vertexai.resources.preview.FeatureOnlineStore.list(
         project=project_id, location=location
     )
