@@ -80,5 +80,3 @@ resource "google_project_iam_member" "cloudbuild_service_account_iam" {
   role     = each.value
   member   = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
-
-# │ Error: Error waiting to create Connection: Error waiting for Creating Connection: Error code 9, message: could not access secret "projects/${project_number}/secrets/langchain-google-github-oauth-token/versions/1" with service account "service-${project_number}@gcp-sa-cloudbuild.iam.gserviceaccount.com": generic::permission_denied: Permission 'secretmanager.versions.access' denied for resource 'projects/${project_number}/secrets/langchain-google-github-oauth-token/versions/1' (or it may not exist).
