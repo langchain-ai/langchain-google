@@ -166,6 +166,7 @@ def get_generation_info(
                     "category": rating.category.name,
                     "probability_label": rating.probability.name,
                     "blocked": rating.blocked,
+                    "severity": rating.severity.name,
                 }
                 for rating in candidate.safety_ratings
             ],

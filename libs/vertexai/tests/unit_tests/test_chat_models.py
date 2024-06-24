@@ -887,6 +887,7 @@ def test_safety_settings_gemini_init() -> None:
         SafetySetting(
             category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
             threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+            method=SafetySetting.HarmBlockMethod.SEVERITY,
         )
     ]
     model = ChatVertexAI(
