@@ -178,3 +178,12 @@ docs/docs/node_modules
 docs/docs/yarn.lock
 _dist
 docs/docs/templates
+
+#terraform
+**/.terraform
+**/terraform.tfstate*
+**/terraform.tfvars
+**/*.auto.tfvars
+**/*.tfvars
+**/.terraform.tfstate.lock.info
+**/.terraform.lock.hcl
