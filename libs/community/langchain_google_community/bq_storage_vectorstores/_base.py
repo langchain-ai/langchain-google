@@ -7,15 +7,15 @@ from datetime import timedelta
 from functools import partial
 from importlib.util import find_spec
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 import numpy as np
 from google.cloud.exceptions import NotFound
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.pydantic_v1 import BaseModel, ConfigDict, root_validator
 from langchain_core.vectorstores import VectorStore
-from pydantic import BaseModel, ConfigDict
 
 from langchain_google_community._utils import get_client_info
 from langchain_google_community.bq_storage_vectorstores.utils import (
@@ -44,8 +44,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         table_name: BigQuery table name.
         location: BigQuery region/location.
         content_field: Name of the column storing document content (default: "content").
-        text_embedding_field: Name of the column storing text embeddings (default:
-            "text_embedding").
+        embedding_field: Name of the column storing text embeddings (default:
+            "embedding").
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
@@ -65,16 +65,22 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     table_name: str
     location: str
     content_field: str = "content"
-    text_embedding_field: str = "text_embedding"
+    embedding_field: str = "embedding"
     doc_id_field: str = "doc_id"
     credentials: Optional[Any] = None
     embedding_dimension: Optional[int] = None
-    _extra_fields: Union[Dict[str, str], None] = None
-    _table_schema: Any = None
+    extra_fields: Union[Dict[str, str], None] = None
+    table_schema: Any = None
+    _bq_client: Any = None
+    _logger: Any = None
+    _full_table_id: Optional[str] = None
+
+    class Config:
+        arbitrary_types_allowed = True
 
     @abstractmethod
     def sync_data(self) -> None:
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     def get_documents(
@@ -95,7 +101,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def _similarity_search_by_vectors_with_scores_and_embeddings(
@@ -105,46 +111,53 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         k: int = 5,
         batch_size: Union[int, None] = None,
     ) -> list[list[list[Any]]]:
-        raise NotImplementedError()
+        ...
 
-    def model_post_init(self, __context) -> None:  # type: ignore[no-untyped-def]
-        """Constructor for FeatureStore."""
+    @root_validator(pre=False, skip_on_failure=True)
+    def validate_vals(cls, values: dict) -> dict:
         try:
-            import pandas as pd  # type: ignore[import-untyped]
+            import pandas  # noqa: F401
             from google.cloud import bigquery  # type: ignore[attr-defined]
             from google.cloud.aiplatform import base
 
             find_spec("pyarrow")
             find_spec("db_types")
-            self._logger = base.Logger(__name__)
-            self._pd = pd
-            self._bigquery = bigquery
         except ModuleNotFoundError:
             raise ImportError(
                 "Please, install feature store dependency group: "
                 "`pip install langchain-google-community[featurestore]`"
             )
-        client_info = get_client_info(module="bigquery-vector-search")
-        self._bq_client = bigquery.Client(
-            project=self.project_id,
-            location=self.location,
-            credentials=self.credentials,
-            client_info=client_info,
+        values["_logger"] = base.Logger(__name__)
+        values["_bq_client"] = bigquery.Client(
+            project=values["project_id"],
+            location=values["location"],
+            credentials=values["credentials"],
+            client_info=get_client_info(module="bigquery-vector-search"),
         )
-        if self.embedding_dimension is None:
-            self.embedding_dimension = len(self.embedding.embed_query("test"))
-        self._full_table_id = (
-            f"{self.project_id}." f"{self.dataset_name}." f"{self.table_name}"
+        if values["embedding_dimension"] is None:
+            values["embedding_dimension"] = len(values["embedding"].embed_query("test"))
+        full_table_id = (
+            f"{values['project_id']}.{values['dataset_name']}.{values['table_name']}"
         )
-        self._initialize_bq_table()
-        self._validate_bq_table()
-        self._logger.info(
-            f"BigQuery table {self._full_table_id} "
+        values["_full_table_id"] = full_table_id
+
+        values["_bq_client"].create_dataset(
+            dataset=values["dataset_name"], exists_ok=True
+        )
+        values["_bq_client"].create_dataset(
+            dataset=f"{values['dataset_name']}_temp", exists_ok=True
+        )
+        table_ref = bigquery.TableReference.from_string(full_table_id)
+        values["_bq_client"].create_table(table_ref, exists_ok=True)
+        values["_logger"].info(
+            f"BigQuery table {full_table_id} "
             f"initialized/validated as persistent storage. "
             f"Access via BigQuery console:\n "
-            f"https://console.cloud.google.com/bigquery?project={self.project_id}"
-            f"&ws=!1m5!1m4!4m3!1s{self.project_id}!2s{self.dataset_name}!3s{self.table_name}"
+            f"https://console.cloud.google.com/bigquery?project={values['project_id']}"
+            f"&ws=!1m5!1m4!4m3!1s{values['project_id']}!2s{values['dataset_name']}!3s"
+            f"{values['table_name']}"
         )
+        return values
 
     @property
     def embeddings(self) -> Optional[Embeddings]:
@@ -152,18 +165,19 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
     @property
     def full_table_id(self) -> str:
-        return self._full_table_id
+        return cast(str, self._full_table_id)
 
     def _validate_bq_table(self) -> Any:
-        table_ref = self._bigquery.TableReference.from_string(self._full_table_id)
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
+        table_ref = bigquery.TableReference.from_string(self.full_table_id)
 
         try:
-            table = self._bq_client.get_table(
-                self._full_table_id
-            )  # Attempt to retrieve the table information
+            # Attempt to retrieve the table information
+            self._bq_client.get_table(self.full_table_id)
         except NotFound:
             self._logger.debug(
-                f"Couldn't find table {self._full_table_id}. "
+                f"Couldn't find table {self.full_table_id}. "
                 f"Table will be created once documents are added"
             )
             return
@@ -171,7 +185,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         table = self._bq_client.get_table(table_ref)
         schema = table.schema.copy()
         if schema:  ## Check if table has a schema
-            self._table_schema = {field.name: field.field_type for field in schema}
+            self.table_schema = {field.name: field.field_type for field in schema}
             columns = {c.name: c for c in schema}
             validate_column_in_bq_schema(
                 column_name=self.doc_id_field,
@@ -186,18 +200,18 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 expected_modes=["NULLABLE", "REQUIRED"],
             )
             validate_column_in_bq_schema(
-                column_name=self.text_embedding_field,
+                column_name=self.embedding_field,
                 columns=columns,
                 expected_types=["FLOAT", "FLOAT64"],
                 expected_modes=["REPEATED"],
             )
-            if self._extra_fields is None:
+            if self.extra_fields is None:
                 extra_fields = {}
                 for column in schema:
                     if column.name not in [
                         self.doc_id_field,
                         self.content_field,
-                        self.text_embedding_field,
+                        self.embedding_field,
                     ]:
                         # Check for unsupported REPEATED mode
                         if column.mode == "REPEATED":
@@ -206,25 +220,27 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                                 f"REPEATED fields are not supported in this context."
                             )
                         extra_fields[column.name] = column.field_type
-                self._extra_fields = extra_fields
+                self.extra_fields = extra_fields
             else:
-                for field, type in self._extra_fields.items():
+                for field, type in self.extra_fields.items():
                     validate_column_in_bq_schema(
                         column_name=field,
                         columns=columns,
                         expected_types=[type],
                         expected_modes=["NULLABLE", "REQUIRED"],
                     )
-            self._logger.debug(f"Table {self._full_table_id} validated")
+            self._logger.debug(f"Table {self.full_table_id} validated")
         return table_ref
 
     def _initialize_bq_table(self) -> Any:
         """Validates or creates the BigQuery table."""
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
         self._bq_client.create_dataset(dataset=self.dataset_name, exists_ok=True)
         self._bq_client.create_dataset(
             dataset=f"{self.dataset_name}_temp", exists_ok=True
         )
-        table_ref = self._bigquery.TableReference.from_string(self._full_table_id)
+        table_ref = bigquery.TableReference.from_string(self.full_table_id)
         self._bq_client.create_table(table_ref, exists_ok=True)
         return table_ref
 
@@ -268,6 +284,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
+        import pandas as pd
+
         ids = [uuid.uuid4().hex for _ in texts]
         if metadatas is None:
             metadatas = [{} for _ in texts]
@@ -277,15 +295,15 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
             record = {
                 self.doc_id_field: idx,
                 self.content_field: text,
-                self.text_embedding_field: emb,
+                self.embedding_field: emb,
             }
             record.update(metadata_dict)
             values_dict.append(record)  # type: ignore[arg-type]
 
         table = self._bq_client.get_table(
-            self._full_table_id
+            self.full_table_id
         )  # Attempt to retrieve the table information
-        df = self._pd.DataFrame(values_dict)
+        df = pd.DataFrame(values_dict)
         job = self._bq_client.load_table_from_dataframe(df, table)
         job.result()
         self._validate_bq_table()
@@ -304,15 +322,17 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
             Optional[bool]: True if deletion is successful,
             False otherwise, None if not implemented.
         """
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
         if not ids or len(ids) == 0:
             return True
 
-        job_config = self._bigquery.QueryJobConfig(
-            query_parameters=[self._bigquery.ArrayQueryParameter("ids", "STRING", ids)],
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ArrayQueryParameter("ids", "STRING", ids)],
         )
         self._bq_client.query(
             f"""
-                    DELETE FROM `{self._full_table_id}` WHERE {self.doc_id_field}
+                    DELETE FROM `{self.full_table_id}` WHERE {self.doc_id_field}
                     IN UNNEST(@ids)
                     """,
             job_config=job_config,

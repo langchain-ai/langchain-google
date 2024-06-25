@@ -190,9 +190,9 @@ def _merge_messages(
                 isinstance(block, dict) and block.get("type") == "tool_result"
                 for block in curr.content
             ):
-                curr = HumanMessage(curr.content)  # type: ignore[misc]
+                curr = HumanMessage(curr.content)
             else:
-                curr = HumanMessage(  # type: ignore[misc]
+                curr = HumanMessage(
                     [
                         {
                             "type": "tool_result",

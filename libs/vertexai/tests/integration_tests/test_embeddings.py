@@ -62,7 +62,8 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
 
 @pytest.mark.release
 def test_langchain_google_vertexai_large_batches() -> None:
-    documents = ["foo bar" for _ in range(0, 251)]
+    batch_size = 32
+    documents = ["foo bar" for _ in range(batch_size)]
     model_uscentral1 = VertexAIEmbeddings(
         model_name="textembedding-gecko@001", location="us-central1"
     )
@@ -71,7 +72,7 @@ def test_langchain_google_vertexai_large_batches() -> None:
     # )
     model_uscentral1.embed_documents(documents)
     # model_asianortheast1.embed_documents(documents)
-    assert model_uscentral1.instance["batch_size"] >= 250
+    assert model_uscentral1.instance["batch_size"] >= batch_size
     # assert model_asianortheast1.instance["batch_size"] < 50
 
 

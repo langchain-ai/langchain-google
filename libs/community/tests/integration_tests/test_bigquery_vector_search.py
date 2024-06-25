@@ -33,7 +33,7 @@ def store(request: pytest.FixtureRequest) -> BigQueryVectorSearch:
     )
     TestBigQueryVectorStore.store = BigQueryVectorSearch(
         project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
-        embedding=FakeEmbeddings(),
+        embedding=FakeEmbeddings(),  # type: ignore[call-arg]
         dataset_name=TestBigQueryVectorStore.dataset_name,
         table_name=TEST_TABLE_NAME,
     )

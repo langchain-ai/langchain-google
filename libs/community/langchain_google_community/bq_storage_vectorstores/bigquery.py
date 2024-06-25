@@ -3,12 +3,12 @@ from datetime import datetime, timedelta
 from threading import Lock, Thread
 from typing import Any, Dict, List, Literal, Optional, Type, Union
 
-from google.api_core.exceptions import (
-    ClientError,
-)
+from google.api_core.exceptions import ClientError
+from google.cloud import bigquery  # type: ignore[attr-defined]
 from google.cloud.bigquery.table import Table
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.pydantic_v1 import root_validator
 
 from langchain_google_community.bq_storage_vectorstores._base import (
     BaseBigQueryVectorStore,
@@ -41,8 +41,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         table_name: BigQuery table name.
         location: BigQuery region/location.
         content_field: Name of the column storing document content (default: "content").
-        text_embedding_field: Name of the column storing text embeddings (default:
-            "text_embedding").
+        embedding_field: Name of the column storing text embeddings (default:
+            "embedding").
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
@@ -55,19 +55,6 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     _creating_index: bool = False
     _have_index: bool = False
     _last_index_check: datetime = datetime.min
-
-    def model_post_init(self, __context: Any) -> None:
-        # Initialize attributes after model creation
-        super().model_post_init(__context)
-        self._creating_index = False
-        self._have_index = False
-        self._last_index_check = datetime.min
-        self._initialize_bq_vector_index()
-        self._logger.info(
-            "BigQueryVectorStore initialized with BigQuery VectorSearch. \n"
-            "Optional online serving available via .to_vertex_fs_vector_store() "
-            "method."
-        )
 
     def sync_data(self) -> None:
         pass
@@ -92,9 +79,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """
 
         if ids and len(ids) > 0:
-            job_config = self._bigquery.QueryJobConfig(
+            job_config = bigquery.QueryJobConfig(
                 query_parameters=[
-                    self._bigquery.ArrayQueryParameter("ids", "STRING", ids),
+                    bigquery.ArrayQueryParameter("ids", "STRING", ids),
                 ]
             )
             id_expr = f"{self.doc_id_field} IN UNNEST(@ids)"
@@ -112,7 +99,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         job = self._bq_client.query(  # type: ignore[union-attr]
             f"""
-                    SELECT * FROM `{self._full_table_id}` WHERE {id_expr}
+                    SELECT * FROM `{self.full_table_id}` WHERE {id_expr}
                     {where_filter_expr}
                     """,
             job_config=job_config,
@@ -122,7 +109,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             metadata = {}
             for field in row.keys():
                 if field not in [
-                    self.text_embedding_field,
+                    self.embedding_field,
                     self.content_field,
                 ]:
                     metadata[field] = row[field]
@@ -131,75 +118,55 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             docs.append(doc)
         return docs
 
-    def _initialize_bq_vector_index(self) -> Any:
+    @root_validator(pre=False, skip_on_failure=True)
+    def initialize_bq_vector_index(cls, values: dict) -> dict:
         """
         A vector index in BigQuery table enables efficient
         approximate vector search.
         """
-        if self._have_index or self._creating_index:
-            return
+        if values.get("_have_index") or values.get("_creating_index"):
+            return values
 
-        table = self._bq_client.get_table(self._full_table_id)  # type: ignore[union-attr]
+        table = values["_bq_client"].get_table(values["_full_table_id"])  # type: ignore[union-attr]
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
-            self._logger.debug("Not enough rows to create a vector index.")
-            return
+            values["_logger"].debug("Not enough rows to create a vector index.")
+            return values
 
-        if datetime.utcnow() - self._last_index_check < INDEX_CHECK_INTERVAL:
-            return
+        if datetime.utcnow() - values["_last_index_check"] < INDEX_CHECK_INTERVAL:
+            return values
 
         with _vector_table_lock:
-            self._last_index_check = datetime.utcnow()
+            values["_last_index_check"] = datetime.utcnow()
             # Check if index exists, create if necessary
             check_query = (
-                f"SELECT 1 FROM `{self.project_id}."
-                f"{self.dataset_name}"
+                f"SELECT 1 FROM `{values['project_id']}."
+                f"{values['dataset_name']}"
                 ".INFORMATION_SCHEMA.VECTOR_INDEXES` WHERE"
-                f" table_name = '{self.table_name}'"
+                f" table_name = '{values['table_name']}'"
             )
-            job = self._bq_client.query(  # type: ignore[union-attr]
-                check_query, api_method=self._bigquery.enums.QueryApiMethod.QUERY
+            job = values["_bq_client"].query(  # type: ignore[union-attr]
+                check_query, api_method=bigquery.enums.QueryApiMethod.QUERY
             )
             if job.result().total_rows == 0:
                 # Need to create an index. Make it in a separate thread.
-                self._create_bq_index_in_background()
+                values["_logger"].debug("Trying to create a vector index.")
+                Thread(
+                    target=_create_bq_index,
+                    kwargs={
+                        "bq_client": values["_bq_client"],
+                        "table_name": values["table_name"],
+                        "full_table_id": values["_full_table_id"],
+                        "embedding_field": values["embedding_field"],
+                        "distance_type": values["distance_type"],
+                        "logger": values["_logger"],
+                    },
+                    daemon=True,
+                ).start()
+
             else:
-                self._logger.debug("Vector index already exists.")
-                self._have_index = True
-
-    def _create_bq_index_in_background(self) -> None:
-        if self._have_index or self._creating_index:
-            return
-
-        self._creating_index = True
-        self._logger.debug("Trying to create a vector index.")
-        Thread(target=self._create_bq_index, daemon=True).start()
-
-    def _create_bq_index(self) -> None:
-        """
-        Create a BQ Vector Index if doesn't exists, if the number of rows is above
-        MIN_INDEX_ROWS constant
-        Returns:
-        None
-        """
-        table = self._bq_client.get_table(self._full_table_id)  # type: ignore[union-attr]
-        if (table.num_rows or 0) < MIN_INDEX_ROWS:
-            return
-
-        index_name = f"{self.table_name}_langchain_index"
-        try:
-            sql = f"""
-                CREATE VECTOR INDEX IF NOT EXISTS
-                `{index_name}`
-                ON `{self._full_table_id}`
-                ({self.text_embedding_field})
-                OPTIONS(distance_type="{self.distance_type}", index_type="IVF")
-            """
-            self._bq_client.query(sql).result()  # type: ignore[union-attr]
-            self._have_index = True
-        except ClientError as ex:
-            self._logger.debug("Vector index creation failed (%s).", ex.args[0])
-        finally:
-            self._creating_index = False
+                values["_logger"].debug("Vector index already exists.")
+                values["_have_index"] = True
+            return values
 
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
@@ -262,7 +229,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         if filter:
             filter_expressions = []
             for column, value in filter.items():
-                if self._table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
+                if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
                     filter_expressions.append(f"base.{column} = {value}")
                 else:
                     filter_expressions.append(f"base.{column} = '{value}'")
@@ -273,7 +240,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         if table_to_query is not None:
             embeddings_query = f"""
             with embeddings as (
-            SELECT {self.text_embedding_field}, ROW_NUMBER() OVER() as row_num
+            SELECT {self.embedding_field}, ROW_NUMBER() OVER() as row_num
             from `{table_to_query}`
             )"""
 
@@ -282,10 +249,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
             for i in range(num_embeddings):
                 embeddings_query += (
-                    f"SELECT {i} as row_num, @emb_{i} AS text_embedding"
+                    f"SELECT {i} as row_num, @emb_{i} AS {self.embedding_field}"
                     if i == 0
                     else f"\nUNION ALL\n"
-                    f"SELECT {i} as row_num, @emb_{i} AS text_embedding"
+                    f"SELECT {i} as row_num, @emb_{i} AS {self.embedding_field}"
                 )
             embeddings_query += "\n)\n"
 
@@ -305,9 +272,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         full_query = f"""{embeddings_query}
         {select_clause}
         FROM VECTOR_SEARCH(
-            TABLE `{self._full_table_id}`,
-            "text_embedding",
-            (SELECT row_num, {self.text_embedding_field} from embeddings),
+            TABLE `{self.full_table_id}`,
+            "{self.embedding_field}",
+            (SELECT row_num, {self.embedding_field} from embeddings),
             distance_type => "{self.distance_type}",
             top_k => {k}
         )
@@ -326,19 +293,19 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter=filter, k=k, num_embeddings=len(embeddings)
         )
 
-        job_config = self._bigquery.QueryJobConfig(
+        job_config = bigquery.QueryJobConfig(
             query_parameters=[
-                self._bigquery.ArrayQueryParameter(f"emb_{i}", "FLOAT64", emb)
+                bigquery.ArrayQueryParameter(f"emb_{i}", "FLOAT64", emb)
                 for i, emb in enumerate(embeddings)
             ],
             use_query_cache=True,
-            priority=self._bigquery.QueryPriority.INTERACTIVE,
+            priority=bigquery.QueryPriority.INTERACTIVE,
         )
 
         results = self._bq_client.query(  # type: ignore[union-attr]
             full_query,
             job_config=job_config,
-            api_method=self._bigquery.enums.QueryApiMethod.QUERY,
+            api_method=bigquery.enums.QueryApiMethod.QUERY,
         )
         return list(results)
 
@@ -348,8 +315,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         expire_hours_temp_table: int = 12,
     ) -> Table:
         """Create temporary table to store query embeddings prior to batch search"""
-        df = self._pd.DataFrame([])
-        df[self.text_embedding_field] = embeddings
+        import pandas as pd
+
+        df = pd.DataFrame([])
+
+        df[self.embedding_field] = embeddings
         table_id = (
             f"{self.project_id}."
             f"{self.dataset_name}_temp."
@@ -357,11 +327,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         )
 
         schema = [
-            self._bigquery.SchemaField(
-                self.text_embedding_field, "FLOAT64", mode="REPEATED"
-            )
+            bigquery.SchemaField(self.embedding_field, "FLOAT64", mode="REPEATED")
         ]
-        table_ref = self._bigquery.Table(table_id, schema=schema)
+        table_ref = bigquery.Table(table_id, schema=schema)
         table = self._bq_client.create_table(table_ref)
         table.expires = datetime.now() + timedelta(hours=expire_hours_temp_table)
         table = self._bq_client.update_table(table, ["expires"])
@@ -383,7 +351,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         metadata_fields = [
             x
             for x in result_fields
-            if x not in [self.text_embedding_field, self.content_field, "row_num"]
+            if x not in [self.embedding_field, self.content_field, "row_num"]
         ]
         documents = []
         for result in search_results:
@@ -399,7 +367,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 document_record = [
                     document,
                     metadata["score"],
-                    result[self.text_embedding_field],  # type: ignore
+                    result[self.embedding_field],  # type: ignore
                 ]
             else:
                 document_record = [document, metadata["score"]]
@@ -457,18 +425,18 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             k=k,
             num_embeddings=len(embeddings),
             table_to_query=table_ref,
-            fields_to_exclude=[self.text_embedding_field],
+            fields_to_exclude=[self.embedding_field],
         )
 
-        job_config = self._bigquery.QueryJobConfig(
+        job_config = bigquery.QueryJobConfig(
             use_query_cache=True,
-            priority=self._bigquery.QueryPriority.INTERACTIVE,
+            priority=bigquery.QueryPriority.INTERACTIVE,
         )
 
         search_results = self._bq_client.query(  # type: ignore[union-attr]
             full_query,
             job_config=job_config,
-            api_method=self._bigquery.enums.QueryApiMethod.QUERY,
+            api_method=bigquery.enums.QueryApiMethod.QUERY,
         )
 
         return self._create_langchain_documents(
@@ -527,6 +495,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         )
 
         base_params = self.dict(include=BaseBigQueryVectorStore.__fields__.keys())
+        base_params["embedding"] = self.embedding
         all_params = {**base_params, **kwargs}
         fs_obj = VertexFSVectorStore(**all_params)
         return fs_obj
@@ -543,3 +512,35 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             (https://cloud.google.com/bigquery/docs/reference/rest/v2/Job#JobStatistics2).
         """
         return self._bq_client.get_job(job_id)._properties["statistics"]
+
+
+def _create_bq_index(
+    bq_client: Any,
+    table_name: str,
+    full_table_id: str,
+    embedding_field: str,
+    distance_type: str,
+    logger: Any,
+) -> bool:
+    """
+    Create a BQ Vector Index if doesn't exist, if the number of rows is above
+    MIN_INDEX_ROWS constant
+    """
+    table = bq_client.get_table(full_table_id)  # type: ignore[union-attr]
+    if (table.num_rows or 0) < MIN_INDEX_ROWS:
+        return False
+
+    index_name = f"{table_name}_langchain_index"
+    try:
+        sql = f"""
+            CREATE VECTOR INDEX IF NOT EXISTS
+            `{index_name}`
+            ON `{full_table_id}`
+            ({embedding_field})
+            OPTIONS(distance_type="{distance_type}", index_type="IVF")
+        """
+        bq_client.query(sql).result()  # type: ignore[union-attr]
+        return True
+    except ClientError as ex:
+        logger.debug("Vector index creation failed (%s).", ex.args[0])
+        return False
