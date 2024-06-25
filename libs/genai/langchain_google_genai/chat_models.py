@@ -619,8 +619,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     convert_system_message_to_human: bool = False
     """Whether to merge any leading SystemMessage into the following HumanMessage.
-    
-    Gemini does not support system messages; any unsupported messages will 
+
+    Gemini does not support system messages; any unsupported messages will
     raise an error."""
 
     class Config:
@@ -997,7 +997,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
         # Bind dicts for easier serialization/deserialization.
-        genai_tools = [tool_to_dict(convert_to_genai_function_declarations(tools))]
+        genai_tools = [
+            tool_to_dict(convert_to_genai_function_declarations(tool)) for tool in tools
+        ]
         if tool_choice:
             all_names = [
                 f["name"]  # type: ignore[index]
@@ -1005,4 +1007,5 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 for f in t["function_declarations"]
             ]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
+
         return self.bind(tools=genai_tools, tool_config=tool_config, **kwargs)
