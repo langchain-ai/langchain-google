@@ -104,7 +104,7 @@ class TestVertexFSVectorStore_fs_vectorstore:
             embedding=store_fs_vectorstore.embedding,
             location="us-central1",
             dataset_name=store_fs_vectorstore.dataset_name,
-            table_name="error_table",
+            table_name=f"error_table{str(random.randint(1,100000))}",
             online_store_name=store_fs_vectorstore.online_store_name,
             view_name=store_fs_vectorstore.view_name,
         )
