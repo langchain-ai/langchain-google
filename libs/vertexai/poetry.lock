@@ -1314,7 +1314,7 @@ tenacity = "^8.1.0,!=8.4.0"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "ad50702934b07810305572cca7919dd3c5ff7949"
+resolved_reference = "a75b32a54ac106a07153b0f043388a5d9b49d93a"
 subdirectory = "libs/langchain"
 
 [[package]]
@@ -1341,7 +1341,7 @@ tenacity = "^8.1.0,!=8.4.0"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "ad50702934b07810305572cca7919dd3c5ff7949"
+resolved_reference = "a75b32a54ac106a07153b0f043388a5d9b49d93a"
 subdirectory = "libs/core"
 
 [[package]]
@@ -1362,7 +1362,7 @@ pytest = ">=7,<9"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "ad50702934b07810305572cca7919dd3c5ff7949"
+resolved_reference = "a75b32a54ac106a07153b0f043388a5d9b49d93a"
 subdirectory = "libs/standard-tests"
 
 [[package]]
@@ -2767,4 +2767,4 @@ anthropic = ["anthropic"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "7787455b7180eafe80b00d4629cd11e405623ad63f8ec5c444600221fe36f0b2"
+content-hash = "e1900005a8ec866c8818338e3f0293e0592f18bf75b7b051316730ff4d4b5551"
