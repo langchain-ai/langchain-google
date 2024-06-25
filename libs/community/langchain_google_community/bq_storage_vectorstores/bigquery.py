@@ -1,13 +1,15 @@
 import uuid
 from datetime import datetime, timedelta
 from threading import Lock, Thread
-from typing import Any, Dict, List, Literal, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union
 
 from google.api_core.exceptions import ClientError
-from google.cloud.bigquery.table import Table
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.pydantic_v1 import root_validator
+
+if TYPE_CHECKING:
+    from google.cloud.bigquery.table import Table
 
 from langchain_google_community.bq_storage_vectorstores._base import (
     BaseBigQueryVectorStore,
@@ -317,7 +319,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         self,
         embeddings: Optional[List[List[float]]],
         expire_hours_temp_table: int = 12,
-    ) -> Table:
+    ) -> "Table":
         """Create temporary table to store query embeddings prior to batch search"""
         import pandas as pd
         from google.cloud import bigquery  # type: ignore[attr-defined]
