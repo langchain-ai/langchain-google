@@ -45,7 +45,8 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 @pytest.fixture
 def sdk_manager() -> VectorSearchSDKManager:
     sdk_manager = VectorSearchSDKManager(
-        project_id=os.environ["PROJECT_ID"], region=os.environ.get("REGION", "us-central1")
+        project_id=os.environ["PROJECT_ID"],
+        region=os.environ.get("REGION", "us-central1"),
     )
     return sdk_manager
 
@@ -140,7 +141,7 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("n_threads", ["-1",-1,51, "100"])
+@pytest.mark.parametrize("n_threads", ["-1", -1, 51, "100"])
 def test_gcs_document_storage_invalid_user_input(
     sdk_manager: VectorSearchSDKManager, n_threads: int
 ):
