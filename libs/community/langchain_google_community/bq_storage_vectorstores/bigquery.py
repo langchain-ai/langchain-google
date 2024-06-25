@@ -4,7 +4,6 @@ from threading import Lock, Thread
 from typing import Any, Dict, List, Literal, Optional, Type, Union
 
 from google.api_core.exceptions import ClientError
-from google.cloud import bigquery  # type: ignore[attr-defined]
 from google.cloud.bigquery.table import Table
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -77,6 +76,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
         if ids and len(ids) > 0:
             job_config = bigquery.QueryJobConfig(
@@ -124,6 +124,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         A vector index in BigQuery table enables efficient
         approximate vector search.
         """
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
         if values.get("_have_index") or values.get("_creating_index"):
             return values
 
@@ -289,6 +291,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         filter: Optional[Dict[str, Any]] = None,
         k: int = 5,
     ) -> list:
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
         full_query = self._create_search_query(
             filter=filter, k=k, num_embeddings=len(embeddings)
         )
@@ -316,6 +320,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     ) -> Table:
         """Create temporary table to store query embeddings prior to batch search"""
         import pandas as pd
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
         df = pd.DataFrame([])
 
@@ -400,6 +405,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         with_embeddings: If True, returns the embeddings of the results along with
             the documents
         """
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
         if not embeddings and not queries:
             raise ValueError(
                 "At least one of 'embeddings' or 'queries' must be provided."
