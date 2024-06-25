@@ -10,7 +10,6 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 import numpy as np
-from google.cloud.exceptions import NotFound
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -169,6 +168,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
     def _validate_bq_table(self) -> Any:
         from google.cloud import bigquery  # type: ignore[attr-defined]
+        from google.cloud.exceptions import NotFound
 
         table_ref = bigquery.TableReference.from_string(self.full_table_id)
 
