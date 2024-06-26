@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Type
 
-from langchain_core.messages import ToolCall
+from langchain_core.messages import ToolCall, AIMessage
 from langchain_core.output_parsers import BaseGenerationOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel
@@ -27,7 +27,9 @@ class ToolsOutputParser(BaseGenerationOutputParser):
         if not result or not isinstance(result[0], ChatGeneration):
             return None if self.first_tool_only else []
         message = result[0].message
-        if isinstance(message.content, str):
+        if isinstance(message, AIMessage) and message.tool_calls:
+            tool_calls = message.tool_calls
+        elif isinstance(message.content, str):
             tool_calls: List = []
         else:
             content: List = message.content
