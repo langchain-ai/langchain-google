@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Sequence, Tuple, Union
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform import telemetry
@@ -58,6 +58,11 @@ class Searcher(ABC):
             embeddings: List of embedddings for each record.
             metadatas: List of metadata of each record.
         """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def remove_datapoints(self, datapoint_ids: Sequence[str]) -> None:
+        """Remove datapoints from the index."""
         raise NotImplementedError()
 
     def _postprocess_response(
@@ -135,6 +140,26 @@ class VectorSearchSearcher(Searcher):
                 staging_bucket=self._staging_bucket,
                 is_complete_overwrite=is_complete_overwrite,
             )
+
+    def remove_datapoints(self, datapoint_ids: Sequence[str]) -> None:
+        """Remove datapoints from the index.
+
+        Args:
+            datapoint_ids: Sequence[str]
+                Required. The list of datapoint ids t
+        Raises:
+            ValueError: If the datapoint_ids sequence is empty.
+            RuntimeError: If there's an error while removing datapoints.
+        """
+        if not datapoint_ids:
+            raise ValueError("datapoint_ids must not be empty")
+
+        try:
+            self._index.remove_datapoints(datapoint_ids=datapoint_ids)
+        except Exception as e:
+            raise RuntimeError(
+                f"Error removing datapoints from the index: {str(e)}"
+            ) from e
 
     def find_neighbors(
         self,
