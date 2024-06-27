@@ -167,6 +167,12 @@ def _format_to_gapic_function_declaration(
     elif isinstance(tool, vertexai.FunctionDeclaration):
         return _format_vertex_to_function_declaration(tool)
     elif isinstance(tool, dict):
+        # this could come from
+        # 'langchain_core.utils.function_calling.convert_to_openai_tool'
+        if tool.get("type") == "function" and tool.get("function"):
+            return _format_dict_to_function_declaration(
+                cast(FunctionDescription, tool.get("function"))
+            )
         return _format_dict_to_function_declaration(tool)
     else:
         raise ValueError(f"Unsupported tool call type {tool}")
