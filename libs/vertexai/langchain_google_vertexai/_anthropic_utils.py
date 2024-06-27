@@ -31,7 +31,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 if TYPE_CHECKING:
-    from anthropic.types import RawMessageStreamEvent
+    from anthropic.types import RawMessageStreamEvent # type: ignore
 
 _message_type_lookups = {
     "human": "user",

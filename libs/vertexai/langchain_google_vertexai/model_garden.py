@@ -146,7 +146,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
-        from anthropic import (
+        from anthropic import ( # type: ignore
             AnthropicVertex,
             AsyncAnthropicVertex,
         )
