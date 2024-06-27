@@ -42,7 +42,7 @@ from langchain_google_vertexai._utils import GoogleModelFamily
                 "gemini-1.5-flash-001",
                 "gemini-1.5-pro-001",
                 "medlm-large-1.5-preview",
-                "medlm-large-1.5",
+                "medlm-large-1.5-001",
             ],
             GoogleModelFamily.GEMINI_ADVANCED,
         ),
