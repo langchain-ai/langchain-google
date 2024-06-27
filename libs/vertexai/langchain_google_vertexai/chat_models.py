@@ -966,11 +966,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     setting this parameter to True is discouraged.
     """
     response_mime_type: Optional[str] = None
-    """Optional. Output response mimetype of the generated candidate text. Only 
-        supported in Gemini 1.5 and later models. Supported mimetype: 
-            * "text/plain": (default) Text output. 
+    """Optional. Output response mimetype of the generated candidate text. Only
+        supported in Gemini 1.5 and later models. Supported mimetype:
+            * "text/plain": (default) Text output.
             * "application/json": JSON response in the candidates.
-       The model also needs to be prompted to output the appropriate response 
+       The model also needs to be prompted to output the appropriate response
        type, otherwise the behavior is undefined. This is a preview feature.
     """
 
