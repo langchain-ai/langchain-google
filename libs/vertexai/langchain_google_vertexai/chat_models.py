@@ -296,6 +296,14 @@ def _parse_chat_history_gemini(
                 )
                 parts.append(Part(function_call=function_call))
 
+            prev_content = vertex_messages[-1]
+            prev_content_is_model = prev_content and prev_content.role == "model"
+            if prev_content_is_model:
+                prev_parts = list(prev_content.parts)
+                prev_parts.extend(parts)
+                vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                continue
+
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
             prev_ai_message = None
@@ -306,17 +314,17 @@ def _parse_chat_history_gemini(
                     name=message.name, response={"content": message.content}
                 )
             )
+            parts = [part]
 
             prev_content = vertex_messages[-1]
             prev_content_is_function = prev_content and prev_content.role == "function"
-            if prev_content_is_function:
-                parts = list(prev_content.parts)
-                parts.append(part)
-                # replacing last message
-                vertex_messages[-1] = Content(role=role, parts=parts)
-                continue
 
-            parts = [part]
+            if prev_content_is_function:
+                prev_parts = list(prev_content.parts)
+                prev_parts.extend(parts)
+                # replacing last message
+                vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                continue
 
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, ToolMessage):
@@ -383,18 +391,19 @@ def _parse_chat_history_gemini(
                     response=content,
                 )
             )
+            parts = [part]
 
             prev_content = vertex_messages[-1]
             prev_content_is_function = prev_content and prev_content.role == "function"
+
             if prev_content_is_function:
-                parts = list(prev_content.parts)
-                parts.append(part)
+                prev_parts = list(prev_content.parts)
+                prev_parts.extend(parts)
                 # replacing last message
-                vertex_messages[-1] = Content(role=role, parts=parts)
+                vertex_messages[-1] = Content(role=role, parts=prev_parts)
                 continue
-            else:
-                parts = [part]
-                vertex_messages.append(Content(role=role, parts=parts))
+
+            vertex_messages.append(Content(role=role, parts=parts))
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
