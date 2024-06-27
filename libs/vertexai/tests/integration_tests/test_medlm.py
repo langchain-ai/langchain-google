@@ -24,9 +24,9 @@ def test_invoke_medlm_large_15_gemini_1() -> None:
 
 @pytest.mark.extended
 def test_invoke_medlm_large_15_gemini_2() -> None:
-    model = VertexAI(model_name="medlm-large-1.5-preview")
+    model = ChatVertexAI(model_name="medlm-large-1.5-preview")
     result = model.invoke("How you can help me?")
-    assert isinstance(result, str)
+    assert isinstance(result, AIMessage)
 
 
 @pytest.mark.extended
