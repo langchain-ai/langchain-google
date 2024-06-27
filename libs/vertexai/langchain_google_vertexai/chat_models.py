@@ -52,13 +52,14 @@ from langchain_core.messages import (
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
-    JsonOutputToolsParser,
+    JsonOutputKeyToolsParser,
     PydanticToolsParser,
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
 from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.utils.function_calling import convert_to_openai_function
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
 )
@@ -1568,7 +1569,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 tools=[schema], first_tool_only=True
             )
         else:
-            parser = JsonOutputToolsParser()
+            schema = convert_to_openai_function(schema)
+            parser = JsonOutputKeyToolsParser(
+                key_name=schema["name"], first_tool_only=True
+            )
         llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
