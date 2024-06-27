@@ -545,15 +545,18 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
         {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
     )
     response = model.invoke([message])
-    expected = [
-        {
-            "type": "MyModel",
-            "args": {
-                "name": "Erick",
-                "age": 27,
-            },
-        }
-    ]
+    expected = {
+        "name": "Erick",
+        "age": 27,
+    }
+
+    model = llm.with_structured_output(
+        {"title": "MyModel", "description": "MyModel", "type": "object", "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"},
+        }, "required": ["name", "age"]}
+    )
+    response = model.invoke([message])
     assert response == expected
 
 
