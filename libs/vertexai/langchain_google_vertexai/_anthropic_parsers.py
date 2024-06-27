@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Type
 
-from langchain_core.messages import ToolCall, AIMessage
+from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.output_parsers import BaseGenerationOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel
