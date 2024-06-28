@@ -114,6 +114,7 @@ from langchain_google_vertexai.functions_utils import (
     _ToolChoiceType,
     _ToolsType,
     _format_to_gapic_tool,
+    _ToolType,
 )
 
 logger = logging.getLogger(__name__)
@@ -1560,7 +1561,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
         else:
             parser = JsonOutputToolsParser()
-        llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
+        tool_choice = _get_tool_name(schema) if self._is_gemini_advanced else None
+        llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -1705,3 +1707,8 @@ def _get_usage_metadata_non_gemini(raw_metadata: dict) -> Optional[UsageMetadata
             output_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
         )
+
+
+def _get_tool_name(tool: _ToolType) -> str:
+    vertexai_tool = _format_to_gapic_tool([tool])
+    return [f.name for f in vertexai_tool.function_declarations][0]

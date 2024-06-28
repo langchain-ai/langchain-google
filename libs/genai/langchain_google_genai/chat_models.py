@@ -959,7 +959,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         else:
             parser = JsonOutputToolsParser()
-        llm = self.bind_tools([schema], tool_choice=False)
+        llm = self.bind_tools([schema], tool_choice=_get_tool_name(schema))
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -1006,3 +1006,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         return self.bind(tools=genai_tools, tool_config=tool_config, **kwargs)
+
+
+def _get_tool_name(
+    tool: Union[ToolDict, GoogleTool],
+) -> str:
+    genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
+    return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
