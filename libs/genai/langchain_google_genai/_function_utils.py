@@ -201,17 +201,17 @@ def _tool_choice_to_tool_config(
 ) -> _ToolConfigDict:
     allowed_function_names: Optional[List[str]] = None
     if tool_choice is True or tool_choice == "any":
-        mode = "any"
+        mode = "ANY"
         allowed_function_names = all_names
     elif tool_choice == "auto":
-        mode = "auto"
+        mode = "AUTO"
     elif tool_choice == "none":
-        mode = "none"
+        mode = "NONE"
     elif isinstance(tool_choice, str):
-        mode = "any"
+        mode = "ANY"
         allowed_function_names = [tool_choice]
     elif isinstance(tool_choice, list):
-        mode = "any"
+        mode = "ANY"
         allowed_function_names = tool_choice
     elif isinstance(tool_choice, dict):
         if "mode" in tool_choice:
@@ -231,7 +231,7 @@ def _tool_choice_to_tool_config(
         raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
     return _ToolConfigDict(
         function_calling_config={
-            "mode": mode,
+            "mode": mode.upper(),
             "allowed_function_names": allowed_function_names,
         }
     )

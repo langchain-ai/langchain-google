@@ -406,7 +406,12 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
 
 
-def test_chat_google_genai_function_calling_with_structured_output() -> None:
+# Test with model that supports tool choice (gemini 1.5) and one that doesn't
+# (gemini 1).
+@pytest.mark.paramterize("model_name", [_MODEL, "model/gemini-1.5-flash-001"])
+def test_chat_google_genai_function_calling_with_structured_output(
+    model_name: str,
+) -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -414,7 +419,7 @@ def test_chat_google_genai_function_calling_with_structured_output() -> None:
     safety = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
-    llm = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety)
+    llm = ChatGoogleGenerativeAI(model=model_name, safety_settings=safety)
     model = llm.with_structured_output(MyModel)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
