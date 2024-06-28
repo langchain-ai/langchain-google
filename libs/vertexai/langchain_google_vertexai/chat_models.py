@@ -53,6 +53,7 @@ from langchain_core.messages.ai import UsageMetadata
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
+    JsonOutputToolsParser,
     PydanticToolsParser,
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
@@ -1568,11 +1569,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
-        else:
+        elif isinstance(schema, dict) and all(
+            k in schema for k in ("title", "description", "properties")
+        ):
             schema = convert_to_openai_function(schema)
             parser = JsonOutputKeyToolsParser(
                 key_name=schema["name"], first_tool_only=True
             )
+        else:
+            parser = JsonOutputToolsParser()
         llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
