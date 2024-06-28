@@ -320,7 +320,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     first_result = self._get_embeddings_with_retry(
                         first_batch, embeddings_type
                     )
-                    batches = batches[1:]
                     break
                 except InvalidArgument:
                     had_failure = True
@@ -347,6 +346,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     batches = VertexAIEmbeddings._prepare_batches(
                         texts[first_batch_len:], self.instance["batch_size"]
                     )
+                else:
+                    batches = batches[1:]
             else:
                 # Still figuring out max batch size.
                 batches = batches[1:]
