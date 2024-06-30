@@ -314,6 +314,10 @@ def _make_message_chunk_from_anthropic_event(
                 output_tokens=output_tokens,
                 total_tokens=output_tokens,
             ),
+            response_metadata={
+                "stop_reason": event.delta.stop_reason,
+                "stop_sequence": event.delta.stop_sequence,
+            },
         )
     else:
         pass
