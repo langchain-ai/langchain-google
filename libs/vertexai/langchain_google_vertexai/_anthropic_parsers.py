@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Type
 
-from langchain_core.messages import ToolCall
+from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.output_parsers import BaseGenerationOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel
@@ -26,25 +26,20 @@ class ToolsOutputParser(BaseGenerationOutputParser):
         """
         if not result or not isinstance(result[0], ChatGeneration):
             return None if self.first_tool_only else []
+
         message = result[0].message
-        if isinstance(message.content, str):
-            tool_calls: List = []
-        else:
-            content: List = message.content
-            _tool_calls = [dict(tc) for tc in _extract_tool_calls(content)]
-            # Map tool call id to index
-            id_to_index = {
-                block["id"]: i
-                for i, block in enumerate(content)
-                if block["type"] == "tool_use"
-            }
-            tool_calls = [{**tc, "index": id_to_index[tc["id"]]} for tc in _tool_calls]
+        tool_calls: List[Any] = []
+
+        if isinstance(message, AIMessage) and message.tool_calls:
+            tool_calls = message.tool_calls
+        elif isinstance(message.content, list):
+            content: Any = message.content
+            tool_calls = _extract_tool_calls(content)
+
         if self.pydantic_schemas:
             tool_calls = [self._pydantic_parse(tc) for tc in tool_calls]
         elif self.args_only:
             tool_calls = [tc["args"] for tc in tool_calls]
-        else:
-            pass
 
         if self.first_tool_only:
             return tool_calls[0] if tool_calls else None
