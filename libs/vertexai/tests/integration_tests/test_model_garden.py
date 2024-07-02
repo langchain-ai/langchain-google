@@ -230,3 +230,26 @@ def test_anthropic_tool_calling() -> None:
     assert tool_call_chunk["args"]
     if tool_call_chunk["args"]:
         assert json.loads(tool_call_chunk["args"]) == {"age": 27.0, "name": "Erick"}
+
+
+@pytest.mark.extended
+def test_anthropic_with_structured_output() -> None:
+    project = os.environ["PROJECT_ID"]
+    location = "us-east5"
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+        model="claude-3-opus@20240229",
+    )
+
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    message = HumanMessage(content="My name is Erick and I am 27 years old")
+    model_with_structured_output = model.with_structured_output(MyModel)
+    response = model_with_structured_output.invoke([message])
+
+    assert isinstance(response, MyModel)
+    assert response.name == "Erick"
+    assert response.age == 27

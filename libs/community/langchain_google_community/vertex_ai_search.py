@@ -245,6 +245,12 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     2 - Automatic spell correction built by the Search API.
         Search will be based on the corrected query if found.
     """
+    boost_spec: Optional[Dict[Any, Any]] = None
+    """BoostSpec for boosting search results. A protobuf should be provided.
+    
+    https://cloud.google.com/generative-ai-app-builder/docs/boost-search-results
+    https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/BoostSpec
+    """
 
     _client: SearchServiceClient
     _serving_config: str
@@ -355,6 +361,9 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             content_search_spec=content_search_spec,
             query_expansion_spec=query_expansion_spec,
             spell_correction_spec=spell_correction_spec,
+            boost_spec=SearchRequest.BoostSpec(**self.boost_spec)
+            if self.boost_spec
+            else None,
         )
 
     def _get_relevant_documents(

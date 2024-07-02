@@ -466,9 +466,6 @@ def _parse_response_candidate(
                 raise Exception("Unexpected content type")
 
         if part.function_call:
-            # TODO: support multiple function calls
-            if "function_call" in additional_kwargs:
-                raise Exception("Multiple function calls are not currently supported")
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
@@ -488,27 +485,27 @@ def _parse_response_candidate(
                 )
             else:
                 try:
-                    tool_calls_dicts = parse_tool_calls(
+                    tool_call_dict = parse_tool_calls(
                         [{"function": function_call}],
                         return_id=False,
-                    )
-                    tool_calls = [
-                        ToolCall(
-                            name=tool_call["name"],
-                            args=tool_call["args"],
-                            id=tool_call.get("id", str(uuid.uuid4())),
-                        )
-                        for tool_call in tool_calls_dicts
-                    ]
+                    )[0]
                 except Exception as e:
-                    invalid_tool_calls = [
+                    invalid_tool_calls.append(
                         InvalidToolCall(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
                             id=function_call.get("id", str(uuid.uuid4())),
                             error=str(e),
                         )
-                    ]
+                    )
+                else:
+                    tool_calls.append(
+                        ToolCall(
+                            name=tool_call_dict["name"],
+                            args=tool_call_dict["args"],
+                            id=tool_call_dict.get("id", str(uuid.uuid4())),
+                        )
+                    )
     if content is None:
         content = ""
 
@@ -594,25 +591,207 @@ def _is_event_loop_running() -> bool:
 
 
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
-    """`Google Generative AI` Chat models API.
+    """`Google AI` chat models integration.
 
-    To use, you must have either:
+    Instantiation:
+        To use, you must have either:
 
-        1. The ``GOOGLE_API_KEY``` environment variable set with your API key, or
-        2. Pass your API key using the google_api_key kwarg to the ChatGoogle
-           constructor.
+            1. The ``GOOGLE_API_KEY``` environment variable set with your API key, or
+            2. Pass your API key using the google_api_key kwarg to the ChatGoogle
+               constructor.
 
-    Example:
         .. code-block:: python
 
             from langchain_google_genai import ChatGoogleGenerativeAI
-            chat = ChatGoogleGenerativeAI(model="gemini-pro")
-            chat.invoke("Write me a ballad about LangChain")
 
-    """
+            llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro")
+            llm.invoke("Write me a ballad about LangChain")
+
+    Invoke:
+        .. code-block:: python
+
+            messages = [
+                ("system", "Translate the user sentence to French."),
+                ("human", "I love programming."),
+            ]
+            llm.invoke(messages)
+
+        .. code-block:: python
+
+            AIMessage(
+                content="J'adore programmer. \\n",
+                response_metadata={'prompt_feedback': {'block_reason': 0, 'safety_ratings': []}, 'finish_reason': 'STOP', 'safety_ratings': [{'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}]},
+                id='run-56cecc34-2e54-4b52-a974-337e47008ad2-0',
+                usage_metadata={'input_tokens': 18, 'output_tokens': 5, 'total_tokens': 23}
+            )
+
+    Stream:
+        .. code-block:: python
+
+            for chunk in llm.stream(messages):
+                print(chunk)
+
+        .. code-block:: python
+
+            AIMessageChunk(content='J', response_metadata={'finish_reason': 'STOP', 'safety_ratings': []}, id='run-e905f4f4-58cb-4a10-a960-448a2bb649e3', usage_metadata={'input_tokens': 18, 'output_tokens': 1, 'total_tokens': 19})
+            AIMessageChunk(content="'adore programmer. \n", response_metadata={'finish_reason': 'STOP', 'safety_ratings': [{'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}]}, id='run-e905f4f4-58cb-4a10-a960-448a2bb649e3', usage_metadata={'input_tokens': 18, 'output_tokens': 5, 'total_tokens': 23})
+
+        .. code-block:: python
+
+            stream = llm.stream(messages)
+            full = next(stream)
+            for chunk in stream:
+                full += chunk
+            full
+
+        .. code-block:: python
+
+            AIMessageChunk(
+                content="J'adore programmer. \\n",
+                response_metadata={'finish_reason': 'STOPSTOP', 'safety_ratings': [{'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}]},
+                id='run-3ce13a42-cd30-4ad7-a684-f1f0b37cdeec',
+                usage_metadata={'input_tokens': 36, 'output_tokens': 6, 'total_tokens': 42}
+            )
+
+    Async:
+        .. code-block:: python
+
+            await llm.ainvoke(messages)
+
+            # stream:
+            # async for chunk in (await llm.astream(messages))
+
+            # batch:
+            # await llm.abatch([messages])
+
+    Tool calling:
+        .. code-block:: python
+
+            from langchain_core.pydantic_v1 import BaseModel, Field
+
+
+            class GetWeather(BaseModel):
+                '''Get the current weather in a given location'''
+
+                location: str = Field(
+                    ..., description="The city and state, e.g. San Francisco, CA"
+                )
+
+
+            class GetPopulation(BaseModel):
+                '''Get the current population in a given location'''
+
+                location: str = Field(
+                    ..., description="The city and state, e.g. San Francisco, CA"
+                )
+
+
+            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
+            ai_msg = llm_with_tools.invoke(
+                "Which city is hotter today and which is bigger: LA or NY?"
+            )
+            ai_msg.tool_calls
+
+        .. code-block:: python
+
+            [{'name': 'GetWeather',
+              'args': {'location': 'Los Angeles, CA'},
+              'id': 'c186c99f-f137-4d52-947f-9e3deabba6f6'},
+             {'name': 'GetWeather',
+              'args': {'location': 'New York City, NY'},
+              'id': 'cebd4a5d-e800-4fa5-babd-4aa286af4f31'},
+             {'name': 'GetPopulation',
+              'args': {'location': 'Los Angeles, CA'},
+              'id': '4f92d897-f5e4-4d34-a3bc-93062c92591e'},
+             {'name': 'GetPopulation',
+              'args': {'location': 'New York City, NY'},
+              'id': '634582de-5186-4e4b-968b-f192f0a93678'}]
+
+    Structured output:
+        .. code-block:: python
+
+            from typing import Optional
+
+            from langchain_core.pydantic_v1 import BaseModel, Field
+
+
+            class Joke(BaseModel):
+                '''Joke to tell user.'''
+
+                setup: str = Field(description="The setup of the joke")
+                punchline: str = Field(description="The punchline to the joke")
+                rating: Optional[int] = Field(description="How funny the joke is, from 1 to 10")
+
+
+            structured_llm = llm.with_structured_output(Joke)
+            structured_llm.invoke("Tell me a joke about cats")
+
+        .. code-block:: python
+
+            Joke(
+                setup='Why are cats so good at video games?',
+                punchline='They have nine lives on the internet',
+                rating=None
+            )
+
+    Image input:
+        .. code-block:: python
+
+            import base64
+            import httpx
+            from langchain_core.messages import HumanMessage
+
+            image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+            image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the weather in this image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                    },
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting fair weather. The lush green grass and trees indicate a warm and possibly slightly breezy day. There are no signs of rain or storms. \n'
+
+    Token usage:
+        .. code-block:: python
+
+            ai_msg = llm.invoke(messages)
+            ai_msg.usage_metadata
+
+        .. code-block:: python
+
+            {'input_tokens': 18, 'output_tokens': 5, 'total_tokens': 23}
+
+
+        Response metadata
+        .. code-block:: python
+
+            ai_msg = llm.invoke(messages)
+            ai_msg.response_metadata
+
+        .. code-block:: python
+
+            {
+                'prompt_feedback': {'block_reason': 0, 'safety_ratings': []},
+                'finish_reason': 'STOP',
+                'safety_ratings': [{'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}]
+            }
+
+    """  # noqa: E501
 
     client: Any  #: :meta private:
     async_client: Any  #: :meta private:
+    google_api_key: Optional[SecretStr] = Field(None, alias="api_key")
+    """Google AI API key. 
+        
+    If not specified will be read from env var ``GOOGLE_API_KEY``."""
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
     )  #: :meta private:
