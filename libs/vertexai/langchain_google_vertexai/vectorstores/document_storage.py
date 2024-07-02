@@ -1,14 +1,32 @@
 from __future__ import annotations
 
+import io
 import json
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
+from google.api_core.exceptions import NotFound
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
+from google.cloud.storage import (  # type: ignore[attr-defined, unused-ignore, import-untyped]
+    Blob,
+    transfer_manager,
+)
 from langchain_core.documents import Document
 from langchain_core.stores import BaseStore
 
 if TYPE_CHECKING:
     from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
+
+GCS_MAX_BATCH_SIZE = 100
 
 
 class DocumentStorage(BaseStore[str, Document]):
@@ -22,7 +40,11 @@ class GCSDocumentStorage(DocumentStorage):
     """
 
     def __init__(
-        self, bucket: storage.Bucket, prefix: Optional[str] = "documents"
+        self,
+        bucket: storage.Bucket,
+        prefix: Optional[str] = "documents",
+        threaded=True,
+        n_threads=8,
     ) -> None:
         """Constructor.
         Args:
@@ -32,6 +54,24 @@ class GCSDocumentStorage(DocumentStorage):
         super().__init__()
         self._bucket = bucket
         self._prefix = prefix
+        self._threaded = threaded
+        self._n_threads = n_threads
+        if threaded:
+            if not (int(n_threads) > 0 and int(n_threads) <= 50):
+                raise ValueError(
+                    "n_threads must be a valid integer,"
+                    " greater than 0 and lower than or equal to 50"
+                )
+
+    def _prepare_doc_for_bulk_upload(
+        self, key: str, value: Document
+    ) -> Tuple[io.IOBase, Blob]:
+        document_json = value.dict()
+        document_text = json.dumps(document_json).encode("utf-8")
+        doc_contents = io.BytesIO(document_text)
+        blob_name = self._get_blob_name(key)
+        blob = self._bucket.blob(blob_name)
+        return doc_contents, blob
 
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
         """Stores a series of documents using each keys
@@ -39,8 +79,44 @@ class GCSDocumentStorage(DocumentStorage):
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
         """
-        for key, value in key_value_pairs:
-            self._set_one(key, value)
+        if self._threaded:
+            results = transfer_manager.upload_many(
+                [
+                    self._prepare_doc_for_bulk_upload(key, value)
+                    for key, value in key_value_pairs
+                ],
+                skip_if_exists=False,
+                upload_kwargs=None,
+                deadline=None,
+                raise_exception=False,
+                worker_type="thread",
+                max_workers=self._n_threads,
+            )
+
+            for result in results:
+                # The results list is either `None` or an exception for each filename in
+                # the input list, in order.
+                if isinstance(result, Exception):
+                    raise result
+        else:
+            for key, value in key_value_pairs:
+                self._set_one(key, value)
+
+    def _convert_bytes_to_doc(
+        self, doc: io.BytesIO, result: Any
+    ) -> Union[Document, None]:
+        if isinstance(result, NotFound):
+            return None
+        elif result is None:
+            doc.seek(0)
+            raw_doc = doc.read()
+            data = raw_doc.decode("utf-8")
+            data_json = json.loads(data)
+            return Document(**data_json)
+        else:
+            raise Exception(
+                "Unexpected result type when batch getting multiple files from GCS"
+            )
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
@@ -53,7 +129,29 @@ class GCSDocumentStorage(DocumentStorage):
             List of documents. If the key id is not found for any id record returns a
                 None instead.
         """
-        return [self._get_one(key) for key in keys]
+        if self._threaded:
+            download_docs = [
+                (self._bucket.blob(self._get_blob_name(key)), io.BytesIO())
+                for key in keys
+            ]
+            download_results = transfer_manager.download_many(
+                download_docs,
+                skip_if_exists=False,
+                download_kwargs=None,
+                deadline=None,
+                raise_exception=False,
+                worker_type="thread",
+                max_workers=self._n_threads,
+            )
+            for i, result in enumerate(download_results):
+                if isinstance(result, Exception) and not isinstance(result, NotFound):
+                    raise result
+            return [
+                self._convert_bytes_to_doc(doc[1], result)
+                for doc, result in zip(download_docs, download_results)
+            ]
+        else:
+            return [self._get_one(key) for key in keys]
 
     def mdelete(self, keys: Sequence[str]) -> None:
         """Deletes a batch of documents by id.
@@ -61,8 +159,11 @@ class GCSDocumentStorage(DocumentStorage):
         Args:
             keys: List of ids for the text.
         """
-        for key in keys:
-            self._delete_one(key)
+        for i in range(0, len(keys), GCS_MAX_BATCH_SIZE):
+            batch = keys[i : i + GCS_MAX_BATCH_SIZE]
+            with self._bucket.client.batch():
+                for key in batch:
+                    self._delete_one(key)
 
     def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
         """Yields the keys present in the storage.

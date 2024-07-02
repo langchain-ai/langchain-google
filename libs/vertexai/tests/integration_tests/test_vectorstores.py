@@ -45,7 +45,8 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 @pytest.fixture
 def sdk_manager() -> VectorSearchSDKManager:
     sdk_manager = VectorSearchSDKManager(
-        project_id=os.environ["PROJECT_ID"], region=os.environ["REGION"]
+        project_id=os.environ["PROJECT_ID"],
+        region=os.environ.get("REGION", "us-central1"),
     )
     return sdk_manager
 
@@ -54,6 +55,14 @@ def sdk_manager() -> VectorSearchSDKManager:
 def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStorage:
     bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
+
+
+@pytest.fixture
+def gcs_document_storage_unthreaded(
+    sdk_manager: VectorSearchSDKManager,
+) -> GCSDocumentStorage:
+    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    return GCSDocumentStorage(bucket=bucket, prefix="integration_tests", threaded=False)
 
 
 @pytest.fixture
@@ -70,7 +79,7 @@ def vector_store() -> VectorSearchVectorStore:
 
     vector_store = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
+        region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         index_id=os.environ["INDEX_ID"],
         endpoint_id=os.environ["ENDPOINT_ID"],
@@ -86,7 +95,7 @@ def vector_store_private() -> VectorSearchVectorStore:
 
     vector_store_private = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
+        region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         index_id=os.environ["INDEX_ID"],
         endpoint_id=os.environ["ENDPOINT_ID"],
@@ -105,7 +114,7 @@ def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
 
     vector_store = VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
+        region=os.environ.get("REGION", "us-central1"),
         index_id=os.environ["STREAM_INDEX_ID_DATASTORE"],
         endpoint_id=os.environ["STREAM_ENDPOINT_ID_DATASTORE"],
         embedding=embeddings,
@@ -131,10 +140,42 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     assert isinstance(endpoint, MatchingEngineIndexEndpoint)
 
 
-@pytest.mark.xfail(reason="investigating")
+@pytest.mark.extended
+@pytest.mark.parametrize("n_threads", ["-1", -1, 51, "100"])
+def test_gcs_document_storage_invalid_user_input(
+    sdk_manager: VectorSearchSDKManager, n_threads: int
+):
+    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    with pytest.raises(ValueError) as excinfo:
+        GCSDocumentStorage(
+            bucket=bucket,
+            prefix="integration_tests",
+            threaded=True,
+            n_threads=n_threads,
+        )
+    assert isinstance(excinfo.value, ValueError)
+
+
+@pytest.mark.extended
+@pytest.mark.parametrize("n_threads", ["1", 1, 50])
+def test_gcs_document_storage_valid_user_input(
+    sdk_manager: VectorSearchSDKManager, n_threads: int
+):
+    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    doc_store = GCSDocumentStorage(
+        bucket=bucket, prefix="integration_tests", threaded=True, n_threads=n_threads
+    )
+    assert isinstance(doc_store, GCSDocumentStorage)
+
+
 @pytest.mark.extended
 @pytest.mark.parametrize(
-    "storage_class", ["gcs_document_storage", "datastore_document_storage"]
+    "storage_class",
+    [
+        "gcs_document_storage",
+        "gcs_document_storage_unthreaded",
+        "datastore_document_storage",
+    ],
 )
 def test_document_storage(
     storage_class: str,
@@ -142,15 +183,29 @@ def test_document_storage(
 ):
     document_storage: DocumentStorage = request.getfixturevalue(storage_class)
 
+    weirdly_encoded_texts = [
+        "ユーザー別サイト",
+        "简体中文",
+        "크로스 플랫폼으로",
+        "מדורים מבוקשים",
+        "أفضل البحوث",
+        "Σὲ γνωρίζω ἀπὸ",
+        "Десятую Международную",
+        "แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช",
+        "∮ E⋅da = Q, n → ∞, ∑ f(i) = ∏ g(i)",
+        "français langue étrangère",
+        "mañana olé y vamos Messi!",
+    ]
+
     N = 10
     documents = [
         Document(
-            page_content=f"Text content of document {i}",
+            page_content=f"Text content of document {i}: {text}",
             metadata={"index": i, "nested": {"a": i, "b": str(uuid4())}},
         )
-        for i in range(N)
+        for i, text in enumerate(weirdly_encoded_texts * N)
     ]
-    ids = [str(uuid4()) for i in range(N)]
+    ids = [str(uuid4()) for i in range(N * len(weirdly_encoded_texts))]
 
     # Test batch storage and retrieval
     document_storage.mset(list(zip(ids, documents)))
