@@ -1569,15 +1569,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
-        elif isinstance(schema, dict) and all(
-            k in schema for k in ("title", "description", "properties")
-        ):
-            schema = convert_to_openai_function(schema)
-            parser = JsonOutputKeyToolsParser(
-                key_name=schema["name"], first_tool_only=True
-            )
         else:
-            parser = JsonOutputToolsParser()
+            try:
+                schema = convert_to_openai_function(schema)
+            except Exception:
+                parser = JsonOutputToolsParser()
+            else:
+                parser = JsonOutputKeyToolsParser(
+                    key_name=schema["name"], first_tool_only=True
+                )
         llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
