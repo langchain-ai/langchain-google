@@ -7,8 +7,8 @@ from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
 from langchain_core.pydantic_v1 import Extra, Field
-from langchain_google_community._utils import get_client_info
 
+from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
     from google.cloud import discoveryengine_v1alpha  # type: ignore
