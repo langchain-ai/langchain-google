@@ -658,3 +658,22 @@ def test_structured_output_schema():
     assert isinstance(parsed_response, list)
     assert len(parsed_response) > 0
     assert "recipe_name" in parsed_response[0]
+
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-001", 
+        response_schema = {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "recipe_name": {
+                        "type": "string",
+                    },
+                },
+                "required": ["recipe_name"],
+            },
+        }
+    )
+    with pytest.raises(ValueError, match="response_mime_type"):
+        response = model.invoke("List a few popular cookie recipes")
+

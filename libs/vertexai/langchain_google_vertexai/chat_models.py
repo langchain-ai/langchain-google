@@ -1072,15 +1072,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if self.response_schema is not None:
 
             if self.response_mime_type != "application/json":
-                error_message = "`response_schema` is only supported when "
-                "`response_mime_type` is set to `application/json`."
+                error_message = (
+                    "`response_schema` is only supported when "
+                    "`response_mime_type` is set to `application/json`."
+                )
                 raise ValueError(error_message)
 
             gapic_response_schema = _convert_schema_dict_to_gapic(
                 self.response_schema
             )
             updated_params["response_schema"] = gapic_response_schema
-            
+
         return updated_params
 
     def _get_ls_params(
