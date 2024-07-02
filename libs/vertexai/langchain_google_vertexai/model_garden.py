@@ -350,7 +350,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema."""
 
-        llm = self.bind_tools([schema], tool_choice="any")
+        tool_name = convert_to_anthropic_tool(schema)["name"]
+        llm = self.bind_tools([schema], tool_choice=tool_name)
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             output_parser = ToolsOutputParser(
                 first_tool_only=True, pydantic_schemas=[schema]
