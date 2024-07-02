@@ -52,15 +52,13 @@ from langchain_core.messages import (
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
-    JsonOutputKeyToolsParser,
     JsonOutputToolsParser,
     PydanticToolsParser,
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
-from langchain_core.runnables import Runnable, RunnablePassthrough
-from langchain_core.utils.function_calling import convert_to_openai_function
+from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
 )
@@ -1478,6 +1476,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema.
 
+        .. versionchanged:: 1.1.0
+
+            Return type corrected in version 1.1.0. Previously if a dict schema
+            was provided then the output had the form
+            ``[{"args": {}, "name": "schema_name"}]`` where the output was a list with
+            a single dict and the "args" of the one dict corresponded to the schema.
+            As of `1.1.0` this has been fixed so that the schema (the value
+            corresponding to the old "args" key) is returned directly.
+
         Args:
             schema: The output schema as a dict or a Pydantic class. If a Pydantic class
                 then the model output will be an object of that class. If a dict then
@@ -1570,14 +1577,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 tools=[schema], first_tool_only=True
             )
         else:
-            try:
-                schema = convert_to_openai_function(schema)
-            except Exception:
-                parser = JsonOutputToolsParser()
-            else:
-                parser = JsonOutputKeyToolsParser(
-                    key_name=schema["name"], first_tool_only=True
-                )
+            parser = JsonOutputToolsParser(first_tool_only=True) | RunnableGenerator(
+                _yield_args
+            )
         llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
@@ -1693,6 +1695,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message=message,
             generation_info=generation_info,
         )
+
+
+def _yield_args(tool_call_chunks: Iterator[dict]) -> Iterator[dict]:
+    for tc in tool_call_chunks:
+        yield tc["args"]
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
