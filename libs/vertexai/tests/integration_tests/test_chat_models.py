@@ -629,3 +629,50 @@ def test_prediction_client_transport():
 
     assert model.prediction_client.transport.kind == "rest"
     assert model.async_prediction_client.transport.kind == "rest"
+
+
+@pytest.mark.extended
+def test_structured_output_schema():
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-001",
+        response_mime_type="application/json",
+        response_schema={
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "recipe_name": {
+                        "type": "string",
+                    },
+                },
+                "required": ["recipe_name"],
+            },
+        },
+    )
+
+    response = model.invoke("List a few popular cookie recipes")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    parsed_response = json.loads(response.content)
+    assert isinstance(parsed_response, list)
+    assert len(parsed_response) > 0
+    assert "recipe_name" in parsed_response[0]
+
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-001",
+        response_schema={
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "recipe_name": {
+                        "type": "string",
+                    },
+                },
+                "required": ["recipe_name"],
+            },
+        },
+    )
+    with pytest.raises(ValueError, match="response_mime_type"):
+        response = model.invoke("List a few popular cookie recipes")

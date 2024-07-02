@@ -67,6 +67,7 @@ from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
+    _convert_schema_dict_to_gapic,
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
@@ -124,6 +125,7 @@ _allowed_params = [
     "top_k",
     "top_p",
     "response_mime_type",
+    "response_schema",
     "temperature",
     "max_output_tokens",
     "presence_penalty",
@@ -983,6 +985,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
        type, otherwise the behavior is undefined. This is a preview feature.
     """
 
+    response_schema: Optional[Dict[str, Any]] = None
+    """ Optional. Enforce an schema to the output. Only works when `response_mime_type`
+        is set to `application/json`.
+        The format of the dictionary should follow Open API schema.
+    """
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -1055,8 +1063,21 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _default_params(self) -> Dict[str, Any]:
         updated_params = super()._default_params
+
         if self.response_mime_type is not None:
             updated_params["response_mime_type"] = self.response_mime_type
+
+        if self.response_schema is not None:
+            if self.response_mime_type != "application/json":
+                error_message = (
+                    "`response_schema` is only supported when "
+                    "`response_mime_type` is set to `application/json`."
+                )
+                raise ValueError(error_message)
+
+            gapic_response_schema = _convert_schema_dict_to_gapic(self.response_schema)
+            updated_params["response_schema"] = gapic_response_schema
+
         return updated_params
 
     def _get_ls_params(
