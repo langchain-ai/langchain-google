@@ -192,6 +192,10 @@ class _BaseVertexAIVectorStore(VectorStore):
                 f"{len(metadatas)} != {len(texts)}"
             )
 
+        # Add generated IDs to metadata
+        for metadata, id in zip(metadatas, ids):
+            metadata["doc_id"] = id
+
         documents = [
             Document(page_content=text, metadata=metadata)
             for text, metadata in zip(texts, metadatas)
@@ -206,6 +210,33 @@ class _BaseVertexAIVectorStore(VectorStore):
         )
 
         return ids
+
+    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
+        """
+        Delete by vector ID.
+        Args:
+            ids (Optional[List[str]]): List of ids to delete.
+            **kwargs (Any): Other keyword arguments (not used,
+            but included for compatibility).
+        Returns:
+            Optional[bool]: True if deletion is successful.
+        Raises:
+            ValueError: If ids is None or an empty list.
+            RuntimeError: If an error occurs during the deletion process.
+        """
+        if ids is None or len(ids) == 0:
+            raise ValueError("ids must be provided and cannot be an empty list")
+
+        try:
+            # Remove datapoints from the Vertex Vector Search Index
+            self._searcher.remove_datapoints(datapoint_ids=ids)
+            # Remove documents from the document storage
+            self._document_storage.mdelete(ids)
+
+            return True
+
+        except Exception as e:
+            raise RuntimeError(f"Error during deletion: {str(e)}") from e
 
     @classmethod
     def from_texts(
