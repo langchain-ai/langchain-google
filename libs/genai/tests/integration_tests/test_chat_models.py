@@ -16,6 +16,7 @@ from langchain_core.messages import (
 )
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import tool
+from langchain_standard_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,
@@ -23,7 +24,6 @@ from langchain_google_genai import (
     HarmCategory,
 )
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
-from langchain_standard_tests.integration_tests import ChatModelIntegrationTests
 
 _MODEL = "models/gemini-1.0-pro-001"  # TODO: Use nano when it's available.
 _VISION_MODEL = "gemini-pro-vision"
@@ -460,4 +460,3 @@ def test_chat_google_genai_function_calling_with_structured_output() -> None:
         }
     ]
     assert response == expected
-

@@ -3,7 +3,7 @@
 import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Union, Type
+from typing import Dict, List, Optional, Type, Union
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
