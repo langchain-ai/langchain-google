@@ -1197,7 +1197,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         system_instruction, contents = _parse_chat_history_gemini(messages)
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         tool_config = self._tool_config_gemini(tool_config=tool_config)
-        request = GenerateContentRequest(
+        return GenerateContentRequest(
             contents=contents,
             system_instruction=system_instruction,
             tools=formatted_tools,
@@ -1208,7 +1208,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             ),
             model=self.full_model_name,
         )
-        return request
 
     def _generate_gemini(
         self,
