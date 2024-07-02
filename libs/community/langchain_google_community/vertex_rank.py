@@ -8,6 +8,8 @@ from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
 from langchain_core.pydantic_v1 import Extra, Field
 
+from langchain_google_community._utils import get_client_info
+
 if TYPE_CHECKING:
     from google.cloud import discoveryengine_v1alpha  # type: ignore
 
@@ -98,7 +100,8 @@ class VertexAIRank(BaseDocumentCompressor):
                 or Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
                 if self.credentials_path
                 else None
-            )
+            ),
+            client_info=get_client_info(module="vertex-ai-search"),
         )
 
     def _rerank_documents(
