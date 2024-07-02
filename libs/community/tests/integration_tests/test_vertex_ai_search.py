@@ -14,6 +14,7 @@ export DATA_STORE_ID=... - the ID of the search engine to use for the test
 import json
 import os
 import pickle
+from typing import Dict, Optional
 
 import cloudpickle
 import pytest
@@ -26,9 +27,46 @@ from langchain_google_community import (
     VertexAISearchSummaryTool,
 )
 
+boost_spec = {
+    "condition_boost_specs": [
+        {
+            "condition": "true",
+            "boost_control_spec": {
+                "field_name": "dateModified",
+                "attribute_type": "FRESHNESS",
+                "interpolation_type": "LINEAR",
+                "control_points": [
+                    {"attribute_value": "7d", "boost_amount": 0.9},
+                    {"attribute_value": "30d", "boost_amount": 0.7},
+                ],
+            },
+        }
+    ]
+}
+
 
 @pytest.mark.extended
-def test_google_vertex_ai_search_get_relevant_documents() -> None:
+@pytest.mark.parametrize("spec", [None, boost_spec])
+def test_google_vertex_ai_search_get_relevant_documents(spec: Optional[Dict]) -> None:
+    """Test the get_relevant_documents() method."""
+    data_store_id = os.environ["DATA_STORE_ID"]
+    if spec:
+        retriever = VertexAIMultiTurnSearchRetriever(
+            data_store_id=data_store_id, boost_spec=spec
+        )
+    else:
+        retriever = VertexAIMultiTurnSearchRetriever(data_store_id=data_store_id)
+    documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
+    assert len(documents) > 0
+    for doc in documents:
+        assert isinstance(doc, Document)
+        assert doc.page_content
+        assert doc.metadata["id"]
+        assert doc.metadata["source"]
+
+
+@pytest.mark.extended
+def test_google_vertex_ai_search_boostspec() -> None:
     """Test the get_relevant_documents() method."""
     data_store_id = os.environ["DATA_STORE_ID"]
     retriever = VertexAIMultiTurnSearchRetriever(data_store_id=data_store_id)
@@ -70,9 +108,10 @@ def test_vertex_search_tool() -> None:
 
 
 @pytest.mark.extended
-def test_native_serialization() -> None:
+@pytest.mark.parametrize("spec", [None, boost_spec])
+def test_native_serialization(spec: Optional[Dict]) -> None:
     retriever = VertexAISearchRetriever(
-        data_store_id="test-data-store", project_id="test-project"
+        data_store_id="test-data-store", project_id="test-project", boost_spec=spec
     )
     serialized = json.dumps(retriever.to_json())
     retriever_loaded = load(
@@ -82,9 +121,10 @@ def test_native_serialization() -> None:
 
 
 @pytest.mark.extended
-def test_cloudpickle() -> None:
+@pytest.mark.parametrize("spec", [None, boost_spec])
+def test_cloudpickle(spec: Optional[Dict]) -> None:
     retriever = VertexAISearchRetriever(
-        data_store_id="test-data-store", project_id="test-project"
+        data_store_id="test-data-store", project_id="test-project", boost_spec=spec
     )
     serialized = cloudpickle.dumps(retriever)
     retriever_loaded = pickle.loads(serialized)
