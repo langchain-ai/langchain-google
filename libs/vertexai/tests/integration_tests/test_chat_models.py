@@ -630,13 +630,13 @@ def test_prediction_client_transport():
     assert model.prediction_client.transport.kind == "rest"
     assert model.async_prediction_client.transport.kind == "rest"
 
+
 @pytest.mark.extended
 def test_structured_output_schema():
-
     model = ChatVertexAI(
-        model_name="gemini-1.5-pro-001", 
+        model_name="gemini-1.5-pro-001",
         response_mime_type="application/json",
-        response_schema = {
+        response_schema={
             "type": "array",
             "items": {
                 "type": "object",
@@ -647,7 +647,7 @@ def test_structured_output_schema():
                 },
                 "required": ["recipe_name"],
             },
-        }
+        },
     )
 
     response = model.invoke("List a few popular cookie recipes")
@@ -660,8 +660,8 @@ def test_structured_output_schema():
     assert "recipe_name" in parsed_response[0]
 
     model = ChatVertexAI(
-        model_name="gemini-1.5-pro-001", 
-        response_schema = {
+        model_name="gemini-1.5-pro-001",
+        response_schema={
             "type": "array",
             "items": {
                 "type": "object",
@@ -672,8 +672,7 @@ def test_structured_output_schema():
                 },
                 "required": ["recipe_name"],
             },
-        }
+        },
     )
     with pytest.raises(ValueError, match="response_mime_type"):
         response = model.invoke("List a few popular cookie recipes")
-
