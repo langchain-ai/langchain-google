@@ -101,6 +101,8 @@ class _VertexAIBase(BaseModel):
             values["model_name"] = values.pop("model")
         if values.get("project") is None:
             values["project"] = initializer.global_config.project
+        if values.get("api_transport") is None:
+            values["api_transport"] = initializer.global_config._api_transport
         if values.get("api_endpoint"):
             api_endpoint = values["api_endpoint"]
         else:
