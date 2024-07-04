@@ -694,12 +694,12 @@ def test_structured_output_schema():
 def test_context_catching():
     import datetime
 
-    from vertexai.generative_models import Part
-    from vertexai.preview import caching
+    from vertexai.generative_models import Part  # type: ignore
+    from vertexai.preview import caching  # type: ignore
 
     system_instruction = """
     
-    You are an expert researcher. You always stick to the facts in the sources provided, 
+    You are an expert researcher. You always stick to the facts in the sources provided,
     and never make up new facts.
     
     If asked about it, the secret number is 747.

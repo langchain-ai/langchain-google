@@ -1020,7 +1020,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         safety_settings = values.get("safety_settings")
         tuned_model_name = values.get("tuned_model_name")
         values["model_family"] = GoogleModelFamily(values["model_name"])
-        cached_content = values.get("cached_content")
 
         if values.get("full_model_name") is not None:
             pass
@@ -1249,7 +1248,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 logger.warning(message)
 
-        full_cache_name = f"projects/{self.project}/locations/{self.location}/cachedContents/{self.cached_content}"
+        full_cache_name = (
+            f"projects/{self.project}/locations/{self.location}/"
+            f"cachedContents/{self.cached_content}"
+        )
 
         return GenerateContentRequest(
             contents=contents,
