@@ -688,3 +688,51 @@ def test_structured_output_schema():
     )
     with pytest.raises(ValueError, match="response_mime_type"):
         response = model.invoke("List a few popular cookie recipes")
+
+
+@pytest.mark.extended
+def test_context_catching():
+
+    import datetime
+
+    from vertexai.generative_models import Part
+    from vertexai.preview import caching
+
+
+    system_instruction = """
+    
+    You are an expert researcher. You always stick to the facts in the sources provided, 
+    and never make up new facts.
+    
+    If asked about it, the secret number is 747.
+    
+    Now look at these research papers, and answer the following questions.
+    
+    """
+
+    contents = [
+        Part.from_uri(
+            "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf",
+            mime_type="application/pdf",
+        ),
+        Part.from_uri(
+            "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf",
+            mime_type="application/pdf",
+        ),
+    ]
+
+    cached_content = caching.CachedContent.create(
+        model_name="gemini-1.5-pro-001",
+        system_instruction=system_instruction,
+        contents=contents,
+        ttl=datetime.timedelta(minutes=60),
+    )
+
+    chat = ChatVertexAI(
+        model_name="gemini-1.5-pro-001", cached_content= cached_content.name)
+    
+    response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
