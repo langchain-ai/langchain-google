@@ -692,12 +692,10 @@ def test_structured_output_schema():
 
 @pytest.mark.extended
 def test_context_catching():
-
     import datetime
 
     from vertexai.generative_models import Part
     from vertexai.preview import caching
-
 
     system_instruction = """
     
@@ -729,8 +727,9 @@ def test_context_catching():
     )
 
     chat = ChatVertexAI(
-        model_name="gemini-1.5-pro-001", cached_content= cached_content.name)
-    
+        model_name="gemini-1.5-pro-001", cached_content=cached_content.name
+    )
+
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
