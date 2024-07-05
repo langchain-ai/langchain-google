@@ -24,7 +24,10 @@ from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
-from langchain_core.utils.function_calling import FunctionDescription
+from langchain_core.utils.function_calling import (
+    FunctionDescription,
+    convert_to_openai_tool,
+)
 from langchain_core.utils.json_schema import dereference_refs
 
 logger = logging.getLogger(__name__)
@@ -169,11 +172,8 @@ def _format_to_gapic_function_declaration(
     elif isinstance(tool, dict):
         # this could come from
         # 'langchain_core.utils.function_calling.convert_to_openai_tool'
-        if tool.get("type") == "function" and tool.get("function"):
-            return _format_dict_to_function_declaration(
-                cast(FunctionDescription, tool.get("function"))
-            )
-        return _format_dict_to_function_declaration(tool)
+        function = convert_to_openai_tool(cast(dict, tool))["function"]
+        return _format_dict_to_function_declaration(cast(FunctionDescription, function))
     else:
         raise ValueError(f"Unsupported tool call type {tool}")
 

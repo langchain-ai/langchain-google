@@ -58,7 +58,7 @@ from langchain_core.output_parsers.openai_tools import (
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
-from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
 )
@@ -67,6 +67,7 @@ from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
+    _convert_schema_dict_to_gapic,
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
@@ -124,6 +125,7 @@ _allowed_params = [
     "top_k",
     "top_p",
     "response_mime_type",
+    "response_schema",
     "temperature",
     "max_output_tokens",
     "presence_penalty",
@@ -983,6 +985,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
        type, otherwise the behavior is undefined. This is a preview feature.
     """
 
+    response_schema: Optional[Dict[str, Any]] = None
+    """ Optional. Enforce an schema to the output. Only works when `response_mime_type`
+        is set to `application/json`.
+        The format of the dictionary should follow Open API schema.
+    """
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -1055,8 +1063,21 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _default_params(self) -> Dict[str, Any]:
         updated_params = super()._default_params
+
         if self.response_mime_type is not None:
             updated_params["response_mime_type"] = self.response_mime_type
+
+        if self.response_schema is not None:
+            if self.response_mime_type != "application/json":
+                error_message = (
+                    "`response_schema` is only supported when "
+                    "`response_mime_type` is set to `application/json`."
+                )
+                raise ValueError(error_message)
+
+            gapic_response_schema = _convert_schema_dict_to_gapic(self.response_schema)
+            updated_params["response_schema"] = gapic_response_schema
+
         return updated_params
 
     def _get_ls_params(
@@ -1476,6 +1497,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema.
 
+        .. versionchanged:: 1.1.0
+
+            Return type corrected in version 1.1.0. Previously if a dict schema
+            was provided then the output had the form
+            ``[{"args": {}, "name": "schema_name"}]`` where the output was a list with
+            a single dict and the "args" of the one dict corresponded to the schema.
+            As of `1.1.0` this has been fixed so that the schema (the value
+            corresponding to the old "args" key) is returned directly.
+
         Args:
             schema: The output schema as a dict or a Pydantic class. If a Pydantic class
                 then the model output will be an object of that class. If a dict then
@@ -1568,7 +1598,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 tools=[schema], first_tool_only=True
             )
         else:
-            parser = JsonOutputToolsParser()
+            parser = JsonOutputToolsParser(first_tool_only=True) | RunnableGenerator(
+                _yield_args
+            )
         llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
@@ -1684,6 +1716,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message=message,
             generation_info=generation_info,
         )
+
+
+def _yield_args(tool_call_chunks: Iterator[dict]) -> Iterator[dict]:
+    for tc in tool_call_chunks:
+        yield tc["args"]
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
