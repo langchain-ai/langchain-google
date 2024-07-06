@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 
 from langchain_core.messages import BaseMessage
 from vertexai.preview import caching  # type: ignore
@@ -18,7 +18,7 @@ from langchain_google_vertexai.functions_utils import (
 
 def create_context_cache(
     model: ChatVertexAI,
-    messages: list[BaseMessage],
+    messages: List[BaseMessage],
     expire_time: Optional[datetime] = None,
     time_to_live: Optional[timedelta] = None,
     tools: Optional[_ToolsType] = None,
