@@ -32,7 +32,7 @@ EXPECTED_ALL = [
     "VertexAIVisualQnAChat",
     "VertexPairWiseStringEvaluator",
     "VertexStringEvaluator",
-    "create_context_cache"
+    "create_context_cache",
 ]
 
 
