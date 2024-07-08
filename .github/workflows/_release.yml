@@ -72,6 +72,7 @@ jobs:
       - build
     uses:
       ./.github/workflows/_test_release.yml
+    permissions: write-all
     with:
       working-directory: ${{ inputs.working-directory }}
     secrets: inherit
