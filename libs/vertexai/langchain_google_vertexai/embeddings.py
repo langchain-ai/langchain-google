@@ -12,6 +12,7 @@ from google.api_core.exceptions import (
     InvalidArgument,
     ResourceExhausted,
     ServiceUnavailable,
+    InternalServerError,
 )
 from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
@@ -154,6 +155,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             ServiceUnavailable,
             Aborted,
             DeadlineExceeded,
+            InternalServerError,
         ]
         retry_decorator = create_base_retry_decorator(
             error_types=retry_errors, max_retries=self.max_retries
