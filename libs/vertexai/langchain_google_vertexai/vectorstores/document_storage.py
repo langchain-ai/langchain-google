@@ -4,10 +4,10 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence, Tuple
-from google.cloud.storage import transfer_manager
-from google.cloud.storage.retry import DEFAULT_RETRY
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
+from google.cloud.storage import transfer_manager
+from google.cloud.storage.retry import DEFAULT_RETRY
 from langchain_core.documents import Document
 from langchain_core.stores import BaseStore
 
@@ -48,11 +48,13 @@ class GCSDocumentStorage(DocumentStorage):
                 with open(Path(tmp_folder) / key, "w") as f:
                     json.dump(value.dict(), f)
 
-            transfer_manager.upload_many_from_filenames(self._bucket,
-                                                        [item[0] for item in key_value_pairs],
-                                                        blob_name_prefix=f'{self._prefix}/',
-                                                        source_directory=tmp_folder,
-                                                        upload_kwargs={"retry": DEFAULT_RETRY})
+            transfer_manager.upload_many_from_filenames(
+                self._bucket,
+                [item[0] for item in key_value_pairs],
+                blob_name_prefix=f"{self._prefix}/",
+                source_directory=tmp_folder,
+                upload_kwargs={"retry": DEFAULT_RETRY},
+            )
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
