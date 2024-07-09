@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from google.cloud.storage import transfer_manager
+from google.cloud.storage.retry import DEFAULT_RETRY
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from langchain_core.documents import Document
@@ -39,8 +43,16 @@ class GCSDocumentStorage(DocumentStorage):
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
         """
-        for key, value in key_value_pairs:
-            self._set_one(key, value)
+        with TemporaryDirectory() as tmp_folder:
+            for key, value in key_value_pairs:
+                with open(Path(tmp_folder) / key, "w") as f:
+                    json.dump(value.dict(), f)
+
+            transfer_manager.upload_many_from_filenames(self._bucket,
+                                                        [item[0] for item in key_value_pairs],
+                                                        blob_name_prefix=f'{self._prefix}/',
+                                                        source_directory=tmp_folder,
+                                                        upload_kwargs={"retry": DEFAULT_RETRY})
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
@@ -48,7 +60,7 @@ class GCSDocumentStorage(DocumentStorage):
         Subclasses that have faster ways to retrieve data by batch should implement
         this method.
         Args:
-            ids: List of ids for the text.
+            keys: List of ids for the text.
         Returns:
             List of documents. If the key id is not found for any id record returns a
                 None instead.
@@ -90,19 +102,6 @@ class GCSDocumentStorage(DocumentStorage):
         document_str = existing_blob.download_as_text()
         document_json: Dict[str, Any] = json.loads(document_str)
         return Document(**document_json)
-
-    def _set_one(self, key: str, value: Document) -> None:
-        """Stores a document text associated to a document_id.
-        Args:
-            key: Id of the document to be stored.
-            document: Document to be stored.
-        """
-        blob_name = self._get_blob_name(key)
-        new_blow = self._bucket.blob(blob_name)
-
-        document_json = value.dict()
-        document_text = json.dumps(document_json)
-        new_blow.upload_from_string(document_text)
 
     def _delete_one(self, key: str) -> None:
         """Deletes one document by its key.
