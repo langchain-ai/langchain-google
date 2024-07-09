@@ -9,10 +9,10 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 from google.api_core.exceptions import (
     Aborted,
     DeadlineExceeded,
+    InternalServerError,
     InvalidArgument,
     ResourceExhausted,
     ServiceUnavailable,
-    InternalServerError,
 )
 from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
