@@ -45,14 +45,14 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 @pytest.fixture
 def sdk_manager() -> VectorSearchSDKManager:
     sdk_manager = VectorSearchSDKManager(
-        project_id=os.environ["PROJECT_ID"], region=os.environ["REGION"]
+        project_id=os.environ["PROJECT_ID"], region=os.environ.get("REGION", "us-central1")
     )
     return sdk_manager
 
 
 @pytest.fixture
 def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStorage:
-    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
 
 
@@ -70,7 +70,7 @@ def vector_store() -> VectorSearchVectorStore:
 
     vector_store = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
+        region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         index_id=os.environ["INDEX_ID"],
         endpoint_id=os.environ["ENDPOINT_ID"],
@@ -86,10 +86,10 @@ def vector_store_private() -> VectorSearchVectorStore:
 
     vector_store_private = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
-        gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
-        index_id=os.environ["INDEX_ID"],
-        endpoint_id=os.environ["ENDPOINT_ID"],
+        region=os.environ.get("REGION", "us-central1"),
+        gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
+        index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_ENDPOINT_ID"],
         private_service_connect_ip_address=os.environ[
             "PRIVATE_SERVICE_CONNECT_IP_ADDRESS"
         ],
@@ -105,9 +105,9 @@ def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
 
     vector_store = VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
-        index_id=os.environ["STREAM_INDEX_ID_DATASTORE"],
-        endpoint_id=os.environ["STREAM_ENDPOINT_ID_DATASTORE"],
+        region=os.environ.get("REGION", "us-central1"),
+        index_id=os.environ["VECTOR_SEARCH_STREAM_INDEX_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_STREAM_ENDPOINT_ID"],
         embedding=embeddings,
         stream_update=True,
     )
@@ -120,13 +120,13 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     gcs_client = sdk_manager.get_gcs_client()
     assert isinstance(gcs_client, storage.Client)
 
-    gcs_bucket = sdk_manager.get_gcs_bucket(os.environ["GCS_BUCKET_NAME"])
+    gcs_bucket = sdk_manager.get_gcs_bucket(os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
     assert isinstance(gcs_bucket, storage.Bucket)
 
-    index = sdk_manager.get_index(index_id=os.environ["INDEX_ID"])
+    index = sdk_manager.get_index(index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"])
     assert isinstance(index, MatchingEngineIndex)
 
-    endpoint = sdk_manager.get_endpoint(endpoint_id=os.environ["ENDPOINT_ID"])
+    endpoint = sdk_manager.get_endpoint(endpoint_id=os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"])
     assert isinstance(endpoint, MatchingEngineIndexEndpoint)
 
 
@@ -168,8 +168,8 @@ def test_document_storage(
 
 @pytest.mark.extended
 def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
-    index = sdk_manager.get_index(os.environ["INDEX_ID"])
-    endpoint = sdk_manager.get_endpoint(os.environ["ENDPOINT_ID"])
+    index = sdk_manager.get_index(os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"])
+    endpoint = sdk_manager.get_endpoint(os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"])
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
 
     searcher = VectorSearchSearcher(endpoint=endpoint, index=index)
