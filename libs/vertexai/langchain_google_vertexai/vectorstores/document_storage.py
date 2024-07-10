@@ -37,7 +37,7 @@ class GCSDocumentStorage(DocumentStorage):
         self._bucket = bucket
         self._prefix = prefix
 
-    def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
+    def mset(self, key_value_pairs: Sequence[Tuple[str, Document]], **kwargs) -> None:
         """Stores a series of documents using each keys
 
         Args:
@@ -47,13 +47,15 @@ class GCSDocumentStorage(DocumentStorage):
             for key, value in key_value_pairs:
                 with open(Path(tmp_folder) / key, "w") as f:
                     json.dump(value.dict(), f)
-
+                    
+            prefix = f"{self._prefix}/" if self._prefix else ""
             transfer_manager.upload_many_from_filenames(
                 self._bucket,
                 [item[0] for item in key_value_pairs],
-                blob_name_prefix=f"{self._prefix}/",
+                blob_name_prefix=prefix,
                 source_directory=tmp_folder,
                 upload_kwargs={"retry": DEFAULT_RETRY},
+                **kwargs
             )
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
