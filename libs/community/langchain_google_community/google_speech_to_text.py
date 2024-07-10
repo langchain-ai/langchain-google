@@ -37,6 +37,7 @@ class SpeechToTextLoader(BaseLoader):
         recognizer_id: str = "_",
         config: Optional[RecognitionConfig] = None,
         config_mask: Optional[FieldMask] = None,
+        is_long: bool = False,
     ):
         """
         Initializes the GoogleSpeechToTextLoader.
@@ -54,6 +55,9 @@ class SpeechToTextLoader(BaseLoader):
                 recognition request.
                 For more information:
                 https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognizeRequest
+            is_long: use async Cloud Speech recognition, mainly for long documents
+                For more information:
+                https://cloud.google.com/speech-to-text/v2/docs/batch-recognize
         """
         try:
             from google.api_core.client_options import ClientOptions
@@ -97,6 +101,7 @@ class SpeechToTextLoader(BaseLoader):
         self._recognizer_path = self._client.recognizer_path(
             project_id, location, recognizer_id
         )
+        self._is_long = is_long
 
     def load(self) -> List[Document]:
         """Transcribes the audio file and loads the transcript into documents.
@@ -104,6 +109,8 @@ class SpeechToTextLoader(BaseLoader):
         It uses the Google Cloud Speech-to-Text API to transcribe the audio file
         and blocks until the transcription is finished.
         """
+        if self._is_long:
+            return [Document(page_content=self._load_long())]
         try:
             from google.cloud.speech_v2 import RecognizeRequest
         except ImportError as exc:
@@ -137,3 +144,30 @@ class SpeechToTextLoader(BaseLoader):
             )
             for result in response.results
         ]
+
+    def _load_long(self) -> str:
+        from google.cloud.speech_v2 import (
+            BatchRecognizeFileMetadata,
+            BatchRecognizeRequest,
+            InlineOutputConfig,
+            RecognitionOutputConfig,
+        )
+
+        request = BatchRecognizeRequest(
+            recognizer=self._recognizer_path,
+            config=self.config,
+            config_mask=self.config_mask,
+            files=[BatchRecognizeFileMetadata(uri=self.file_path)],
+            recognition_output_config=RecognitionOutputConfig(
+                inline_response_config=InlineOutputConfig(),
+            ),
+        )
+        operation = self._client.batch_recognize(request=request)
+        response = operation.result(timeout=120)
+        return "".join(
+            [
+                r.alternatives[0].transcript
+                for r in response.results[self.file_path].transcript.results
+                if r.alternatives
+            ]
+        )

@@ -325,9 +325,16 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[GenerationChunk]:
-        generation_config = kwargs.get("generation_config", {})
-        if stop:
-            generation_config["stop_sequences"] = stop
+        generation_config = {
+            "stop_sequences": stop,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "max_output_tokens": self.max_output_tokens,
+            "candidate_count": self.n,
+        }
+        generation_config = generation_config | kwargs.get("generation_config", {})
+
         for stream_resp in _completion_with_retry(
             self,
             prompt,

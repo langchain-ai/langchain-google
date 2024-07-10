@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-vertexai"
-version = "1.0.5"
+version = "1.0.6"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 readme = "README.md"
@@ -12,11 +12,11 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain-core = ">=0.2.5,<0.3"
-google-cloud-aiplatform = "^1.54.1"
-google-cloud-storage = "^2.16.0"
+langchain-core = ">=0.2.9,<0.3"
+google-cloud-aiplatform = "^1.56.0"
+google-cloud-storage = "^2.17.0"
 # optional dependencies
-anthropic = { extras = ["vertexai"], version = ">=0.28.0,<1", optional = true }
+anthropic = { extras = ["vertexai"], version = ">=0.29.0,<1", optional = true }
 
 [tool.poetry.group.test]
 optional = true
@@ -28,14 +28,17 @@ pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
-langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain" }
-langchain-text-splitters = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/text-splitters" }
 types-requests = "^2.31.0.20231231"
 types-protobuf = "^4.24.0.4"
 numexpr = "^2.8.6"
+numpy = [
+  { version = "^1", python = "<3.12" },
+  { version = "^1.26.0", python = ">=3.12" },
+]
 google-api-python-client = "^2.117.0"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests"}
+
 
 [tool.codespell]
 ignore-words-list = "rouge"
@@ -53,6 +56,7 @@ optional = true
 numexpr = { version = "^2.8.8", python = ">=3.9,<4.0" }
 google-api-python-client = "^2.114.0"
 google-cloud-datastore = "^2.19.0"
+langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain" }
 
 [tool.poetry.group.lint]
 optional = true
