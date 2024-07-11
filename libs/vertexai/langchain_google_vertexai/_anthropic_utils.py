@@ -27,6 +27,7 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
@@ -162,7 +163,7 @@ class AnthropicTool(TypedDict):
 
 
 def convert_to_anthropic_tool(
-    tool: Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool],
+    tool: Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool, Runnable],
 ) -> AnthropicTool:
     # already in Anthropic tool format
     if isinstance(tool, dict) and all(

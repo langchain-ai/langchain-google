@@ -22,6 +22,7 @@ from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -39,6 +40,7 @@ _FunctionDeclarationLike = Union[
     Callable,
     vertexai.FunctionDeclaration,
     Dict[str, Any],
+    Runnable,
 ]
 _GoogleSearchRetrievalLike = Union[
     gapic.GoogleSearchRetrieval,
@@ -168,6 +170,8 @@ def _format_to_gapic_function_declaration(
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
     elif isinstance(tool, vertexai.FunctionDeclaration):
         return _format_vertex_to_function_declaration(tool)
+    elif isinstance(tool, Runnable):
+        return _format_base_tool_to_function_declaration(tool.as_tool())
     elif isinstance(tool, dict):
         # this could come from
         # 'langchain_core.utils.function_calling.convert_to_openai_tool'

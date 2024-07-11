@@ -1629,9 +1629,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         Args:
             tools: A list of tool definitions to bind to this chat model.
-                Can be a pydantic model, callable, or BaseTool. Pydantic
-                models, callables, and BaseTools will be automatically converted to
-                their schema dictionary representation.
+                Can be  a dictionary, pydantic model, callable, BaseTool, or Runnable.
+                Pydantic models, callables, BaseTools, and Runnables will be
+                automatically converted to their schema dictionary representation.
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """
