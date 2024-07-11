@@ -75,7 +75,9 @@ class _VertexAIBase(BaseModel):
     api_endpoint: Optional[str] = Field(None, alias="base_url")
     "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
     api_transport: Optional[str] = None
-    """The desired API transport method, can be either 'grpc' or 'rest'"""
+    """The desired API transport method, can be either 'grpc' or 'rest'. 
+    Uses the default parameter in vertexai.init if defined.
+    """
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
     )  #: :meta private:
@@ -101,6 +103,8 @@ class _VertexAIBase(BaseModel):
             values["model_name"] = values.pop("model")
         if values.get("project") is None:
             values["project"] = initializer.global_config.project
+        if values.get("api_transport") is None:
+            values["api_transport"] = initializer.global_config._api_transport
         if values.get("api_endpoint"):
             api_endpoint = values["api_endpoint"]
         else:
