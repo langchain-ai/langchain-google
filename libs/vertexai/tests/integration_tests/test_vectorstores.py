@@ -76,8 +76,8 @@ def vector_store(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
-        index_id=os.environ["INDEX_ID"],
-        endpoint_id=os.environ["ENDPOINT_ID"],
+        index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_ENDPOINT_ID"],
         embedding=embeddings,
     )
 
