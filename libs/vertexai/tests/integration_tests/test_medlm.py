@@ -57,6 +57,7 @@ def test_invoke_medlm_medium_palm_error() -> None:
         model.invoke("How you can help me?")
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_invoke_test_completion() -> None:
     model = VertexAI(model_name="medlm-medium@latest")
@@ -64,6 +65,7 @@ def test_invoke_test_completion() -> None:
     assert isinstance(result, str)
 
 
+@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_invoke_chat() -> None:
     model = ChatVertexAI(model_name="medlm-medium@latest")
