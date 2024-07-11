@@ -77,7 +77,7 @@ def vector_store(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
         region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
         index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"],
-        endpoint_id=os.environ["VECTOR_SEARCH_ENDPOINT_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"],
         embedding=embeddings,
     )
 
@@ -92,7 +92,7 @@ def vector_store_private(embeddings: VertexAIEmbeddings) -> VectorSearchVectorSt
         region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
         index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"],
-        endpoint_id=os.environ["VECTOR_SEARCH_ENDPOINT_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"],
         private_service_connect_ip_address=os.environ[
             "PRIVATE_SERVICE_CONNECT_IP_ADDRESS"
         ],
