@@ -53,9 +53,8 @@ class _ToolDictLike(TypedDict):
     retrieval: Optional[_RetrievalLike]
 
 
-_ToolsType = Sequence[
-    Union[gapic.Tool, vertexai.Tool, _ToolDictLike, _FunctionDeclarationLike]
-]
+_ToolType = Union[gapic.Tool, vertexai.Tool, _ToolDictLike, _FunctionDeclarationLike]
+_ToolsType = Sequence[_ToolType]
 
 _ALLOWED_SCHEMA_FIELDS = []
 _ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
