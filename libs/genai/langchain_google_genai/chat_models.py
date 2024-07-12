@@ -788,7 +788,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     client: Any  #: :meta private:
     async_client: Any  #: :meta private:
-    google_api_key: Optional[SecretStr] = Field(None, alias="api_key")
+    google_api_key: Optional[SecretStr] = Field(default=None, alias="api_key")
     """Google AI API key. 
         
     If not specified will be read from env var ``GOOGLE_API_KEY``."""
