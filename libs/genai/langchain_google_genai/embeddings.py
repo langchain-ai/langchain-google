@@ -39,7 +39,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             embeddings.embed_query("What's our Q1 revenue?")
     """
 
-    client: Any  #: :meta private:
+    client: Any = None  #: :meta private:
     model: str = Field(
         ...,
         description="The name of the embedding model to use. "

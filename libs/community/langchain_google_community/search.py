@@ -47,7 +47,7 @@ class GoogleSearchAPIWrapper(BaseModel):
 
     """
 
-    search_engine: Any  #: :meta private:
+    search_engine: Any = None  #: :meta private:
     google_api_key: Optional[str] = None
     google_cse_id: Optional[str] = None
     k: int = 10

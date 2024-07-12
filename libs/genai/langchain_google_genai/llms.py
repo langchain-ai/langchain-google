@@ -212,7 +212,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             llm = GoogleGenerativeAI(model="gemini-pro")
     """
 
-    client: Any  #: :meta private:
+    client: Any = None  #: :meta private:
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
