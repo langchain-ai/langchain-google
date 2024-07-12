@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Tuple, Union, cast
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform import telemetry
@@ -71,7 +71,10 @@ class Searcher(ABC):
             List of list of tuples of (id, distance).
         """
         return [
-            [(neighbor.id, neighbor.distance) for neighbor in matching_neighbor_list]
+            [
+                (neighbor.id, cast(float, neighbor.distance))
+                for neighbor in matching_neighbor_list
+            ]
             for matching_neighbor_list in response
         ]
 

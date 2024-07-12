@@ -43,13 +43,16 @@ from langchain_core.messages import (
     BaseMessage,
     FunctionMessage,
     HumanMessage,
-    InvalidToolCall,
     SystemMessage,
     ToolCall,
-    ToolCallChunk,
     ToolMessage,
 )
 from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.tool import (
+    tool_call_chunk,
+    tool_call as create_tool_call,
+    invalid_tool_call,
+)
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputToolsParser,
@@ -291,12 +294,7 @@ def _parse_chat_history_gemini(
                 parts = _convert_to_parts(message)
 
             for tc in message.tool_calls:
-                function_call = FunctionCall(
-                    {
-                        "name": tc["name"],
-                        "args": tc["args"],
-                    }
-                )
+                function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
                 parts.append(Part(function_call=function_call))
 
             prev_content = vertex_messages[-1]
@@ -515,7 +513,7 @@ def _parse_response_candidate(
             if streaming:
                 index = function_call.get("index")
                 tool_call_chunks.append(
-                    ToolCallChunk(
+                    tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=function_call.get("id", str(uuid.uuid4())),
@@ -530,7 +528,7 @@ def _parse_response_candidate(
                     )
                     tool_calls.extend(
                         [
-                            ToolCall(
+                            create_tool_call(
                                 name=tool_call["name"],
                                 args=tool_call["args"],
                                 id=tool_call.get("id", str(uuid.uuid4())),
@@ -540,7 +538,7 @@ def _parse_response_candidate(
                     )
                 except Exception as e:
                     invalid_tool_calls.append(
-                        InvalidToolCall(
+                        invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
                             id=function_call.get("id", str(uuid.uuid4())),

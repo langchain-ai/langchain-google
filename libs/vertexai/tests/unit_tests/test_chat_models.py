@@ -22,9 +22,9 @@ from langchain_core.messages import (
     FunctionMessage,
     HumanMessage,
     SystemMessage,
-    ToolCall,
     ToolMessage,
 )
+from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
@@ -267,7 +267,7 @@ def test_parse_history_gemini_function() -> None:
     fn_name_2 = "multiply"
     fn_name_3 = "subtract"
     text_answer1 = "3*3 is bigger than 2+2 and 4-4"
-    tool_call_1 = ToolCall(
+    tool_call_1 = create_tool_call(
         name=fn_name_1,
         id="1",
         args={
@@ -275,7 +275,7 @@ def test_parse_history_gemini_function() -> None:
             "arg2": "2",
         },
     )
-    tool_call_2 = ToolCall(
+    tool_call_2 = create_tool_call(
         name=fn_name_2,
         id="2",
         args={
@@ -283,7 +283,7 @@ def test_parse_history_gemini_function() -> None:
             "arg2": "3",
         },
     )
-    tool_call_3 = ToolCall(
+    tool_call_3 = create_tool_call(
         name=fn_name_3,
         id="3",
         args={
@@ -385,7 +385,7 @@ def test_parse_history_gemini_function() -> None:
                 AIMessage(
                     content="",
                     tool_calls=[
-                        ToolCall(
+                        create_tool_call(
                             name="Information",
                             args={"name": "Ben"},
                             id="00000000-0000-0000-0000-00000000000",
@@ -412,7 +412,7 @@ def test_parse_history_gemini_function() -> None:
                 AIMessage(
                     content="Mike age is 30",
                     tool_calls=[
-                        ToolCall(
+                        create_tool_call(
                             name="Information",
                             args={"name": "Ben"},
                             id="00000000-0000-0000-0000-00000000000",
@@ -440,7 +440,7 @@ def test_parse_history_gemini_function() -> None:
                 AIMessage(
                     content=["Mike age is 30", "Arthur age is 30"],
                     tool_calls=[
-                        ToolCall(
+                        create_tool_call(
                             name="Information",
                             args={"name": "Ben"},
                             id="00000000-0000-0000-0000-00000000000",
@@ -469,7 +469,7 @@ def test_parse_history_gemini_function() -> None:
                 AIMessage(
                     content=["Mike age is 30"],
                     tool_calls=[
-                        ToolCall(
+                        create_tool_call(
                             name="Information",
                             args={"name": "Rob"},
                             id="00000000-0000-0000-0000-00000000000",
@@ -479,7 +479,7 @@ def test_parse_history_gemini_function() -> None:
                 AIMessage(
                     content=["Arthur age is 30"],
                     tool_calls=[
-                        ToolCall(
+                        create_tool_call(
                             name="Information",
                             args={"name": "Ben"},
                             id="00000000-0000-0000-0000-00000000000",
@@ -633,7 +633,7 @@ def test_default_params_gemini() -> None:
             AIMessage(
                 content="",
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Ben"},
                         id="00000000-0000-0000-0000-00000000000",
@@ -658,7 +658,7 @@ def test_default_params_gemini() -> None:
             AIMessage(
                 content="",
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"info": ["A", "B", "C"]},
                         id="00000000-0000-0000-0000-00000000000",
@@ -688,7 +688,7 @@ def test_default_params_gemini() -> None:
             AIMessage(
                 content="",
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={
                             "people": [
@@ -718,7 +718,7 @@ def test_default_params_gemini() -> None:
             AIMessage(
                 content="",
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"info": [[1, 2, 3], [4, 5, 6]]},
                         id="00000000-0000-0000-0000-00000000000",
@@ -744,7 +744,7 @@ def test_default_params_gemini() -> None:
             AIMessage(
                 content="Mike age is 30",
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Ben"},
                         id="00000000-0000-0000-0000-00000000000",
@@ -770,7 +770,7 @@ def test_default_params_gemini() -> None:
             AIMessage(
                 content="Mike age is 30",
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Ben"},
                         id="00000000-0000-0000-0000-00000000000",
@@ -807,12 +807,12 @@ def test_default_params_gemini() -> None:
                     }
                 },
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Ben"},
                         id="00000000-0000-0000-0000-00000000000",
                     ),
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Mike"},
                         id="00000000-0000-0000-0000-00000000000",
