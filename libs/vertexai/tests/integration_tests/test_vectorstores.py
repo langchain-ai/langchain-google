@@ -55,7 +55,9 @@ def sdk_manager() -> VectorSearchSDKManager:
 def gcs_document_storage(
         sdk_manager: VectorSearchSDKManager
     ) -> GCSDocumentStorage:
-    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
+    bucket = sdk_manager.get_gcs_bucket(
+        bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"]
+    )
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
 
 
