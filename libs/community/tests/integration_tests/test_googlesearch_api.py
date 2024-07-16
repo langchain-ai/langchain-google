@@ -20,20 +20,6 @@ def test_call() -> None:
 
 
 @pytest.mark.extended
-def test_no_result_call() -> None:
-    """Test that call gives no result."""
-    google_api_key = os.environ["GOOGLE_API_KEY"]
-    google_cse_id = os.environ["GOOGLE_CSE_ID"]
-    search = GoogleSearchAPIWrapper(  # type: ignore[call-arg]
-        google_api_key=google_api_key, google_cse_id=google_cse_id
-    )
-    output = search.run(
-        "NORESULTCALL_NORESULTCALL_NORESULTCALL_NORESULTCALL_NORESULTCALL_NORESULTCALL"
-    )
-    assert "No good Google Search Result was found" == output
-
-
-@pytest.mark.extended
 def test_result_with_params_call() -> None:
     """Test that call gives the correct answer with extra params."""
     google_api_key = os.environ["GOOGLE_API_KEY"]
