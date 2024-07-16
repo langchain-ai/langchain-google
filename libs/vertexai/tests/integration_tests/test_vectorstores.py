@@ -237,7 +237,7 @@ def test_vector_store_filtering(
     assert all(document.metadata["price"] < 20.0 for document in documents)
 
 
-@pytest.mark.extended
+@pytest.mark.long
 def test_vector_store_update_index(
     vector_store: VectorSearchVectorStore, sample_documents: List[Document]
 ):
