@@ -46,20 +46,16 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 def sdk_manager() -> VectorSearchSDKManager:
     sdk_manager = VectorSearchSDKManager(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ.get("REGION", "us-central1")
+        region=os.environ.get("REGION", "us-central1"),
     )
     return sdk_manager
 
-
 @pytest.fixture
-def gcs_document_storage(
-        sdk_manager: VectorSearchSDKManager
-    ) -> GCSDocumentStorage:
+def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStorage:
     bucket = sdk_manager.get_gcs_bucket(
         bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"]
     )
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
-
 
 @pytest.fixture
 def datastore_document_storage(
@@ -70,13 +66,11 @@ def datastore_document_storage(
 
 @pytest.fixture
 def embeddings() -> VertexAIEmbeddings:
-
     return VertexAIEmbeddings(model_name="textembedding-gecko@001")
 
 
 @pytest.fixture
 def vector_store(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
-
     vector_store = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
@@ -91,7 +85,6 @@ def vector_store(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
 
 @pytest.fixture
 def vector_store_private(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
-
     vector_store_private = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
@@ -109,9 +102,8 @@ def vector_store_private(embeddings: VertexAIEmbeddings) -> VectorSearchVectorSt
 
 @pytest.fixture
 def datastore_vector_store(
-        embeddings: VertexAIEmbeddings
+        embeddings: VertexAIEmbeddings,
     ) -> VectorSearchVectorStoreDatastore:
-
     vector_store = VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
@@ -179,8 +171,7 @@ def test_document_storage(
 
 @pytest.mark.extended
 def test_public_endpoint_vector_searcher(
-        embeddings: VertexAIEmbeddings, 
-        sdk_manager: VectorSearchSDKManager
+        embeddings: VertexAIEmbeddings, sdk_manager: VectorSearchSDKManager
     ):
     index = sdk_manager.get_index(os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"])
     endpoint = sdk_manager.get_endpoint(os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"])
