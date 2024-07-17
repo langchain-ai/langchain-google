@@ -965,9 +965,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         if not self.async_client:
-            raise RuntimeError(
-                "Initialize ChatGoogleGenerativeAI with a running event loop "
-                "to use async methods."
+            updated_kwargs = {
+                **kwargs,
+                **{
+                    "tools": tools,
+                    "functions": functions,
+                    "safety_settings": safety_settings,
+                    "tool_config": tool_config,
+                    "generation_config": generation_config,
+                },
+            }
+            return await super()._agenerate(
+                messages, stop, run_manager, **updated_kwargs
             )
 
         request = self._prepare_request(
@@ -1036,27 +1045,43 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        request = self._prepare_request(
-            messages,
-            stop=stop,
-            tools=tools,
-            functions=functions,
-            safety_settings=safety_settings,
-            tool_config=tool_config,
-            generation_config=generation_config,
-        )
-        async for chunk in await _achat_with_retry(
-            request=request,
-            generation_method=self.async_client.stream_generate_content,
-            **kwargs,
-            metadata=self.default_metadata,
-        ):
-            _chat_result = _response_to_result(chunk, stream=True)
-            gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+        if not self.async_client:
+            updated_kwargs = {
+                **kwargs,
+                **{
+                    "tools": tools,
+                    "functions": functions,
+                    "safety_settings": safety_settings,
+                    "tool_config": tool_config,
+                    "generation_config": generation_config,
+                },
+            }
+            async for value in super()._astream(
+                messages, stop, run_manager, **updated_kwargs
+            ):
+                yield value
+        else:
+            request = self._prepare_request(
+                messages,
+                stop=stop,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+            )
+            async for chunk in await _achat_with_retry(
+                request=request,
+                generation_method=self.async_client.stream_generate_content,
+                **kwargs,
+                metadata=self.default_metadata,
+            ):
+                _chat_result = _response_to_result(chunk, stream=True)
+                gen = cast(ChatGenerationChunk, _chat_result.generations[0])
 
-            if run_manager:
-                await run_manager.on_llm_new_token(gen.text)
-            yield gen
+                if run_manager:
+                    await run_manager.on_llm_new_token(gen.text)
+                yield gen
 
     def _prepare_request(
         self,
