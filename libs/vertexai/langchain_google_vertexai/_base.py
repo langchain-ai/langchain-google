@@ -72,7 +72,7 @@ class _VertexAIBase(BaseModel):
     client_options: Optional["ClientOptions"] = Field(
         default=None, exclude=True
     )  #: :meta private:
-    api_endpoint: Optional[str] = Field(None, alias="base_url")
+    api_endpoint: Optional[str] = Field(default=None, alias="base_url")
     "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
     api_transport: Optional[str] = None
     """The desired API transport method, can be either 'grpc' or 'rest'. 

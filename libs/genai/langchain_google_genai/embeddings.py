@@ -39,20 +39,20 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             embeddings.embed_query("What's our Q1 revenue?")
     """
 
-    client: Any  #: :meta private:
+    client: Any = None  #: :meta private:
     model: str = Field(
         ...,
         description="The name of the embedding model to use. "
         "Example: models/embedding-001",
     )
     task_type: Optional[str] = Field(
-        None,
+        default=None,
         description="The task type. Valid options include: "
         "task_type_unspecified, retrieval_query, retrieval_document, "
         "semantic_similarity, classification, and clustering",
     )
     google_api_key: Optional[SecretStr] = Field(
-        None,
+        default=None,
         description="The Google API key to use. If not provided, "
         "the GOOGLE_API_KEY environment variable will be used.",
     )
@@ -64,18 +64,18 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         "provided, credentials will be ascertained from the GOOGLE_API_KEY envvar",
     )
     client_options: Optional[Dict] = Field(
-        None,
+        default=None,
         description=(
             "A dictionary of client options to pass to the Google API client, "
             "such as `api_endpoint`."
         ),
     )
     transport: Optional[str] = Field(
-        None,
+        default=None,
         description="A string, one of: [`rest`, `grpc`, `grpc_asyncio`].",
     )
     request_options: Optional[Dict] = Field(
-        None,
+        default=None,
         description="A dictionary of request options to pass to the Google API client."
         "Example: `{'timeout': 10}`",
     )
