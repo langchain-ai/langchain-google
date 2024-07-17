@@ -16,7 +16,9 @@ class RecordPerson(BaseModel):
 
     name: str = Field(..., description="The person's name")
     age: int = Field(..., description="The person's age")
-    fav_food: Optional[str] = Field(default=None, description="The person's favorite food")
+    fav_food: Optional[str] = Field(
+        default=None, description="The person's favorite food"
+    )
 
 
 class RecordDog(BaseModel):
