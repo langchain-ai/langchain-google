@@ -128,6 +128,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
+        values["_creating_index"] = values.get("_creating_index", False)
+        values["_have_index"] = values.get("_have_index", False)
+        values["_last_index_check"] = values.get("_last_index_check", datetime.min)
+
         if values.get("_have_index") or values.get("_creating_index"):
             return values
 
@@ -135,9 +139,6 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
             values["_logger"].debug("Not enough rows to create a vector index.")
             return values
-
-        if "_last_index_check" not in values:
-            values["_last_index_check"] = datetime.min
 
         if datetime.utcnow() - values["_last_index_check"] < INDEX_CHECK_INTERVAL:
             return values
