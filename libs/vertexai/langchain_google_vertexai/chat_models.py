@@ -992,6 +992,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         The format of the dictionary should follow Open API schema.
     """
 
+    cached_content: Optional[str] = None
+    """ Optional. Use the model in cache mode. Only supported in Gemini 1.5 and later 
+        models. Must be a string containing the cache name (A sequence of numbers)
+    """
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -1193,21 +1198,76 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         functions: Optional[_ToolsType] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
+        cached_content: Optional[str] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         tool_config = self._tool_config_gemini(tool_config=tool_config)
+        safety_settings = self._safety_settings_gemini(safety_settings)
+        generation_config = self._generation_config_gemini(
+            stream=stream, stop=stop, **kwargs
+        )
+
+        if (self.cached_content is not None) or (cached_content is not None):
+            selected_cached_content = self.cached_content or cached_content
+
+            return self._request_from_cached_content(
+                cached_content=selected_cached_content,  # type: ignore
+                contents=contents,
+                system_instruction=system_instruction,
+                tools=formatted_tools,
+                tool_config=tool_config,
+                safety_settings=safety_settings,
+                generation_config=generation_config,
+                model=self.full_model_name,
+            )
+
         return GenerateContentRequest(
             contents=contents,
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=self._safety_settings_gemini(safety_settings),
-            generation_config=self._generation_config_gemini(
-                stream=stream, stop=stop, **kwargs
-            ),
+            safety_settings=safety_settings,
+            generation_config=generation_config,
             model=self.full_model_name,
+        )
+
+    def _request_from_cached_content(
+        self,
+        cached_content: str,
+        system_instruction: Optional[Content],
+        tools: Optional[Sequence[GapicTool]],
+        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
+        contents: list[Content],
+        safety_settings: Optional[Sequence[SafetySetting]],
+        generation_config: GenerationConfig,
+        model: Optional[str],
+    ) -> GenerateContentRequest:
+        not_allowed_parameters = [
+            ("system_instructions", system_instruction),
+            ("tools", tools),
+            ("tool_config", tool_config),
+        ]
+
+        for param_name, parameter in not_allowed_parameters:
+            if parameter:
+                message = (
+                    f"Using cached content. Parameter `{param_name}` will be ignored. "
+                )
+                logger.warning(message)
+
+        full_cache_name = (
+            f"projects/{self.project}/locations/{self.location}/"
+            f"cachedContents/{cached_content}"
+        )
+
+        return GenerateContentRequest(
+            contents=contents,
+            model=model,
+            safety_settings=safety_settings,
+            generation_config=generation_config,
+            cached_content=full_cache_name,
         )
 
     def _generate_gemini(

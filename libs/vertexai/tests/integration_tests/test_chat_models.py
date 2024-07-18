@@ -24,6 +24,7 @@ from langchain_google_vertexai import (
     FunctionCallingConfig,
     HarmBlockThreshold,
     HarmCategory,
+    create_context_cache,
 )
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
@@ -688,3 +689,57 @@ def test_structured_output_schema():
     )
     with pytest.raises(ValueError, match="response_mime_type"):
         response = model.invoke("List a few popular cookie recipes")
+
+
+@pytest.mark.extended
+def test_context_catching():
+    system_instruction = """
+    
+    You are an expert researcher. You always stick to the facts in the sources provided,
+    and never make up new facts.
+    
+    If asked about it, the secret number is 747.
+    
+    Now look at these research papers, and answer the following questions.
+    
+    """
+
+    cached_content = create_context_cache(
+        ChatVertexAI(model_name="gemini-1.5-pro-001"),
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf",
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
+                        },
+                    },
+                ]
+            ),
+        ],
+    )
+
+    # Using cached_content in constructor
+    chat = ChatVertexAI(model_name="gemini-1.5-pro-001", cached_content=cached_content)
+
+    response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
+
+    # Using cached content in request
+    chat = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    response = chat.invoke("What is the secret number?", cached_content=cached_content)
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
