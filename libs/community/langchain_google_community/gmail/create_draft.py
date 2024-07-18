@@ -24,11 +24,11 @@ class CreateDraftSchema(BaseModel):
         description="The subject of the message.",
     )
     cc: Optional[List[str]] = Field(
-        None,
+        default=None,
         description="The list of CC recipients.",
     )
     bcc: Optional[List[str]] = Field(
-        None,
+        default=None,
         description="The list of BCC recipients.",
     )
 

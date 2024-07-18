@@ -27,11 +27,11 @@ class SendMessageSchema(BaseModel):
         description="The subject of the message.",
     )
     cc: Optional[Union[str, List[str]]] = Field(
-        None,
+        default=None,
         description="The list of CC recipients.",
     )
     bcc: Optional[Union[str, List[str]]] = Field(
-        None,
+        default=None,
         description="The list of BCC recipients.",
     )
 
