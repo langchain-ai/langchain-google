@@ -177,9 +177,7 @@ def _format_to_gapic_function_declaration(
         raise ValueError(f"Unsupported tool call type {tool}")
 
 
-def _format_to_gapic_tool(
-    tools: _ToolsType,
-) -> gapic.Tool:
+def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
     gapic_tool = gapic.Tool()
     for tool in tools:
         if any(f in gapic_tool for f in ["google_search_retrieval", "retrieval"]):

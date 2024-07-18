@@ -60,13 +60,11 @@ from langchain_core.messages import (
     BaseMessage,
     FunctionMessage,
     HumanMessage,
-    InvalidToolCall,
     SystemMessage,
-    ToolCall,
-    ToolCallChunk,
     ToolMessage,
 )
 from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputToolsParser,
@@ -476,7 +474,7 @@ def _parse_response_candidate(
 
             if streaming:
                 tool_call_chunks.append(
-                    ToolCallChunk(
+                    tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=function_call.get("id", str(uuid.uuid4())),
@@ -491,7 +489,7 @@ def _parse_response_candidate(
                     )[0]
                 except Exception as e:
                     invalid_tool_calls.append(
-                        InvalidToolCall(
+                        invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
                             id=function_call.get("id", str(uuid.uuid4())),
@@ -500,7 +498,7 @@ def _parse_response_candidate(
                     )
                 else:
                     tool_calls.append(
-                        ToolCall(
+                        tool_call(
                             name=tool_call_dict["name"],
                             args=tool_call_dict["args"],
                             id=tool_call_dict.get("id", str(uuid.uuid4())),

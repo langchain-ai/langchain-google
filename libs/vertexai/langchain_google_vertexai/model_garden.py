@@ -212,10 +212,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         }
         tool_calls = _extract_tool_calls(data_dict["content"])
         if tool_calls:
-            msg = AIMessage(
-                content=content,
-                tool_calls=tool_calls,
-            )
+            msg = AIMessage(content=content, tool_calls=tool_calls)
         else:
             msg = AIMessage(content=content)
         # Collect token usage
