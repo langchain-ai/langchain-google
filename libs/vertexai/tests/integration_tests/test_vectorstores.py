@@ -5,7 +5,7 @@ Additionally in order to run the test you must have set the following environmen
 variables:
 - PROJECT_ID: Id of the Google Cloud Project
 - REGION: Region of the Bucket, Index and Endpoint
-- GCS_BUCKET_NAME: Name of a Google Cloud Storage Bucket
+- VECTOR_SEARCH_STAGING_BUCKET: Name of a Google Cloud Storage Bucket
 - INDEX_ID: Id of the Vector Search index.
 - ENDPOINT_ID: Id of the Vector Search endpoint.
 """
@@ -63,7 +63,7 @@ def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStor
 def gcs_document_storage_unthreaded(
     sdk_manager: VectorSearchSDKManager,
 ) -> GCSDocumentStorage:
-    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests", threaded=False)
 
 
