@@ -138,7 +138,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         if "_last_index_check" not in values:
             values["_last_index_check"] = datetime.min
-        
+ 
         if datetime.utcnow() - values["_last_index_check"] < INDEX_CHECK_INTERVAL:
             return values
 
