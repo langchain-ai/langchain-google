@@ -140,6 +140,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             values["_logger"].debug("Not enough rows to create a vector index.")
             return values
 
+        if "_last_index_check" not in values:
+            values["_last_index_check"] = datetime.min
+
         if datetime.utcnow() - values["_last_index_check"] < INDEX_CHECK_INTERVAL:
             return values
 

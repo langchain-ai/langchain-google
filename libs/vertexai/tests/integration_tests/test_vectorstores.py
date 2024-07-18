@@ -45,14 +45,17 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 @pytest.fixture
 def sdk_manager() -> VectorSearchSDKManager:
     sdk_manager = VectorSearchSDKManager(
-        project_id=os.environ["PROJECT_ID"], region=os.environ["REGION"]
+        project_id=os.environ["PROJECT_ID"],
+        region=os.environ.get("REGION", "us-central1"),
     )
     return sdk_manager
 
 
 @pytest.fixture
 def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStorage:
-    bucket = sdk_manager.get_gcs_bucket(bucket_name=os.environ["GCS_BUCKET_NAME"])
+    bucket = sdk_manager.get_gcs_bucket(
+        bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"]
+    )
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
 
 
@@ -65,15 +68,18 @@ def datastore_document_storage(
 
 
 @pytest.fixture
-def vector_store() -> VectorSearchVectorStore:
-    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
+def embeddings() -> VertexAIEmbeddings:
+    return VertexAIEmbeddings(model_name="textembedding-gecko@001")
 
+
+@pytest.fixture
+def vector_store(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
     vector_store = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
-        gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
-        index_id=os.environ["INDEX_ID"],
-        endpoint_id=os.environ["ENDPOINT_ID"],
+        region=os.environ.get("REGION", "us-central1"),
+        gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
+        index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"],
         embedding=embeddings,
     )
 
@@ -81,15 +87,13 @@ def vector_store() -> VectorSearchVectorStore:
 
 
 @pytest.fixture
-def vector_store_private() -> VectorSearchVectorStore:
-    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
-
+def vector_store_private(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
     vector_store_private = VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
-        gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
-        index_id=os.environ["INDEX_ID"],
-        endpoint_id=os.environ["ENDPOINT_ID"],
+        region=os.environ.get("REGION", "us-central1"),
+        gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
+        index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"],
         private_service_connect_ip_address=os.environ[
             "PRIVATE_SERVICE_CONNECT_IP_ADDRESS"
         ],
@@ -100,14 +104,14 @@ def vector_store_private() -> VectorSearchVectorStore:
 
 
 @pytest.fixture
-def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
-    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
-
+def datastore_vector_store(
+    embeddings: VertexAIEmbeddings,
+) -> VectorSearchVectorStoreDatastore:
     vector_store = VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
-        region=os.environ["REGION"],
-        index_id=os.environ["STREAM_INDEX_ID_DATASTORE"],
-        endpoint_id=os.environ["STREAM_ENDPOINT_ID_DATASTORE"],
+        region=os.environ.get("REGION", "us-central1"),
+        index_id=os.environ["VECTOR_SEARCH_STREAM_INDEX_ID"],
+        endpoint_id=os.environ["VECTOR_SEARCH_STREAM_ENDPOINT_ID"],
         embedding=embeddings,
         stream_update=True,
     )
@@ -115,23 +119,23 @@ def datastore_vector_store() -> VectorSearchVectorStoreDatastore:
     return vector_store
 
 
-@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
     gcs_client = sdk_manager.get_gcs_client()
     assert isinstance(gcs_client, storage.Client)
 
-    gcs_bucket = sdk_manager.get_gcs_bucket(os.environ["GCS_BUCKET_NAME"])
+    gcs_bucket = sdk_manager.get_gcs_bucket(os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
     assert isinstance(gcs_bucket, storage.Bucket)
 
-    index = sdk_manager.get_index(index_id=os.environ["INDEX_ID"])
+    index = sdk_manager.get_index(index_id=os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"])
     assert isinstance(index, MatchingEngineIndex)
 
-    endpoint = sdk_manager.get_endpoint(endpoint_id=os.environ["ENDPOINT_ID"])
+    endpoint = sdk_manager.get_endpoint(
+        endpoint_id=os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"]
+    )
     assert isinstance(endpoint, MatchingEngineIndexEndpoint)
 
 
-@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 @pytest.mark.parametrize(
     "storage_class", ["gcs_document_storage", "datastore_document_storage"]
@@ -168,12 +172,12 @@ def test_document_storage(
     assert all(item is None for item in document_storage.mget(ids))
 
 
-@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
-def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
-    index = sdk_manager.get_index(os.environ["INDEX_ID"])
-    endpoint = sdk_manager.get_endpoint(os.environ["ENDPOINT_ID"])
-    embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-default")
+def test_public_endpoint_vector_searcher(
+    embeddings: VertexAIEmbeddings, sdk_manager: VectorSearchSDKManager
+):
+    index = sdk_manager.get_index(os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"])
+    endpoint = sdk_manager.get_endpoint(os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"])
 
     searcher = VectorSearchSearcher(endpoint=endpoint, index=index)
 
@@ -186,7 +190,6 @@ def test_public_endpoint_vector_searcher(sdk_manager: VectorSearchSDKManager):
     assert len(matching_neighbors_list) == 2
 
 
-@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 @pytest.mark.parametrize(
     "vector_store_class", ["vector_store", "datastore_vector_store"]
@@ -207,7 +210,6 @@ def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
         assert isinstance(doc, Document)
 
 
-@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 @pytest.mark.parametrize(
     "vector_store_class",
@@ -231,15 +233,13 @@ def test_vector_store_filtering(
     assert all(document.metadata["price"] < 20.0 for document in documents)
 
 
-@pytest.mark.xfail(reason="investigating")
-@pytest.mark.extended
+@pytest.mark.long
 def test_vector_store_update_index(
     vector_store: VectorSearchVectorStore, sample_documents: List[Document]
 ):
     vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
 
 
-@pytest.mark.xfail(reason="investigating")
 @pytest.mark.extended
 def test_vector_store_stream_update_index(
     datastore_vector_store: VectorSearchVectorStoreDatastore,

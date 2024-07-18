@@ -1,7 +1,7 @@
 """Test ChatGoogleGenerativeAI chat model."""
-
+import asyncio
 import json
-from typing import Generator, Optional, Type
+from typing import Generator, List, Optional, Type
 
 import pytest
 from langchain_core.language_models import BaseChatModel
@@ -465,3 +465,28 @@ def test_chat_google_genai_function_calling_with_structured_output(
         }
     ]
     assert response == expected
+
+
+def test_ainvoke_without_eventloop() -> None:
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-001")
+
+    async def model_ainvoke(context: str) -> BaseMessage:
+        result = await model.ainvoke(context)
+        return result
+
+    result = asyncio.run(model_ainvoke("How can you help me?"))
+    assert isinstance(result, AIMessage)
+
+
+def test_astream_without_eventloop() -> None:
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-001")
+
+    async def model_astream(context: str) -> List[BaseMessageChunk]:
+        result = []
+        async for chunk in model.astream(context):
+            result.append(chunk)
+        return result
+
+    result = asyncio.run(model_astream("How can you help me?"))
+    assert len(result) > 0
+    assert isinstance(result[0], AIMessageChunk)
