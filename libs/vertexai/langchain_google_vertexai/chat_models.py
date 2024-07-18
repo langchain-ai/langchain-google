@@ -1198,6 +1198,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         functions: Optional[_ToolsType] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
+        cached_content: Optional[str] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
@@ -1208,8 +1209,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             stream=stream, stop=stop, **kwargs
         )
 
-        if self.cached_content is not None:
+        if (self.cached_content is not None) or (cached_content is not None):
+            selected_cached_content = self.cached_content or cached_content
+
             return self._request_from_cached_content(
+                cached_content=selected_cached_content,  # type: ignore
                 contents=contents,
                 system_instruction=system_instruction,
                 tools=formatted_tools,
@@ -1231,6 +1235,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def _request_from_cached_content(
         self,
+        cached_content: str,
         system_instruction: Optional[Content],
         tools: Optional[Sequence[GapicTool]],
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
@@ -1254,7 +1259,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         full_cache_name = (
             f"projects/{self.project}/locations/{self.location}/"
-            f"cachedContents/{self.cached_content}"
+            f"cachedContents/{cached_content}"
         )
 
         return GenerateContentRequest(

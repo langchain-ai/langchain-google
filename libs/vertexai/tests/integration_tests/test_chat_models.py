@@ -727,9 +727,18 @@ def test_context_catching():
         ],
     )
 
+    # Using cached_content in constructor
     chat = ChatVertexAI(model_name="gemini-1.5-pro-001", cached_content=cached_content)
 
     response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
+
+    # Using cached content in request
+    chat = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
