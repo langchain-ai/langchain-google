@@ -20,9 +20,9 @@ from langchain_core.messages import (
     FunctionMessage,
     HumanMessage,
     SystemMessage,
-    ToolCall,
     ToolMessage,
 )
+from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.pydantic_v1 import SecretStr
 from langchain_standard_tests.unit_tests import ChatModelUnitTests
 from pytest import CaptureFixture
@@ -353,7 +353,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     },
                 },
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Ben"},
                         id="00000000-0000-0000-0000-00000000000",
@@ -383,7 +383,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     },
                 },
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"info": ["A", "B", "C"]},
                         id="00000000-0000-0000-0000-00000000000",
@@ -425,7 +425,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     },
                 },
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={
                             "people": [
@@ -460,7 +460,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     },
                 },
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"info": [[1, 2, 3], [4, 5, 6]]},
                         id="00000000-0000-0000-0000-00000000000",
@@ -490,7 +490,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     },
                 },
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Ben"},
                         id="00000000-0000-0000-0000-00000000000",
@@ -520,7 +520,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     },
                 },
                 tool_calls=[
-                    ToolCall(
+                    create_tool_call(
                         name="Information",
                         args={"name": "Ben"},
                         id="00000000-0000-0000-0000-00000000000",
