@@ -24,7 +24,10 @@ from langchain_core.outputs import ChatGeneration, Generation
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
-from langchain_core.utils.function_calling import FunctionDescription
+from langchain_core.utils.function_calling import (
+    FunctionDescription,
+    convert_to_openai_tool,
+)
 from langchain_core.utils.json_schema import dereference_refs
 
 logger = logging.getLogger(__name__)
@@ -50,9 +53,8 @@ class _ToolDictLike(TypedDict):
     retrieval: Optional[_RetrievalLike]
 
 
-_ToolsType = Sequence[
-    Union[gapic.Tool, vertexai.Tool, _ToolDictLike, _FunctionDeclarationLike]
-]
+_ToolType = Union[gapic.Tool, vertexai.Tool, _ToolDictLike, _FunctionDeclarationLike]
+_ToolsType = Sequence[_ToolType]
 
 _ALLOWED_SCHEMA_FIELDS = []
 _ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
@@ -167,7 +169,10 @@ def _format_to_gapic_function_declaration(
     elif isinstance(tool, vertexai.FunctionDeclaration):
         return _format_vertex_to_function_declaration(tool)
     elif isinstance(tool, dict):
-        return _format_dict_to_function_declaration(tool)
+        # this could come from
+        # 'langchain_core.utils.function_calling.convert_to_openai_tool'
+        function = convert_to_openai_tool(cast(dict, tool))["function"]
+        return _format_dict_to_function_declaration(cast(FunctionDescription, function))
     else:
         raise ValueError(f"Unsupported tool call type {tool}")
 

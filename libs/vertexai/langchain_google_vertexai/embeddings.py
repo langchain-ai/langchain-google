@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 from google.api_core.exceptions import (
     Aborted,
     DeadlineExceeded,
+    InternalServerError,
     InvalidArgument,
     ResourceExhausted,
     ServiceUnavailable,
@@ -154,6 +155,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             ServiceUnavailable,
             Aborted,
             DeadlineExceeded,
+            InternalServerError,
         ]
         retry_decorator = create_base_retry_decorator(
             error_types=retry_errors, max_retries=self.max_retries
@@ -320,7 +322,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     first_result = self._get_embeddings_with_retry(
                         first_batch, embeddings_type
                     )
-                    batches = batches[1:]
                     break
                 except InvalidArgument:
                     had_failure = True
@@ -347,6 +348,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     batches = VertexAIEmbeddings._prepare_batches(
                         texts[first_batch_len:], self.instance["batch_size"]
                     )
+                else:
+                    batches = batches[1:]
             else:
                 # Still figuring out max batch size.
                 batches = batches[1:]

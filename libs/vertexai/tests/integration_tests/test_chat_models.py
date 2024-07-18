@@ -24,6 +24,7 @@ from langchain_google_vertexai import (
     FunctionCallingConfig,
     HarmBlockThreshold,
     HarmCategory,
+    create_context_cache,
 )
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
@@ -545,16 +546,28 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
         {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
     )
     response = model.invoke([message])
-    expected = [
+    assert response == {
+        "name": "Erick",
+        "age": 27,
+    }
+
+    model = llm.with_structured_output(
         {
-            "type": "MyModel",
-            "args": {
-                "name": "Erick",
-                "age": 27,
+            "title": "MyModel",
+            "description": "MyModel",
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"},
             },
+            "required": ["name", "age"],
         }
-    ]
-    assert response == expected
+    )
+    response = model.invoke([message])
+    assert response == {
+        "name": "Erick",
+        "age": 27,
+    }
 
 
 @pytest.mark.release
@@ -629,3 +642,104 @@ def test_prediction_client_transport():
 
     assert model.prediction_client.transport.kind == "rest"
     assert model.async_prediction_client.transport.kind == "rest"
+
+
+@pytest.mark.extended
+def test_structured_output_schema():
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-001",
+        response_mime_type="application/json",
+        response_schema={
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "recipe_name": {
+                        "type": "string",
+                    },
+                },
+                "required": ["recipe_name"],
+            },
+        },
+    )
+
+    response = model.invoke("List a few popular cookie recipes")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    parsed_response = json.loads(response.content)
+    assert isinstance(parsed_response, list)
+    assert len(parsed_response) > 0
+    assert "recipe_name" in parsed_response[0]
+
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-001",
+        response_schema={
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "recipe_name": {
+                        "type": "string",
+                    },
+                },
+                "required": ["recipe_name"],
+            },
+        },
+    )
+    with pytest.raises(ValueError, match="response_mime_type"):
+        response = model.invoke("List a few popular cookie recipes")
+
+
+@pytest.mark.extended
+def test_context_catching():
+    system_instruction = """
+    
+    You are an expert researcher. You always stick to the facts in the sources provided,
+    and never make up new facts.
+    
+    If asked about it, the secret number is 747.
+    
+    Now look at these research papers, and answer the following questions.
+    
+    """
+
+    cached_content = create_context_cache(
+        ChatVertexAI(model_name="gemini-1.5-pro-001"),
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf",
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
+                        },
+                    },
+                ]
+            ),
+        ],
+    )
+
+    # Using cached_content in constructor
+    chat = ChatVertexAI(model_name="gemini-1.5-pro-001", cached_content=cached_content)
+
+    response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
+
+    # Using cached content in request
+    chat = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    response = chat.invoke("What is the secret number?", cached_content=cached_content)
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content

@@ -464,6 +464,51 @@ def test_parse_history_gemini_function() -> None:
                 )
             ],
         ),
+        (
+            [
+                AIMessage(
+                    content=["Mike age is 30"],
+                    tool_calls=[
+                        ToolCall(
+                            name="Information",
+                            args={"name": "Rob"},
+                            id="00000000-0000-0000-0000-00000000000",
+                        ),
+                    ],
+                ),
+                AIMessage(
+                    content=["Arthur age is 30"],
+                    tool_calls=[
+                        ToolCall(
+                            name="Information",
+                            args={"name": "Ben"},
+                            id="00000000-0000-0000-0000-00000000000",
+                        ),
+                    ],
+                ),
+            ],
+            [
+                Content(
+                    role="model",
+                    parts=[
+                        Part(text="Mike age is 30"),
+                        Part(
+                            function_call=FunctionCall(
+                                name="Information",
+                                args={"name": "Rob"},
+                            )
+                        ),
+                        Part(text="Arthur age is 30"),
+                        Part(
+                            function_call=FunctionCall(
+                                name="Information",
+                                args={"name": "Ben"},
+                            )
+                        ),
+                    ],
+                )
+            ],
+        ),
     ],
 )
 def test_parse_history_gemini_multi(source_history, expected_history) -> None:
@@ -887,6 +932,7 @@ def test_safety_settings_gemini_init() -> None:
         SafetySetting(
             category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
             threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+            method=SafetySetting.HarmBlockMethod.SEVERITY,
         )
     ]
     model = ChatVertexAI(

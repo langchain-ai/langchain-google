@@ -101,7 +101,7 @@ def test_format_dict_to_genai_function() -> None:
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = _ToolConfigDict(
         function_calling_config={
-            "mode": "any",
+            "mode": "ANY",
             "allowed_function_names": ["foo"],
         },
     )

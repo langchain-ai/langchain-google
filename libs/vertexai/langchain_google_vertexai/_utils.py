@@ -131,6 +131,8 @@ class GoogleModelFamily(str, Enum):
             "gemini-1.5-pro-preview-0409",
             "gemini-1.5-flash-001",
             "gemini-1.5-pro-001",
+            "medlm-large-1.5-preview",
+            "medlm-large-1.5-001",
         }
         if model_name in gemini_advanced_models:
             return GoogleModelFamily.GEMINI_ADVANCED
@@ -166,6 +168,7 @@ def get_generation_info(
                     "category": rating.category.name,
                     "probability_label": rating.probability.name,
                     "blocked": rating.blocked,
+                    "severity": rating.severity.name,
                 }
                 for rating in candidate.safety_ratings
             ],

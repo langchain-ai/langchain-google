@@ -39,8 +39,9 @@ lint lint_diff lint_package lint_tests:
 	./scripts/check_pydantic.sh .
 	./scripts/lint_imports.sh
 	poetry run ruff .
-	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff format $(PYTHON_FILES) --diff
-	[ "$(PYTHON_FILES)" = "" ] || poetry run mypy $(PYTHON_FILES)
+	poetry run ruff format $(PYTHON_FILES) --diff
+	poetry run ruff --select I $(PYTHON_FILES)
+	mkdir $(MYPY_CACHE); poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
 format format_diff:
 	poetry run ruff format $(PYTHON_FILES)
@@ -51,6 +52,10 @@ spell_check:
 
 spell_fix:
 	poetry run codespell --toml pyproject.toml -w
+
+
+check_imports: $(shell find langchain_google_genai -name '*.py')
+	poetry run python ./scripts/check_imports.py $^
 
 ######################
 # HELP

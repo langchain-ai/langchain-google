@@ -58,7 +58,7 @@ from langchain_core.output_parsers.openai_tools import (
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
-from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
 )
@@ -67,6 +67,7 @@ from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
+    _convert_schema_dict_to_gapic,
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
@@ -114,6 +115,7 @@ from langchain_google_vertexai.functions_utils import (
     _ToolChoiceType,
     _ToolsType,
     _format_to_gapic_tool,
+    _ToolType,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +126,7 @@ _allowed_params = [
     "top_k",
     "top_p",
     "response_mime_type",
+    "response_schema",
     "temperature",
     "max_output_tokens",
     "presence_penalty",
@@ -296,6 +299,14 @@ def _parse_chat_history_gemini(
                 )
                 parts.append(Part(function_call=function_call))
 
+            prev_content = vertex_messages[-1]
+            prev_content_is_model = prev_content and prev_content.role == "model"
+            if prev_content_is_model:
+                prev_parts = list(prev_content.parts)
+                prev_parts.extend(parts)
+                vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                continue
+
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
             prev_ai_message = None
@@ -306,17 +317,17 @@ def _parse_chat_history_gemini(
                     name=message.name, response={"content": message.content}
                 )
             )
+            parts = [part]
 
             prev_content = vertex_messages[-1]
             prev_content_is_function = prev_content and prev_content.role == "function"
-            if prev_content_is_function:
-                parts = list(prev_content.parts)
-                parts.append(part)
-                # replacing last message
-                vertex_messages[-1] = Content(role=role, parts=parts)
-                continue
 
-            parts = [part]
+            if prev_content_is_function:
+                prev_parts = list(prev_content.parts)
+                prev_parts.extend(parts)
+                # replacing last message
+                vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                continue
 
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, ToolMessage):
@@ -383,18 +394,19 @@ def _parse_chat_history_gemini(
                     response=content,
                 )
             )
+            parts = [part]
 
             prev_content = vertex_messages[-1]
             prev_content_is_function = prev_content and prev_content.role == "function"
+
             if prev_content_is_function:
-                parts = list(prev_content.parts)
-                parts.append(part)
+                prev_parts = list(prev_content.parts)
+                prev_parts.extend(parts)
                 # replacing last message
-                vertex_messages[-1] = Content(role=role, parts=parts)
+                vertex_messages[-1] = Content(role=role, parts=prev_parts)
                 continue
-            else:
-                parts = [part]
-                vertex_messages.append(Content(role=role, parts=parts))
+
+            vertex_messages.append(Content(role=role, parts=parts))
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
@@ -966,12 +978,23 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     setting this parameter to True is discouraged.
     """
     response_mime_type: Optional[str] = None
-    """Optional. Output response mimetype of the generated candidate text. Only 
-        supported in Gemini 1.5 and later models. Supported mimetype: 
-            * "text/plain": (default) Text output. 
+    """Optional. Output response mimetype of the generated candidate text. Only
+        supported in Gemini 1.5 and later models. Supported mimetype:
+            * "text/plain": (default) Text output.
             * "application/json": JSON response in the candidates.
-       The model also needs to be prompted to output the appropriate response 
+       The model also needs to be prompted to output the appropriate response
        type, otherwise the behavior is undefined. This is a preview feature.
+    """
+
+    response_schema: Optional[Dict[str, Any]] = None
+    """ Optional. Enforce an schema to the output. Only works when `response_mime_type`
+        is set to `application/json`.
+        The format of the dictionary should follow Open API schema.
+    """
+
+    cached_content: Optional[str] = None
+    """ Optional. Use the model in cache mode. Only supported in Gemini 1.5 and later 
+        models. Must be a string containing the cache name (A sequence of numbers)
     """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
@@ -1046,8 +1069,21 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @property
     def _default_params(self) -> Dict[str, Any]:
         updated_params = super()._default_params
+
         if self.response_mime_type is not None:
             updated_params["response_mime_type"] = self.response_mime_type
+
+        if self.response_schema is not None:
+            if self.response_mime_type != "application/json":
+                error_message = (
+                    "`response_schema` is only supported when "
+                    "`response_mime_type` is set to `application/json`."
+                )
+                raise ValueError(error_message)
+
+            gapic_response_schema = _convert_schema_dict_to_gapic(self.response_schema)
+            updated_params["response_schema"] = gapic_response_schema
+
         return updated_params
 
     def _get_ls_params(
@@ -1162,21 +1198,76 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         functions: Optional[_ToolsType] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
+        cached_content: Optional[str] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         tool_config = self._tool_config_gemini(tool_config=tool_config)
+        safety_settings = self._safety_settings_gemini(safety_settings)
+        generation_config = self._generation_config_gemini(
+            stream=stream, stop=stop, **kwargs
+        )
+
+        if (self.cached_content is not None) or (cached_content is not None):
+            selected_cached_content = self.cached_content or cached_content
+
+            return self._request_from_cached_content(
+                cached_content=selected_cached_content,  # type: ignore
+                contents=contents,
+                system_instruction=system_instruction,
+                tools=formatted_tools,
+                tool_config=tool_config,
+                safety_settings=safety_settings,
+                generation_config=generation_config,
+                model=self.full_model_name,
+            )
+
         return GenerateContentRequest(
             contents=contents,
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=self._safety_settings_gemini(safety_settings),
-            generation_config=self._generation_config_gemini(
-                stream=stream, stop=stop, **kwargs
-            ),
+            safety_settings=safety_settings,
+            generation_config=generation_config,
             model=self.full_model_name,
+        )
+
+    def _request_from_cached_content(
+        self,
+        cached_content: str,
+        system_instruction: Optional[Content],
+        tools: Optional[Sequence[GapicTool]],
+        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
+        contents: list[Content],
+        safety_settings: Optional[Sequence[SafetySetting]],
+        generation_config: GenerationConfig,
+        model: Optional[str],
+    ) -> GenerateContentRequest:
+        not_allowed_parameters = [
+            ("system_instructions", system_instruction),
+            ("tools", tools),
+            ("tool_config", tool_config),
+        ]
+
+        for param_name, parameter in not_allowed_parameters:
+            if parameter:
+                message = (
+                    f"Using cached content. Parameter `{param_name}` will be ignored. "
+                )
+                logger.warning(message)
+
+        full_cache_name = (
+            f"projects/{self.project}/locations/{self.location}/"
+            f"cachedContents/{cached_content}"
+        )
+
+        return GenerateContentRequest(
+            contents=contents,
+            model=model,
+            safety_settings=safety_settings,
+            generation_config=generation_config,
+            cached_content=full_cache_name,
         )
 
     def _generate_gemini(
@@ -1467,6 +1558,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema.
 
+        .. versionchanged:: 1.1.0
+
+            Return type corrected in version 1.1.0. Previously if a dict schema
+            was provided then the output had the form
+            ``[{"args": {}, "name": "schema_name"}]`` where the output was a list with
+            a single dict and the "args" of the one dict corresponded to the schema.
+            As of `1.1.0` this has been fixed so that the schema (the value
+            corresponding to the old "args" key) is returned directly.
+
         Args:
             schema: The output schema as a dict or a Pydantic class. If a Pydantic class
                 then the model output will be an object of that class. If a dict then
@@ -1533,7 +1633,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             .. code-block:: python
 
                 from langchain_core.pydantic_v1 import BaseModel
-                from langchain_core.utils.function_calling import convert_to_openai_tool
+                from langchain_core.utils.function_calling import convert_to_openai_function
                 from langchain_google_vertexai import ChatVertexAI
 
                 class AnswerWithJustification(BaseModel):
@@ -1541,7 +1641,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     answer: str
                     justification: str
 
-                dict_schema = convert_to_openai_tool(AnswerWithJustification)
+                dict_schema = convert_to_openai_function(AnswerWithJustification)
                 llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
                 structured_llm = llm.with_structured_output(dict_schema)
 
@@ -1559,8 +1659,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 tools=[schema], first_tool_only=True
             )
         else:
-            parser = JsonOutputToolsParser()
-        llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
+            parser = JsonOutputToolsParser(first_tool_only=True) | RunnableGenerator(
+                _yield_args
+            )
+        tool_choice = _get_tool_name(schema) if self._is_gemini_advanced else None
+        llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -1677,6 +1780,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         )
 
 
+def _yield_args(tool_call_chunks: Iterator[dict]) -> Iterator[dict]:
+    for tc in tool_call_chunks:
+        yield tc["args"]
+
+
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
     """Get UsageMetadata from raw response metadata."""
     input_tokens = raw_metadata.get("prompt_token_count", 0)
@@ -1705,3 +1813,8 @@ def _get_usage_metadata_non_gemini(raw_metadata: dict) -> Optional[UsageMetadata
             output_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
         )
+
+
+def _get_tool_name(tool: _ToolType) -> str:
+    vertexai_tool = _format_to_gapic_tool([tool])
+    return [f.name for f in vertexai_tool.function_declarations][0]

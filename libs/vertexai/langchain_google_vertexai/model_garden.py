@@ -16,6 +16,7 @@ from typing import (
     Union,
 )
 
+from google.auth.credentials import Credentials
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -134,6 +135,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
     access_token: Optional[str] = None
     stream_usage: bool = True  # Whether to include usage metadata in streaming output
+    credentials: Optional[Credentials] = None
 
     class Config:
         """Configuration for this pydantic object."""
@@ -156,12 +158,14 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             region=values["location"],
             max_retries=values["max_retries"],
             access_token=values["access_token"],
+            credentials=values["credentials"],
         )
         values["async_client"] = AsyncAnthropicVertex(
             project_id=values["project"],
             region=values["location"],
             max_retries=values["max_retries"],
             access_token=values["access_token"],
+            credentials=values["credentials"],
         )
         return values
 
@@ -350,7 +354,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema."""
 
-        llm = self.bind_tools([schema], tool_choice="any")
+        tool_name = convert_to_anthropic_tool(schema)["name"]
+        llm = self.bind_tools([schema], tool_choice=tool_name)
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             output_parser = ToolsOutputParser(
                 first_tool_only=True, pydantic_schemas=[schema]

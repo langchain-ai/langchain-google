@@ -190,9 +190,9 @@ def _merge_messages(
                 isinstance(block, dict) and block.get("type") == "tool_result"
                 for block in curr.content
             ):
-                curr = HumanMessage(curr.content)  # type: ignore[misc]
+                curr = HumanMessage(curr.content)
             else:
-                curr = HumanMessage(  # type: ignore[misc]
+                curr = HumanMessage(
                     [
                         {
                             "type": "tool_result",
@@ -314,6 +314,10 @@ def _make_message_chunk_from_anthropic_event(
                 output_tokens=output_tokens,
                 total_tokens=output_tokens,
             ),
+            response_metadata={
+                "stop_reason": event.delta.stop_reason,
+                "stop_sequence": event.delta.stop_sequence,
+            },
         )
     else:
         pass
