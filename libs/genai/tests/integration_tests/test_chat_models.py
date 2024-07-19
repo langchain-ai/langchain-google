@@ -182,7 +182,6 @@ def test_chat_google_genai_invoke_multimodal() -> None:
 
 
 def test_chat_google_genai_invoke_multimodal_multiple_messages() -> None:
-
     messages: list = [
         HumanMessage(content="Hi there"),
         AIMessage(content="Hi, how are you?"),
