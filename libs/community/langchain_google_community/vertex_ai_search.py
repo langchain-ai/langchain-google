@@ -153,7 +153,10 @@ class _BaseVertexAISearchRetriever(Serializable):
                 chunk_metadata = doc_metadata.copy()
                 chunk_metadata["source"] = derived_struct_data.get("link", "")
 
-                if chunk_type == "extractive_answers":
+                if (
+                    chunk_type == "extractive_answers"
+                    or chunk_type == "extractive_segments"
+                ):
                     chunk_metadata["source"] += f":{chunk.get('pageNumber', '')}"
                 documents.append(
                     Document(
