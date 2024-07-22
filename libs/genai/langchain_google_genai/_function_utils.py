@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import json
 import logging
 from typing import (
@@ -119,7 +120,6 @@ def _dict_to_gapic_schema(schema: Dict[str, Any]) -> gapic.Schema:
     dereferenced_schema = dereference_refs(schema)
     formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
     json_schema = json.dumps(formatted_schema)
-    print(json_schema)
     return gapic.Schema.from_json(json_schema)
 
 
@@ -137,7 +137,7 @@ def _format_dict_to_function_declaration(
 def convert_to_genai_function_declarations(
     tools: Sequence[_ToolsType],
 ) -> gapic.Tool:
-    if not isinstance(tools, Sequence):
+    if not isinstance(tools, collections.abc.Sequence):
         logger.warning(
             "convert_to_genai_function_declarations expects a Sequence "
             "and not a single tool."
@@ -154,7 +154,7 @@ def convert_to_genai_function_declarations(
                 continue
             tool = cast(_ToolDictLike, tool)
             function_declarations = tool["function_declarations"]
-            if not isinstance(tool["function_declarations"], list):
+            if not isinstance(function_declarations, collections.abc.Sequence):
                 raise ValueError(
                     "function_declarations should be a list"
                     f"got '{type(function_declarations)}'"
