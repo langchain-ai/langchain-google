@@ -56,7 +56,10 @@ def test_gemini_safety_settings_generate() -> None:
     blocked_output = llm.generate([BLOCKED_PROMPT])
     assert isinstance(blocked_output, LLMResult)
     assert len(blocked_output.generations) == 1
-    assert len(blocked_output.generations[0]) == 0
+    generation_info = output.generations[0][0].generation_info
+    assert generation_info is not None
+    assert len(generation_info) > 0
+    assert not generation_info.get("is_blocked")
 
     # test safety_settings passed directly to generate
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
