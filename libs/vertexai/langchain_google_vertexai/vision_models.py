@@ -459,9 +459,13 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
 
         # Only one message allowed with one text part.
         user_query = None
-        is_valid = len(messages) == 1 and len(messages[0].content) == 1
-        if is_valid:
-            user_query = get_text_str_from_content_part(messages[0].content[0])
+
+        if len(messages) == 1:
+            if isinstance(messages[0].content, str):
+                user_query = messages[0].content
+            elif len(messages[0].content) == 1:
+                user_query = get_text_str_from_content_part(messages[0].content[0])
+
         if user_query is None:
             raise ValueError(
                 "Only one message with one text part allowed for image generation"
