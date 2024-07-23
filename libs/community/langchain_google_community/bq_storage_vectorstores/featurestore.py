@@ -356,9 +356,12 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                     self.content_field,
                 ]:
                     dict_values = proto.Message.to_dict(feature.value)
-                    col_type, value = next(iter(dict_values.items()))
-                    value = cast_proto_type(column=col_type, value=value)
-                    metadata[feature.name] = value
+                    if dict_values:
+                        col_type, value = next(iter(dict_values.items()))
+                        value = cast_proto_type(column=col_type, value=value)
+                        metadata[feature.name] = value
+                    else:
+                        metadata[feature.name] = None
                 if feature.name == self.embedding_field:
                     embedding = feature.value.double_array_value.values
                 if feature.name == self.content_field:
