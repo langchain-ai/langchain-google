@@ -60,13 +60,11 @@ from langchain_core.messages import (
     BaseMessage,
     FunctionMessage,
     HumanMessage,
-    InvalidToolCall,
     SystemMessage,
-    ToolCall,
-    ToolCallChunk,
     ToolMessage,
 )
 from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputToolsParser,
@@ -140,7 +138,7 @@ def _create_retry_decorator() -> Callable[[Any], Any]:
     multiplier = 2
     min_seconds = 1
     max_seconds = 60
-    max_retries = 10
+    max_retries = 2
 
     return retry(
         reraise=True,
@@ -476,7 +474,7 @@ def _parse_response_candidate(
 
             if streaming:
                 tool_call_chunks.append(
-                    ToolCallChunk(
+                    tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=function_call.get("id", str(uuid.uuid4())),
@@ -491,7 +489,7 @@ def _parse_response_candidate(
                     )[0]
                 except Exception as e:
                     invalid_tool_calls.append(
-                        InvalidToolCall(
+                        invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
                             id=function_call.get("id", str(uuid.uuid4())),
@@ -500,7 +498,7 @@ def _parse_response_candidate(
                     )
                 else:
                     tool_calls.append(
-                        ToolCall(
+                        tool_call(
                             name=tool_call_dict["name"],
                             args=tool_call_dict["args"],
                             id=tool_call_dict.get("id", str(uuid.uuid4())),
@@ -786,9 +784,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     """  # noqa: E501
 
-    client: Any  #: :meta private:
-    async_client: Any  #: :meta private:
-    google_api_key: Optional[SecretStr] = Field(None, alias="api_key")
+    client: Any = None  #: :meta private:
+    async_client: Any = None  #: :meta private:
+    google_api_key: Optional[SecretStr] = Field(default=None, alias="api_key")
     """Google AI API key. 
         
     If not specified will be read from env var ``GOOGLE_API_KEY``."""
@@ -965,9 +963,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         if not self.async_client:
-            raise RuntimeError(
-                "Initialize ChatGoogleGenerativeAI with a running event loop "
-                "to use async methods."
+            updated_kwargs = {
+                **kwargs,
+                **{
+                    "tools": tools,
+                    "functions": functions,
+                    "safety_settings": safety_settings,
+                    "tool_config": tool_config,
+                    "generation_config": generation_config,
+                },
+            }
+            return await super()._agenerate(
+                messages, stop, run_manager, **updated_kwargs
             )
 
         request = self._prepare_request(
@@ -1036,27 +1043,43 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        request = self._prepare_request(
-            messages,
-            stop=stop,
-            tools=tools,
-            functions=functions,
-            safety_settings=safety_settings,
-            tool_config=tool_config,
-            generation_config=generation_config,
-        )
-        async for chunk in await _achat_with_retry(
-            request=request,
-            generation_method=self.async_client.stream_generate_content,
-            **kwargs,
-            metadata=self.default_metadata,
-        ):
-            _chat_result = _response_to_result(chunk, stream=True)
-            gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+        if not self.async_client:
+            updated_kwargs = {
+                **kwargs,
+                **{
+                    "tools": tools,
+                    "functions": functions,
+                    "safety_settings": safety_settings,
+                    "tool_config": tool_config,
+                    "generation_config": generation_config,
+                },
+            }
+            async for value in super()._astream(
+                messages, stop, run_manager, **updated_kwargs
+            ):
+                yield value
+        else:
+            request = self._prepare_request(
+                messages,
+                stop=stop,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+            )
+            async for chunk in await _achat_with_retry(
+                request=request,
+                generation_method=self.async_client.stream_generate_content,
+                **kwargs,
+                metadata=self.default_metadata,
+            ):
+                _chat_result = _response_to_result(chunk, stream=True)
+                gen = cast(ChatGenerationChunk, _chat_result.generations[0])
 
-            if run_manager:
-                await run_manager.on_llm_new_token(gen.text)
-            yield gen
+                if run_manager:
+                    await run_manager.on_llm_new_token(gen.text)
+                yield gen
 
     def _prepare_request(
         self,
@@ -1071,9 +1094,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
         formatted_tools = None
         if tools:
-            formatted_tools = [
-                convert_to_genai_function_declarations(tool) for tool in tools
-            ]
+            formatted_tools = [convert_to_genai_function_declarations(tools)]
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
 
@@ -1189,7 +1210,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @property
     def _supports_tool_choice(self) -> bool:
-        return "gemini-1.5" in self.model
+        return "gemini-1.5-pro" in self.model
 
 
 def _get_tool_name(

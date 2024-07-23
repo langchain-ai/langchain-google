@@ -43,13 +43,16 @@ from langchain_core.messages import (
     BaseMessage,
     FunctionMessage,
     HumanMessage,
-    InvalidToolCall,
     SystemMessage,
     ToolCall,
-    ToolCallChunk,
     ToolMessage,
 )
 from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.tool import (
+    tool_call_chunk,
+    tool_call as create_tool_call,
+    invalid_tool_call,
+)
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputToolsParser,
@@ -115,6 +118,7 @@ from langchain_google_vertexai.functions_utils import (
     _ToolChoiceType,
     _ToolsType,
     _format_to_gapic_tool,
+    _ToolType,
 )
 
 logger = logging.getLogger(__name__)
@@ -290,12 +294,7 @@ def _parse_chat_history_gemini(
                 parts = _convert_to_parts(message)
 
             for tc in message.tool_calls:
-                function_call = FunctionCall(
-                    {
-                        "name": tc["name"],
-                        "args": tc["args"],
-                    }
-                )
+                function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
                 parts.append(Part(function_call=function_call))
 
             prev_content = vertex_messages[-1]
@@ -514,7 +513,7 @@ def _parse_response_candidate(
             if streaming:
                 index = function_call.get("index")
                 tool_call_chunks.append(
-                    ToolCallChunk(
+                    tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=function_call.get("id", str(uuid.uuid4())),
@@ -529,7 +528,7 @@ def _parse_response_candidate(
                     )
                     tool_calls.extend(
                         [
-                            ToolCall(
+                            create_tool_call(
                                 name=tool_call["name"],
                                 args=tool_call["args"],
                                 id=tool_call.get("id", str(uuid.uuid4())),
@@ -539,7 +538,7 @@ def _parse_response_candidate(
                     )
                 except Exception as e:
                     invalid_tool_calls.append(
-                        InvalidToolCall(
+                        invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
                             id=function_call.get("id", str(uuid.uuid4())),
@@ -991,6 +990,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         The format of the dictionary should follow Open API schema.
     """
 
+    cached_content: Optional[str] = None
+    """ Optional. Use the model in cache mode. Only supported in Gemini 1.5 and later 
+        models. Must be a string containing the cache name (A sequence of numbers)
+    """
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -1192,21 +1196,76 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         functions: Optional[_ToolsType] = None,
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
+        cached_content: Optional[str] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         tool_config = self._tool_config_gemini(tool_config=tool_config)
+        safety_settings = self._safety_settings_gemini(safety_settings)
+        generation_config = self._generation_config_gemini(
+            stream=stream, stop=stop, **kwargs
+        )
+
+        if (self.cached_content is not None) or (cached_content is not None):
+            selected_cached_content = self.cached_content or cached_content
+
+            return self._request_from_cached_content(
+                cached_content=selected_cached_content,  # type: ignore
+                contents=contents,
+                system_instruction=system_instruction,
+                tools=formatted_tools,
+                tool_config=tool_config,
+                safety_settings=safety_settings,
+                generation_config=generation_config,
+                model=self.full_model_name,
+            )
+
         return GenerateContentRequest(
             contents=contents,
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=self._safety_settings_gemini(safety_settings),
-            generation_config=self._generation_config_gemini(
-                stream=stream, stop=stop, **kwargs
-            ),
+            safety_settings=safety_settings,
+            generation_config=generation_config,
             model=self.full_model_name,
+        )
+
+    def _request_from_cached_content(
+        self,
+        cached_content: str,
+        system_instruction: Optional[Content],
+        tools: Optional[Sequence[GapicTool]],
+        tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
+        contents: list[Content],
+        safety_settings: Optional[Sequence[SafetySetting]],
+        generation_config: GenerationConfig,
+        model: Optional[str],
+    ) -> GenerateContentRequest:
+        not_allowed_parameters = [
+            ("system_instructions", system_instruction),
+            ("tools", tools),
+            ("tool_config", tool_config),
+        ]
+
+        for param_name, parameter in not_allowed_parameters:
+            if parameter:
+                message = (
+                    f"Using cached content. Parameter `{param_name}` will be ignored. "
+                )
+                logger.warning(message)
+
+        full_cache_name = (
+            f"projects/{self.project}/locations/{self.location}/"
+            f"cachedContents/{cached_content}"
+        )
+
+        return GenerateContentRequest(
+            contents=contents,
+            model=model,
+            safety_settings=safety_settings,
+            generation_config=generation_config,
+            cached_content=full_cache_name,
         )
 
     def _generate_gemini(
@@ -1601,7 +1660,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             parser = JsonOutputToolsParser(first_tool_only=True) | RunnableGenerator(
                 _yield_args
             )
-        llm = self.bind_tools([schema], tool_choice=self._is_gemini_advanced)
+        tool_choice = _get_tool_name(schema) if self._is_gemini_advanced else None
+        llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -1751,3 +1811,8 @@ def _get_usage_metadata_non_gemini(raw_metadata: dict) -> Optional[UsageMetadata
             output_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
         )
+
+
+def _get_tool_name(tool: _ToolType) -> str:
+    vertexai_tool = _format_to_gapic_tool([tool])
+    return [f.name for f in vertexai_tool.function_declarations][0]

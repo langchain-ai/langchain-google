@@ -30,7 +30,7 @@ class GooglePlacesAPIWrapper(BaseModel):
     """
 
     gplaces_api_key: Optional[str] = None
-    google_map_client: Any  #: :meta private:
+    google_map_client: Any = None  #: :meta private:
     top_k_results: Optional[int] = None
 
     class Config:

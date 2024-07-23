@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-vertexai"
-version = "1.0.6"
+version = "1.0.7"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 readme = "README.md"
@@ -12,11 +12,11 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain-core = ">=0.2.9,<0.3"
+langchain-core = ">=0.2.17,<0.3"
 google-cloud-aiplatform = "^1.56.0"
 google-cloud-storage = "^2.17.0"
 # optional dependencies
-anthropic = { extras = ["vertexai"], version = ">=0.29.0,<1", optional = true }
+anthropic = { extras = ["vertexai"], version = ">=0.30.0,<1", optional = true }
 
 [tool.poetry.group.test]
 optional = true

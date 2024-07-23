@@ -16,28 +16,28 @@ model_names_to_test = [None, "codechat-bison", "chat-bison", _DEFAULT_MODEL_NAME
 
 
 @pytest.mark.extended
-def test_invoke_medlm_large() -> None:
+def test_invoke_medlm_large_palm() -> None:
     model = VertexAI(model_name="medlm-large")
     result = model.invoke("How you can help me?")
     assert isinstance(result, str)
 
 
 @pytest.mark.extended
-def test_invoke_medlm_large_error() -> None:
+def test_invoke_medlm_large_palm_error() -> None:
     with pytest.raises(ValueError):
         model = ChatVertexAI(model_name="medlm-large")
         model.invoke("How you can help me?")
 
 
 @pytest.mark.extended
-def test_invoke_medlm_medium() -> None:
+def test_invoke_medlm_medium_palm() -> None:
     model = VertexAI(model_name="medlm-medium")
     result = model.invoke("How you can help me?")
     assert isinstance(result, str)
 
 
 @pytest.mark.extended
-def test_invoke_medlm_medium_error() -> None:
+def test_invoke_medlm_medium_palm_error() -> None:
     with pytest.raises(ValueError):
         model = ChatVertexAI(model_name="medlm-medium")
         model.invoke("How you can help me?")

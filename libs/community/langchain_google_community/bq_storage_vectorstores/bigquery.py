@@ -128,6 +128,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
+        values["_creating_index"] = values.get("_creating_index", False)
+        values["_have_index"] = values.get("_have_index", False)
+        values["_last_index_check"] = values.get("_last_index_check", datetime.min)
+
         if values.get("_have_index") or values.get("_creating_index"):
             return values
 

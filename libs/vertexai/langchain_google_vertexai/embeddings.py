@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 from google.api_core.exceptions import (
     Aborted,
     DeadlineExceeded,
+    InternalServerError,
     InvalidArgument,
     ResourceExhausted,
     ServiceUnavailable,
@@ -154,6 +155,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             ServiceUnavailable,
             Aborted,
             DeadlineExceeded,
+            InternalServerError,
         ]
         retry_decorator = create_base_retry_decorator(
             error_types=retry_errors, max_retries=self.max_retries
