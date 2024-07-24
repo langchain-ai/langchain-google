@@ -818,8 +818,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     google_api_key: Optional[SecretStr] = Field(default=None, alias="api_key")
-    """Google AI API key. 
-        
+    """Google AI API key.
+
     If not specified will be read from env var ``GOOGLE_API_KEY``."""
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
@@ -827,8 +827,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     convert_system_message_to_human: bool = False
     """Whether to merge any leading SystemMessage into the following HumanMessage.
-    
-    Gemini does not support system messages; any unsupported messages will 
+
+    Gemini does not support system messages; any unsupported messages will
     raise an error."""
 
     class Config:
