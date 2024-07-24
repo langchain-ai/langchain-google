@@ -199,7 +199,7 @@ def _format_to_gapic_function_declaration(
 ) -> gapic.FunctionDeclaration:
     if isinstance(tool, BaseTool):
         return _format_base_tool_to_function_declaration(tool)
-    elif isinstance(tool, type) and issubclass(tool, BaseModel):
+    elif isinstance(tool, type) and is_basemodel_subclass(tool):
         return _convert_pydantic_to_genai_function(tool)
     elif isinstance(tool, dict):
         if all(k in tool for k in ("name", "description")) and "parameters" not in tool:
