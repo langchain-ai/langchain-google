@@ -565,7 +565,7 @@ def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> N
 
 
 def test_serialize() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")
+    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", api_key=SecretStr("test-key"))
     serialized = dumps(llm)
     llm_loaded = loads(
         serialized,
