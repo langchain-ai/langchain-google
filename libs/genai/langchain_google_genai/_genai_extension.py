@@ -21,7 +21,7 @@ from google.ai.generativelanguage_v1beta import (
 from google.api_core import client_options as client_options_lib
 from google.api_core import exceptions as gapi_exception
 from google.api_core import gapic_v1
-from google.auth import credentials, exceptions  # type: ignore
+from google.auth import credentials, exceptions
 from google.protobuf import timestamp_pb2
 
 _logger = logging.getLogger(__name__)

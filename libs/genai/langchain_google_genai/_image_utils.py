@@ -54,7 +54,7 @@ class ImageBytesLoader:
                 "Please pass in images as Google Cloud Storage URI, "
                 "b64 encoded image string (data:image/...), or valid image url."
             )
-            return self._bytes_from_file(image_string)
+            return self._bytes_from_file(image_string)  # type: ignore[unreachable]
 
         raise ValueError(
             "Image string must be one of: Google Cloud Storage URI, "

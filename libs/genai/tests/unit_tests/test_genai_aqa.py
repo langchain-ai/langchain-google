@@ -3,11 +3,9 @@ from unittest.mock import MagicMock, patch
 import google.ai.generativelanguage as genai
 import pytest
 
-from langchain_google_genai import (
-    AqaInput,
-    GenAIAqa,
-)
+from langchain_google_genai import AqaInput, GenAIAqa
 from langchain_google_genai import _genai_extension as genaix
+from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory
 
 # Make sure the tests do not hit actual production servers.
 genaix.set_config(
@@ -54,8 +52,8 @@ def test_invoke(mock_generate_answer: MagicMock) -> None:
         answer_style=genai.GenerateAnswerRequest.AnswerStyle.EXTRACTIVE,
         safety_settings=[
             genai.SafetySetting(
-                category=genai.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold=genai.SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
             )
         ],
     )
@@ -80,11 +78,10 @@ def test_invoke(mock_generate_answer: MagicMock) -> None:
     assert len(request.safety_settings) == 1
     assert (
         request.safety_settings[0].category
-        == genai.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT
+        == HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT
     )
     assert (
-        request.safety_settings[0].threshold
-        == genai.SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
+        request.safety_settings[0].threshold == HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
     )
 
     assert request.temperature == 0.5
