@@ -249,7 +249,7 @@ def _parse_chat_history_gemini(
                 raw_content = ast.literal_eval(raw_content)
             except SyntaxError:
                 pass
-            except ValueError:  
+            except ValueError:
                 pass
         # A linting error is thrown here because it does not think this line is
         # reachable due to typing, but it is wrong so we ignore the lint error.
