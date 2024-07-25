@@ -251,14 +251,11 @@ def _parse_chat_history_gemini(
                 pass
             except ValueError as e:  # noqa
                 pass
-        
         if isinstance(raw_content, int):
             raw_content = str(raw_content)
-
         if isinstance(raw_content, str):
             raw_content = [raw_content]
         result = []
-
         for raw_part in raw_content:
             part = _convert_to_prompt(raw_part)
             if part:
