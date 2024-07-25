@@ -6,6 +6,7 @@ from typing import List, Optional, cast
 
 import pytest
 from google.cloud import storage
+from langchain import agents
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -17,6 +18,7 @@ from langchain_core.messages import (
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 
 from langchain_google_vertexai import (
@@ -234,6 +236,78 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
     output = llm([message])
     assert isinstance(output.content, str)
 
+
+@pytest.mark.release
+@pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
+def test_multimodal_media_inline_base64_template(file_uri, mime_type) -> None:
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0514")
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+    storage_client = storage.Client()
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    text_message = {
+        "type": "text",
+        "text": "Describe the attached media in 5 words!"
+    }
+    message = HumanMessage(content=[media_message, text_message])
+    chain = prompt_template | llm
+    output = chain.invoke({"input": [message]})
+    assert isinstance(output.content, str)
+
+@tool
+def get_pixel_info(query: str):
+        """Retrieves information about the Pixel."""
+        return "MOCK PIXEL INFO STRING"
+
+@pytest.mark.release
+def test_multimodal_media_inline_base64_agent() -> None:
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+    storage_client = storage.Client()
+    # Can't use the pixel.mp3, since it has too many tokens it will hit quota
+    # error.
+    file_uri = "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    text_message = {
+        "type": "text",
+        "text": "Describe the attached media in 5 words."
+    }
+    message = [media_message, text_message]
+    tools = [get_pixel_info]
+    agent = agents.create_tool_calling_agent(
+        llm,
+        tools,
+        prompt_template
+    )
+    agent_executor = agents.AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=False,
+        stream_runnable=False)
+    output = agent_executor.invoke({"input": message})
+    assert isinstance(output, str)
 
 @pytest.mark.xfail(reason="investigating")
 @pytest.mark.release
