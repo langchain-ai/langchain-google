@@ -247,12 +247,14 @@ def _parse_chat_history_gemini(
         if isinstance(raw_content, str):
             try:
                 raw_content = ast.literal_eval(raw_content)
-            except SyntaxError as e:  # noqa
+            except SyntaxError:
                 pass
-            except ValueError as e:  # noqa
+            except ValueError:  
                 pass
-        if isinstance(raw_content, int):
-            raw_content = str(raw_content)
+        # A linting error is thrown here because it does not think this line is
+        # reachable due to typing, but it is wrong so we ignore the lint error.
+        if isinstance(raw_content, int):  # noqa
+            raw_content = str(raw_content)  # noqa
         if isinstance(raw_content, str):
             raw_content = [raw_content]
         result = []
