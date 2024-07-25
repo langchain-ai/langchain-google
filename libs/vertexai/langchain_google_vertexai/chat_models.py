@@ -165,6 +165,7 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         ValueError: If a sequence of message has a SystemMessage not at the
         first place.
     """
+
     vertex_messages, context = [], None
     for i, message in enumerate(history):
         content = cast(str, message.content)
@@ -189,9 +190,7 @@ def _parse_chat_history_gemini(
     project: Optional[str] = None,
     convert_system_message_to_human: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
-
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
-
         if isinstance(part, str):
             return Part(text=part)
 
@@ -235,7 +234,7 @@ def _parse_chat_history_gemini(
             return proto_part
 
         raise ValueError("Only text, image_url, and media types are supported!")
-    
+
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
         raw_content = message.content
 
@@ -264,7 +263,6 @@ def _parse_chat_history_gemini(
             part = _convert_to_prompt(raw_part)
             if part:
                 result.append(part)
-        
         return result
 
     vertex_messages: List[Content] = []
@@ -1227,6 +1225,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         generation_config = self._generation_config_gemini(
             stream=stream, stop=stop, **kwargs
         )
+
         if (self.cached_content is not None) or (cached_content is not None):
             selected_cached_content = self.cached_content or cached_content
 
