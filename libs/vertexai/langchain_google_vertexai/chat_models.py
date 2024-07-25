@@ -1,7 +1,7 @@
 """Wrapper around Google VertexAI chat-based models."""
 
 from __future__ import annotations  # noqa
-
+import ast
 import json
 import logging
 from dataclasses import dataclass, field
@@ -165,7 +165,6 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         ValueError: If a sequence of message has a SystemMessage not at the
         first place.
     """
-
     vertex_messages, context = [], None
     for i, message in enumerate(history):
         content = cast(str, message.content)
@@ -190,7 +189,9 @@ def _parse_chat_history_gemini(
     project: Optional[str] = None,
     convert_system_message_to_human: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
+
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
+
         if isinstance(part, str):
             return Part(text=part)
 
@@ -234,16 +235,36 @@ def _parse_chat_history_gemini(
             return proto_part
 
         raise ValueError("Only text, image_url, and media types are supported!")
-
+    
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
         raw_content = message.content
+
+        # If a user sends a multimodal request with agents, then the full input
+        # will be sent as a string due to the ChatPromptTemplate formatting.
+        # Because of this, we need to first try to convert the string to its
+        # native type (such as list or dict) so that results can be properly
+        # appended to the prompt, otherwise they will all be parsed as Text
+        # rather than `inline_data`.
         if isinstance(raw_content, str):
+            try:
+                raw_content = ast.literal_eval(raw_content)
+            except SyntaxError as e:
+                pass
+            except ValueError as e:
+                pass
+        
+        if isinstance(raw_content, int):
+            raw_content = str(raw_content)
+
+        if isinstance(raw_content, str) :
             raw_content = [raw_content]
         result = []
+
         for raw_part in raw_content:
             part = _convert_to_prompt(raw_part)
             if part:
                 result.append(part)
+        
         return result
 
     vertex_messages: List[Content] = []
@@ -1206,7 +1227,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         generation_config = self._generation_config_gemini(
             stream=stream, stop=stop, **kwargs
         )
-
         if (self.cached_content is not None) or (cached_content is not None):
             selected_cached_content = self.cached_content or cached_content
 
