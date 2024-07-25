@@ -247,9 +247,9 @@ def _parse_chat_history_gemini(
         if isinstance(raw_content, str):
             try:
                 raw_content = ast.literal_eval(raw_content)
-            except SyntaxError as e:
+            except SyntaxError as e: #noqa
                 pass
-            except ValueError as e:
+            except ValueError as e: #noqa
                 pass
         
         if isinstance(raw_content, int):
