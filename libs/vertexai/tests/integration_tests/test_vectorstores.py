@@ -5,7 +5,7 @@ Additionally in order to run the test you must have set the following environmen
 variables:
 - PROJECT_ID: Id of the Google Cloud Project
 - REGION: Region of the Bucket, Index and Endpoint
-- GCS_BUCKET_NAME: Name of a Google Cloud Storage Bucket
+- VECTOR_SEARCH_STAGING_BUCKET: Name of a Google Cloud Storage Bucket
 - INDEX_ID: Id of the Vector Search index.
 - ENDPOINT_ID: Id of the Vector Search endpoint.
 """
@@ -57,6 +57,16 @@ def gcs_document_storage(sdk_manager: VectorSearchSDKManager) -> GCSDocumentStor
         bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"]
     )
     return GCSDocumentStorage(bucket=bucket, prefix="integration_tests")
+
+
+@pytest.fixture
+def gcs_document_storage_unthreaded(
+    sdk_manager: VectorSearchSDKManager,
+) -> GCSDocumentStorage:
+    bucket = sdk_manager.get_gcs_bucket(
+        bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"]
+    )
+    return GCSDocumentStorage(bucket=bucket, prefix="integration_tests", threaded=False)
 
 
 @pytest.fixture
@@ -137,8 +147,41 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
 
 
 @pytest.mark.extended
+@pytest.mark.parametrize("n_threads", ["-1", -1, 51, "100"])
+def test_gcs_document_storage_invalid_user_input(
+    sdk_manager: VectorSearchSDKManager, n_threads: int
+):
+    bucket = sdk_manager.get_gcs_bucket(os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
+    with pytest.raises(ValueError) as excinfo:
+        GCSDocumentStorage(
+            bucket=bucket,
+            prefix="integration_tests",
+            threaded=True,
+            n_threads=n_threads,
+        )
+    assert isinstance(excinfo.value, ValueError)
+
+
+@pytest.mark.extended
+@pytest.mark.parametrize("n_threads", ["1", 1, 50])
+def test_gcs_document_storage_valid_user_input(
+    sdk_manager: VectorSearchSDKManager, n_threads: int
+):
+    bucket = sdk_manager.get_gcs_bucket(os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
+    doc_store = GCSDocumentStorage(
+        bucket=bucket, prefix="integration_tests", threaded=True, n_threads=n_threads
+    )
+    assert isinstance(doc_store, GCSDocumentStorage)
+
+
+@pytest.mark.extended
 @pytest.mark.parametrize(
-    "storage_class", ["gcs_document_storage", "datastore_document_storage"]
+    "storage_class",
+    [
+        "gcs_document_storage",
+        "gcs_document_storage_unthreaded",
+        "datastore_document_storage",
+    ],
 )
 def test_document_storage(
     storage_class: str,
@@ -146,15 +189,29 @@ def test_document_storage(
 ):
     document_storage: DocumentStorage = request.getfixturevalue(storage_class)
 
+    weirdly_encoded_texts = [
+        "ユーザー別サイト",
+        "简体中文",
+        "크로스 플랫폼으로",
+        "מדורים מבוקשים",
+        "أفضل البحوث",
+        "Σὲ γνωρίζω ἀπὸ",
+        "Десятую Международную",
+        "แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช",
+        "∮ E⋅da = Q, n → ∞, ∑ f(i) = ∏ g(i)",
+        "français langue étrangère",
+        "mañana olé y vamos Messi!",
+    ]
+
     N = 10
     documents = [
         Document(
-            page_content=f"Text content of document {i}",
+            page_content=f"Text content of document {i}: {text}",
             metadata={"index": i, "nested": {"a": i, "b": str(uuid4())}},
         )
-        for i in range(N)
+        for i, text in enumerate(weirdly_encoded_texts * N)
     ]
-    ids = [str(uuid4()) for i in range(N)]
+    ids = [str(uuid4()) for i in range(N * len(weirdly_encoded_texts))]
 
     # Test batch storage and retrieval
     document_storage.mset(list(zip(ids, documents)))
