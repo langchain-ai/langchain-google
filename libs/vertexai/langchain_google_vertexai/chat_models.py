@@ -36,6 +36,7 @@ from langchain_core.language_models.chat_models import (
     BaseChatModel,
     LangSmithParams,
     generate_from_stream,
+    agenerate_from_stream,
 )
 from langchain_core.messages import (
     AIMessage,
@@ -1387,6 +1388,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        stream: Optional[bool] = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Asynchronously generate next turn in the conversation.
@@ -1403,12 +1405,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Raises:
             ValueError: if the last message in the list is not from human.
         """
-        if "stream" in kwargs:
-            kwargs.pop("stream")
-            logger.warning("ChatVertexAI does not currently support async streaming.")
-
+        should_stream = stream is True or (stream is None and self.streaming)
         if not self._is_gemini_model:
+            if should_stream:
+                logger.warning("ChatVertexAI does not currently support async streaming.")
             return await self._agenerate_non_gemini(messages, stop=stop, **kwargs)
+
+        if should_stream:
+            stream_iter = self._astream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            return await agenerate_from_stream(stream_iter)
 
         return await self._agenerate_gemini(
             messages=messages,
