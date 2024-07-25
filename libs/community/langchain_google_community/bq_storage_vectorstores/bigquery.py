@@ -11,8 +11,13 @@ from langchain_core.pydantic_v1 import root_validator
 if TYPE_CHECKING:
     from google.cloud.bigquery.table import Table
 
+from langchain_google_community._utils import get_client_info
+from langchain_google_community.bq_storage_vectorstores.utils import (
+    validate_column_in_bq_schema,
+)
+
 from langchain_google_community.bq_storage_vectorstores._base import (
-    BaseBigQueryVectorStore,
+    BaseVectorStore,
 )
 
 _vector_table_lock = Lock()  # process-wide BigQueryVectorSearch table lock
@@ -23,7 +28,7 @@ INDEX_CHECK_INTERVAL = timedelta(seconds=60)
 USER_AGENT_PREFIX = "FeatureStore"
 
 
-class BigQueryVectorStore(BaseBigQueryVectorStore):
+class BigQueryVectorStore(BaseVectorStore):
     """
     A vector store implementation that utilizes BigQuery and BigQuery Vector Search.
 
@@ -53,6 +58,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     """
 
     distance_type: Literal["COSINE", "EUCLIDEAN"] = "EUCLIDEAN"
+    table_schema: Any = None
+    credentials: Optional[Any] = None
+    _bq_client: Any = None
     _creating_index: bool = False
     _have_index: bool = False
     _last_index_check: datetime = datetime.min
@@ -128,6 +136,30 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
+        values["_bq_client"] = bigquery.Client(
+            project=values["project_id"],
+            location=values["location"],
+            credentials=values["credentials"],
+            client_info=get_client_info(module="bigquery-vector-search"),
+        )
+        values["_bq_client"].create_dataset(
+            dataset=values["dataset_name"], exists_ok=True
+        )
+        values["_bq_client"].create_dataset(
+            dataset=f"{values['dataset_name']}_temp", exists_ok=True
+        )
+        full_table_id = values["_full_table_id"]
+        table_ref = bigquery.TableReference.from_string(full_table_id)
+        values["_bq_client"].create_table(table_ref, exists_ok=True)
+        values["_logger"].info(
+            f"BigQuery table {full_table_id} "
+            f"initialized/validated as persistent storage. "
+            f"Access via BigQuery console:\n "
+            f"https://console.cloud.google.com/bigquery?project={values['project_id']}"
+            f"&ws=!1m5!1m4!4m3!1s{values['project_id']}!2s{values['dataset_name']}!3s"
+            f"{values['table_name']}"
+        )
+
         values["_creating_index"] = values.get("_creating_index", False)
         values["_have_index"] = values.get("_have_index", False)
         values["_last_index_check"] = values.get("_last_index_check", datetime.min)
@@ -176,6 +208,84 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 values["_have_index"] = True
             return values
 
+    def _validate_bq_table(self) -> Any:
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+        from google.cloud.exceptions import NotFound
+
+        table_ref = bigquery.TableReference.from_string(self.full_table_id)
+
+        try:
+            # Attempt to retrieve the table information
+            self._bq_client.get_table(self.full_table_id)
+        except NotFound:
+            self._logger.debug(
+                f"Couldn't find table {self.full_table_id}. "
+                f"Table will be created once documents are added"
+            )
+            return
+
+        table = self._bq_client.get_table(table_ref)
+        schema = table.schema.copy()
+        if schema:  ## Check if table has a schema
+            self.table_schema = {field.name: field.field_type for field in schema}
+            columns = {c.name: c for c in schema}
+            validate_column_in_bq_schema(
+                column_name=self.doc_id_field,
+                columns=columns,
+                expected_types=["STRING"],
+                expected_modes=["NULLABLE", "REQUIRED"],
+            )
+            validate_column_in_bq_schema(
+                column_name=self.content_field,
+                columns=columns,
+                expected_types=["STRING"],
+                expected_modes=["NULLABLE", "REQUIRED"],
+            )
+            validate_column_in_bq_schema(
+                column_name=self.embedding_field,
+                columns=columns,
+                expected_types=["FLOAT", "FLOAT64"],
+                expected_modes=["REPEATED"],
+            )
+            if self.extra_fields is None:
+                extra_fields = {}
+                for column in schema:
+                    if column.name not in [
+                        self.doc_id_field,
+                        self.content_field,
+                        self.embedding_field,
+                    ]:
+                        # Check for unsupported REPEATED mode
+                        if column.mode == "REPEATED":
+                            raise ValueError(
+                                f"Column '{column.name}' is REPEATED. "
+                                f"REPEATED fields are not supported in this context."
+                            )
+                        extra_fields[column.name] = column.field_type
+                self.extra_fields = extra_fields
+            else:
+                for field, type in self.extra_fields.items():
+                    validate_column_in_bq_schema(
+                        column_name=field,
+                        columns=columns,
+                        expected_types=[type],
+                        expected_modes=["NULLABLE", "REQUIRED"],
+                    )
+            self._logger.debug(f"Table {self.full_table_id} validated")
+        return table_ref
+
+    def _initialize_bq_table(self) -> Any:
+        """Validates or creates the BigQuery table."""
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
+        self._bq_client.create_dataset(dataset=self.dataset_name, exists_ok=True)
+        self._bq_client.create_dataset(
+            dataset=f"{self.dataset_name}_temp", exists_ok=True
+        )
+        table_ref = bigquery.TableReference.from_string(self.full_table_id)
+        self._bq_client.create_table(table_ref, exists_ok=True)
+        return table_ref
+    
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
         embeddings: List[List[float]],
@@ -387,6 +497,78 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         results_docs = [documents[i * k : (i + 1) * k] for i in range(num_queries)]
         return results_docs
 
+    def add_texts_with_embeddings(
+        self,
+        texts: List[str],
+        embs: List[List[float]],
+        metadatas: Optional[List[dict]] = None,
+    ) -> List[str]:
+        """Add precomputed embeddings and relative texts / metadatas to the vectorstore.
+
+        Args:
+            ids: List of unique ids in string format
+            texts: List of strings to add to the vectorstore.
+            embs: List of lists of floats with text embeddings for texts.
+            metadatas: Optional list of metadata records associated with the texts.
+                (ie [{"url": "www.myurl1.com", "title": "title1"},
+                {"url": "www.myurl2.com", "title": "title2"}])
+        Returns:
+            List of ids from adding the texts into the vectorstore.
+        """
+        import pandas as pd
+
+        ids = [uuid.uuid4().hex for _ in texts]
+        if metadatas is None:
+            metadatas = [{} for _ in texts]
+
+        values_dict: List[Dict[str, List[Any]]] = []
+        for idx, text, emb, metadata_dict in zip(ids, texts, embs, metadatas):
+            record = {
+                self.doc_id_field: idx,
+                self.content_field: text,
+                self.embedding_field: emb,
+            }
+            record.update(metadata_dict)
+            values_dict.append(record)  # type: ignore[arg-type]
+
+        table = self._bq_client.get_table(
+            self.full_table_id
+        )  # Attempt to retrieve the table information
+        df = pd.DataFrame(values_dict)
+        job = self._bq_client.load_table_from_dataframe(df, table)
+        job.result()
+        self._validate_bq_table()
+        self._logger.debug(f"stored {len(ids)} records in BQ")
+        return ids
+
+    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
+        """Delete documents by record IDs
+
+        Args:
+            ids: List of ids to delete.
+            **kwargs: Other keyword arguments that subclasses might use.
+
+        Returns:
+            Optional[bool]: True if deletion is successful,
+            False otherwise, None if not implemented.
+        """
+        from google.cloud import bigquery  # type: ignore[attr-defined]
+
+        if not ids or len(ids) == 0:
+            return True
+
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ArrayQueryParameter("ids", "STRING", ids)],
+        )
+        self._bq_client.query(
+            f"""
+                    DELETE FROM `{self.full_table_id}` WHERE {self.doc_id_field}
+                    IN UNNEST(@ids)
+                    """,
+            job_config=job_config,
+        ).result()
+        return True
+
     def batch_search(
         self,
         embeddings: Optional[List[List[float]]] = None,
@@ -503,7 +685,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             ImportError: If the required LangChain Google Community feature store
                 module is not available.
         """
-        from langchain_google_community.bq_storage_vectorstores.featurestore import (
+        from featurestore import (
             VertexFSVectorStore,
         )
 

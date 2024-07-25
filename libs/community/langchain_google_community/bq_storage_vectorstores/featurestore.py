@@ -13,11 +13,13 @@ from google.api_core.exceptions import (
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import root_validator
-
+from langchain_core.pydantic_v1 import root_validator, Field
 from langchain_google_community._utils import get_client_info, get_user_agent
 from langchain_google_community.bq_storage_vectorstores._base import (
-    BaseBigQueryVectorStore,
+    BaseVectorStore,
+)
+from langchain_google_community.bq_storage_vectorstores.bigquery import (
+    BigQueryVectorStore,
 )
 from langchain_google_community.bq_storage_vectorstores.utils import (
     cast_proto_type,
@@ -28,7 +30,8 @@ from langchain_google_community.bq_storage_vectorstores.utils import (
 MIN_INDEX_ROWS = 5
 INDEX_CHECK_INTERVAL = timedelta(seconds=60)
 USER_AGENT_PREFIX = "FeatureStore"
-
+def default_none_factory() -> Callable[[Any], bool]:
+    return lambda x: x is None
 
 class VertexFSVectorStore(BaseBigQueryVectorStore):
     """
@@ -52,7 +55,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         embedding_field: Name of the column storing text embeddings (default:
             "embedding").
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
-        credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
             provided).
         online_store_name (str, optional): Name of the Vertex AI Feature Store online
@@ -221,6 +223,33 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 time.sleep(30)
 
         self._wait_until_dummy_query_success()
+
+    def add_texts_with_embeddings(
+        self,
+        texts: List[str],
+        embs: List[List[float]],
+        metadatas: Optional[List[dict]] = None,
+    ) -> List[str]:
+        self._logger.warning(
+            "Perfer using adding texts in the bq_store and then sync the data. \n"
+            "bq_store = fs_store.to_bq_vector_store() \n"
+            "bq.store.add_texts_with_embeddings() or .add_texts() \n"
+            "fs_store.sync_data()"
+        )
+        ids = self.to_bq_vector_store().add_texts_with_embeddings(texts, embs, metadatas)
+        self.sync_data()
+        return ids
+
+    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
+        self._logger.warning(
+            "Perfer using delete ids in the bq_store and then sync the data. \n"
+            "bq_store = fs_store.to_bq_vector_store() \n"
+            "bq_store.delete(ids, **kwargs) \n"
+            "fs_store.sync_data()"
+        )
+        self.to_bq_vector_store().delete(ids, **kwargs)
+        self.sync_data()
+        return True
 
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
@@ -523,7 +552,6 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         all_params = {**base_params, **kwargs}
         bq_obj = BigQueryVectorStore(**all_params)
         return bq_obj
-
 
 def _create_online_store(
     project_id: str,
