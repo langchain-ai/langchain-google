@@ -11,7 +11,6 @@ from google.cloud.aiplatform_v1beta1.types import (
     Content,
     Part,
 )
-from langchain import agents
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -272,6 +271,7 @@ def test_multimodal_media_inline_base64_template(file_uri, mime_type) -> None:
 
 @pytest.mark.extended
 def test_multimodal_media_inline_base64_agent() -> None:
+    from langchain import agents
 
     @tool
     def get_climate_info(query: str):
@@ -303,9 +303,10 @@ def test_multimodal_media_inline_base64_agent() -> None:
     message = [media_message, text_message]
     tools = [get_climate_info]
     agent = agents.create_tool_calling_agent(
-        llm=llm, tools=tools, prompt=prompt_template)
-    agent_executor = agents.AgentExecutor(
-        agent=agent, tools=tools, verbose=False, stream_runnable=False
+        llm=llm, tools=tools, prompt=prompt_template  # type: ignore[arg-type]
+    )
+    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+        agent=agent, tools=tools, verbose=False, stream_runnable=False # type: ignore[arg-type]
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
@@ -329,7 +330,7 @@ def test_parse_history_gemini_multimodal_FC():
     instruction = "Describe the attached media in 5 words."
     text_message = {"type": "text", "text": instruction}
     message = str([media_message, text_message])
-    history = [HumanMessage(content=message)]
+    history: List[BaseMessage] = [HumanMessage(content=message)]
     parts = [
         Part(inline_data=Blob(data=media_base64, mime_type=mime_type)),
         Part(text=instruction),
