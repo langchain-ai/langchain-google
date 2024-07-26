@@ -360,7 +360,9 @@ def test_parse_history_gemini_multimodal_FC():
     storage_client = storage.Client()
     # Can't use the pixel.mp3, since it has too many tokens it will hit quota
     # error.
-    file_uri = "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
     mime_type = "audio/mp3"
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
@@ -370,19 +372,14 @@ def test_parse_history_gemini_multimodal_FC():
         "mime_type": mime_type,
     }
     instruction = "Describe the attached media in 5 words."
-    text_message = {
-        "type": "text",
-        "text": instruction
-    }
+    text_message = {"type": "text", "text": instruction}
     message = str([media_message, text_message])
     history = [HumanMessage(content=message)]
     parts = [
         Part(inline_data=Blob(data=media_base64, mime_type=mime_type)),
-        Part(text=instruction)
+        Part(text=instruction),
     ]
-    expected = [Content(
-        role="user",
-        parts=parts)]
+    expected = [Content(role="user", parts=parts)]
     _, response = _parse_chat_history_gemini(history=history)
     assert expected == response
 

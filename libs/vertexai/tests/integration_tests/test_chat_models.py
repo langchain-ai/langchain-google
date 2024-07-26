@@ -255,19 +255,18 @@ def test_multimodal_media_inline_base64_template(file_uri, mime_type) -> None:
         "data": media_base64,
         "mime_type": mime_type,
     }
-    text_message = {
-        "type": "text",
-        "text": "Describe the attached media in 5 words!"
-    }
+    text_message = {"type": "text", "text": "Describe the attached media in 5 words!"}
     message = HumanMessage(content=[media_message, text_message])
     chain = prompt_template | llm
     output = chain.invoke({"input": [message]})
     assert isinstance(output.content, str)
 
+
 @tool
 def get_pixel_info(query: str):
-        """Retrieves information about the Pixel."""
-        return "MOCK PIXEL INFO STRING"
+    """Retrieves information about the Pixel."""
+    return "MOCK PIXEL INFO STRING"
+
 
 @pytest.mark.release
 def test_multimodal_media_inline_base64_agent() -> None:
@@ -281,7 +280,9 @@ def test_multimodal_media_inline_base64_agent() -> None:
     storage_client = storage.Client()
     # Can't use the pixel.mp3, since it has too many tokens it will hit quota
     # error.
-    file_uri = "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
     mime_type = "audio/mp3"
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
@@ -290,24 +291,16 @@ def test_multimodal_media_inline_base64_agent() -> None:
         "data": media_base64,
         "mime_type": mime_type,
     }
-    text_message = {
-        "type": "text",
-        "text": "Describe the attached media in 5 words."
-    }
+    text_message = {"type": "text", "text": "Describe the attached media in 5 words."}
     message = [media_message, text_message]
     tools = [get_pixel_info]
-    agent = agents.create_tool_calling_agent(
-        llm,
-        tools,
-        prompt_template
-    )
+    agent = agents.create_tool_calling_agent(llm, tools, prompt_template)
     agent_executor = agents.AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=False,
-        stream_runnable=False)
+        agent=agent, tools=tools, verbose=False, stream_runnable=False
+    )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output, str)
+
 
 @pytest.mark.xfail(reason="investigating")
 @pytest.mark.release
