@@ -303,10 +303,15 @@ def test_multimodal_media_inline_base64_agent() -> None:
     message = [media_message, text_message]
     tools = [get_climate_info]
     agent = agents.create_tool_calling_agent(
-        llm=llm, tools=tools, prompt=prompt_template  # type: ignore[arg-type]
+        llm=llm,
+        tools=tools,  # type: ignore[arg-type]
+        prompt=prompt_template,
     )
     agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent, tools=tools, verbose=False, stream_runnable=False # type: ignore[arg-type]
+        agent=agent,  # type: ignore[arg-type]
+        tools=tools,  # type: ignore[arg-type]
+        verbose=False,
+        stream_runnable=False,
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
