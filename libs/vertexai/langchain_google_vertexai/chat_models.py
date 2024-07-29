@@ -1408,7 +1408,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         should_stream = stream is True or (stream is None and self.streaming)
         if not self._is_gemini_model:
             if should_stream:
-                logger.warning("ChatVertexAI does not currently support async streaming.")
+                logger.warning(
+                    "ChatVertexAI does not currently support async streaming."
+                )
             return await self._agenerate_non_gemini(messages, stop=stop, **kwargs)
 
         if should_stream:
