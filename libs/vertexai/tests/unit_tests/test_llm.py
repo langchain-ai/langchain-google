@@ -2,6 +2,7 @@ from typing import Any, Dict
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
+from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai.llms import VertexAI
 
 
@@ -73,3 +74,29 @@ def test_vertexai_args_passed() -> None:
                 ]
                 == 0
             )
+
+
+def test_extract_response() -> None:
+    prompts_results = [
+        ("a prediction", "a prediction"),
+        ("Prompt:\na prompt\nOutput:\na prediction", "a prediction"),
+        (
+            "Prompt:\na prompt\nOutput:\nFake output\nOutput:\na prediction",
+            "a prediction",
+        ),
+        ("Prompt:\na prompt\nNo Output", "Prompt:\na prompt\nNo Output"),
+    ]
+    model = _BaseVertexAIModelGarden(endpoint_id="123", result_arg="result")
+    for original_result, result in prompts_results:
+        assert model._parse_prediction(original_result) == result
+        assert model._parse_prediction({"result": original_result}) == result
+
+    model = _BaseVertexAIModelGarden(endpoint_id="123", result_arg=None)
+
+    class MyResult:
+        def __init__(self, result):
+            self.result = result
+
+    for original_result, result in prompts_results:
+        my_result = MyResult(original_result)
+        assert model._parse_prediction(my_result) == my_result

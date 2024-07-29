@@ -366,16 +366,21 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
         return LLMResult(generations=generations)
 
     def _parse_prediction(self, prediction: Any) -> str:
-
         if isinstance(prediction, str):
             if prediction.startswith("Prompt:\n"):
-                return re.search(r"(?s:.*)\nOutput:\n(.*)",prediction)[1]
+                result = re.search(r"(?s:.*)\nOutput:\n(.*)", prediction)
+                if result:
+                    return result[1]
             return prediction
 
         if self.result_arg:
             try:
                 if prediction[self.result_arg].startswith("Prompt:\n"):
-                    return re.search(r"(?s:.*)\nOutput:\n(.*)", prediction[self.result_arg])[1]
+                    result = re.search(
+                        r"(?s:.*)\nOutput:\n(.*)", prediction[self.result_arg]
+                    )
+                    if result:
+                        return result[1]
                 return prediction[self.result_arg]
             except KeyError:
                 if isinstance(prediction, str):
@@ -390,6 +395,4 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
                 else:
                     raise ValueError(f"{self.result_arg} key not found in prediction!")
 
-        if prediction.startswith("Prompt:\n"):
-            return re.search(r"(?s:.*)\nOutput:\n(.*)", prediction)[1]
         return prediction
