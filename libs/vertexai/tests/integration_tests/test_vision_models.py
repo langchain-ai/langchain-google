@@ -1,5 +1,6 @@
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import PromptTemplate
 
 from langchain_google_vertexai.vision_models import (
     VertexAIImageCaptioning,
@@ -127,6 +128,18 @@ def test_vertex_ai_image_generation_and_edition():
     assert isinstance(response, AIMessage)
 
     generated_image = response.content[0]
+
+    model = VertexAIImageGeneratorChat()
+
+    prompt = PromptTemplate(
+        template="I want an image of {img_object} in {img_context}.",
+        input_variables=["img_object", "img_context"],
+    )
+
+    chain = prompt | model
+
+    response = chain.invoke(dict(img_object="cat", img_context="beach"))
+    assert isinstance(response, AIMessage)
 
     editor = VertexAIImageEditorChat()
 

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import collections
+import json
+import logging
 from typing import (
     Any,
     Callable,
@@ -16,13 +19,20 @@ from typing import (
 )
 
 import google.ai.generativelanguage as glm
-from google.ai.generativelanguage import FunctionCallingConfig, FunctionDeclaration
-from google.ai.generativelanguage import Tool as GoogleTool
+import google.ai.generativelanguage_v1beta.types as gapic
+import proto  # type: ignore[import]
 from google.generativeai.types.content_types import ToolDict  # type: ignore[import]
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
+from langchain_core.utils.function_calling import (
+    FunctionDescription,
+    convert_to_openai_tool,
+)
 from langchain_core.utils.json_schema import dereference_refs
+
+logger = logging.getLogger(__name__)
+
 
 TYPE_ENUM = {
     "string": glm.Type.STRING,
@@ -34,6 +44,17 @@ TYPE_ENUM = {
 }
 
 TYPE_ENUM_REVERSE = {v: k for k, v in TYPE_ENUM.items()}
+_ALLOWED_SCHEMA_FIELDS = []
+_ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
+_ALLOWED_SCHEMA_FIELDS.extend(
+    [
+        f
+        for f in gapic.Schema.to_dict(
+            gapic.Schema(), preserving_proto_field_name=False
+        ).keys()
+    ]
+)
+_ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
 
 class _ToolDictLike(TypedDict):
@@ -52,7 +73,7 @@ class _ToolDict(TypedDict):
 
 # Info: This is a FunctionDeclaration(=fc).
 _FunctionDeclarationLike = Union[
-    BaseTool, Type[BaseModel], FunctionDeclaration, Callable, Dict[str, Any]
+    BaseTool, Type[BaseModel], gapic.FunctionDeclaration, Callable, Dict[str, Any]
 ]
 
 # Info: This mean one tool.
@@ -60,10 +81,10 @@ _FunctionDeclarationLikeList = Sequence[_FunctionDeclarationLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
-# The dict should be GoogleTool like. {"function_declarations": [ { "name": ...}.
+# The dict should be gapic.Tool like. {"function_declarations": [ { "name": ...}.
 # OpenAI like dict is not be accepted. {{'type': 'function', 'function': {'name': ...}
 _ToolsType = Union[
-    GoogleTool,
+    gapic.Tool,
     ToolDict,
     _ToolDictLike,
     _FunctionDeclarationLikeList,
@@ -71,183 +92,151 @@ _ToolsType = Union[
 ]
 
 
-#
-# Info: GoogleTool means function_declarations and proto.Message.
+def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
+    converted_schema: Dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "definitions":
+            continue
+        elif key == "items":
+            converted_schema["items"] = _format_json_schema_to_gapic(value)
+        elif key == "properties":
+            if "properties" not in converted_schema:
+                converted_schema["properties"] = {}
+            for pkey, pvalue in value.items():
+                converted_schema["properties"][pkey] = _format_json_schema_to_gapic(
+                    pvalue
+                )
+            continue
+        elif key in ["type", "_type"]:
+            converted_schema["type"] = str(value).upper()
+        elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
+            logger.warning(f"Key '{key}' is not supported in schema, ignoring")
+        else:
+            converted_schema[key] = value
+    return converted_schema
+
+
+def _dict_to_gapic_schema(schema: Dict[str, Any]) -> gapic.Schema:
+    dereferenced_schema = dereference_refs(schema)
+    formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
+    json_schema = json.dumps(formatted_schema)
+    return gapic.Schema.from_json(json_schema)
+
+
+def _format_dict_to_function_declaration(
+    tool: Union[FunctionDescription, Dict[str, Any]],
+) -> gapic.FunctionDeclaration:
+    return gapic.FunctionDeclaration(
+        name=tool.get("name"),
+        description=tool.get("description"),
+        parameters=_dict_to_gapic_schema(tool.get("parameters", {})),
+    )
+
+
+# Info: gapic.Tool means function_declarations and proto.Message.
 def convert_to_genai_function_declarations(
-    tool: _ToolsType,
-) -> GoogleTool:
-    if isinstance(tool, list):
-        # multiple _FunctionDeclarationLike
-        return GoogleTool(
-            function_declarations=_convert_fc_likes_to_genai_function(tool)
+    tools: Sequence[_ToolsType],
+) -> gapic.Tool:
+    if not isinstance(tools, collections.abc.Sequence):
+        logger.warning(
+            "convert_to_genai_function_declarations expects a Sequence "
+            "and not a single tool."
         )
-    elif isinstance(tool, (BaseTool, FunctionDeclaration)):
-        # single _FunctionDeclarationLike
-        return GoogleTool(
-            function_declarations=[_convert_fc_like_to_genai_function(tool)]
-        )
+        tools = [tools]
+    gapic_tool = gapic.Tool()
+    for tool in tools:
+        if isinstance(tool, gapic.Tool):
+            gapic_tool.function_declarations.extend(tool.function_declarations)
+        elif isinstance(tool, dict):
+            if "function_declarations" not in tool:
+                fd = _format_to_gapic_function_declaration(tool)
+                gapic_tool.function_declarations.append(fd)
+                continue
+            tool = cast(_ToolDictLike, tool)
+            function_declarations = tool["function_declarations"]
+            if not isinstance(function_declarations, collections.abc.Sequence):
+                raise ValueError(
+                    "function_declarations should be a list"
+                    f"got '{type(function_declarations)}'"
+                )
+            if function_declarations:
+                fds = [
+                    _format_to_gapic_function_declaration(fd)
+                    for fd in function_declarations
+                ]
+                gapic_tool.function_declarations.extend(fds)
+        else:
+            fd = _format_to_gapic_function_declaration(tool)
+            gapic_tool.function_declarations.append(fd)
+    return gapic_tool
+
+
+def tool_to_dict(tool: gapic.Tool) -> _ToolDict:
+    def _traverse_values(raw: Any) -> Any:
+        if isinstance(raw, list):
+            return [_traverse_values(v) for v in raw]
+        if isinstance(raw, dict):
+            return {k: _traverse_values(v) for k, v in raw.items()}
+        if isinstance(raw, proto.Message):
+            return _traverse_values(type(raw).to_dict(raw))
+        return raw
+
+    return _traverse_values(type(tool).to_dict(tool))
+
+
+def _format_to_gapic_function_declaration(
+    tool: _FunctionDeclarationLike,
+) -> gapic.FunctionDeclaration:
+    if isinstance(tool, BaseTool):
+        return _format_base_tool_to_function_declaration(tool)
     elif isinstance(tool, type) and issubclass(tool, BaseModel):
-        # single _FunctionDeclarationLike
-        return GoogleTool(
-            function_declarations=[_convert_fc_like_to_genai_function(tool)]
-        )
-    elif isinstance(tool, GoogleTool):
-        return cast(GoogleTool, tool)
-    elif callable(tool):
-        return GoogleTool(
-            function_declarations=[
-                _convert_tool_to_genai_function(callable_as_lc_tool()(tool))
-            ]
-        )
+        return _convert_pydantic_to_genai_function(tool)
     elif isinstance(tool, dict):
-        return GoogleTool(function_declarations=_convert_dict_to_genai_functions(tool))  # type: ignore
-    else:
-        raise ValueError(f"Unsupported tool type {tool}")
+        if all(k in tool for k in ("name", "description")) and "parameters" not in tool:
+            function = cast(dict, tool)
+            function["parameters"] = {}
+        else:
+            function = convert_to_openai_tool(cast(dict, tool))["function"]
+        return _format_dict_to_function_declaration(cast(FunctionDescription, function))
+    elif callable(tool):
+        return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
+    raise ValueError(f"Unsupported tool type {tool}")
 
 
-def tool_to_dict(tool: GoogleTool) -> _ToolDict:
-    function_declarations = []
-    for function_declaration_proto in tool.function_declarations:
-        properties: Dict[str, Any] = {}
-        for property in function_declaration_proto.parameters.properties:
-            property_type = function_declaration_proto.parameters.properties[
-                property
-            ].type
-            property_dict = {"type": TYPE_ENUM_REVERSE[property_type]}
-            property_description = function_declaration_proto.parameters.properties[
-                property
-            ].description
-            if property_description:
-                property_dict["description"] = property_description
-            properties[property] = property_dict
-        name = function_declaration_proto.name
-        description = function_declaration_proto.description
-        parameters = {"type": "object", "properties": properties}
-        if function_declaration_proto.parameters.required:
-            parameters["required"] = function_declaration_proto.parameters.required
-        function_declaration = _FunctionDeclarationDict(
-            name=name, description=description, parameters=parameters
-        )
-        function_declarations.append(function_declaration)
-    return {"function_declarations": function_declarations}
-
-
-def _convert_fc_likes_to_genai_function(
-    fc_likes: _FunctionDeclarationLikeList,
-) -> Sequence[FunctionDeclaration]:
-    if isinstance(fc_likes, list):
-        return [_convert_fc_like_to_genai_function(fc) for fc in fc_likes]
-    raise ValueError(f"Unsupported fc_likes type {fc_likes}")
-
-
-def _convert_fc_like_to_genai_function(
-    fc_like: _FunctionDeclarationLike,
-) -> FunctionDeclaration:
-    if isinstance(fc_like, BaseTool):
-        return _convert_tool_to_genai_function(fc_like)
-    elif isinstance(fc_like, type) and issubclass(fc_like, BaseModel):
-        return _convert_pydantic_to_genai_function(fc_like)
-    elif isinstance(fc_like, dict):
-        # TODO: add declaration_index
-        return _convert_dict_to_genai_function(fc_like)
-    elif callable(fc_like):
-        return _convert_tool_to_genai_function(callable_as_lc_tool()(fc_like))
-    else:
-        raise ValueError(f"Unsupported fc_like type {fc_like}")
-
-
-def _convert_tool_dict_to_genai_functions(
-    tool_dict: _ToolDictLike,
-) -> Sequence[FunctionDeclaration]:
-    if "function_declarations" in tool_dict:
-        return _convert_dicts_to_genai_functions(tool_dict["function_declarations"])  # type: ignore
-    else:
-        raise ValueError(f"Unsupported function tool_dict type {tool_dict}")
-
-
-def _convert_dict_to_genai_functions(
-    function_declarations_dict: Dict[str, Any],
-) -> Sequence[FunctionDeclaration]:
-    if "function_declarations" in function_declarations_dict:
-        # GoogleTool like
-        return [
-            _convert_dict_to_genai_function(fc, i)
-            for i, fc in enumerate(function_declarations_dict["function_declarations"])
-        ]
-    d = function_declarations_dict
-    if "name" in d and "description" in d and "parameters" in d:
-        # _FunctionDeclarationDict
-        return [_convert_dict_to_genai_function(d)]
-    else:
-        # OpenAI like?
-        raise ValueError(f"Unsupported function call type {function_declarations_dict}")
-
-
-def _convert_dicts_to_genai_functions(
-    function_declaration_dicts: Sequence[Dict[str, Any]],
-) -> Sequence[FunctionDeclaration]:
-    return [
-        _convert_dict_to_genai_function(function_declaration_dict, i)
-        for i, function_declaration_dict in enumerate(function_declaration_dicts)
-    ]
-
-
-def _convert_dict_to_genai_function(
-    function_declaration_dict: Dict[str, Any], declaration_index: int = 0
-) -> FunctionDeclaration:
-    formatted_fc = {
-        "name": function_declaration_dict.get("name", f"unknown-{declaration_index}"),
-        "description": function_declaration_dict.get("description", "no-description"),
-    }
-    if "parameters" in function_declaration_dict:
-        formatted_fc["parameters"] = {
-            "properties": {
-                k: {
-                    "type_": TYPE_ENUM[v["type"]],
-                    "description": v.get("description"),
-                }
-                for k, v in function_declaration_dict["parameters"][
-                    "properties"
-                ].items()
-            },
-            "required": function_declaration_dict.get("parameters", []).get(
-                "required", []
-            ),
-            "type_": TYPE_ENUM[function_declaration_dict["parameters"]["type"]],
-        }
-    return FunctionDeclaration(**formatted_fc)
-
-
-def _convert_tool_to_genai_function(tool: BaseTool) -> FunctionDeclaration:
-    if tool.args_schema:
-        fc = tool.args_schema
-        if isinstance(fc, type) and issubclass(fc, BaseModel):
-            return _convert_pydantic_to_genai_function(
-                fc, tool_name=tool.name, tool_description=tool.description
-            )
-        raise ValueError(f"Unsupported function call type {fc}")
-    else:
-        return FunctionDeclaration(
+def _format_base_tool_to_function_declaration(
+    tool: BaseTool,
+) -> gapic.FunctionDeclaration:
+    if not tool.args_schema:
+        return gapic.FunctionDeclaration(
             name=tool.name,
             description=tool.description,
-            parameters={
-                "properties": {
-                    "__arg1": {"type_": TYPE_ENUM["string"]},
+            parameters=gapic.Schema(
+                type=gapic.Type.OBJECT,
+                properties={
+                    "__arg1": gapic.Schema(type=gapic.Type.STRING),
                 },
-                "required": ["__arg1"],
-                "type_": TYPE_ENUM["object"],
-            },
+                required=["__arg1"],
+            ),
         )
+
+    schema = tool.args_schema.schema()
+    parameters = _dict_to_gapic_schema(schema)
+
+    return gapic.FunctionDeclaration(
+        name=tool.name or schema.get("title"),
+        description=tool.description or schema.get("description"),
+        parameters=parameters,
+    )
 
 
 def _convert_pydantic_to_genai_function(
     pydantic_model: Type[BaseModel],
     tool_name: Optional[str] = None,
     tool_description: Optional[str] = None,
-) -> FunctionDeclaration:
+) -> gapic.FunctionDeclaration:
     schema = dereference_refs(pydantic_model.schema())
     schema.pop("definitions", None)
-    function_declaration = FunctionDeclaration(
+    function_declaration = gapic.FunctionDeclaration(
         name=tool_name if tool_name else schema.get("title"),
         description=tool_description if tool_description else schema.get("description"),
         parameters={
@@ -290,7 +279,7 @@ _ToolChoiceType = Union[
 
 
 class _FunctionCallingConfigDict(TypedDict):
-    mode: Union[FunctionCallingConfig.Mode, str]
+    mode: Union[gapic.FunctionCallingConfig.Mode, str]
     allowed_function_names: Optional[List[str]]
 
 

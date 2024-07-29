@@ -64,11 +64,13 @@ def test_format_native_dict_to_genai_function() -> None:
             }
         ]
     }
-    schema = convert_to_genai_function_declarations(calculator)
+    schema = convert_to_genai_function_declarations([calculator])
     expected = glm.Tool(
         function_declarations=[
             glm.FunctionDeclaration(
-                name="multiply", description="Returns the product of two numbers."
+                name="multiply",
+                description="Returns the product of two numbers.",
+                parameters={},
             )
         ]
     )
@@ -90,7 +92,7 @@ def test_format_dict_to_genai_function() -> None:
             }
         ]
     }
-    schema = convert_to_genai_function_declarations(calculator)
+    schema = convert_to_genai_function_declarations([calculator])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "search"
     assert function_declaration.parameters
@@ -127,7 +129,7 @@ def test_tool_to_dict_glm_tool() -> None:
         ]
     )
     tool_dict = tool_to_dict(tool)
-    assert tool == convert_to_genai_function_declarations(tool_dict)
+    assert tool == convert_to_genai_function_declarations([tool_dict])
 
 
 def test_tool_to_dict_pydantic() -> None:
@@ -137,4 +139,4 @@ def test_tool_to_dict_pydantic() -> None:
 
     tool = convert_to_genai_function_declarations([MyModel])
     tool_dict = tool_to_dict(tool)
-    assert tool == convert_to_genai_function_declarations(tool_dict)
+    assert tool == convert_to_genai_function_declarations([tool_dict])

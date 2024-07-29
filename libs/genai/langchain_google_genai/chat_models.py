@@ -138,7 +138,7 @@ def _create_retry_decorator() -> Callable[[Any], Any]:
     multiplier = 2
     min_seconds = 1
     max_seconds = 60
-    max_retries = 10
+    max_retries = 2
 
     return retry(
         reraise=True,
@@ -1094,9 +1094,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
         formatted_tools = None
         if tools:
-            formatted_tools = [
-                convert_to_genai_function_declarations(tool) for tool in tools
-            ]
+            formatted_tools = [convert_to_genai_function_declarations(tools)]
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
 
