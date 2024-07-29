@@ -178,6 +178,9 @@ def get_generation_info(
                 else None
             ),
             "usage_metadata": usage_metadata,
+            "finish_reason": (
+                candidate.finish_reason.name if candidate.finish_reason else None
+            ),
         }
         try:
             if candidate.grounding_metadata:
