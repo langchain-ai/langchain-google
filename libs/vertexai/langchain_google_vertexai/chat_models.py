@@ -64,6 +64,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
 from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
 from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.pydantic import is_basemodel_subclass
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
 )
@@ -1674,7 +1675,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """  # noqa: E501
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
-        if isinstance(schema, type) and issubclass(schema, BaseModel):
+        if isinstance(schema, type) and is_basemodel_subclass(schema):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
