@@ -193,14 +193,14 @@ class _GemmaLocalKaggleBase(_GemmaBase):
 
     client: Any = None  #: :meta private:
     keras_backend: str = "jax"
-    model_name: str = Field(default="google/gemma_2b", alias="model")
+    model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
 
     class Config:
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
-        
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
