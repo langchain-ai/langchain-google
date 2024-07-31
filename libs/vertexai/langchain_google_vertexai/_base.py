@@ -248,7 +248,7 @@ class _VertexAICommon(_VertexAIBase):
             credentials=values.get("credentials"),
             api_transport=values.get("api_transport"),
             api_endpoint=values.get("api_endpoint"),
-            request_metadata=values.get("request_metadata"),
+            request_metadata=values.get("default_metadata"),
         )
         return None
 
