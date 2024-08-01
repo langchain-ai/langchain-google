@@ -20,6 +20,7 @@ from typing import (
     Union,
     cast,
     Literal,
+    Tuple,
     TypedDict,
     overload,
 )
@@ -1512,8 +1513,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             metadata=self.default_metadata,
             **kwargs,
         )
+        total_lc_usage = None
         for response_chunk in response_iter:
-            chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
+            chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
+                response_chunk, prev_total_usage=total_lc_usage
+            )
             if run_manager and isinstance(chunk.message.content, str):
                 run_manager.on_llm_new_token(chunk.message.content)
             yield chunk
@@ -1564,8 +1568,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             is_gemini=True,
             **kwargs,
         )
+        total_lc_usage = None
         async for response_chunk in await response_iter:
-            chunk = self._gemini_chunk_to_generation_chunk(response_chunk)
+            chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
+                response_chunk, prev_total_usage=total_lc_usage
+            )
             if run_manager and isinstance(chunk.message.content, str):
                 await run_manager.on_llm_new_token(chunk.message.content)
             yield chunk
@@ -1768,13 +1775,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         return ChatResult(generations=generations)
 
     def _gemini_chunk_to_generation_chunk(
-        self, response_chunk: GenerationResponse
-    ) -> ChatGenerationChunk:
+        self,
+        response_chunk: GenerationResponse,
+        prev_total_usage: Optional[UsageMetadata] = None,
+    ) -> Tuple[ChatGenerationChunk, Optional[UsageMetadata]]:
         # return an empty completion message if there's no candidates
         usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
 
         # Gather langchain (standard) usage metadata
-        lc_usage = _get_usage_metadata_gemini(usage_metadata)
+        # Note: some models (e.g., gemini-1.5-pro with image inputs) return
+        # cumulative sums of token counts.
+        total_lc_usage = _get_usage_metadata_gemini(usage_metadata)
+        if total_lc_usage and prev_total_usage:
+            lc_usage: Optional[UsageMetadata] = UsageMetadata(
+                input_tokens=total_lc_usage["input_tokens"]
+                - prev_total_usage["input_tokens"],
+                output_tokens=total_lc_usage["output_tokens"]
+                - prev_total_usage["output_tokens"],
+                total_tokens=total_lc_usage["total_tokens"]
+                - prev_total_usage["total_tokens"],
+            )
+        else:
+            lc_usage = total_lc_usage
         if not response_chunk.candidates:
             message = AIMessageChunk(content="")
             if lc_usage:
@@ -1795,7 +1817,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
-        )
+        ), total_lc_usage
 
 
 def _yield_args(tool_call_chunks: Iterator[dict]) -> Iterator[dict]:
