@@ -1779,10 +1779,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message = AIMessageChunk(content="")
             if lc_usage:
                 message.usage_metadata = lc_usage
-            if usage_metadata:
-                generation_info = {"usage_metadata": usage_metadata}
-            else:
-                generation_info = {}
+            generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
             message = _parse_response_candidate(top_candidate, streaming=True)
