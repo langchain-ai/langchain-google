@@ -198,7 +198,7 @@ def _format_to_gapic_function_declaration(
             function = cast(dict, tool)
             function["parameters"] = {}
         else:
-            if tool['parameters'].get('properties'):
+            if "parameters" in tool and tool["parameters"].get("properties"):
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
                 function = cast(dict, tool)
