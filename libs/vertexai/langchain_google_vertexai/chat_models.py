@@ -36,6 +36,7 @@ from langchain_core.language_models.chat_models import (
     BaseChatModel,
     LangSmithParams,
     generate_from_stream,
+    agenerate_from_stream,
 )
 from langchain_core.messages import (
     AIMessage,
@@ -62,6 +63,8 @@ from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
 from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
+from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.pydantic import is_basemodel_subclass
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
 )
@@ -1197,11 +1200,23 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None,
         safety_settings: Optional[SafetySettingsType] = None,
         cached_content: Optional[str] = None,
+        *,
+        tool_choice: Optional[_ToolChoiceType] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
-        tool_config = self._tool_config_gemini(tool_config=tool_config)
+        if tool_config:
+            tool_config = self._tool_config_gemini(tool_config=tool_config)
+        elif tool_choice:
+            all_names = [
+                f.name
+                for tool in (formatted_tools or [])
+                for f in tool.function_declarations
+            ]
+            tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
+        else:
+            pass
         safety_settings = self._safety_settings_gemini(safety_settings)
         generation_config = self._generation_config_gemini(
             stream=stream, stop=stop, **kwargs
@@ -1324,7 +1339,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self,
         tools: Optional[_ToolsType] = None,
         functions: Optional[_ToolsType] = None,
-    ) -> Optional[Sequence[GapicTool]]:
+    ) -> Optional[List[GapicTool]]:
         if tools and functions:
             logger.warning(
                 "Binding tools and functions together is not supported.",
@@ -1387,6 +1402,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        stream: Optional[bool] = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Asynchronously generate next turn in the conversation.
@@ -1403,12 +1419,19 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Raises:
             ValueError: if the last message in the list is not from human.
         """
-        if "stream" in kwargs:
-            kwargs.pop("stream")
-            logger.warning("ChatVertexAI does not currently support async streaming.")
-
+        should_stream = stream is True or (stream is None and self.streaming)
         if not self._is_gemini_model:
+            if should_stream:
+                logger.warning(
+                    "ChatVertexAI does not currently support async streaming."
+                )
             return await self._agenerate_non_gemini(messages, stop=stop, **kwargs)
+
+        if should_stream:
+            stream_iter = self._astream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            return await agenerate_from_stream(stream_iter)
 
         return await self._agenerate_gemini(
             messages=messages,
@@ -1652,7 +1675,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """  # noqa: E501
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
-        if isinstance(schema, type) and issubclass(schema, BaseModel):
+        if isinstance(schema, type) and is_basemodel_subclass(schema):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
@@ -1698,12 +1721,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
-        vertexai_tool = _format_to_gapic_tool(tools)
+        try:
+            formatted_tools = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
+        except Exception:
+            formatted_tools = [_format_to_gapic_tool(tools)]
         if tool_choice:
-            all_names = [f.name for f in vertexai_tool.function_declarations]
-            tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
-        # Bind dicts for easier serialization/deserialization.
-        return self.bind(tools=[vertexai_tool], tool_config=tool_config, **kwargs)
+            kwargs["tool_choice"] = tool_choice
+        elif tool_config:
+            kwargs["tool_config"] = tool_config
+        else:
+            pass
+        return self.bind(tools=formatted_tools, **kwargs)
 
     def _start_chat(
         self, history: _ChatHistory, **kwargs: Any
