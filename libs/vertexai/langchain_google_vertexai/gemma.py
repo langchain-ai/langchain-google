@@ -306,7 +306,7 @@ class _GemmaLocalHFBase(_GemmaBase):
     client: Any = None  #: :meta private:
     hf_access_token: str
     cache_dir: Optional[str] = None
-    model_name: str = Field(default="google/gemma_2b", alias="model")
+    model_name: str = Field(default="google/gemma-2b", alias="model")
     """Gemma model name."""
 
     class Config:
