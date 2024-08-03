@@ -7,10 +7,7 @@ Note: This test must be run with the GOOGLE_API_KEY environment variable set to 
 from typing import Generator
 
 import pytest
-from google.generativeai.types import (  # type: ignore[import]
-    HarmBlockThreshold,
-    HarmCategory,
-)
+from google.generativeai.types import HarmBlockThreshold, HarmCategory
 from langchain_core.outputs import LLMResult
 
 from langchain_google_genai import GoogleGenerativeAI

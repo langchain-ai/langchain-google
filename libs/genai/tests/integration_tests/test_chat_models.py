@@ -5,10 +5,7 @@ import json
 from typing import Generator, List, Optional, Type
 
 import pytest
-from google.generativeai.types import (  # type: ignore[import]
-    HarmBlockThreshold,
-    HarmCategory,
-)
+from google.generativeai.types import HarmBlockThreshold, HarmCategory
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
