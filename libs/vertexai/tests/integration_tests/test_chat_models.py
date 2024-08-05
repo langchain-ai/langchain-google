@@ -188,6 +188,11 @@ def test_multimodal() -> None:
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
+    # Test streaming with gemini-1.5-pro
+    llm = ChatVertexAI(model_name="gemini-1.5-pro", rate_limiter=rate_limiter)
+    for chunk in llm.stream([message]):
+        assert isinstance(chunk, AIMessageChunk)
+
 
 video_param = pytest.param(
     "gs://cloud-samples-data/generative-ai/video/pixel8.mp4",
