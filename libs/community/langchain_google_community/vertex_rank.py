@@ -11,10 +11,7 @@ from langchain_core.pydantic_v1 import Extra, Field
 from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
-    from google.cloud import discoveryengine_v1alpha  # type: ignore
-
-if TYPE_CHECKING:
-    from google.cloud import discoveryengine_v1alpha  # type: ignore
+    from google.cloud import discoveryengine_v1  # type: ignore
 
 
 class VertexAIRank(BaseDocumentCompressor):
@@ -78,7 +75,7 @@ class VertexAIRank(BaseDocumentCompressor):
         if not self.client:
             self.client = self._get_rank_service_client()
 
-    def _get_rank_service_client(self) -> "discoveryengine_v1alpha.RankServiceClient":
+    def _get_rank_service_client(self) -> "discoveryengine_v1.RankServiceClient":
         """
         Returns a RankServiceClient instance for making API calls to the
         Vertex AI Ranking service.
@@ -87,14 +84,14 @@ class VertexAIRank(BaseDocumentCompressor):
             A RankServiceClient instance.
         """
         try:
-            from google.cloud import discoveryengine_v1alpha  # type: ignore
+            from google.cloud import discoveryengine_v1  # type: ignore
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
                 "Please, install vertexaisearch dependency group: "
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
-        return discoveryengine_v1alpha.RankServiceClient(
+        return discoveryengine_v1.RankServiceClient(
             credentials=(
                 self.credentials
                 or Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
@@ -117,11 +114,11 @@ class VertexAIRank(BaseDocumentCompressor):
         Returns:
             A list of reranked documents.
         """
-        from google.cloud import discoveryengine_v1alpha  # type: ignore
+        from google.cloud import discoveryengine_v1  # type: ignore
 
         try:
             records = [
-                discoveryengine_v1alpha.RankingRecord(
+                discoveryengine_v1.RankingRecord(
                     id=(doc.metadata.get(self.id_field) if self.id_field else str(idx)),
                     content=doc.page_content,
                     **(
@@ -137,13 +134,10 @@ class VertexAIRank(BaseDocumentCompressor):
         except KeyError:
             warnings.warn(f"id_field '{self.id_field}' not found in document metadata.")
 
-        ranking_config_path = (
-            f"projects/{self.project_id}/locations/{self.location_id}"
-            f"/rankingConfigs/{self.ranking_config}"
-        )
-
-        request = discoveryengine_v1alpha.RankRequest(
-            ranking_config=ranking_config_path,
+        request = discoveryengine_v1.RankRequest(
+            ranking_config=self.client.ranking_config_path(
+                self.project_id, self.location_id, self.ranking_config
+            ),
             model=self.model,
             query=query,
             records=records,

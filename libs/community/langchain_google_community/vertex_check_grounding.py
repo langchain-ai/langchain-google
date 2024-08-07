@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
-    from google.cloud import discoveryengine_v1alpha  # type: ignore
+    from google.cloud import discoveryengine_v1  # type: ignore
 
 
 class VertexAICheckGroundingWrapper(
@@ -68,7 +68,7 @@ class VertexAICheckGroundingWrapper(
 
     def _get_check_grounding_service_client(
         self,
-    ) -> "discoveryengine_v1alpha.GroundedGenerationServiceClient":
+    ) -> "discoveryengine_v1.GroundedGenerationServiceClient":
         """
         Returns a GroundedGenerationServiceClient instance using provided credentials.
         Raises ImportError if necessary packages are not installed.
@@ -77,14 +77,14 @@ class VertexAICheckGroundingWrapper(
             A GroundedGenerationServiceClient instance.
         """
         try:
-            from google.cloud import discoveryengine_v1alpha  # type: ignore
+            from google.cloud import discoveryengine_v1  # type: ignore
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
                 "Please install vertexaisearch dependency group: "
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
-        return discoveryengine_v1alpha.GroundedGenerationServiceClient(
+        return discoveryengine_v1.GroundedGenerationServiceClient(
             credentials=(
                 self.credentials
                 or Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
@@ -106,7 +106,7 @@ class VertexAICheckGroundingWrapper(
             answer_candidate (str): The candidate answer to be evaluated for grounding.
             documents (List[Document]): The documents against which grounding is
             checked. This will be converted to facts:
-                facts (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
+                facts (MutableSequence[google.cloud.discoveryengine_v1.types.\
                     GroundingFact]):
                 List of facts for the grounding check.
                 We support up to 200 facts.
@@ -121,13 +121,13 @@ class VertexAICheckGroundingWrapper(
                 provided facts. This is always set when a
                 response is returned.
 
-            cited_chunks (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
+            cited_chunks (MutableSequence[google.cloud.discoveryengine_v1.types.\
                 FactChunk]):
                 List of facts cited across all claims in the
                 answer candidate. These are derived from the
                 facts supplied in the request.
 
-            claims (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
+            claims (MutableSequence[google.cloud.discoveryengine_v1.types.\
                 CheckGroundingResponse.Claim]):
                 Claim texts and citation info across all
                 claims in the answer candidate.
@@ -135,17 +135,17 @@ class VertexAICheckGroundingWrapper(
             answer_with_citations (str):
                 Complete formed answer formatted with inline citations
         """
-        from google.cloud import discoveryengine_v1alpha  # type: ignore
+        from google.cloud import discoveryengine_v1  # type: ignore
 
         answer_candidate = input
         documents = self.extract_documents(config)
 
-        grounding_spec = discoveryengine_v1alpha.CheckGroundingSpec(
+        grounding_spec = discoveryengine_v1.CheckGroundingSpec(
             citation_threshold=self.citation_threshold,
         )
 
         facts = [
-            discoveryengine_v1alpha.GroundingFact(
+            discoveryengine_v1.GroundingFact(
                 fact_text=doc.page_content,
                 attributes={
                     key: value
@@ -162,15 +162,18 @@ class VertexAICheckGroundingWrapper(
         if not facts:
             raise ValueError("No valid documents provided for grounding.")
 
-        request = discoveryengine_v1alpha.CheckGroundingRequest(
-            grounding_config=f"projects/{self.project_id}/locations/{self.location_id}/groundingConfigs/{self.grounding_config}",
+        if self.client is None:
+            raise ValueError("Client not initialized.")
+
+        request = discoveryengine_v1.CheckGroundingRequest(
+            grounding_config=self.client.grounding_config_path(
+                self.project_id, self.location_id, self.grounding_config
+            ),
             answer_candidate=answer_candidate,
             facts=facts,
             grounding_spec=grounding_spec,
         )
 
-        if self.client is None:
-            raise ValueError("Client not initialized.")
         try:
             response = self.client.check_grounding(request=request)
         except core_exceptions.GoogleAPICallError as e:
