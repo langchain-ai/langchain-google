@@ -136,6 +136,12 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             return values
 
         table = values["_bq_client"].get_table(values["_full_table_id"])  # type: ignore[union-attr]
+
+        #Update existing table schema
+        schema = table.schema.copy()
+        if schema:  ## Check if table has a schema
+            values["table_schema"] = {field.name: field.field_type for field in schema}
+
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
             values["_logger"].debug("Not enough rows to create a vector index.")
             return values
