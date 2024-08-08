@@ -40,7 +40,7 @@ def store(request: pytest.FixtureRequest) -> BigQueryVectorSearch:
     TestBigQueryVectorStore.store.add_texts(
         TestBigQueryVectorStore.texts, TestBigQueryVectorStore.metadatas
     )
-    TestBigQueryVectorStore.existing_store= BigQueryVectorSearch(
+    TestBigQueryVectorStore.existing_store = BigQueryVectorSearch(
         project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
         embedding=FakeEmbeddings(),  # type: ignore[call-arg]
         dataset_name=TestBigQueryVectorStore.dataset_name,
@@ -113,9 +113,12 @@ class TestBigQueryVectorStore:
         assert "fruit" in kinds
         assert "treat" not in kinds
         assert "planet" not in kinds
+
     @pytest.mark.skip(reason="investigating")
     @pytest.mark.extended
-    def test_existing_store_semantic_search_filter_fruits(self, existing_store: BigQueryVectorSearch) -> None:
+    def test_existing_store_semantic_search_filter_fruits(
+        self, existing_store: BigQueryVectorSearch
+    ) -> None:
         """Test on semantic similarity with metadata filter on an existing_store."""
         docs = existing_store.similarity_search("food", filter={"kind": "fruit"})
         kinds = [d.metadata["kind"] for d in docs]
@@ -125,11 +128,12 @@ class TestBigQueryVectorStore:
 
     @pytest.mark.skip(reason="investigating")
     @pytest.mark.extended
-    def test_existing_store_get_doc_by_filter(self, existing_store: BigQueryVectorSearch) -> None:
+    def test_existing_store_get_doc_by_filter(
+        self, existing_store: BigQueryVectorSearch
+    ) -> None:
         """Test on document retrieval with metadata filter on an existing_store."""
         docs = existing_store.get_documents(filter={"kind": "fruit"})
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" not in kinds
         assert "planet" not in kinds
-
