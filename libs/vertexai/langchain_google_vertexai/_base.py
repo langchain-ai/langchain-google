@@ -214,9 +214,9 @@ class _VertexAICommon(_VertexAIBase):
         if self.model_family == GoogleModelFamily.GEMINI:
             default_params: Dict[str, Any] = {}
         elif self.model_family == GoogleModelFamily.GEMINI_ADVANCED:
-            default_params: Dict[str, Any] = {}
+            default_params = {}
         else:
-            default_params: Dict[str, Any] = {
+            default_params = {
                 "temperature": _PALM_DEFAULT_TEMPERATURE,
                 "max_output_tokens": _PALM_DEFAULT_MAX_OUTPUT_TOKENS,
                 "top_p": _PALM_DEFAULT_TOP_P,
