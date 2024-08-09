@@ -247,7 +247,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
 def test_multimodal_media_inline_base64_template(file_uri, mime_type) -> None:
-    llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0514")
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
     prompt_template = ChatPromptTemplate.from_messages(
         [
             ("human", "{input}"),
