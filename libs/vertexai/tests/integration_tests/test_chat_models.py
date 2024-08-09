@@ -265,8 +265,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
-def test_multimodal_media_inline_base64_template(file_uri, mime_type) -> None:
+def test_multimodal_media_inline_base64_template() -> None:
     llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
     prompt_template = ChatPromptTemplate.from_messages(
         [
@@ -275,6 +274,10 @@ def test_multimodal_media_inline_base64_template(file_uri, mime_type) -> None:
         ]
     )
     storage_client = storage.Client()
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     media_message = {
