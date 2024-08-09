@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from concurrent.futures import Executor
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple
 
@@ -248,7 +249,7 @@ class _VertexAICommon(_VertexAIBase):
             credentials=values.get("credentials"),
             api_transport=values.get("api_transport"),
             api_endpoint=values.get("api_endpoint"),
-            request_metadata=values.get("request_metadata"),
+            request_metadata=values.get("default_metadata"),
         )
         return None
 
@@ -366,10 +367,20 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
 
     def _parse_prediction(self, prediction: Any) -> str:
         if isinstance(prediction, str):
+            if prediction.startswith("Prompt:\n"):
+                result = re.search(r"(?s:.*)\nOutput:\n(.*)", prediction)
+                if result:
+                    return result[1]
             return prediction
 
         if self.result_arg:
             try:
+                if prediction[self.result_arg].startswith("Prompt:\n"):
+                    result = re.search(
+                        r"(?s:.*)\nOutput:\n(.*)", prediction[self.result_arg]
+                    )
+                    if result:
+                        return result[1]
                 return prediction[self.result_arg]
             except KeyError:
                 if isinstance(prediction, str):

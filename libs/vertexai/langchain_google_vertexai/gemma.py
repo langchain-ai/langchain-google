@@ -196,6 +196,11 @@ class _GemmaLocalKaggleBase(_GemmaBase):
     model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
 
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -230,7 +235,7 @@ class _GemmaLocalKaggleBase(_GemmaBase):
         return {**self._default_params, **params}
 
 
-class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):
+class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):  # type: ignore
     """Local gemma chat model loaded from Kaggle."""
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
@@ -260,7 +265,7 @@ class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):
         return "gemma_local_kaggle"
 
 
-class GemmaChatLocalKaggle(_GemmaLocalKaggleBase, BaseChatModel):
+class GemmaChatLocalKaggle(_GemmaLocalKaggleBase, BaseChatModel):  # type: ignore
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
@@ -301,8 +306,13 @@ class _GemmaLocalHFBase(_GemmaBase):
     client: Any = None  #: :meta private:
     hf_access_token: str
     cache_dir: Optional[str] = None
-    model_name: str = Field(default="gemma_2b_en", alias="model")
+    model_name: str = Field(default="google/gemma-2b", alias="model")
     """Gemma model name."""
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
@@ -346,7 +356,7 @@ class _GemmaLocalHFBase(_GemmaBase):
         )[0]
 
 
-class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):
+class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):  # type: ignore
     """Local gemma model loaded from HuggingFace."""
 
     def _generate(
@@ -368,7 +378,7 @@ class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):
         return "gemma_local_hf"
 
 
-class GemmaChatLocalHF(_GemmaLocalHFBase, BaseChatModel):
+class GemmaChatLocalHF(_GemmaLocalHFBase, BaseChatModel):  # type: ignore
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
