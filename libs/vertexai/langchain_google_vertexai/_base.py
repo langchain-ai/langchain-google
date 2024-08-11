@@ -212,6 +212,8 @@ class _VertexAICommon(_VertexAIBase):
     @property
     def _default_params(self) -> Dict[str, Any]:
         if self.model_family == GoogleModelFamily.GEMINI:
+            default_params: Dict[str, Any] = {}
+        elif self.model_family == GoogleModelFamily.GEMINI_ADVANCED:
             default_params = {}
         else:
             default_params = {

@@ -37,7 +37,7 @@ def test_format_json_schema_to_gapic():
         int_field: Optional[int]
 
     class B(BaseModel):
-        object_field: Optional[A]
+        object_field: Optional[A] = Field(description="Class A")
         array_field: Sequence[A]
         int_field: int = Field(description="int field", minimum=1, maximum=10)
         str_field: str = Field(
