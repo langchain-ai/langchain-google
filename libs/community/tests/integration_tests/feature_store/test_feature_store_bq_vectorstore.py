@@ -54,11 +54,48 @@ def store_bq_vectorstore(request: pytest.FixtureRequest) -> BigQueryVectorStore:
     return TestBigQueryVectorStore_bq_vectorstore.store_bq_vectorstore
 
 
+@pytest.fixture(scope="class")
+def existing_store_bq_vectorstore(
+    request: pytest.FixtureRequest,
+) -> BigQueryVectorStore:
+    """Existing BigQueryVectorStore tests context.
+
+    In order to run this test, you define PROJECT_ID environment variable
+    with GCP project id.
+
+    Example:
+    export PROJECT_ID=...
+    """
+    from google.cloud import bigquery
+
+    embedding_model = FakeEmbeddings(size=EMBEDDING_SIZE)
+    TestBigQueryVectorStore_bq_vectorstore.existing_store_bq_vectorstore = (
+        BigQueryVectorStore(
+            project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
+            embedding=embedding_model,
+            location="us-central1",
+            dataset_name=TestBigQueryVectorStore_bq_vectorstore.dataset_name,
+            table_name=TEST_TABLE_NAME,
+        )
+    )
+
+    def teardown() -> None:
+        bigquery.Client(location="us-central1").delete_dataset(
+            TestBigQueryVectorStore_bq_vectorstore.dataset_name,
+            delete_contents=True,
+            not_found_ok=True,
+        )
+
+    request.addfinalizer(teardown)
+    return TestBigQueryVectorStore_bq_vectorstore.existing_store_bq_vectorstore
+
+
 class TestBigQueryVectorStore_bq_vectorstore:
     """BigQueryVectorStore tests class."""
 
     dataset_name = TEST_DATASET
     store_bq_vectorstore: BigQueryVectorStore
+    existing_store_bq_vectorstore: BigQueryVectorStore
     texts = ["apple", "ice cream", "Saturn", "candy", "banana"]
     metadatas = [
         {
@@ -102,6 +139,30 @@ class TestBigQueryVectorStore_bq_vectorstore:
     def test_get_doc_by_filter(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
         """Test on document retrieval with metadata filter."""
         docs = store_bq_vectorstore.get_documents(filter={"kind": "fruit"})
+        kinds = [d.metadata["kind"] for d in docs]
+        assert "fruit" in kinds
+        assert "treat" not in kinds
+        assert "planet" not in kinds
+
+    @pytest.mark.extended
+    def test_existing_store_semantic_search_filter_fruits(
+        self, existing_store_bq_vectorstore: BigQueryVectorStore
+    ) -> None:
+        """Test on semantic similarity with metadata filter."""
+        docs = existing_store_bq_vectorstore.similarity_search(
+            "food", filter={"kind": "fruit"}, k=10
+        )
+        kinds = [d.metadata["kind"] for d in docs]
+        assert "fruit" in kinds
+        assert "treat" not in kinds
+        assert "planet" not in kinds
+
+    @pytest.mark.extended
+    def test_existing_store_get_doc_by_filter(
+        self, existing_store_bq_vectorstore: BigQueryVectorStore
+    ) -> None:
+        """Test on document retrieval with metadata filter."""
+        docs = existing_store_bq_vectorstore.get_documents(filter={"kind": "fruit"})
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" not in kinds
