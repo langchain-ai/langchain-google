@@ -73,5 +73,5 @@
 ## Note(optional)
 
 <!-- Information about the errors fixed by PR -->
-<!-- Ramaining issue or something -->
+<!-- Remaining issue or something -->
 <!-- Other information about PR -->

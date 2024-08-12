@@ -36,6 +36,7 @@ numpy = [
   { version = "^1.26.0", python = ">=3.12" },
 ]
 google-api-python-client = "^2.117.0"
+langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain" }
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests"}
 

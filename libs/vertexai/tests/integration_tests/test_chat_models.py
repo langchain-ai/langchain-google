@@ -6,6 +6,11 @@ from typing import List, Optional, cast
 
 import pytest
 from google.cloud import storage
+from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
+    Content,
+    Part,
+)
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -16,6 +21,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.tools import tool
@@ -26,6 +32,9 @@ from langchain_google_vertexai import (
     HarmBlockThreshold,
     HarmCategory,
     create_context_cache,
+)
+from langchain_google_vertexai.chat_models import (
+    _parse_chat_history_gemini,
 )
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
@@ -253,6 +262,110 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
     message = HumanMessage(content=[text_message, media_message])
     output = llm([message])
     assert isinstance(output.content, str)
+
+
+@pytest.mark.release
+def test_multimodal_media_inline_base64_template() -> None:
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+    storage_client = storage.Client()
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    text_message = {"type": "text", "text": "Describe the attached media in 5 words!"}
+    message = HumanMessage(content=[media_message, text_message])
+    chain = prompt_template | llm
+    output = chain.invoke({"input": [message]})
+    assert isinstance(output.content, str)
+
+
+@pytest.mark.extended
+def test_multimodal_media_inline_base64_agent() -> None:
+    from langchain import agents
+
+    @tool
+    def get_climate_info(query: str):
+        """Retrieves information about the Climate."""
+        return "MOCK CLIMATE INFO STRING"
+
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+    storage_client = storage.Client()
+    # Can't use the pixel.mp3, since it has too many tokens it will hit quota
+    # error.
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    text_message = {"type": "text", "text": "Describe the attached media in 5 words."}
+    message = [media_message, text_message]
+    tools = [get_climate_info]
+    agent = agents.create_tool_calling_agent(
+        llm=llm,
+        tools=tools,  # type: ignore[arg-type]
+        prompt=prompt_template,
+    )
+    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+        agent=agent,  # type: ignore[arg-type]
+        tools=tools,  # type: ignore[arg-type]
+        verbose=False,
+        stream_runnable=False,
+    )
+    output = agent_executor.invoke({"input": message})
+    assert isinstance(output["output"], str)
+
+
+def test_parse_history_gemini_multimodal_FC():
+    storage_client = storage.Client()
+    # Can't use the pixel.mp3, since it has too many tokens it will hit quota
+    # error.
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([media_message, text_message])
+    history: List[BaseMessage] = [HumanMessage(content=message)]
+    parts = [
+        Part(inline_data=Blob(data=media_base64, mime_type=mime_type)),
+        Part(text=instruction),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    _, response = _parse_chat_history_gemini(history=history)
+    assert expected == response
 
 
 @pytest.mark.xfail(reason="investigating")
