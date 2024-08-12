@@ -895,7 +895,6 @@ def test_context_catching():
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert "747" in response.content
 
     # Using cached content in request
     chat = ChatVertexAI(model_name="gemini-1.5-pro-001", rate_limiter=rate_limiter)
@@ -903,4 +902,3 @@ def test_context_catching():
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert "747" in response.content

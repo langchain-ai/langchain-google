@@ -991,7 +991,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     """  # noqa: E501
 
-    model_name: str = Field(default="chat-bison", alias="model")
+    model_name: str = Field(default="chat-bison-default", alias="model")
     "Underlying model name."
     examples: Optional[List[BaseMessage]] = None
     convert_system_message_to_human: bool = False
@@ -1045,6 +1045,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         safety_settings = values.get("safety_settings")
         tuned_model_name = values.get("tuned_model_name")
         values["model_family"] = GoogleModelFamily(values["model_name"])
+
+        if values["model_name"] == "chat-bison-default":
+            logger.warning(
+                "Model_name will become a required arg for VertexAIEmbeddings "
+                "starting from Sep-01-2024. Currently the default is set to "
+                "chat-bison"
+            )
+            values["model_name"] = "chat-bison"
 
         if values.get("full_model_name") is not None:
             pass
