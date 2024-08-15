@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import uuid
 from operator import itemgetter
 from typing import (
     Any,
@@ -14,9 +16,13 @@ from typing import (
     Sequence,
     Type,
     Union,
+    overload,
 )
 
+import requests
+from google import auth
 from google.auth.credentials import Credentials
+from google.auth.transport import requests as auth_requests
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -30,8 +36,14 @@ from langchain_core.language_models.chat_models import (
 from langchain_core.language_models.llms import BaseLLM
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
 )
+from langchain_core.messages.tool import tool_call as create_tool_call
+from langchain_core.messages.tool import tool_call_chunk
 from langchain_core.outputs import (
     ChatGeneration,
     ChatGenerationChunk,
@@ -46,6 +58,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import convert_to_openai_function
 
 from langchain_google_vertexai._anthropic_parsers import (
     ToolsOutputParser,
@@ -57,7 +70,12 @@ from langchain_google_vertexai._anthropic_utils import (
     _tools_in_params,
     convert_to_anthropic_tool,
 )
-from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
+from langchain_google_vertexai._base import (
+    _BaseVertexAIModelGarden,
+    _VertexAIBase,
+    _VertexAICommon,
+)
+from langchain_google_vertexai._utils import VertexMaaSModelFamily
 
 
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
@@ -371,3 +389,425 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return RunnableMap(raw=llm) | parser_with_fallback
         else:
             return llm | output_parser
+
+
+@overload
+def _parse_response_candidate(
+    response_candidate: Dict[str, str], streaming: Literal[False] = False
+) -> AIMessage:
+    ...
+
+
+@overload
+def _parse_response_candidate(
+    response_candidate: Dict[str, str], streaming: Literal[True]
+) -> AIMessageChunk:
+    ...
+
+
+def _parse_response_candidate(
+    response_candidate: Dict[str, str], streaming: bool = False
+) -> AIMessage:
+    content = response_candidate["content"]
+    role = response_candidate["role"]
+    if role != "assistant":
+        raise ValueError(f"Role in response is {role}, expected 'assistant'!")
+    tool_calls = []
+    tool_call_chunks = []
+
+    response_json = None
+    try:
+        response_json = json.loads(response_candidate["content"])
+    except ValueError:
+        pass
+    if response_json and "name" in response_json:
+        function_name = response_json["name"]
+        function_args = response_json.get("parameters", None)
+        if streaming:
+            tool_call_chunks.append(
+                tool_call_chunk(
+                    name=function_name, args=function_args, id=str(uuid.uuid4())
+                )
+            )
+        else:
+            tool_calls.append(
+                create_tool_call(
+                    name=function_name, args=function_args, id=str(uuid.uuid4())
+                )
+            )
+        content = ""
+
+    if streaming:
+        return AIMessageChunk(
+            content=content,
+            tool_call_chunks=tool_call_chunks,
+        )
+
+    return AIMessage(
+        content=content,
+        tool_calls=tool_calls,
+    )
+
+
+class VertexMaaS(_VertexAIBase, BaseChatModel):
+    """Google Cloud Vertex AI Model-as-a-Service chat model integration.
+
+    For more information, see:
+        https://cloud.google.com/blog/products/ai-machine-learning/llama-3-1-on-vertex-ai
+        and https://cloud.google.com/blog/products/ai-machine-learning/codestral-and-mistral-large-v2-on-vertex-ai
+
+
+    Setup:
+        You need to enable a corresponding MaaS model (Google Cloud UI console ->
+        Vertex AI -> Model Garden -> search for a model you need and click enable)
+
+        You must have the langchain-google-vertexai Python package installed
+        .. code-block:: bash
+
+            pip install -U langchain-google-vertexai
+
+        And either:
+            - Have credentials configured for your environment
+                (gcloud, workload identity, etc...)
+            - Store the path to a service account JSON file as the
+                GOOGLE_APPLICATION_CREDENTIALS environment variable
+
+        This codebase uses the google.auth library which first looks for the application
+        credentials variable mentioned above, and then looks for system-level auth.
+
+        For more information, see:
+        https://cloud.google.com/docs/authentication/application-default-credentials#GAC
+        and https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth.
+
+    Key init args — completion params:
+        model: str
+            Name of VertexMaaS model to use. Currently three models are supported:
+            "meta/llama3-405b-instruct-maas", "mistral-nemo@2407" and
+            "mistral-large@2407"
+        append_tools_to_system_message: bool
+            Whether to append tools to a system message (useful for Llama 3.1 tool
+            calling only)
+
+
+    Key init args — client params:
+        credentials: Optional[google.auth.credentials.Credentials]
+            The default custom credentials to use when making API calls. If not
+            provided, credentials will be ascertained from the environment.
+        project: Optional[str]
+            The default GCP project to use when making Vertex API calls.
+        location: str = "us-central1"
+            The default location to use when making API calls.
+
+    See full list of supported init args and their descriptions in the params section.
+
+    Instantiate:
+        .. code-block:: python
+
+            from langchain_google_vertexai import VertexMaaS
+
+            llm = VertexMaaS(
+                model="gemini-1.5-flash-001",
+                # other params...
+            )
+
+    Invoke:
+        .. code-block:: python
+
+            messages = [
+                ("system", "You are a helpful translator. Translate the user sentence to French."),
+                ("human", "I love programming."),
+            ]
+            llm.invoke(messages)
+
+        .. code-block:: python
+
+            AIMessage(content="J'adore programmer. \n", id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+
+    Stream:
+        .. code-block:: python
+
+            for chunk in llm.stream(messages):
+                print(chunk)
+
+        .. code-block:: python
+
+            AIMessageChunk(content='J', id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content="'adore programmer. \n", id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content='', id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+
+        .. code-block:: python
+
+            stream = llm.stream(messages)
+            full = next(stream)
+            for chunk in stream:
+                full += chunk
+            full
+
+        .. code-block:: python
+
+            AIMessageChunk(content="J'adore programmer. \n", id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
+
+    """  # noqa: E501
+
+    append_tools_to_system_message: bool = False
+    "Whether to append tools to the system message or not."
+    model_family: Optional[VertexMaaSModelFamily] = None
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
+    @root_validator(pre=True)
+    def validate_environment(cls, values: Dict) -> Dict:
+        """Validate that the python package exists in environment."""
+        family = VertexMaaSModelFamily(values["model_name"])
+        values["model_family"] = family
+        if family == VertexMaaSModelFamily.MISTRAL:
+            model = values["model_name"].split("@")[0]
+            values["full_model_name"] = values["model_name"]
+            values["model_name"] = model
+        return values
+
+    @property
+    def token(self) -> str:
+        if self.credentials:
+            if not self.credentials.token:
+                request = auth_requests.Request()
+                self.credentials.refresh(request)
+            return self.credentials.token
+        credentials, _ = auth.default()
+        if not credentials.token:
+            request = auth_requests.Request()
+            credentials.refresh(request)
+        return credentials.token
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+            "x-goog-api-client": self._libary_version,
+            "user_agent": self._user_agent,
+        }
+
+    def get_url(self, stream: bool = False) -> str:
+        if self.model_family == VertexMaaSModelFamily.LLAMA:
+            url_part = "endpoints/openapi/chat/completions"
+            version = "v1beta1"
+        else:
+            version = "v1"
+            if stream:
+                url_part = (
+                    f"publishers/mistralai/models/{self.model_name}:streamRawPredict"
+                )
+            else:
+                url_part = f"publishers/mistralai/models/{self.model_name}:rawPredict"
+        return (
+            f"https://{self.location}-aiplatform.googleapis.com/{version}/projects/"
+            f"{self.project}/locations/{self.location}/{url_part}"
+        )
+
+    def _convert_messages(
+        self, messages: List[BaseMessage], tools: Optional[List[BaseTool]] = None
+    ) -> List[Dict[str, Any]]:
+        converted_messages: List[Dict[str, Any]] = []
+        if tools and not self.append_tools_to_system_message:
+            raise ValueError(
+                "If providing tools, either format system message yourself or "
+                "append_tools_to_system_message to True!"
+            )
+        elif tools:
+            tools_str = "\n".join(
+                [json.dumps(convert_to_openai_function(t)) for t in tools]
+            )
+            formatted_system_message = (
+                "You are an assistant with access to the following tools:\n\n"
+                f"{tools_str}\n\n"
+                "If you decide to use a tool, please respond with a JSON for a "
+                "function call with its proper arguments that best answers the "
+                "given prompt.\nRespond in the format "
+                '{"name": function name, "parameters": dictionary '
+                "of argument name and its value}. Do not use variables.\n"
+                "Do not provide any additional comments when calling a tool.\n"
+                "Do not mention tools to the user when preparing the final answer."
+            )
+            message = messages[0]
+            if not isinstance(message, SystemMessage):
+                converted_messages.append(
+                    {"role": "system", "content": formatted_system_message}
+                )
+            else:
+                converted_messages.append(
+                    {
+                        "role": "system",
+                        "content": str(message.content)
+                        + "\n"
+                        + formatted_system_message,
+                    }
+                )
+
+        for i, message in enumerate(messages):
+            if tools and isinstance(message, SystemMessage) and i == 0:
+                continue
+            if isinstance(message, AIMessage):
+                converted_messages.append(
+                    {"role": "assistant", "content": message.content}
+                )
+            elif isinstance(message, HumanMessage):
+                converted_messages.append({"role": "user", "content": message.content})
+            elif isinstance(message, SystemMessage):
+                converted_messages.append(
+                    {"role": "system", "content": message.content}
+                )
+            elif isinstance(message, ToolMessage):
+                # we also need to format a previous message if we got a tool result
+                prev_message = messages[i - 1]
+                if not isinstance(prev_message, AIMessage):
+                    raise ValueError("ToolMessage should follow AIMessage only!")
+                _ = converted_messages[-1].pop("content", None)
+                tool_calls = []
+                for tool_call in prev_message.tool_calls:
+                    tool_calls.append(
+                        {
+                            "type": "function",
+                            "id": tool_call["id"],
+                            "function": {
+                                "name": tool_call["name"],
+                                "arguments": json.dumps(tool_call.get("args", {})),
+                            },
+                        }
+                    )
+                converted_messages[-1]["tool_calls"] = tool_calls
+                if len(tool_calls) > 1:
+                    raise ValueError(
+                        "Only a single function call per turn is supported!"
+                    )
+                converted_messages.append(
+                    {
+                        "role": "tool",
+                        "name": message.name,
+                        "content": message.content,
+                        "tool_call_id": message.tool_call_id,
+                    }
+                )
+            else:
+                raise ValueError(f"Message type {type(message)} is not yet supported!")
+        return converted_messages
+
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stream: Optional[bool] = None,
+        *,
+        tools: Optional[List[BaseTool]] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Generate next turn in the conversation.
+
+        Args:
+            messages: The history of the conversation as a list of messages. Code chat
+                does not support context.
+            stop: The list of stop words (optional).
+            run_manager: The CallbackManager for LLM run, it's not used at the moment.
+            stream: Whether to use the streaming endpoint.
+
+        Returns:
+            The ChatResult that contains outputs generated by the model.
+
+        Raises:
+            ValueError: if the last message in the list is not from human.
+        """
+        formatted_messages = messages
+        if self.model_family != VertexMaaSModelFamily.LLAMA and tools:
+            raise ValueError("Tools are supported only for Llama 3.1!")
+
+        if stream is True:
+            stream_iter = self._stream(
+                formatted_messages,
+                stop=stop,
+                run_manager=run_manager,
+                tools=tools,
+                **kwargs,
+            )
+            return generate_from_stream(stream_iter)
+
+        converted_messages = self._convert_messages(formatted_messages, tools=tools)
+
+        data = {
+            "model": self.model_name,
+            "stream": False,
+            "messages": converted_messages,
+        }
+        response = requests.post(self.get_url(), headers=self.headers, json=data)
+        result = response.json()
+        if response.status_code != 200:
+            raise ValueError(json.dumps(result))
+
+        generations = []
+        for candidate in result["choices"]:
+            message = _parse_response_candidate(candidate["message"])
+            generations.append(ChatGeneration(message=message))
+
+        return ChatResult(generations=generations)
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return "vertexai_model_garden_maas"
+
+    def _stream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        *,
+        tools: Optional[List[BaseTool]] = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        converted_messages = self._convert_messages(messages, tools=tools)
+        data = {
+            "model": self.model_name,
+            "stream": True,
+            "messages": converted_messages,
+        }
+        response = requests.post(
+            self.get_url(stream=True), headers=self.headers, json=data, stream=True
+        )
+        buffer = ""
+
+        def try_parse_chunk(buffer):
+            try:
+                if buffer.startswith("data: "):
+                    json_obj, index = json.JSONDecoder().raw_decode(buffer[6:])
+                    index += 6
+                else:
+                    json_obj, index = json.JSONDecoder().raw_decode(buffer)
+                chunk = _parse_response_candidate(
+                    json_obj["choices"][0]["delta"], streaming=True
+                )
+                if run_manager and isinstance(chunk.content, str):
+                    run_manager.on_llm_new_token(chunk.content)
+                return chunk, index
+            except json.JSONDecodeError:
+                pass
+            return None, None
+
+        for raw_chunk in response.iter_content(decode_unicode=True):
+            buffer += raw_chunk
+            chunk, index = try_parse_chunk(buffer)
+            if index:
+                yield ChatGenerationChunk(
+                    message=chunk,
+                    generation_info={},
+                )
+                buffer = buffer[index:]
+        chunk, _ = try_parse_chunk(buffer)
+        if chunk:
+            yield ChatGenerationChunk(
+                message=chunk,
+                generation_info={},
+            )
+        return

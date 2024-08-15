@@ -67,7 +67,6 @@ class _VertexAIBase(BaseModel):
     "Optional list of stop words to use when generating."
     model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
-    model_family: Optional[GoogleModelFamily] = None  #: :meta private:
     full_model_name: Optional[str] = None  #: :meta private:
     "The full name of the model's endpoint."
     client_options: Optional["ClientOptions"] = Field(
@@ -156,9 +155,16 @@ class _VertexAIBase(BaseModel):
         _, user_agent = get_user_agent(f"{type(self).__name__}_{self.model_name}")
         return user_agent
 
+    @property
+    def _libary_version(self) -> str:
+        """Gets the library version for headers."""
+        library_version, _ = get_user_agent(f"{type(self).__name__}_{self.model_name}")
+        return library_version
+
 
 class _VertexAICommon(_VertexAIBase):
     client_preview: Any = None  #: :meta private:
+    model_family: Optional[GoogleModelFamily] = None  #: :meta private:
     model_name: str = Field(default=None, alias="model")
     "Underlying model name."
     temperature: Optional[float] = None

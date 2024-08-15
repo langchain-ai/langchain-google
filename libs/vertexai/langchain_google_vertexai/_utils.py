@@ -147,6 +147,26 @@ class GoogleModelFamily(str, Enum):
         return GoogleModelFamily.GEMINI
 
 
+class VertexMaaSModelFamily(str, Enum):
+    LLAMA = auto()
+    # https://cloud.google.com/blog/products/ai-machine-learning/llama-3-1-on-vertex-ai
+    MISTRAL = auto()
+    # https://cloud.google.com/blog/products/ai-machine-learning/codestral-and-mistral-large-v2-on-vertex-ai
+
+    @classmethod
+    def _missing_(cls, value: Any) -> "VertexMaaSModelFamily":
+        model_name = value.lower()
+        llama_models = {
+            "meta/llama3-405b-instruct-maas",
+        }
+        mistral_models = {"mistral-nemo@2407", "mistral-large@2407"}
+        if model_name in llama_models:
+            return VertexMaaSModelFamily.LLAMA
+        if model_name in mistral_models:
+            return VertexMaaSModelFamily.MISTRAL
+        raise ValueError(f"Model {model_name} is not supported yet!")
+
+
 def is_gemini_model(model_family: GoogleModelFamily) -> bool:
     """Returns True if the model name is a Gemini model."""
     return model_family in [GoogleModelFamily.GEMINI, GoogleModelFamily.GEMINI_ADVANCED]
