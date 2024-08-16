@@ -15,6 +15,7 @@ from google.ai.generativelanguage_v1beta.types import (
     Part,
 )
 from langchain_core.language_models import BaseChatModel
+from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
     FunctionMessage,
@@ -550,3 +551,14 @@ def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> N
                 res_kw = result.additional_kwargs[key]
                 exp_kw = value
                 assert res_kw == exp_kw
+
+
+def test_serialize() -> None:
+    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")
+    serialized = dumps(llm)
+    llm_loaded = loads(
+        serialized,
+        secrets_map={"GOOGLE_API_KEY": "test-key"},
+        valid_namespaces=["langchain_google_genai"],
+    )
+    assert llm == llm_loaded

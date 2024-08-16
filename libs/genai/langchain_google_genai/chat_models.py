@@ -815,8 +815,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     """  # noqa: E501
 
-    client: Any = None  #: :meta private:
-    async_client: Any = None  #: :meta private:
+    client: Any = Field(default=None, exclude=True)  #: :meta private:
+    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     google_api_key: Optional[SecretStr] = Field(default=None, alias="api_key")
     """Google AI API key. 
         
