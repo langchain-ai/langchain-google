@@ -187,9 +187,10 @@ class VertexAI(_VertexAICommon, BaseLLM):
         self, stop: Optional[List[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
-        ls_params = super()._get_ls_params(stop=stop, **kwargs)
+        params = self._prepare_params(stop=stop, **kwargs)
+        ls_params = super()._get_ls_params(stop=stop, **params)
         ls_params["ls_provider"] = "google_vertexai"
-        if ls_max_tokens := kwargs.get("max_output_tokens", self.max_output_tokens):
+        if ls_max_tokens := params.get("max_output_tokens", self.max_output_tokens):
             ls_params["ls_max_tokens"] = ls_max_tokens
         if ls_stop := stop or self.stop:
             ls_params["ls_stop"] = ls_stop
