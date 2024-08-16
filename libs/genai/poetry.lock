@@ -547,7 +547,7 @@ files = [
 
 [[package]]
 name = "langchain-core"
-version = "0.2.32"
+version = "0.2.33"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = ">=3.8.1,<4.0"
@@ -570,7 +570,7 @@ typing-extensions = ">=4.7"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "b83f1eb0d56dbf99605a1fce93953ee09d77aabf"
+resolved_reference = "c1bd4e05bcd180a36ba7b5d89ca2b5ce4f1e5d4a"
 subdirectory = "libs/core"
 
 [[package]]
@@ -1537,4 +1537,4 @@ images = ["pillow"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "d49b614f6a5ac332c61b7b5246e61c25297e82437ec0cd9c59f2128a084a86cb"
+content-hash = "6cdb00c9e430e592cea5d0bd158053ceb9e7e64734345fbb75cac364a8ee30c3"
