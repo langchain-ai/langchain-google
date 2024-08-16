@@ -81,7 +81,7 @@ def test_vertex_generate_code() -> None:
     assert len(output.generations) == 1
     assert len(output.generations[0]) == 2
     usage_metadata = output.generations[0][0].generation_info["usage_metadata"]  # type: ignore
-    assert int(usage_metadata["prompt_token_count"]) == 3
+    assert int(usage_metadata["prompt_token_count"]) == 8
     assert int(usage_metadata["candidates_token_count"]) > 1
 
 

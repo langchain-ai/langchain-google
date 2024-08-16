@@ -32,8 +32,10 @@ import google.api_core
 import proto  # type: ignore[import]
 import requests
 from google.ai.generativelanguage_v1beta.types import (
+    Blob,
     Candidate,
     Content,
+    FileData,
     FunctionCall,
     FunctionResponse,
     GenerateContentRequest,
@@ -42,6 +44,7 @@ from google.ai.generativelanguage_v1beta.types import (
     Part,
     SafetySetting,
     ToolConfig,
+    VideoMetadata,
 )
 from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
 from google.generativeai.types.content_types import (  # type: ignore[import]
@@ -325,8 +328,35 @@ def _convert_to_parts(
                             )
                         img_url = img_url["url"]
                     parts.append(image_loader.load_part(img_url))
+                # Handle media type like LangChain.js
+                # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
+                elif part["type"] == "media":
+                    if "mime_type" not in part:
+                        raise ValueError(f"Missing mime_type in media part: {part}")
+                    mime_type = part["mime_type"]
+                    media_part = Part()
+
+                    if "data" in part:
+                        media_part.inline_data = Blob(
+                            data=part["data"], mime_type=mime_type
+                        )
+                    elif "file_uri" in part:
+                        media_part.file_data = FileData(
+                            file_uri=part["file_uri"], mime_type=mime_type
+                        )
+                    else:
+                        raise ValueError(
+                            f"Media part must have either data or file_uri: {part}"
+                        )
+                    if "video_metadata" in part:
+                        metadata = VideoMetadata(part["video_metadata"])
+                        media_part.video_metadata = metadata
+                    parts.append(media_part)
                 else:
-                    raise ValueError(f"Unrecognized message part type: {part['type']}")
+                    raise ValueError(
+                        f"Unrecognized message part type: {part['type']}. Only text, "
+                        f"image_url, and media types are supported."
+                    )
             else:
                 # Yolo
                 logger.warning(
@@ -785,8 +815,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     """  # noqa: E501
 
-    client: Any = None  #: :meta private:
-    async_client: Any = None  #: :meta private:
+    client: Any = Field(default=None, exclude=True)  #: :meta private:
+    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     google_api_key: Optional[SecretStr] = Field(default=None, alias="api_key")
     """Google AI API key. 
         

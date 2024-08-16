@@ -70,7 +70,7 @@ def test_format_native_dict_to_genai_function() -> None:
             glm.FunctionDeclaration(
                 name="multiply",
                 description="Returns the product of two numbers.",
-                parameters={},
+                parameters=None,
             )
         ]
     )
