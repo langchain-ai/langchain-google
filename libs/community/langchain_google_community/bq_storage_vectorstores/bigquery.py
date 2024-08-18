@@ -245,11 +245,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 filter_expressions = []
                 for column, value in filter.items():
                     if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
-                        filter_expressions.append(f"base.{column} = {value}")
+                        filter_expressions.append(f"{column} = {value}")
                     else:
-                        filter_expressions.append(f"base.{column} = '{value}'")
+                        filter_expressions.append(f"{column} = '{value}'")
                 where_filter_expr = " AND ".join(filter_expressions)
-            else: # If already SQL clauses filters is pased
+            else: # If SQL clauses filters is passed
                 where_filter_expr = filter
         else:
             where_filter_expr = "TRUE"
@@ -295,10 +295,17 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             distance_type => "{self.distance_type}",
             top_k => {k}
         )
+        """
+        #Wrap the Inner Query with an Outer SELECT to eliminate "base." column prefix
+        full_query_wrapper = f"""
+        SELECT *
+        FROM (
+            {full_query}
+        ) AS result
         WHERE {where_filter_expr}
         ORDER BY row_num, score
         """
-        return full_query
+        return full_query_wrapper
 
     def _search_embeddings(
         self,
