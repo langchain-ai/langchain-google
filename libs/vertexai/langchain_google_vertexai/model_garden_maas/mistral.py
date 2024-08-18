@@ -1,10 +1,12 @@
 from typing import Any, Optional
 
-import httpx
+import httpx  # type: ignore[import-not-found]
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
 )
-from langchain_mistralai import chat_models
+from langchain_mistralai import (  # type: ignore[unused-ignore, import-not-found]
+    chat_models,
+)
 
 from langchain_google_vertexai.model_garden_maas._base import (
     _BaseVertexMaasModelGarden,
@@ -13,10 +15,10 @@ from langchain_google_vertexai.model_garden_maas._base import (
     completion_with_retry,
 )
 
-chat_models.acompletion_with_retry = acompletion_with_retry  # type: ignore[assignment]
+chat_models.acompletion_with_retry = acompletion_with_retry  # type: ignore[unused-ignore, assignment]
 
 
-class VertexModelGardenMistral(_BaseVertexMaasModelGarden, chat_models.ChatMistralAI):  # type: ignore[misc]
+class VertexModelGardenMistral(_BaseVertexMaasModelGarden, chat_models.ChatMistralAI):  # type: ignore[unused-ignore, misc]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         token = _get_token(credentials=self.credentials)

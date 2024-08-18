@@ -45,11 +45,17 @@ langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git
 [tool.codespell]
 ignore-words-list = "rouge"
 
+
 [tool.poetry.group.codespell]
 optional = true
 
 [tool.poetry.group.codespell.dependencies]
 codespell = "^2.2.0"
+
+[tool.poetry.extras]
+anthropic = ["anthropic"]
+mistral = ["langchain-mistralai"]
+
 
 [tool.poetry.group.test_integration]
 optional = true
@@ -59,12 +65,14 @@ numexpr = { version = "^2.8.8", python = ">=3.9,<4.0" }
 google-api-python-client = "^2.114.0"
 google-cloud-datastore = "^2.19.0"
 langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain" }
+langchain-mistralai = "^0.1.12"
 
 [tool.poetry.group.lint]
 optional = true
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.5"
+
 
 [tool.poetry.group.typing.dependencies]
 mypy = "^1"
@@ -74,12 +82,9 @@ types-requests = "^2.31.0"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
 
+
 [tool.poetry.group.dev.dependencies]
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
-
-[tool.poetry.extras]
-anthropic = ["anthropic"]
-mistral = ["langchain-mistralai"]
 
 [tool.ruff.lint]
 select = [

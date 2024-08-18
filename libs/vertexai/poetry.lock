@@ -2,22 +2,13 @@
 
 [[package]]
 name = "aiohappyeyeballs"
-<<<<<<< HEAD
-version = "2.3.6"
-=======
 version = "2.3.7"
->>>>>>> f58876f (added support for mistral maas models)
 description = "Happy Eyeballs for asyncio"
 optional = false
 python-versions = ">=3.8"
 files = [
-<<<<<<< HEAD
-    {file = "aiohappyeyeballs-2.3.6-py3-none-any.whl", hash = "sha256:15dca2611fa78442f1cb54cf07ffb998573f2b4fbeab45ca8554c045665c896b"},
-    {file = "aiohappyeyeballs-2.3.6.tar.gz", hash = "sha256:88211068d2a40e0436033956d7de3926ff36d54776f8b1022d6b21320cadae79"},
-=======
     {file = "aiohappyeyeballs-2.3.7-py3-none-any.whl", hash = "sha256:337ce4dc0e99eb697c3c5a77d6cb3c52925824d9a67ac0dea7c55b8a2d60b222"},
     {file = "aiohappyeyeballs-2.3.7.tar.gz", hash = "sha256:e794cd29ba6a14078092984e43688212a19081de3a73b6796c2fdeb3706dd6ce"},
->>>>>>> f58876f (added support for mistral maas models)
 ]
 
 [[package]]
@@ -411,7 +402,7 @@ test = ["pytest (>=6)"]
 name = "filelock"
 version = "3.15.4"
 description = "A platform independent file lock."
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "filelock-3.15.4-py3-none-any.whl", hash = "sha256:6ca1fffae96225dab4c6eaf1c4f4f28cd2568d3ec2a44e15a08520504de468e7"},
@@ -527,7 +518,7 @@ files = [
 name = "fsspec"
 version = "2024.6.1"
 description = "File-system specification"
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "fsspec-2024.6.1-py3-none-any.whl", hash = "sha256:3cb443f8bcd2efb31295a5b9fdb02aee81d8452c80d28f97a6d0959e6cee101e"},
@@ -1074,31 +1065,18 @@ protobuf = ["grpcio-tools (>=1.65.5)"]
 
 [[package]]
 name = "grpcio-status"
-<<<<<<< HEAD
-version = "1.65.4"
-=======
 version = "1.65.5"
->>>>>>> f58876f (added support for mistral maas models)
 description = "Status proto mapping for gRPC"
 optional = false
 python-versions = ">=3.8"
 files = [
-<<<<<<< HEAD
-    {file = "grpcio_status-1.65.4-py3-none-any.whl", hash = "sha256:09dd3d84d1a3164940b1d8ed2177688cd8d25a423b1f5ad826b393653ea3de01"},
-    {file = "grpcio_status-1.65.4.tar.gz", hash = "sha256:1803968c4f14d81b4b156f6f2b54e6959bac4f40b0a6ca2bd4c169978438b9dc"},
-=======
     {file = "grpcio_status-1.65.5-py3-none-any.whl", hash = "sha256:44a445ce55375545a913e005be36fbec7999a4cc320d7aecb7a4469d3d49366c"},
     {file = "grpcio_status-1.65.5.tar.gz", hash = "sha256:2c9fa3af32efd26f01837d44305dce106973bc5357b9a9fc8bbd87bb8bf833d1"},
->>>>>>> f58876f (added support for mistral maas models)
 ]
 
 [package.dependencies]
 googleapis-common-protos = ">=1.5.5"
-<<<<<<< HEAD
-grpcio = ">=1.65.4"
-=======
 grpcio = ">=1.65.5"
->>>>>>> f58876f (added support for mistral maas models)
 protobuf = ">=5.26.1,<6.0dev"
 
 [[package]]
@@ -1175,7 +1153,7 @@ socks = ["socksio (==1.*)"]
 name = "httpx-sse"
 version = "0.4.0"
 description = "Consume Server-Sent Event (SSE) messages with HTTPX."
-optional = true
+optional = false
 python-versions = ">=3.8"
 files = [
     {file = "httpx-sse-0.4.0.tar.gz", hash = "sha256:1e81a3a3070ce322add1d3529ed42eb5f70817f45ed6ec915ab753f961139721"},
@@ -1186,7 +1164,7 @@ files = [
 name = "huggingface-hub"
 version = "0.24.5"
 description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
-optional = true
+optional = false
 python-versions = ">=3.8.0"
 files = [
     {file = "huggingface_hub-0.24.5-py3-none-any.whl", hash = "sha256:d93fb63b1f1a919a22ce91a14518974e81fc4610bf344dfe7572343ce8d3aced"},
@@ -1362,11 +1340,7 @@ tenacity = "^8.1.0,!=8.4.0"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-<<<<<<< HEAD
-resolved_reference = "c1bd4e05bcd180a36ba7b5d89ca2b5ce4f1e5d4a"
-=======
 resolved_reference = "bda3becbe77a22ce49d77c59035727f3b2ed64f1"
->>>>>>> f58876f (added support for mistral maas models)
 subdirectory = "libs/langchain"
 
 [[package]]
@@ -1394,18 +1368,14 @@ typing-extensions = ">=4.7"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-<<<<<<< HEAD
-resolved_reference = "c1bd4e05bcd180a36ba7b5d89ca2b5ce4f1e5d4a"
-=======
 resolved_reference = "bda3becbe77a22ce49d77c59035727f3b2ed64f1"
->>>>>>> f58876f (added support for mistral maas models)
 subdirectory = "libs/core"
 
 [[package]]
 name = "langchain-mistralai"
 version = "0.1.12"
 description = "An integration package connecting Mistral and LangChain"
-optional = true
+optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
     {file = "langchain_mistralai-0.1.12-py3-none-any.whl", hash = "sha256:5dc5f3a63a646f848eb5007e410745a11667dcd2bc42939049a84f59f85a9737"},
@@ -1436,11 +1406,7 @@ pytest = ">=7,<9"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-<<<<<<< HEAD
-resolved_reference = "c1bd4e05bcd180a36ba7b5d89ca2b5ce4f1e5d4a"
-=======
 resolved_reference = "bda3becbe77a22ce49d77c59035727f3b2ed64f1"
->>>>>>> f58876f (added support for mistral maas models)
 subdirectory = "libs/standard-tests"
 
 [[package]]
@@ -2492,7 +2458,7 @@ test = ["pytest", "tornado (>=4.5)", "typeguard"]
 name = "tokenizers"
 version = "0.20.0"
 description = ""
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "tokenizers-0.20.0-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:6cff5c5e37c41bc5faa519d6f3df0679e4b37da54ea1f42121719c5e2b4905c0"},
@@ -2620,7 +2586,7 @@ files = [
 name = "tqdm"
 version = "4.66.5"
 description = "Fast, Extensible Progress Meter"
-optional = true
+optional = false
 python-versions = ">=3.7"
 files = [
     {file = "tqdm-4.66.5-py3-none-any.whl", hash = "sha256:90279a3770753eafc9194a0364852159802111925aa30eb3f9d85b0e805ac7cd"},
@@ -2868,8 +2834,4 @@ mistral = ["langchain-mistralai"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-<<<<<<< HEAD
-content-hash = "849459cb12ff1378c3206e0983af87a59a25bea1913ff3dbde3844b1f6fa3366"
-=======
-content-hash = "4c12769b4bccad7451c928474080823da30c7705eace7c8f6f7aa2794d0f3968"
->>>>>>> f58876f (added support for mistral maas models)
+content-hash = "a7c0a3c26c217f9a9b30080a50e275c248ed82d1b10cb1f4a808e294d8c74276"
