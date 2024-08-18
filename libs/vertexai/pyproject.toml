@@ -17,6 +17,7 @@ google-cloud-aiplatform = "^1.56.0"
 google-cloud-storage = "^2.17.0"
 # optional dependencies
 anthropic = { extras = ["vertexai"], version = ">=0.30.0,<1", optional = true }
+langchain-mistralai = { version = ">=0.1.12,<1", optional = true }
 
 [tool.poetry.group.test]
 optional = true
@@ -78,6 +79,7 @@ langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdir
 
 [tool.poetry.extras]
 anthropic = ["anthropic"]
+mistral = ["langchain-mistralai"]
 
 [tool.ruff.lint]
 select = [
