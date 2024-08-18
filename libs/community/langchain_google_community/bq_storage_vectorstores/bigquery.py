@@ -63,7 +63,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     def get_documents(
         self,
         ids: Optional[List[str]] = None,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Dict[str, Any] | str] = None,
         **kwargs: Any,
     ) -> List[Document]:
         """Search documents by their ids or metadata values.
@@ -185,7 +185,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
         embeddings: List[List[float]],
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Dict[str, Any] | str] = None,
         k: int = 5,
         batch_size: Union[int, None] = 100,
     ) -> List[List[List[Any]]]:
@@ -198,7 +198,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Args:
             embeddings: A list of lists, where each inner list represents a
                 query embedding.
-            filter: (Optional) A dictionary specifying filter criteria for document
+            [TODO Freezaa9] filter: (Optional) A dictionary specifying filter criteria for document
                 on metadata properties, e.g.
                             {
                                 "str_property": "foo",
@@ -235,19 +235,22 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     def _create_search_query(
         self,
         num_embeddings: int,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Dict[str, Any] | str] = None,
         k: int = 5,
         table_to_query: Any = None,
         fields_to_exclude: Optional[List[str]] = None,
     ) -> str:
         if filter:
-            filter_expressions = []
-            for column, value in filter.items():
-                if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
-                    filter_expressions.append(f"base.{column} = {value}")
-                else:
-                    filter_expressions.append(f"base.{column} = '{value}'")
-            where_filter_expr = " AND ".join(filter_expressions)
+            if isinstance(filter, Dict): # If Dict filters is passed
+                filter_expressions = []
+                for column, value in filter.items():
+                    if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
+                        filter_expressions.append(f"base.{column} = {value}")
+                    else:
+                        filter_expressions.append(f"base.{column} = '{value}'")
+                where_filter_expr = " AND ".join(filter_expressions)
+            else: # If already SQL clauses filters is pased
+                where_filter_expr = filter
         else:
             where_filter_expr = "TRUE"
 
@@ -300,7 +303,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     def _search_embeddings(
         self,
         embeddings: List[List[float]],
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Dict[str, Any] | str] = None,
         k: int = 5,
     ) -> list:
         from google.cloud import bigquery  # type: ignore[attr-defined]
@@ -397,7 +400,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         self,
         embeddings: Optional[List[List[float]]] = None,
         queries: Optional[List[str]] = None,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Dict[str, Any] | str] = None,
         k: int = 5,
         expire_hours_temp_table: int = 12,
     ) -> List[List[List[Any]]]:
