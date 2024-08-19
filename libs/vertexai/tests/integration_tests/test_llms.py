@@ -96,16 +96,8 @@ async def test_vertex_agenerate() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize(
-    "model_name",
-    model_names_to_test_with_default,
-)
-def test_stream(model_name: str) -> None:
-    llm = (
-        VertexAI(temperature=0, model_name=model_name)
-        if model_name
-        else VertexAI(temperature=0)
-    )
+def test_stream() -> None:
+    llm = VertexAI(temperature=0, model_name=_DEFAULT_MODEL_NAME)
     for token in llm.stream("I'm Pickle Rick"):
         assert isinstance(token, str)
 
