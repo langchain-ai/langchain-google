@@ -215,11 +215,11 @@ def get_generation_info(
             info_usage_metadata["prompt_token_count"] = input_usage.get("totalTokens")
             info["usage_metadata"] = {k: v for k, v in info_usage_metadata.items() if v}
 
-            # NOTE:
-            # "safety_attributes" can contain different values for the same keys
-            # for each generation. Put it in a list, so it can be merged later by
-            # merge_dicts().
-            #
+        # NOTE:
+        # "safety_attributes" can contain different values for the same keys
+        # for each generation. Put it in a list, so it can be merged later by
+        # merge_dicts().
+        if "safety_attributes" in info:
             safety_attributes = info.get("safety_attributes") or {}
             info["safety_attributes"] = [safety_attributes]
 
