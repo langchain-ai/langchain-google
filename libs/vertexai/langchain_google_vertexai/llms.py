@@ -313,13 +313,13 @@ class VertexAI(_VertexAICommon, BaseLLM):
             chunk = self._candidate_to_generation(
                 stream_resp, stream=True, usage_metadata=usage_metadata
             )
-            yield chunk
             if run_manager:
                 run_manager.on_llm_new_token(
                     chunk.text,
                     chunk=chunk,
                     verbose=self.verbose,
                 )
+            yield chunk
 
     async def _astream(
         self,
@@ -343,8 +343,8 @@ class VertexAI(_VertexAICommon, BaseLLM):
             chunk = self._candidate_to_generation(
                 chunk.candidates[0], stream=True, usage_metadata=usage_metadata
             )
-            yield chunk
             if run_manager:
                 await run_manager.on_llm_new_token(
                     chunk.text, chunk=chunk, verbose=self.verbose
                 )
+            yield chunk
