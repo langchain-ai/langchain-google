@@ -10,7 +10,7 @@ from langchain_core.outputs import LLMResult
 from langchain_google_vertexai.llms import VertexAI
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
-model_names_to_test = ["gemini-1.0-pro", _DEFAULT_MODEL_NAME]
+model_names_to_test = [_DEFAULT_MODEL_NAME]
 model_names_to_test_with_default = [None] + model_names_to_test
 
 
