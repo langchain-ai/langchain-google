@@ -31,6 +31,7 @@ from langchain_google_vertexai.gemma import (
 )
 from langchain_google_vertexai.llms import VertexAI
 from langchain_google_vertexai.model_garden import VertexAIModelGarden
+from langchain_google_vertexai.model_garden_maas import get_vertex_maas_model
 from langchain_google_vertexai.utils import create_context_cache
 from langchain_google_vertexai.vectorstores import (
     DataStoreDocumentStorage,
@@ -81,4 +82,5 @@ __all__ = [
     "VertexPairWiseStringEvaluator",
     "VertexStringEvaluator",
     "create_context_cache",
+    "get_vertex_maas_model",
 ]

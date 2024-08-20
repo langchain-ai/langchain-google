@@ -99,12 +99,35 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
     append_tools_to_system_message: bool = False
     "Whether to append tools to the system message or not."
     model_family: Optional[VertexMaaSModelFamily] = None
+    timeout: int = 120
 
     class Config:
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
         arbitrary_types_allowed = True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        token = _get_token(credentials=self.credentials)
+        endpoint = self.get_url()
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "x-goog-api-client": self._library_version,
+            "user_agent": self._user_agent,
+        }
+        self.client = httpx.Client(
+            base_url=endpoint,
+            headers=headers,
+            timeout=self.timeout,
+        )
+        self.async_client = httpx.AsyncClient(
+            base_url=endpoint,
+            headers=headers,
+            timeout=self.timeout,
+        )
 
     @root_validator(pre=True)
     def validate_environment_model_garden(cls, values: Dict) -> Dict:
@@ -132,7 +155,7 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
                     ":streamRawPredict"
                 )
             return f"publishers/mistralai/models/{self.full_model_name}:rawPredict"
-        return "openapi/chat/completions"
+        return "endpoints/openapi/chat/completions"
 
     def get_url(self) -> str:
         if self.model_family == VertexMaaSModelFamily.LLAMA:
@@ -173,12 +196,17 @@ async def acompletion_with_retry(
             kwargs["stream"] = False
         stream = kwargs["stream"]
         if stream:
+            # Llama and Mistral expect different "Content-Type" for streaming
+            headers = {"Accept": "text/event-stream"}
+            if headers_content_type := kwargs.pop("headers_content_type", None):
+                headers["Content-Type"] = headers_content_type
+
             event_source = aconnect_sse(
                 llm.async_client,
                 "POST",
                 llm._get_url_part(stream=True),
                 json=kwargs,
-                headers={"Accept": "text/event-stream"},
+                headers=headers,
             )
             return _aiter_sse(event_source)
         else:
@@ -197,6 +225,10 @@ def completion_with_retry(llm: _BaseVertexMaasModelGarden, **kwargs):
     kwargs = llm._enrich_params(kwargs)
 
     if stream:
+        # Llama and Mistral expect different "Content-Type" for streaming
+        headers = {"Accept": "text/event-stream"}
+        if headers_content_type := kwargs.pop("headers_content_type", None):
+            headers["Content-Type"] = headers_content_type
 
         def iter_sse():
             with connect_sse(
@@ -204,7 +236,7 @@ def completion_with_retry(llm: _BaseVertexMaasModelGarden, **kwargs):
                 "POST",
                 llm._get_url_part(stream=True),
                 json=kwargs,
-                headers={"Accept": "text/event-stream"},
+                headers=headers,
             ) as event_source:
                 _raise_on_error(event_source.response)
                 for event in event_source.iter_sse():
