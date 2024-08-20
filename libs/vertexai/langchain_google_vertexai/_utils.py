@@ -126,15 +126,10 @@ class GoogleModelFamily(str, Enum):
         # https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning
         model_name = value.lower()
         gemini_advanced_models = {
-            "gemini-1.5-flash-preview-0514",
-            "gemini-1.5-pro-preview-0514",
-            "gemini-1.5-pro-preview-0409",
-            "gemini-1.5-flash-001",
-            "gemini-1.5-pro-001",
             "medlm-large-1.5-preview",
             "medlm-large-1.5-001",
         }
-        if model_name in gemini_advanced_models:
+        if "gemini-1.5" in model_name or model_name in gemini_advanced_models:
             return GoogleModelFamily.GEMINI_ADVANCED
         if "gemini" in model_name:
             return GoogleModelFamily.GEMINI
