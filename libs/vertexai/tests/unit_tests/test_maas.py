@@ -1,6 +1,6 @@
 import json
-from typing import Dict
-from unittest.mock import ANY
+from typing import Any, Dict
+from unittest.mock import ANY, MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
@@ -12,7 +12,11 @@ from langchain_google_vertexai.model_garden_maas.llama import (
 )
 
 
-def test_llama_init() -> None:
+@patch("langchain_google_vertexai.model_garden_maas._base.auth")
+def test_llama_init(mock_auth: Any) -> None:
+    mock_credentials = MagicMock()
+    mock_credentials.token.return_value = "test-token"
+    mock_auth.default.return_value = (mock_credentials, None)
     llm = get_vertex_maas_model(
         model_name="meta/llama3-405b-instruct-maas",
         location="moon-dark",
@@ -27,9 +31,11 @@ def test_llama_init() -> None:
     )
     assert llm._get_url_part() == "endpoints/openapi/chat/completions"
     assert llm._get_url_part(stream=True) == "endpoints/openapi/chat/completions"
+    mock_credentials.refresh.assert_called_once()
 
 
-def test_parse_history() -> None:
+@patch("langchain_google_vertexai.model_garden_maas._base.auth")
+def test_parse_history(mock_auth: Any) -> None:
     llm = get_vertex_maas_model(
         model_name="meta/llama3-405b-instruct-maas",
         location="us-central1",
@@ -49,7 +55,8 @@ def test_parse_history() -> None:
     assert parsed_history == expected_parsed_history
 
 
-def test_parse_history_llama_tools() -> None:
+@patch("langchain_google_vertexai.model_garden_maas._base.auth")
+def test_parse_history_llama_tools(mock_auth: Any) -> None:
     @tool
     def get_weather(city: str) -> float:
         """Get the current weather and temperature for a given city."""
@@ -67,7 +74,7 @@ def test_parse_history_llama_tools() -> None:
         SystemMessage(content="You're a helpful assistant."),
         HumanMessage(content="What is the weather in Munich?"),
     ]
-    parsed_history = llm._convert_messages(history, tools=[get_weather])  # type: ignore[list-item]
+    parsed_history = llm._convert_messages(history, tools=[get_weather])
     expected_parsed_history = [
         {"role": "system", "content": ANY},
         {"role": "user", "content": "What is the weather in Munich?"},
@@ -89,7 +96,7 @@ def test_parse_history_llama_tools() -> None:
         ),
         ToolMessage(content="32", name="get_weather", tool_call_id="1"),
     ]
-    parsed_history = llm._convert_messages(history, tools=[get_weather])  # type: ignore[list-item]
+    parsed_history = llm._convert_messages(history, tools=[get_weather])
     expected_parsed_history = [
         {"role": "system", "content": ANY},
         {"role": "user", "content": "What is the weather in Munich?"},

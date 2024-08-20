@@ -10,11 +10,11 @@ from typing import (
     Union,
 )
 
-import httpx  # type: ignore[unused-ignore, import-not-found]
+import httpx
 from google import auth
 from google.auth.credentials import Credentials
 from google.auth.transport import requests as auth_requests
-from httpx_sse import (  # type: ignore[import-not-found]
+from httpx_sse import (
     EventSource,
     aconnect_sse,
     connect_sse,

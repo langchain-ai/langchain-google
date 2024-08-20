@@ -47,7 +47,6 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import (
     convert_to_openai_function,
-    convert_to_openai_tool,
 )
 
 from langchain_google_vertexai.model_garden_maas._base import (
@@ -115,7 +114,7 @@ def _parse_response_candidate_llama(
     )
 
 
-class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
+class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):  # type: ignore[misc]
     """Integration for Llama 3.1 on Google Cloud Vertex AI Model-as-a-Service.
 
     For more information, see:
@@ -424,7 +423,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         return AIMessageChunk(
             content=content,
             additional_kwargs=additional_kwargs,
-            tool_call_chunks=tool_call_chunks,  # type: ignore[arg-type]
+            tool_call_chunks=tool_call_chunks,
             usage_metadata=usage_metadata,  # type: ignore[arg-type]
         )
 

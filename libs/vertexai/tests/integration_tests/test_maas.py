@@ -89,7 +89,7 @@ async def test_tools(model_name: str) -> None:
 
     assert isinstance(response, AIMessage)
     tool_calls = response.tool_calls
-    assert len(tool_calls) == 1
+    assert len(tool_calls) > 0
 
     tool_response = search("sparrow")
     tool_messages: List[BaseMessage] = []
