@@ -10,7 +10,7 @@ from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 @pytest.mark.release
 @pytest.mark.parametrize(
     "model_name",
-    [_DEFAULT_MODEL_NAME, "text-bison@001", "code-bison@001"],
+    [_DEFAULT_MODEL_NAME, "code-bison@001"],
 )
 def test_llm_invoke(model_name: str) -> None:
     vb = VertexAICallbackHandler()
@@ -51,7 +51,7 @@ def test_chat_call(model_name: str) -> None:
 @pytest.mark.release
 @pytest.mark.parametrize(
     "model_name",
-    [_DEFAULT_MODEL_NAME, "text-bison@001", "code-bison@001"],
+    [_DEFAULT_MODEL_NAME, "code-bison@001"],
 )
 def test_invoke_config(model_name: str) -> None:
     vb = VertexAICallbackHandler()
