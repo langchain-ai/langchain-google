@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-import httpx  # type: ignore[import-not-found]
+import httpx  # type: ignore[unused-ignore, import-not-found]
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
 )

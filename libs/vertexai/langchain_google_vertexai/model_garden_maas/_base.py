@@ -10,7 +10,7 @@ from typing import (
     Union,
 )
 
-import httpx  # type: ignore[import-not-found]
+import httpx  # type: ignore[unused-ignore, import-not-found]
 from google import auth
 from google.auth.credentials import Credentials
 from google.auth.transport import requests as auth_requests
