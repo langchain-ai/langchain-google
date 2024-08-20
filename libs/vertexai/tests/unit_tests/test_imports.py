@@ -16,6 +16,7 @@ EXPECTED_ALL = [
     "HarmBlockThreshold",
     "HarmCategory",
     "PydanticFunctionsOutputParser",
+    "SafetySetting",
     "Schema",
     "ToolConfig",
     "Type",

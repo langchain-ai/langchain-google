@@ -6,7 +6,11 @@ from google.cloud.aiplatform_v1beta1.types import (
     Type,
 )
 
-from langchain_google_vertexai._enums import HarmBlockThreshold, HarmCategory
+from langchain_google_vertexai._enums import (
+    HarmBlockThreshold,
+    HarmCategory,
+    SafetySetting,
+)
 from langchain_google_vertexai.chains import create_structured_runnable
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
@@ -59,6 +63,7 @@ __all__ = [
     "HarmBlockThreshold",
     "HarmCategory",
     "PydanticFunctionsOutputParser",
+    "SafetySetting",
     "Schema",
     "ToolConfig",
     "Type",
