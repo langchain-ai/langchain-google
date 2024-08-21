@@ -2834,4 +2834,4 @@ mistral = ["langchain-mistralai"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "a7c0a3c26c217f9a9b30080a50e275c248ed82d1b10cb1f4a808e294d8c74276"
+content-hash = "8240d23b8fc671345e140d2720298d549a40e05da220a901ee8b72a1b51bcb25"

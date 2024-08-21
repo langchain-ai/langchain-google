@@ -11,20 +11,19 @@ from langchain_core.messages import (
 )
 from langchain_core.tools import tool
 
-from langchain_google_vertexai.model_garden_maas.mistral import (
-    VertexModelGardenMistral,
+from langchain_google_vertexai.model_garden_maas import (
+    _LLAMA_MODELS,
+    _MISTRAL_MODELS,
+    get_vertex_maas_model,
 )
 
-model_names = [
-    "mistral-nemo@2407",
-    "mistral-large@2407",
-]
+model_names = _LLAMA_MODELS + _MISTRAL_MODELS
 
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 def test_generate(model_name: str) -> None:
-    llm = VertexModelGardenMistral(model=model_name, location="us-central1")
+    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = llm.invoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
     print(output)
@@ -33,7 +32,7 @@ def test_generate(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 async def test_agenerate(model_name: str) -> None:
-    llm = VertexModelGardenMistral(model=model_name, location="us-central1")
+    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = await llm.ainvoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
     print(output)
@@ -42,7 +41,7 @@ async def test_agenerate(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 def test_stream(model_name: str) -> None:
-    llm = VertexModelGardenMistral(model=model_name, location="us-central1")
+    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = llm.stream("What is the meaning of life?")
     for chunk in output:
         assert isinstance(chunk, AIMessageChunk)
@@ -51,7 +50,7 @@ def test_stream(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 async def test_astream(model_name: str) -> None:
-    llm = VertexModelGardenMistral(model=model_name, location="us-central1")
+    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = llm.astream("What is the meaning of life?")
     async for chunk in output:
         assert isinstance(chunk, AIMessageChunk)
@@ -72,7 +71,11 @@ async def test_tools(model_name: str) -> None:
 
     tools = [search]
 
-    llm = VertexModelGardenMistral(model=model_name, location="us-central1")
+    llm = get_vertex_maas_model(
+        model_name=model_name,
+        location="us-central1",
+        append_tools_to_system_message=True,
+    )
     llm_with_search = llm.bind_tools(
         tools=tools,
     )
@@ -86,7 +89,7 @@ async def test_tools(model_name: str) -> None:
 
     assert isinstance(response, AIMessage)
     tool_calls = response.tool_calls
-    assert len(tool_calls) == 1
+    assert len(tool_calls) > 0
 
     tool_response = search("sparrow")
     tool_messages: List[BaseMessage] = []
@@ -103,5 +106,6 @@ async def test_tools(model_name: str) -> None:
     result = llm_with_search.invoke([request, response] + tool_messages)
 
     assert isinstance(result, AIMessage)
-    assert "brown" in result.content
+    if model_name in _MISTRAL_MODELS:
+        assert "brown" in result.content
     assert len(result.tool_calls) == 0

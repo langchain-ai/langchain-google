@@ -18,6 +18,8 @@ google-cloud-storage = "^2.17.0"
 # optional dependencies
 anthropic = { extras = ["vertexai"], version = ">=0.30.0,<1", optional = true }
 langchain-mistralai = { version = ">=0.1.12,<1", optional = true }
+httpx = "^0.27.0"
+httpx-sse = "^0.4.0"
 
 [tool.poetry.group.test]
 optional = true
@@ -44,6 +46,8 @@ langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git
 
 [tool.codespell]
 ignore-words-list = "rouge"
+
+
 
 
 [tool.poetry.group.codespell]
