@@ -374,22 +374,19 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
         return LLMResult(generations=generations)
 
     def _parse_prediction(self, prediction: Any) -> str:
-        if isinstance(prediction, str):
-            if prediction.startswith("Prompt:\n"):
-                result = re.search(r"(?s:.*)\nOutput:\n((.|\n)*)", prediction)
+        def _clean_response(response: str) -> str:
+            if response.startswith("Prompt:\n"):
+                result = re.search(r"(?s:.*)\nOutput:\n((?s:.*))", response)
                 if result:
                     return result[1]
-            return prediction
+            return response
+
+        if isinstance(prediction, str):
+            return _clean_response(prediction)
 
         if self.result_arg:
             try:
-                if prediction[self.result_arg].startswith("Prompt:\n"):
-                    result = re.search(
-                        r"(?s:.*)\nOutput:\n((.|\n)*)", prediction[self.result_arg]
-                    )
-                    if result:
-                        return result[1]
-                return prediction[self.result_arg]
+                return _clean_response(prediction[self.result_arg])
             except KeyError:
                 if isinstance(prediction, str):
                     error_desc = (
