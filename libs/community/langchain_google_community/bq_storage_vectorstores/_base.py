@@ -18,6 +18,7 @@ from langchain_core.vectorstores import VectorStore
 
 from langchain_google_community._utils import get_client_info
 from langchain_google_community.bq_storage_vectorstores.utils import (
+    check_bq_dataset_exists,
     validate_column_in_bq_schema,
 )
 
@@ -139,13 +140,17 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
             f"{values['project_id']}.{values['dataset_name']}.{values['table_name']}"
         )
         values["_full_table_id"] = full_table_id
-
-        values["_bq_client"].create_dataset(
-            dataset=values["dataset_name"], exists_ok=True
-        )
-        values["_bq_client"].create_dataset(
-            dataset=f"{values['dataset_name']}_temp", exists_ok=True
-        )
+        temp_dataset_id = f"{values['dataset_name']}_temp"
+        if not check_bq_dataset_exists(
+            client=values["_bq_client"], dataset_id=values["dataset_name"]
+        ):
+            values["_bq_client"].create_dataset(
+                dataset=values["dataset_name"], exists_ok=True
+            )
+        if not check_bq_dataset_exists(
+            client=values["_bq_client"], dataset_id=temp_dataset_id
+        ):
+            values["_bq_client"].create_dataset(dataset=temp_dataset_id, exists_ok=True)
         table_ref = bigquery.TableReference.from_string(full_table_id)
         values["_bq_client"].create_table(table_ref, exists_ok=True)
         values["_logger"].info(
