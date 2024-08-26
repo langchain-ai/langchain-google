@@ -1,5 +1,7 @@
 from typing import Any, Dict
 
+from google.cloud.exceptions import NotFound
+
 
 def validate_column_in_bq_schema(
     columns: dict, column_name: str, expected_types: list, expected_modes: list
@@ -50,3 +52,16 @@ def cast_proto_type(column: str, value: Any) -> Any:
     elif column.startswith("bool"):
         return bool(value)
     return value
+
+
+def check_bq_dataset_exists(client: Any, dataset_id: str) -> bool:
+    from google.cloud import bigquery  # type: ignore[attr-defined]
+
+    if not isinstance(client, bigquery.Client):
+        raise TypeError("client must be an instance of bigquery.Client")
+
+    try:
+        client.get_dataset(dataset_id)  # Make an API request.
+        return True
+    except NotFound:
+        return False
