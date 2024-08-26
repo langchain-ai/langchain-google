@@ -67,7 +67,7 @@ def test_add_texts_with_custom_ids(mocker):
 
     assert returned_ids == ids
 
-    VectorStore._generate_unique_ids.assert_not_called()
+    VectorStore._generate_unique_ids.assert_not_called()  # type: ignore[attr-defined]
     VectorStore._document_storage.mset.assert_called_once()
     VectorStore._embeddings.embed_documents.assert_called_once()
     VectorStore._searcher.add_to_index.assert_called_once()
