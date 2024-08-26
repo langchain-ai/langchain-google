@@ -50,6 +50,7 @@ ignore-words-list = "rouge"
 
 
 
+
 [tool.poetry.group.codespell]
 optional = true
 
@@ -83,6 +84,7 @@ mypy = "^1"
 types-google-cloud-ndb = "^2.2.0.20240106"
 types-protobuf = "^4.24.0.4"
 types-requests = "^2.31.0"
+types-tqdm = "^4.66.0.20240417"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
 

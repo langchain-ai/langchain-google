@@ -428,9 +428,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                     "Unable to show progress bar because tqdm could not be imported. "
                     "Please install with `pip install tqdm`."
                 )
-                iter_ = batches
+                iter_ = batches # type: ignore
         else:
-            iter_ = batches
+            iter_ = batches # type: ignore
         for batch in iter_:
             tasks.append(
                 self.instance["task_executor"].submit(
