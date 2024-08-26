@@ -91,6 +91,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             job_config = None
             id_expr = "TRUE"
         if filter:
+            # Pull BQ Vector Store information if not already done.
+            if not self.table_schema:
+                self._validate_bq_table()
             filter_expressions = []
             for column, value in filter.items():
                 filter_expressions.append(f"{column} = '{value}'")
