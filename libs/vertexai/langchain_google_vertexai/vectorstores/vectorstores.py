@@ -197,12 +197,12 @@ class _BaseVertexAIVectorStore(VectorStore):
         # metadata is a list so probably not?
         texts = list(texts)
 
-        if len(set(ids)) != len(ids):
+        if ids is not None and len(set(ids)) != len(ids):
             raise ValueError(
                 "All provided ids should be unique."
                 f"There are {len(ids)-len(set(ids))} duplicates."
             )
-        if len(ids) != len(texts):
+        if ids is not None and len(ids) != len(texts):
             raise ValueError(
                 "The number of `ids` should match the number of `texts` "
                 f"{len(ids)} != {len(texts)}"

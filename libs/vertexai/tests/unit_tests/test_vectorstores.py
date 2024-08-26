@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from langchain_google_vertexai.vectorstores._utils import to_data_points
 from langchain_google_vertexai.vectorstores.vectorstores import _BaseVertexAIVectorStore
