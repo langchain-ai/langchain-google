@@ -173,7 +173,8 @@ class _BaseVertexAIVectorStore(VectorStore):
         self,
         texts: Iterable[str],
         metadatas: Union[List[dict], None] = None,
-        ids: Union[List[str], None] = None,
+        *,
+        ids: Optional[List[str]] = None,
         is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> List[str]:
@@ -196,9 +197,6 @@ class _BaseVertexAIVectorStore(VectorStore):
         # metadata is a list so probably not?
         texts = list(texts)
 
-        if ids is None:
-            ids = self._generate_unique_ids(len(texts))
-
         if len(set(ids)) != len(ids):
             raise ValueError(
                 "All provided ids should be unique."
@@ -209,6 +207,9 @@ class _BaseVertexAIVectorStore(VectorStore):
                 "The number of `ids` should match the number of `texts` "
                 f"{len(ids)} != {len(texts)}"
             )
+
+        if ids is None:
+            ids = self._generate_unique_ids(len(texts))
 
         if metadatas is None:
             metadatas = [{}] * len(texts)
