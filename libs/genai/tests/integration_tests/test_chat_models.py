@@ -379,6 +379,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         [MyModel]
     )
     response = model.invoke([message])
+    print("response=", response)
     _check_tool_calls(response, "MyModel")
 
     # Test .bind_tools with function
