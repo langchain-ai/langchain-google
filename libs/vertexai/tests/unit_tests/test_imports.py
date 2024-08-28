@@ -16,6 +16,7 @@ EXPECTED_ALL = [
     "HarmBlockThreshold",
     "HarmCategory",
     "PydanticFunctionsOutputParser",
+    "SafetySetting",
     "Schema",
     "ToolConfig",
     "Type",
@@ -33,6 +34,7 @@ EXPECTED_ALL = [
     "VertexPairWiseStringEvaluator",
     "VertexStringEvaluator",
     "create_context_cache",
+    "get_vertex_maas_model",
 ]
 
 

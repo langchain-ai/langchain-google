@@ -91,6 +91,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             job_config = None
             id_expr = "TRUE"
         if filter:
+            # Pull BQ Vector Store information if not already done.
+            if not self.table_schema:
+                self._validate_bq_table()
             filter_expressions = []
             for column, value in filter.items():
                 filter_expressions.append(f"{column} = '{value}'")
@@ -136,6 +139,12 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             return values
 
         table = values["_bq_client"].get_table(values["_full_table_id"])  # type: ignore[union-attr]
+
+        # Update existing table schema
+        schema = table.schema.copy()
+        if schema:  ## Check if table has a schema
+            values["table_schema"] = {field.name: field.field_type for field in schema}
+
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
             values["_logger"].debug("Not enough rows to create a vector index.")
             return values

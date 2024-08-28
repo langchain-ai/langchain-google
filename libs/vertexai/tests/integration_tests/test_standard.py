@@ -19,7 +19,11 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model_name": "gemini-1.0-pro-001", "rate_limiter": rate_limiter}
+        return {
+            "model_name": "gemini-1.0-pro-001",
+            "rate_limiter": rate_limiter,
+            "temperature": 0,
+        }
 
     @pytest.mark.xfail(reason="Gemini 1.0 doesn't support tool_choice='any'")
     def test_structured_few_shot_examples(self, model: BaseChatModel) -> None:

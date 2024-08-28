@@ -7,7 +7,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models.llms import BaseLLM
+from langchain_core.language_models.llms import BaseLLM, LangSmithParams
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.pydantic_v1 import Field, root_validator
 from vertexai.generative_models import (  # type: ignore[import-untyped]
@@ -182,6 +182,19 @@ class VertexAI(_VertexAICommon, BaseLLM):
         if values["streaming"] and values["n"] > 1:
             raise ValueError("Only one candidate can be generated with streaming!")
         return values
+
+    def _get_ls_params(
+        self, stop: Optional[List[str]] = None, **kwargs: Any
+    ) -> LangSmithParams:
+        """Get standard params for tracing."""
+        params = self._prepare_params(stop=stop, **kwargs)
+        ls_params = super()._get_ls_params(stop=stop, **params)
+        ls_params["ls_provider"] = "google_vertexai"
+        if ls_max_tokens := params.get("max_output_tokens", self.max_output_tokens):
+            ls_params["ls_max_tokens"] = ls_max_tokens
+        if ls_stop := stop or self.stop:
+            ls_params["ls_stop"] = ls_stop
+        return ls_params
 
     def _candidate_to_generation(
         self,

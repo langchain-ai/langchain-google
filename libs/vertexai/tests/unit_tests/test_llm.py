@@ -107,3 +107,24 @@ def test_extract_response() -> None:
     for original_result, result in prompts_results:
         my_result = MyResult(original_result)
         assert model._parse_prediction(my_result) == my_result
+
+
+def test_tracing_params() -> None:
+    # Test standard tracing params
+    llm = VertexAI(model_name="gemini-pro")
+    ls_params = llm._get_ls_params()
+    assert ls_params == {
+        "ls_provider": "google_vertexai",
+        "ls_model_type": "llm",
+        "ls_model_name": "gemini-pro",
+    }
+
+    llm = VertexAI(model_name="gemini-pro", temperature=0.1, max_output_tokens=10)
+    ls_params = llm._get_ls_params()
+    assert ls_params == {
+        "ls_provider": "google_vertexai",
+        "ls_model_type": "llm",
+        "ls_model_name": "gemini-pro",
+        "ls_temperature": 0.1,
+        "ls_max_tokens": 10,
+    }

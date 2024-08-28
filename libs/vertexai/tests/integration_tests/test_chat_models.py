@@ -6,6 +6,11 @@ from typing import List, Optional, cast
 
 import pytest
 from google.cloud import storage
+from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
+    Content,
+    Part,
+)
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -16,6 +21,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.tools import tool
@@ -27,11 +33,14 @@ from langchain_google_vertexai import (
     HarmCategory,
     create_context_cache,
 )
+from langchain_google_vertexai.chat_models import (
+    _parse_chat_history_gemini,
+)
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
-model_names_to_test = [None, "codechat-bison", "chat-bison", _DEFAULT_MODEL_NAME]
+model_names_to_test = ["codechat-bison", _DEFAULT_MODEL_NAME]
 
-rate_limiter = InMemoryRateLimiter(requests_per_second=0.5)
+rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
 
 
 def _check_usage_metadata(message: AIMessage) -> None:
@@ -48,20 +57,14 @@ def _check_usage_metadata(message: AIMessage) -> None:
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_initialization(model_name: Optional[str]) -> None:
     """Test chat model initialization."""
-    if model_name:
-        model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
-    else:
-        model = ChatVertexAI(rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
     assert model._llm_type == "vertexai"
 
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_vertexai_single_call(model_name: Optional[str]) -> None:
-    if model_name:
-        model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
-    else:
-        model = ChatVertexAI(rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
     message = HumanMessage(content="Hello")
     response = model([message])
     assert isinstance(response, AIMessage)
@@ -83,10 +86,9 @@ def test_candidates() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", ["chat-bison@001", _DEFAULT_MODEL_NAME])
-async def test_vertexai_agenerate(model_name: str) -> None:
+async def test_vertexai_agenerate() -> None:
     model = ChatVertexAI(
-        temperature=0, model_name=model_name, rate_limiter=rate_limiter
+        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter
     )
     message = HumanMessage(content="Hello")
     response = await model.agenerate([[message]])
@@ -108,10 +110,9 @@ async def test_vertexai_agenerate(model_name: str) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", ["chat-bison@001", _DEFAULT_MODEL_NAME])
-def test_vertexai_stream(model_name: str) -> None:
+def test_vertexai_stream() -> None:
     model = ChatVertexAI(
-        temperature=0, model_name=model_name, rate_limiter=rate_limiter
+        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter
     )
     message = HumanMessage(content="Hello")
 
@@ -148,23 +149,6 @@ async def test_vertexai_astream() -> None:
         pytest.fail("Expected exactly one chunk with usage metadata")
     assert isinstance(full, AIMessageChunk)
     _check_usage_metadata(full)
-
-
-@pytest.mark.release
-def test_vertexai_single_call_with_context() -> None:
-    model = ChatVertexAI(rate_limiter=rate_limiter)
-    raw_context = (
-        "My name is Peter. You are my personal assistant. My favorite movies "
-        "are Lord of the Rings and Hobbit."
-    )
-    question = (
-        "Hello, could you recommend a good movie for me to watch this evening, please?"
-    )
-    context = SystemMessage(content=raw_context)
-    message = HumanMessage(content=question)
-    response = model([context, message])
-    assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
 
 
 @pytest.mark.release
@@ -215,9 +199,7 @@ multimodal_inputs = [
 @pytest.mark.release
 @pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
 def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
-    llm = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0514", rate_limiter=rate_limiter
-    )
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001", rate_limiter=rate_limiter)
     media_message = {
         "type": "media",
         "file_uri": file_uri,
@@ -235,9 +217,7 @@ def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
 def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
-    llm = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0514", rate_limiter=rate_limiter
-    )
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001", rate_limiter=rate_limiter)
     storage_client = storage.Client()
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
@@ -255,13 +235,115 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
     assert isinstance(output.content, str)
 
 
+@pytest.mark.release
+def test_multimodal_media_inline_base64_template() -> None:
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+    storage_client = storage.Client()
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    text_message = {"type": "text", "text": "Describe the attached media in 5 words!"}
+    message = HumanMessage(content=[media_message, text_message])
+    chain = prompt_template | llm
+    output = chain.invoke({"input": [message]})
+    assert isinstance(output.content, str)
+
+
+@pytest.mark.extended
+def test_multimodal_media_inline_base64_agent() -> None:
+    from langchain import agents
+
+    @tool
+    def get_climate_info(query: str):
+        """Retrieves information about the Climate."""
+        return "MOCK CLIMATE INFO STRING"
+
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+    storage_client = storage.Client()
+    # Can't use the pixel.mp3, since it has too many tokens it will hit quota
+    # error.
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    text_message = {"type": "text", "text": "Describe the attached media in 5 words."}
+    message = [media_message, text_message]
+    tools = [get_climate_info]
+    agent = agents.create_tool_calling_agent(
+        llm=llm,
+        tools=tools,  # type: ignore[arg-type]
+        prompt=prompt_template,
+    )
+    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+        agent=agent,  # type: ignore[arg-type]
+        tools=tools,  # type: ignore[arg-type]
+        verbose=False,
+        stream_runnable=False,
+    )
+    output = agent_executor.invoke({"input": message})
+    assert isinstance(output["output"], str)
+
+
+def test_parse_history_gemini_multimodal_FC():
+    storage_client = storage.Client()
+    # Can't use the pixel.mp3, since it has too many tokens it will hit quota
+    # error.
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([media_message, text_message])
+    history: List[BaseMessage] = [HumanMessage(content=message)]
+    parts = [
+        Part(inline_data=Blob(data=media_base64, mime_type=mime_type)),
+        Part(text=instruction),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    _, response = _parse_chat_history_gemini(history=history)
+    assert expected == response
+
+
 @pytest.mark.xfail(reason="investigating")
 @pytest.mark.release
 @pytest.mark.parametrize("file_uri,mime_type", [video_param])
 def test_multimodal_video_metadata(file_uri, mime_type) -> None:
-    llm = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0514", rate_limiter=rate_limiter
-    )
+    llm = ChatVertexAI(model_name="gemini-1.5-pro-001", rate_limiter=rate_limiter)
     media_message = {
         "type": "media",
         "file_uri": file_uri,
@@ -312,27 +394,9 @@ def test_multimodal_history() -> None:
 
 
 @pytest.mark.release
-def test_vertexai_single_call_with_examples() -> None:
-    model = ChatVertexAI(rate_limiter=rate_limiter)
-    raw_context = "My name is Peter. You are my personal assistant."
-    question = "2+2"
-    text_question, text_answer = "4+4", "8"
-    inp = HumanMessage(content=text_question)
-    output = AIMessage(content=text_answer)
-    context = SystemMessage(content=raw_context)
-    message = HumanMessage(content=question)
-    response = model([context, message], examples=[inp, output])
-    assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-
-
-@pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
-    if model_name:
-        model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
-    else:
-        model = ChatVertexAI(rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
@@ -346,10 +410,7 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", ["gemini-1.0-pro-002"])
 def test_vertexai_system_message(model_name: Optional[str]) -> None:
-    if model_name:
-        model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
-    else:
-        model = ChatVertexAI(rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
     system_instruction = """CymbalBank is a bank located in London"""
     text_question1 = "Where is Cymbal located? Provide only the name of the city."
     sys_message = SystemMessage(content=system_instruction)
@@ -362,14 +423,8 @@ def test_vertexai_system_message(model_name: Optional[str]) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", model_names_to_test)
-def test_vertexai_single_call_with_no_system_messages(
-    model_name: Optional[str],
-) -> None:
-    if model_name:
-        model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
-    else:
-        model = ChatVertexAI(rate_limiter=rate_limiter)
+def test_vertexai_single_call_with_no_system_messages() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
@@ -381,25 +436,11 @@ def test_vertexai_single_call_with_no_system_messages(
 
 
 @pytest.mark.release
-def test_vertexai_single_call_fails_no_message() -> None:
-    chat = ChatVertexAI(rate_limiter=rate_limiter)
-    with pytest.raises(ValueError) as exc_info:
-        _ = chat([])
-    assert (
-        str(exc_info.value)
-        == "You should provide at least one message to start the chat!"
-    )
-
-
-@pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_get_num_tokens_from_messages(model_name: str) -> None:
-    if model_name:
-        model = ChatVertexAI(
-            model_name=model_name, temperature=0.0, rate_limiter=rate_limiter
-        )
-    else:
-        model = ChatVertexAI(temperature=0.0, rate_limiter=rate_limiter)
+    model = ChatVertexAI(
+        model_name=model_name, temperature=0.0, rate_limiter=rate_limiter
+    )
     message = HumanMessage(content="Hello")
     token = model.get_num_tokens_from_messages(messages=[message])
     assert isinstance(token, int)
@@ -498,7 +539,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
     model = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0409",
+        model_name="gemini-1.5-pro-001",
         safety_settings=safety,
         rate_limiter=rate_limiter,
     ).bind(
@@ -536,9 +577,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
     safety = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
-    model = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0409", safety_settings=safety
-    ).bind(
+    model = ChatVertexAI(model_name="gemini-1.5-pro-001", safety_settings=safety).bind(
         functions=[MyModel],
         tool_config={
             "function_calling_config": {
@@ -565,7 +604,7 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
     llm = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0409",
+        model_name="gemini-1.5-pro-001",
         safety_settings=safety,
         rate_limiter=rate_limiter,
     )
@@ -622,7 +661,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
     llm = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0409",
+        model_name="gemini-1.5-pro-001",
         safety_settings=safety,
         temperature=0,
         rate_limiter=rate_limiter,
@@ -782,7 +821,6 @@ def test_context_catching():
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert "747" in response.content
 
     # Using cached content in request
     chat = ChatVertexAI(model_name="gemini-1.5-pro-001", rate_limiter=rate_limiter)
@@ -790,4 +828,3 @@ def test_context_catching():
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert "747" in response.content

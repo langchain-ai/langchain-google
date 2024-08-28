@@ -86,6 +86,13 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
             continue
         elif key in ["type", "_type"]:
             converted_schema["type"] = str(value).upper()
+        elif key == "allOf":
+            if len(value) > 1:
+                logger.warning(
+                    "Only first value for 'allOf' key is supported. "
+                    f"Got {len(value)}, ignoring other than first value!"
+                )
+            return _format_json_schema_to_gapic(value[0])
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:

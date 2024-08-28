@@ -9,7 +9,7 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import LangSmithParams, LanguageModelInput
 from langchain_core.language_models.llms import BaseLLM, create_base_retry_decorator
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
@@ -267,6 +267,16 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             raise ValueError("timeout must be greater than zero")
 
         return values
+
+    def _get_ls_params(
+        self, stop: Optional[List[str]] = None, **kwargs: Any
+    ) -> LangSmithParams:
+        """Get standard params for tracing."""
+        ls_params = super()._get_ls_params(stop=stop, **kwargs)
+        ls_params["ls_provider"] = "google_genai"
+        if ls_max_tokens := kwargs.get("max_output_tokens", self.max_output_tokens):
+            ls_params["ls_max_tokens"] = ls_max_tokens
+        return ls_params
 
     def _generate(
         self,

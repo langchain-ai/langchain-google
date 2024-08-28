@@ -85,10 +85,11 @@ class _GemmaBase(BaseModel):
             "top_p": self.top_p,
             "top_k": self.top_k,
         }
-        return {k: v for k, v in params.items() if v is not None}
+        return {k: v for k, v in params.items()}
 
     def _get_params(self, **kwargs) -> Dict[str, Any]:
-        return {k: kwargs.get(k, v) for k, v in self._default_params.items()}
+        params = {k: kwargs.get(k, v) for k, v in self._default_params.items()}
+        return {k: v for k, v in params.items() if v is not None}
 
 
 class GemmaVertexAIModelGarden(VertexAIModelGarden):
@@ -114,6 +115,7 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
         "top_p",
         "top_k",
         "max_tokens",
+        "max_length",
     ]
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
@@ -137,8 +139,10 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
     @property
     def _default_params(self) -> Dict[str, Any]:
         """Get the default parameters for calling gemma."""
-        params = {"max_length": self.max_tokens}
-        return {k: v for k, v in params.items() if v is not None}
+        # support both Gemma 1B and 2B
+        params = super()._default_params
+        params["max_length"] = self.max_tokens
+        return params
 
     def _generate(
         self,

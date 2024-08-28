@@ -67,7 +67,6 @@ class _VertexAIBase(BaseModel):
     "Optional list of stop words to use when generating."
     model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
-    model_family: Optional[GoogleModelFamily] = None  #: :meta private:
     full_model_name: Optional[str] = None  #: :meta private:
     "The full name of the model's endpoint."
     client_options: Optional["ClientOptions"] = Field(
@@ -156,6 +155,12 @@ class _VertexAIBase(BaseModel):
         _, user_agent = get_user_agent(f"{type(self).__name__}_{self.model_name}")
         return user_agent
 
+    @property
+    def _library_version(self) -> str:
+        """Gets the library version for headers."""
+        library_version, _ = get_user_agent(f"{type(self).__name__}_{self.model_name}")
+        return library_version
+
 
 class _VertexAICommon(_VertexAIBase):
     client_preview: Any = None  #: :meta private:
@@ -175,6 +180,7 @@ class _VertexAICommon(_VertexAIBase):
     """How many completions to generate for each prompt."""
     streaming: bool = False
     """Whether to stream the results or not."""
+    model_family: Optional[GoogleModelFamily] = None  #: :meta private:
     safety_settings: Optional["SafetySettingsType"] = None
     """The default safety settings to use for all generations. 
     
@@ -212,6 +218,8 @@ class _VertexAICommon(_VertexAIBase):
     @property
     def _default_params(self) -> Dict[str, Any]:
         if self.model_family == GoogleModelFamily.GEMINI:
+            default_params: Dict[str, Any] = {}
+        elif self.model_family == GoogleModelFamily.GEMINI_ADVANCED:
             default_params = {}
         else:
             default_params = {
@@ -366,22 +374,19 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
         return LLMResult(generations=generations)
 
     def _parse_prediction(self, prediction: Any) -> str:
-        if isinstance(prediction, str):
-            if prediction.startswith("Prompt:\n"):
-                result = re.search(r"(?s:.*)\nOutput:\n(.*)", prediction)
+        def _clean_response(response: str) -> str:
+            if response.startswith("Prompt:\n"):
+                result = re.search(r"(?s:.*)\nOutput:\n((?s:.*))", response)
                 if result:
                     return result[1]
-            return prediction
+            return response
+
+        if isinstance(prediction, str):
+            return _clean_response(prediction)
 
         if self.result_arg:
             try:
-                if prediction[self.result_arg].startswith("Prompt:\n"):
-                    result = re.search(
-                        r"(?s:.*)\nOutput:\n(.*)", prediction[self.result_arg]
-                    )
-                    if result:
-                        return result[1]
-                return prediction[self.result_arg]
+                return _clean_response(prediction[self.result_arg])
             except KeyError:
                 if isinstance(prediction, str):
                     error_desc = (

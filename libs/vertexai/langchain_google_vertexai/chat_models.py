@@ -1,7 +1,7 @@
 """Wrapper around Google VertexAI chat-based models."""
 
 from __future__ import annotations  # noqa
-
+import ast
 import json
 import logging
 from dataclasses import dataclass, field
@@ -241,6 +241,25 @@ def _parse_chat_history_gemini(
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
         raw_content = message.content
+
+        # If a user sends a multimodal request with agents, then the full input
+        # will be sent as a string due to the ChatPromptTemplate formatting.
+        # Because of this, we need to first try to convert the string to its
+        # native type (such as list or dict) so that results can be properly
+        # appended to the prompt, otherwise they will all be parsed as Text
+        # rather than `inline_data`.
+        if isinstance(raw_content, str):
+            try:
+                raw_content = ast.literal_eval(raw_content)
+            except SyntaxError:
+                pass
+            except ValueError:
+                pass
+        # A linting error is thrown here because it does not think this line is
+        # reachable due to typing, but mypy is wrong so we ignore the lint
+        # error.
+        if isinstance(raw_content, int):  # type: ignore
+            raw_content = str(raw_content)  # type: ignore
         if isinstance(raw_content, str):
             raw_content = [raw_content]
         result = []
@@ -972,7 +991,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     """  # noqa: E501
 
-    model_name: str = Field(default="chat-bison", alias="model")
+    model_name: str = Field(default="chat-bison-default", alias="model")
     "Underlying model name."
     examples: Optional[List[BaseMessage]] = None
     convert_system_message_to_human: bool = False
@@ -1026,6 +1045,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         safety_settings = values.get("safety_settings")
         tuned_model_name = values.get("tuned_model_name")
         values["model_family"] = GoogleModelFamily(values["model_name"])
+
+        if values["model_name"] == "chat-bison-default":
+            logger.warning(
+                "Model_name will become a required arg for VertexAIEmbeddings "
+                "starting from Sep-01-2024. Currently the default is set to "
+                "chat-bison"
+            )
+            values["model_name"] = "chat-bison"
 
         if values.get("full_model_name") is not None:
             pass
