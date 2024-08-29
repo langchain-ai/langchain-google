@@ -1,6 +1,9 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from langchain_google_vertexai.vectorstores._utils import to_data_points
+from langchain_google_vertexai.vectorstores.vectorstores import _BaseVertexAIVectorStore
 
 
 def test_to_data_points():
@@ -47,3 +50,29 @@ def test_to_data_points():
     restriction = num_restriction_lookup.pop("some_number")
     assert round(restriction.value_float, 1) == pytest.approx(metadata["some_number"])
     assert len(num_restriction_lookup) == 0
+
+
+def test_add_texts_with_custom_ids(mocker):
+    ids = ["Id1", "Id2"]
+    texts = ["Text1", "Text2"]
+
+    VectorStore = object.__new__(_BaseVertexAIVectorStore)
+    VectorStore._document_storage = MagicMock()
+    VectorStore._embeddings = MagicMock()
+    VectorStore._searcher = MagicMock()
+
+    mocker.patch.object(VectorStore, "_generate_unique_ids")
+
+    returned_ids = VectorStore.add_texts(texts=texts, ids=ids)
+
+    assert returned_ids == ids
+
+    VectorStore._generate_unique_ids.assert_not_called()  # type: ignore[attr-defined]
+    VectorStore._document_storage.mset.assert_called_once()
+    VectorStore._embeddings.embed_documents.assert_called_once()
+    VectorStore._searcher.add_to_index.assert_called_once()
+
+    with pytest.raises(ValueError):
+        VectorStore.add_texts(texts=texts, ids=["Id1"])
+    with pytest.raises(ValueError):
+        VectorStore.add_texts(texts=texts, ids=["Id1", "Id2", "Id2"])

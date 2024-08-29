@@ -32,6 +32,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         embbedings: Optional[Embeddings] = None,
     ) -> None:
         """Constructor.
+
         Args:
             searcher: Object in charge of searching and storing the index.
             document_storage: Object in charge of storing and retrieving documents.
@@ -55,6 +56,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         numeric_filter: Optional[List[NumericNamespace]] = None,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to query and their cosine distance from the query.
+
         Args:
             query: String query look up documents similar to.
             k: Number of Documents to return. Defaults to 4.
@@ -70,6 +72,7 @@ class _BaseVertexAIVectorStore(VectorStore):
                 the matching results. Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
+
         Returns:
             List[Tuple[Document, float]]: List of documents most similar to
             the query text and cosine distance in float for each.
@@ -90,6 +93,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         numeric_filter: Optional[List[NumericNamespace]] = None,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to the embedding and their cosine distance.
+
         Args:
             embedding: Embedding to look up documents similar to.
             k: Number of Documents to return. Defaults to 4.
@@ -105,6 +109,7 @@ class _BaseVertexAIVectorStore(VectorStore):
                 the matching results. Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
+
         Returns:
             List[Tuple[Document, float]]: List of documents most similar to
             the query text and cosine distance in float for each.
@@ -138,6 +143,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         **kwargs: Any,
     ) -> List[Document]:
         """Return docs most similar to query.
+
         Args:
             query: The string that will be used to search for similar documents.
             k: The amount of neighbors that will be retrieved.
@@ -152,6 +158,7 @@ class _BaseVertexAIVectorStore(VectorStore):
                 the matching results. Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
+
         Returns:
             A list of k matching documents.
         """
@@ -166,22 +173,43 @@ class _BaseVertexAIVectorStore(VectorStore):
         self,
         texts: Iterable[str],
         metadatas: Union[List[dict], None] = None,
+        *,
+        ids: Optional[List[str]] = None,
         is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> List[str]:
         """Run more texts through the embeddings and add to the vectorstore.
+
         Args:
             texts: Iterable of strings to add to the vectorstore.
             metadatas: Optional list of metadatas associated with the texts.
+            ids: Optional list of ids to be assigned to the texts in the index.
+                If None, unique ids will be generated.
+            is_complete_overwrite: Optional, determines whether this is an append or
+                overwrite operation. Only relevant for BATCH UPDATE indexes.
             kwargs: vectorstore specific parameters.
+
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
 
-        # Makes sure is a list an can get the length, should we support iterables?
+        # Makes sure is a list and can get the length, should we support iterables?
         # metadata is a list so probably not?
         texts = list(texts)
-        ids = self._generate_unique_ids(len(texts))
+
+        if ids is not None and len(set(ids)) != len(ids):
+            raise ValueError(
+                "All provided ids should be unique."
+                f"There are {len(ids)-len(set(ids))} duplicates."
+            )
+        if ids is not None and len(ids) != len(texts):
+            raise ValueError(
+                "The number of `ids` should match the number of `texts` "
+                f"{len(ids)} != {len(texts)}"
+            )
+
+        if ids is None:
+            ids = self._generate_unique_ids(len(texts))
 
         if metadatas is None:
             metadatas = [{}] * len(texts)
@@ -225,6 +253,7 @@ class _BaseVertexAIVectorStore(VectorStore):
     @classmethod
     def _get_default_embeddings(cls) -> Embeddings:
         """This function returns the default embedding.
+
         Returns:
             Default TensorflowHubEmbeddings to use.
         """
@@ -247,8 +276,10 @@ class _BaseVertexAIVectorStore(VectorStore):
 
     def _generate_unique_ids(self, number: int) -> List[str]:
         """Generates a list of unique ids of length `number`
+
         Args:
             number: Number of ids to generate.
+
         Returns:
             List of unique ids.
         """
@@ -275,6 +306,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         **kwargs: Any,
     ) -> "VectorSearchVectorStore":
         """Takes the object creation out of the constructor.
+
         Args:
             project_id: The GCP project id.
             region: The default location making the API calls. It must have
@@ -293,8 +325,9 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
                 index must be compatible with stream/batch updates.
             kwargs: Additional keyword arguments to pass to
                 VertexAIVectorSearch.__init__().
+
         Returns:
-            A configured VertexAIVectorSearch with the texts added to the index.
+            A configured VertexAIVectorSearch.
         """
 
         sdk_manager = VectorSearchSDKManager(
@@ -349,7 +382,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
     ) -> "VectorSearchVectorStoreDatastore":
         """Takes the object creation out of the constructor.
 
-        # Args:
+        Args:
             project_id: The GCP project id.
             region: The default location making the API calls. It must have
                 the same location as the GCS bucket and must be regional.
@@ -366,6 +399,9 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
                 index must be compatible with stream/batch updates.
             kwargs: Additional keyword arguments to pass to
                 VertexAIVectorSearch.__init__().
+
+        Returns:
+            A configured VectorSearchVectorStoreDatastore.
         """
 
         sdk_manager = VectorSearchSDKManager(
