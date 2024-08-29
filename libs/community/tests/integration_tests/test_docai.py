@@ -14,6 +14,7 @@ def test_docai_layout_parser(processor_name: str) -> None:
     parser = DocAIParser(processor_name=processor_name, location="us")
     assert parser._use_layout_parser is True
     blob = Blob(
+        data=None,
         path="gs://cloud-samples-data/gen-app-builder/search/alphabet-investor-pdfs/2022Q1_alphabet_earnings_release.pdf"
     )
     docs = list(parser.online_process(blob=blob))
