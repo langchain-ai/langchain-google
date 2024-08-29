@@ -401,19 +401,21 @@ def _tool_choice_to_tool_config(
     all_names: List[str],
 ) -> _ToolConfigDict:
     allowed_function_names: Optional[List[str]] = None
-    if tool_choice is True or tool_choice == "any":
-        mode = "ANY"
-        allowed_function_names = all_names
-    elif tool_choice == "auto":
+    if tool_choice == "any":
+        # Notice: default mode is "AUTO"
+        # If set "ANY", may cause error.
+        # google.api_core.exceptions.InvalidArgument:
+        # 400 Function calling mode `ANY` is not enabled for api version v1beta
+        # mode = "ANY"
+        mode = "AUTO"
+    elif tool_choice is True or tool_choice == "auto":
         mode = "AUTO"
     elif tool_choice == "none":
         mode = "NONE"
     elif isinstance(tool_choice, str):
-        mode = "ANY"
-        allowed_function_names = [tool_choice]
+        mode = "AUTO"
     elif isinstance(tool_choice, list):
-        mode = "ANY"
-        allowed_function_names = tool_choice
+        mode = "AUTO"
     elif isinstance(tool_choice, dict):
         if "mode" in tool_choice:
             mode = tool_choice["mode"]

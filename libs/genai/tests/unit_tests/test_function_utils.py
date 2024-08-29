@@ -100,11 +100,11 @@ def test_format_dict_to_genai_function() -> None:
 
 
 @pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
-def test__tool_choice_to_tool_config(choice: Any) -> None:
+def test__tool_choice_to_tool_config_auto(choice: Any) -> None:
     expected = _ToolConfigDict(
         function_calling_config={
-            "mode": "ANY",
-            "allowed_function_names": ["foo"],
+            "mode": "AUTO",
+            "allowed_function_names": None,
         },
     )
     actual = _tool_choice_to_tool_config(choice, ["foo"])
