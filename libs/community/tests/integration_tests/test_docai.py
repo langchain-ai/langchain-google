@@ -9,8 +9,8 @@ from langchain_google_community.docai import DocAIParser
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("processor_name", [os.environ["PROCESSOR_NAME"]])
-def test_docai_layout_parser(processor_name: str) -> None:
+def test_docai_layout_parser() -> None:
+    processor_name = os.environ["PROCESSOR_NAME"]
     parser = DocAIParser(processor_name=processor_name, location="us")
     assert parser._use_layout_parser is True
     blob = Blob(
