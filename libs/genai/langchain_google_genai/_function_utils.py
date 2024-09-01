@@ -5,6 +5,7 @@ import importlib
 import json
 import logging
 import os
+import traceback
 from typing import (
     Any,
     Callable,
@@ -191,6 +192,7 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 def _dict_to_gapic_schema(schema: Dict[str, Any]) -> Optional[gapic.Schema]:
     logger.debug("_dict_to_gapic_schema\n  schema=%s", json.dumps(schema, indent=2))
+    logger.debug("Stack trace:\n%s", "".join(traceback.format_stack()))
     if schema:
         dereferenced_schema = dereference_refs(schema)
         formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
@@ -269,19 +271,26 @@ def _format_to_gapic_function_declaration(
     tool: _FunctionDeclarationLike,
 ) -> gapic.FunctionDeclaration:
     if isinstance(tool, BaseTool):
+        logger.debug("_format_to_gapic_function_declaration BaseTool")
         return _format_base_tool_to_function_declaration(tool)
     elif isinstance(tool, type) and is_basemodel_subclass_safe(tool):
+        logger.debug("_format_to_gapic_function_declaration BaseModel")
         return _convert_pydantic_to_genai_function(tool)  # type: ignore[arg-type]
     elif isinstance(tool, dict):
         if all(k in tool for k in ("name", "description")) and "parameters" not in tool:
+            logger.debug("_format_to_gapic_function_declaration dict(no parameters1)")
             function = cast(dict, tool)
             function["parameters"] = {}
         else:
             if (
                 "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
             ):
+                logger.debug("_format_to_gapic_function_declaration dict(via openai)")
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
+                logger.debug(
+                    "_format_to_gapic_function_declaration dict(no parameters2)"
+                )
                 function = cast(dict, tool)
                 function["parameters"] = {}
         return _format_dict_to_function_declaration(cast(FunctionDescription, function))
@@ -353,12 +362,16 @@ def _convert_pydantic_to_genai_function(
 def _create_function_declaration(
     name: str, description: str, schema: Dict[str, Any]
 ) -> gapic.FunctionDeclaration:
+    logger.debug("_convert_pydantic_to_genai_function\n  schema=%s", schema)
     parameters = _create_function_declaration_parameters(schema)
     gapic_parameters = _dict_to_gapic_schema(parameters)
+    logger.debug(
+        "_convert_pydantic_to_genai_function\n  gapic_parameters=%s", gapic_parameters
+    )
     function_declaration = gapic.FunctionDeclaration(
-        name=name,
-        description=description,
-        parameters=gapic_parameters,
+        name=name if name else schema.get("title"),
+        description=description if description else schema.get("description"),
+        parameters=parameters,
     )
     return function_declaration
 
