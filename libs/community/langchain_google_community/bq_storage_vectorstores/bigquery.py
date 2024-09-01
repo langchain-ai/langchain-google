@@ -225,13 +225,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             num_queries=len(embeddings),
             with_embeddings=True,
         )
-    
+
     def _create_filters(
         self,
         filter: Optional[Dict[str, Any] | str] = None,
     ) -> str:
         if filter:
-            if isinstance(filter, Dict): # If Dict filters is passed
+            if isinstance(filter, Dict):  # If Dict filters is passed
                 filter_expressions = []
                 for column, value in filter.items():
                     if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
@@ -239,12 +239,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                     else:
                         filter_expressions.append(f"{column} = '{value}'")
                 where_filter_expr = " AND ".join(filter_expressions)
-            else: # If SQL clauses filters is passed
+            else:  # If SQL clauses filters is passed
                 where_filter_expr = filter
         else:
             where_filter_expr = "TRUE"
         return where_filter_expr
-
 
     def _create_search_query(
         self,
@@ -254,7 +253,6 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         table_to_query: Any = None,
         fields_to_exclude: Optional[List[str]] = None,
     ) -> str:
-
         # Get where filter
         where_filter_expr = self._create_filters(filter)
 
@@ -300,7 +298,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             top_k => {k}
         )
         """
-        #Wrap the Inner Query with an Outer SELECT to eliminate "base." column prefix
+        # Wrap the Inner Query with an Outer SELECT to eliminate "base." column prefix
         full_query_wrapper = f"""
         SELECT *
         FROM (
