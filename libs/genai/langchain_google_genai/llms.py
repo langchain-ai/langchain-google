@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import google.api_core
-import google.generativeai as genai  # type: ignore[import]
+import google.generativeai as genai  # type: ignore[import-untyped]
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -15,10 +15,7 @@ from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
 from langchain_core.utils import get_from_dict_or_env
 
-from langchain_google_genai._enums import (
-    HarmBlockThreshold,
-    HarmCategory,
-)
+from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory
 
 
 class GoogleModelFamily(str, Enum):
@@ -167,9 +164,9 @@ Supported examples:
     )
 
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
-    """The default safety settings to use for all generations. 
-    
-        For example: 
+    """The default safety settings to use for all generations.
+
+        For example:
 
             from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
 
