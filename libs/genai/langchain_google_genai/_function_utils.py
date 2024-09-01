@@ -3,6 +3,8 @@ from __future__ import annotations
 import collections
 import json
 import logging
+import os
+import traceback
 from typing import (
     Any,
     Callable,
@@ -33,7 +35,8 @@ from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 
 logger = logging.getLogger(__name__)
-
+log_level = os.environ.get("LOG_LEVEL", "WARNING").upper()
+logging.basicConfig(level=log_level)
 
 TYPE_ENUM = {
     "string": glm.Type.STRING,
@@ -125,6 +128,8 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _dict_to_gapic_schema(schema: Dict[str, Any]) -> Optional[gapic.Schema]:
+    logger.debug("_dict_to_gapic_schema\n  schema=%s", schema)
+    logger.debug("Stack trace:\n%s", "".join(traceback.format_stack()))
     if schema:
         dereferenced_schema = dereference_refs(schema)
         formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
@@ -198,17 +203,24 @@ def _format_to_gapic_function_declaration(
     tool: _FunctionDeclarationLike,
 ) -> gapic.FunctionDeclaration:
     if isinstance(tool, BaseTool):
+        logger.debug("_format_to_gapic_function_declaration BaseTool")
         return _format_base_tool_to_function_declaration(tool)
     elif isinstance(tool, type) and issubclass(tool, BaseModel):
+        logger.debug("_format_to_gapic_function_declaration BaseModel")
         return _convert_pydantic_to_genai_function(tool)
     elif isinstance(tool, dict):
         if all(k in tool for k in ("name", "description")) and "parameters" not in tool:
+            logger.debug("_format_to_gapic_function_declaration dict(no parameters1)")
             function = cast(dict, tool)
             function["parameters"] = {}
         else:
             if "parameters" in tool and tool["parameters"].get("properties"):  # type: ignore[index]
+                logger.debug("_format_to_gapic_function_declaration dict(via openai)")
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
+                logger.debug(
+                    "_format_to_gapic_function_declaration dict(no parameters2)"
+                )
                 function = cast(dict, tool)
                 function["parameters"] = {}
         return _format_dict_to_function_declaration(cast(FunctionDescription, function))
@@ -265,10 +277,9 @@ def _convert_pydantic_to_genai_function(
         )
     schema = dereference_refs(schema)
     schema.pop("definitions", None)
-    function_declaration = gapic.FunctionDeclaration(
-        name=tool_name if tool_name else schema.get("title"),
-        description=tool_description if tool_description else schema.get("description"),
-        parameters={
+    logger.debug("_convert_pydantic_to_genai_function\n  schema=%s", schema)
+    parameters = (
+        {
             "properties": _get_properties_from_schema_any(
                 schema.get("properties")
             ),  # TODO: use _dict_to_gapic_schema() if possible
@@ -278,6 +289,12 @@ def _convert_pydantic_to_genai_function(
             "required": schema.get("required", []),
             "type_": TYPE_ENUM[schema["type"]],
         },
+    )
+    logger.debug("_convert_pydantic_to_genai_function\n  parameters=%s", parameters)
+    function_declaration = gapic.FunctionDeclaration(
+        name=tool_name if tool_name else schema.get("title"),
+        description=tool_description if tool_description else schema.get("description"),
+        parameters=parameters,
     )
     return function_declaration
 
