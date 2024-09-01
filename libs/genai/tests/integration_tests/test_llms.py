@@ -7,7 +7,7 @@ Note: This test must be run with the GOOGLE_API_KEY environment variable set to 
 from typing import Dict, Generator
 
 import pytest
-from google.generativeai.types import (  # type: ignore[import]
+from google.generativeai.types import (  # type: ignore[import-untyped]
     HarmBlockThreshold,
     HarmCategory,
 )
