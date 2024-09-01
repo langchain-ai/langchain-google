@@ -90,22 +90,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         else:
             job_config = None
             id_expr = "TRUE"
-        if filter:
-            # Pull BQ Vector Store information if not already done.
-            if not self.table_schema:
-                self._validate_bq_table()
-            filter_expressions = []
-            for column, value in filter.items():
-                filter_expressions.append(f"{column} = '{value}'")
-            filter_expression_str = " AND ".join(filter_expressions)
-            where_filter_expr = f" AND ({filter_expression_str})"
-        else:
-            where_filter_expr = ""
+
+        where_filter_expr = self._create_filters(filter)
 
         job = self._bq_client.query(  # type: ignore[union-attr]
             f"""
-                    SELECT * FROM `{self.full_table_id}` WHERE {id_expr}
-                    {where_filter_expr}
+                    SELECT * FROM `{self.full_table_id}`
+                    WHERE {id_expr} AND {where_filter_expr}
                     """,
             job_config=job_config,
         )
@@ -234,14 +225,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             num_queries=len(embeddings),
             with_embeddings=True,
         )
-
-    def _create_search_query(
+    
+    def _create_filters(
         self,
-        num_embeddings: int,
         filter: Optional[Dict[str, Any] | str] = None,
-        k: int = 5,
-        table_to_query: Any = None,
-        fields_to_exclude: Optional[List[str]] = None,
     ) -> str:
         if filter:
             if isinstance(filter, Dict): # If Dict filters is passed
@@ -256,6 +243,20 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 where_filter_expr = filter
         else:
             where_filter_expr = "TRUE"
+        return where_filter_expr
+
+
+    def _create_search_query(
+        self,
+        num_embeddings: int,
+        filter: Optional[Dict[str, Any] | str] = None,
+        k: int = 5,
+        table_to_query: Any = None,
+        fields_to_exclude: Optional[List[str]] = None,
+    ) -> str:
+
+        # Get where filter
+        where_filter_expr = self._create_filters(filter)
 
         if table_to_query is not None:
             embeddings_query = f"""
