@@ -228,25 +228,6 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_add_texts_with_embeddings(
-        self, store_bq_vectorstore: BigQueryVectorStore
-    ) -> None:
-        """Test adding texts with pre-computed embeddings."""
-        new_texts = ["chocolate", "mars"]
-        new_metadatas = [{"kind": "treat"}, {"kind": "planet"}]
-        new_embeddings = store_bq_vectorstore.embedding.embed_documents(new_texts)
-        ids = store_bq_vectorstore.add_texts_with_embeddings(
-            new_texts, new_embeddings, new_metadatas
-        )
-        assert len(ids) == 2  # Ensure we got IDs back
-        # Verify the documents were added correctly
-        retrieved_docs = store_bq_vectorstore.get_documents(ids)
-        assert retrieved_docs[0].page_content == "chocolate"
-        assert retrieved_docs[1].page_content == "mars"
-        assert retrieved_docs[0].metadata["kind"] == "treat"
-        assert retrieved_docs[1].metadata["kind"] == "planet"
-
-    @pytest.mark.extended
     def test_get_documents_by_ids(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
@@ -291,6 +272,25 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "treat" not in kinds
         assert "planet" not in kinds
         assert "apple" in page_content
+
+    @pytest.mark.extended
+    def test_add_texts_with_embeddings(
+        self, store_bq_vectorstore: BigQueryVectorStore
+    ) -> None:
+        """Test adding texts with pre-computed embeddings."""
+        new_texts = ["chocolate", "mars"]
+        new_metadatas = [{"kind": "treat"}, {"kind": "planet"}]
+        new_embeddings = store_bq_vectorstore.embedding.embed_documents(new_texts)
+        ids = store_bq_vectorstore.add_texts_with_embeddings(
+            new_texts, new_embeddings, new_metadatas
+        )
+        assert len(ids) == 2  # Ensure we got IDs back
+        # Verify the documents were added correctly
+        retrieved_docs = store_bq_vectorstore.get_documents(ids)
+        assert retrieved_docs[0].page_content == "chocolate"
+        assert retrieved_docs[1].page_content == "mars"
+        assert retrieved_docs[0].metadata["kind"] == "treat"
+        assert retrieved_docs[1].metadata["kind"] == "planet"
 
     @pytest.mark.extended
     def test_delete_documents(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
