@@ -31,7 +31,7 @@ def store_bq_vectorstore(request: pytest.FixtureRequest) -> BigQueryVectorStore:
 
     embedding_model = FakeEmbeddings(size=EMBEDDING_SIZE)
     TestBigQueryVectorStore_bq_vectorstore.store_bq_vectorstore = BigQueryVectorStore(
-        project_id="pcs-sbx-dta-ai",  # type: ignore[arg-type]
+        project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
         embedding=embedding_model,
         location="us-central1",
         dataset_name=TestBigQueryVectorStore_bq_vectorstore.dataset_name,
@@ -70,7 +70,7 @@ def existing_store_bq_vectorstore(
     embedding_model = FakeEmbeddings(size=EMBEDDING_SIZE)
     TestBigQueryVectorStore_bq_vectorstore.existing_store_bq_vectorstore = (
         BigQueryVectorStore(
-            project_id="pcs-sbx-dta-ai",  # type: ignore[arg-type]
+            project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
             embedding=embedding_model,
             location="us-central1",
             dataset_name=TestBigQueryVectorStore_bq_vectorstore.dataset_name,
