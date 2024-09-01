@@ -29,7 +29,7 @@ from urllib.parse import urlparse
 import google.api_core
 
 # TODO: remove ignore once the google package is published with types
-import proto  # type: ignore[import]
+import proto  # type: ignore[import-untyped]
 import requests
 from google.ai.generativelanguage_v1beta.types import (
     Blob,
@@ -46,8 +46,8 @@ from google.ai.generativelanguage_v1beta.types import (
     ToolConfig,
     VideoMetadata,
 )
-from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
-from google.generativeai.types.content_types import (  # type: ignore[import]
+from google.generativeai.types import Tool as GoogleTool  # type: ignore[import-untyped]
+from google.generativeai.types.content_types import (  # type: ignore[import-untyped]
     FunctionDeclarationType,
     ToolDict,
 )
@@ -214,7 +214,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         Any: The result from the chat generation method.
     """
     retry_decorator = _create_retry_decorator()
-    from google.api_core.exceptions import InvalidArgument  # type: ignore
+    from google.api_core.exceptions import InvalidArgument
 
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
@@ -283,7 +283,7 @@ def _url_to_pil(image_source: str) -> Image:
         )
     try:
         if isinstance(image_source, IMAGE_TYPES):
-            return image_source  # type: ignore[return-value]
+            return image_source
         elif _is_url(image_source):
             if image_source.startswith("gs://"):
                 return _load_image_from_gcs(image_source)
@@ -1232,9 +1232,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         genai_tools = [tool_to_dict(convert_to_genai_function_declarations(tools))]
         if tool_choice:
             all_names = [
-                f["name"]  # type: ignore[index]
-                for t in genai_tools
-                for f in t["function_declarations"]
+                f["name"] for t in genai_tools for f in t["function_declarations"]
             ]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         return self.bind(tools=genai_tools, tool_config=tool_config, **kwargs)
@@ -1248,4 +1246,4 @@ def _get_tool_name(
     tool: Union[ToolDict, GoogleTool],
 ) -> str:
     genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
-    return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
+    return [f["name"] for f in genai_tool["function_declarations"]][0]

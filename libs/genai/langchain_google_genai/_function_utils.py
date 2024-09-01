@@ -20,8 +20,10 @@ from typing import (
 
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
-import proto  # type: ignore[import]
-from google.generativeai.types.content_types import ToolDict  # type: ignore[import]
+import proto  # type: ignore[import-untyped]
+from google.generativeai.types.content_types import (  # type: ignore[import-untyped]
+    ToolDict,
+)
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
@@ -147,7 +149,7 @@ def convert_to_genai_function_declarations(
     tools: Sequence[_ToolsType],
 ) -> gapic.Tool:
     if not isinstance(tools, collections.abc.Sequence):
-        logger.warning(
+        logger.warning(  # type: ignore[unreachable]
             "convert_to_genai_function_declarations expects a Sequence "
             "and not a single tool."
         )
@@ -205,7 +207,7 @@ def _format_to_gapic_function_declaration(
             function = cast(dict, tool)
             function["parameters"] = {}
         else:
-            if "parameters" in tool and tool["parameters"].get("properties"):
+            if "parameters" in tool and tool["parameters"].get("properties"):  # type: ignore[index]
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
                 function = cast(dict, tool)
