@@ -106,13 +106,13 @@ from . import _genai_extension as genaix
 
 IMAGE_TYPES: Tuple = ()
 try:
-    import PIL
-    from PIL.Image import Image
+    import PIL  # type: ignore
+    from PIL.Image import Image  # type: ignore
 
     IMAGE_TYPES = IMAGE_TYPES + (Image,)
 except ImportError:
-    PIL = None  # type: ignore
-    Image = None  # type: ignore
+    PIL = None
+    Image = None
 
 logger = logging.getLogger(__name__)
 
