@@ -194,7 +194,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 query embedding.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their corresponding
-                values. The method will generate SQL expressions based on the data types defined 
+                values. The method will generate SQL expressions based on the data types defined
                 in `self.table_schema`:
                     - For columns of type "INTEGER" or "FLOAT", the value is used directly.
                     - For other data types, the value is enclosed in single quotes.
@@ -239,13 +239,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """Creates a SQL WHERE clause based on the provided filter criteria.
 
         This function generates a SQL WHERE clause from a given filter, which can either
-        be a dictionary of column-value pairs or a pre-formatted SQL string. If no filter 
+        be a dictionary of column-value pairs or a pre-formatted SQL string. If no filter
         is provided, it returns a default clause that evaluates to TRUE.
 
         Args:
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their corresponding
-                values. The method will generate SQL expressions based on the data types defined 
+                values. The method will generate SQL expressions based on the data types defined
                 in `self.table_schema`:
                     - For columns of type "INTEGER" or "FLOAT", the value is used directly.
                     - For other data types, the value is enclosed in single quotes.

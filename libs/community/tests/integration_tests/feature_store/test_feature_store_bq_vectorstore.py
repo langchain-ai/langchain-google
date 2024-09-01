@@ -2,7 +2,6 @@
 Test Vertex Feature Store Vector Search with BQ Vector Search vectorstore.
 """
 
-import os
 import random
 
 import pytest
