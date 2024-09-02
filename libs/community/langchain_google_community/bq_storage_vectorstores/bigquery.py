@@ -268,6 +268,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             the string "TRUE" to indicate that no filtering should be applied.
         """
         if filter:
+            # Pull BQ Vector Store information if not already done.
+            if not self.table_schema:
+                self._validate_bq_table()
             if isinstance(filter, Dict):  # If Dict filters is passed
                 filter_expressions = []
                 for column, value in filter.items():
