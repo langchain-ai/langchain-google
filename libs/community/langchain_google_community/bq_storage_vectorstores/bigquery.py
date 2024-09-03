@@ -123,7 +123,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             docs.append(doc)
         return docs
 
-    @root_validator(pre=False, skip_on_failure=True)
+    @root_validator(pre=False, skip_on_failure=False)
     def initialize_bq_vector_index(cls, values: dict) -> dict:
         """
         A vector index in BigQuery table enables efficient
