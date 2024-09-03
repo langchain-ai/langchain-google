@@ -52,7 +52,6 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         "semantic_similarity, classification, and clustering",
     )
     google_api_key: Optional[SecretStr] = Field(
-        alias="api_key",
         default_factory=secret_from_env("GOOGLE_API_KEY", default=None),
         description=(
             "The Google API key to use. If not provided, "
