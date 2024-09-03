@@ -211,7 +211,7 @@ class _GemmaLocalKaggleBase(_GemmaBase):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that llama-cpp-python library is installed."""
         try:

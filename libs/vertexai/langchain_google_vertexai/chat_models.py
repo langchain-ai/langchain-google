@@ -1039,7 +1039,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that the python package exists in environment."""
         safety_settings = values.get("safety_settings")
