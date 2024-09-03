@@ -42,7 +42,7 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
     """The limit on the number of documents returned."""
     client: "DocumentServiceClient" = None  #: :meta private:
 
-    @root_validator(pre=False, skip_on_failure=False)
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validates the environment."""
         try:  # noqa: F401
