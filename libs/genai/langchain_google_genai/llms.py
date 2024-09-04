@@ -13,7 +13,7 @@ from langchain_core.language_models import LangSmithParams, LanguageModelInput
 from langchain_core.language_models.llms import BaseLLM, create_base_retry_decorator
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
-from langchain_core.utils import get_from_dict_or_env
+from langchain_core.utils import secret_from_env
 
 from langchain_google_genai._enums import (
     HarmBlockThreshold,
@@ -122,7 +122,9 @@ Supported examples:
     - models/text-bison-001""",
     )
     """Model name to use."""
-    google_api_key: Optional[SecretStr] = None
+    google_api_key: Optional[SecretStr] = Field(
+        alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
+    )
     credentials: Any = None
     "The default custom credentials (google.auth.credentials.Credentials) to use "
     "when making API calls. If not provided, credentials will be ascertained from "
@@ -214,7 +216,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
 
     client: Any = None  #: :meta private:
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validates params and passes them to google-generativeai package."""
         if values.get("credentials"):
@@ -224,9 +226,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                 client_options=values.get("client_options"),
             )
         else:
-            google_api_key = get_from_dict_or_env(
-                values, "google_api_key", "GOOGLE_API_KEY"
-            )
+            google_api_key = values.get("google_api_key")
             if isinstance(google_api_key, SecretStr):
                 google_api_key = google_api_key.get_secret_value()
             genai.configure(

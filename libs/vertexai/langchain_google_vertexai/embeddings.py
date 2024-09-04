@@ -100,7 +100,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     # Instance context
     instance: Dict[str, Any] = {}  #: :meta private:
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validates that the python package exists in environment."""
         cls._init_vertexai(values)

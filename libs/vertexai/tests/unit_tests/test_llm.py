@@ -80,7 +80,7 @@ def test_vertexai_args_passed() -> None:
 
 def test_extract_response() -> None:
     class FakeModelGarden(_BaseVertexAIModelGarden):
-        @root_validator()
+        @root_validator(pre=False, skip_on_failure=True)
         def validate_environment(cls, values: Dict) -> Dict:
             return values
 
