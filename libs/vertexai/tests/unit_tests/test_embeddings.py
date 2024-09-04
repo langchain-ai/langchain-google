@@ -41,7 +41,7 @@ class MockVertexAIEmbeddings(VertexAIEmbeddings):
     def _init_vertexai(cls, values: Dict) -> None:
         pass
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         values["client"] = MagicMock()
         return values

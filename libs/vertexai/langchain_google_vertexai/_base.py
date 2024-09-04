@@ -311,7 +311,7 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
     single_example_per_request: bool = True
     "LLM endpoint currently serves only the first example in the request"
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that the python package exists in environment."""
 

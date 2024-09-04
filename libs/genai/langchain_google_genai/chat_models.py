@@ -77,7 +77,7 @@ from langchain_core.output_parsers.openai_tools import (
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
-from langchain_core.utils import get_from_dict_or_env
+from langchain_core.utils import secret_from_env
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from tenacity import (
     before_sleep_log,
@@ -817,9 +817,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
-    google_api_key: Optional[SecretStr] = Field(default=None, alias="api_key")
-    """Google AI API key.
-
+    google_api_key: Optional[SecretStr] = Field(
+        alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
+    )
+    """Google AI API key.         
     If not specified will be read from env var ``GOOGLE_API_KEY``."""
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
@@ -846,7 +847,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def is_lc_serializable(self) -> bool:
         return True
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     def validate_environment(cls, values: Dict) -> Dict:
         """Validates params and passes them to google-generativeai package."""
         if (
@@ -869,9 +870,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         client_info = get_client_info("ChatGoogleGenerativeAI")
         google_api_key = None
         if not values.get("credentials"):
-            google_api_key = get_from_dict_or_env(
-                values, "google_api_key", "GOOGLE_API_KEY"
-            )
+            google_api_key = values.get("google_api_key")
             if isinstance(google_api_key, SecretStr):
                 google_api_key = google_api_key.get_secret_value()
         transport: Optional[str] = values.get("transport")
