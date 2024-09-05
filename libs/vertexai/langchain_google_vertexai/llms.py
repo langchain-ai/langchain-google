@@ -9,7 +9,7 @@ from langchain_core.callbacks.manager import (
 )
 from langchain_core.language_models.llms import BaseLLM, LangSmithParams
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
-from langchain_core.pydantic_v1 import Field, root_validator
+from pydantic import Field, root_validator
 from vertexai.generative_models import (  # type: ignore[import-untyped]
     Candidate,
     GenerativeModel,
@@ -35,6 +35,8 @@ from langchain_google_vertexai._utils import (
     get_generation_info,
     is_gemini_model,
 )
+from pydantic import ConfigDict
+
 
 
 def _completion_with_retry(
@@ -120,10 +122,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True,)
 
     @classmethod
     def is_lc_serializable(self) -> bool:

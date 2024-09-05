@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import google.cloud.aiplatform_v1beta1.types as gapic
 import pytest
 import vertexai.generative_models as vertexai  # type: ignore
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool, tool
 from langchain_core.utils.json_schema import dereference_refs
 

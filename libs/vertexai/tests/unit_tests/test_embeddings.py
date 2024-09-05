@@ -2,7 +2,7 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import root_validator
 
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType

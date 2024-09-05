@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatResult, LLMResult
 from langchain_core.outputs.chat_generation import ChatGeneration
 from langchain_core.outputs.generation import Generation
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from vertexai.preview.vision_models import (  # type: ignore[import-untyped]
     GeneratedImage,
     ImageGenerationModel,

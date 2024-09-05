@@ -2,7 +2,7 @@ from typing import Any, Dict
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import root_validator
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai.llms import VertexAI

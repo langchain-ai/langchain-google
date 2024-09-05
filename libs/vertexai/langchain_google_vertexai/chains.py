@@ -13,7 +13,7 @@ from langchain_core.output_parsers import (
     StrOutputParser,
 )
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langchain_core.runnables import Runnable
 
 from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser

@@ -62,7 +62,7 @@ from langchain_core.output_parsers.openai_tools import (
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
+from pydantic import BaseModel, root_validator, Field
 from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import is_basemodel_subclass
@@ -124,6 +124,8 @@ from langchain_google_vertexai.functions_utils import (
     _format_to_gapic_tool,
     _ToolType,
 )
+from pydantic import ConfigDict
+
 
 logger = logging.getLogger(__name__)
 
@@ -1024,11 +1026,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(populate_by_name=True,arbitrary_types_allowed=True,)
 
     @classmethod
     def is_lc_serializable(self) -> bool:

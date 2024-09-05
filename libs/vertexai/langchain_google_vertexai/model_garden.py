@@ -39,7 +39,7 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
     RunnableMap,
@@ -58,15 +58,14 @@ from langchain_google_vertexai._anthropic_utils import (
     convert_to_anthropic_tool,
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
+from pydantic import ConfigDict
+
 
 
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     """Large language models served from Vertex AI Model Garden."""
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True,)
 
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
@@ -137,10 +136,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     stream_usage: bool = True  # Whether to include usage metadata in streaming output
     credentials: Optional[Credentials] = None
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True,)
 
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:

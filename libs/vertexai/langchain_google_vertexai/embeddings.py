@@ -17,7 +17,7 @@ from google.api_core.exceptions import (
 from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import root_validator
 from vertexai.language_models import (  # type: ignore
     TextEmbeddingInput,
     TextEmbeddingModel,

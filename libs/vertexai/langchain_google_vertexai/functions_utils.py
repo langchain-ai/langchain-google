@@ -21,7 +21,7 @@ import vertexai.generative_models as vertexai  # type: ignore
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
