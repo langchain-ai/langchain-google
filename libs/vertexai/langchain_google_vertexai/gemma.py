@@ -21,7 +21,7 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from pydantic import BaseModel, ConfigDict, Field, model_validator, root_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
@@ -316,8 +316,9 @@ class _GemmaLocalHFBase(_GemmaBase):
         populate_by_name=True,
     )
 
-    @root_validator()
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Any:
         """Validate that llama-cpp-python library is installed."""
         try:
             from transformers import AutoTokenizer, GemmaForCausalLM  # type: ignore

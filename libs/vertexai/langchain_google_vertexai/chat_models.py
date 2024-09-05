@@ -125,7 +125,6 @@ from langchain_google_vertexai.functions_utils import (
     _ToolType,
 )
 from pydantic import ConfigDict
-from typing_extensions import Self
 
 
 logger = logging.getLogger(__name__)
@@ -1041,57 +1040,58 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
 
-    @model_validator(mode="after")
-    def validate_environment(self) -> Self:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Any:
         """Validate that the python package exists in environment."""
-        safety_settings = self.safety_settings
-        tuned_model_name = self.tuned_model_name
-        self.model_family = GoogleModelFamily(self.model_name)
+        safety_settings = values.get("safety_settings")
+        tuned_model_name = values.get("tuned_model_name")
+        values["model_family"] = GoogleModelFamily(values["model_name"])
 
-        if self.model_name == "chat-bison-default":
+        if values["model_name"] == "chat-bison-default":
             logger.warning(
                 "Model_name will become a required arg for VertexAIEmbeddings "
                 "starting from Sep-01-2024. Currently the default is set to "
                 "chat-bison"
             )
-            self.model_name = "chat-bison"
+            values["model_name"] = "chat-bison"
 
-        if self.full_model_name is not None:
+        if values.get("full_model_name") is not None:
             pass
-        elif self.tuned_model_name is not None:
-            self.full_model_name = _format_model_name(
-                self.tuned_model_name,
-                location=self.location,
-                project=self.project,
+        elif values.get("tuned_model_name") is not None:
+            values["full_model_name"] = _format_model_name(
+                values["tuned_model_name"],
+                location=values["location"],
+                project=values["project"],
             )
         else:
-            self.full_model_name = _format_model_name(
-                self.model_name,
-                location=self.location,
-                project=self.project,
+            values["full_model_name"] = _format_model_name(
+                values["model_name"],
+                location=values["location"],
+                project=values["project"],
             )
 
-        if safety_settings and not is_gemini_model(self.model_family):
+        if safety_settings and not is_gemini_model(values["model_family"]):
             raise ValueError("Safety settings are only supported for Gemini models")
 
         if tuned_model_name:
-            generative_model_name = self.tuned_model_name
+            generative_model_name = values["tuned_model_name"]
         else:
-            generative_model_name = self.model_name
+            generative_model_name = values["model_name"]
 
-        if not is_gemini_model(self.model_family):
+        if not is_gemini_model(values["model_family"]):
             cls._init_vertexai(values)
-            if self.model_family == GoogleModelFamily.CODEY:
+            if values["model_family"] == GoogleModelFamily.CODEY:
                 model_cls = CodeChatModel
                 model_cls_preview = PreviewCodeChatModel
             else:
                 model_cls = ChatModel
                 model_cls_preview = PreviewChatModel
-            self.client = model_cls.from_pretrained(generative_model_name)
-            self.client_preview = model_cls_preview.from_pretrained(
+            values["client"] = model_cls.from_pretrained(generative_model_name)
+            values["client_preview"] = model_cls_preview.from_pretrained(
                 generative_model_name
             )
-        return self
+        return values
 
     @property
     def _is_gemini_advanced(self) -> bool:
