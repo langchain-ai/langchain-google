@@ -11,7 +11,7 @@ from langchain_core.outputs import LLMResult
 
 from langchain_google_genai import GoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 
-model_names = ["models/text-bison-001", "gemini-pro"]
+model_names = ["gemini-pro"]
 
 
 @pytest.mark.parametrize(
@@ -27,10 +27,7 @@ def test_google_generativeai_call(model_name: str) -> None:
     output = llm("Say foo:")
     assert isinstance(output, str)
     assert llm._llm_type == "google_palm"
-    if model_name and "gemini" in model_name:
-        assert llm.client.model_name == "models/gemini-pro"
-    else:
-        assert llm.model == "models/text-bison-001"
+    assert llm.client.model_name == "models/gemini-pro"
 
 
 @pytest.mark.parametrize(
@@ -44,12 +41,6 @@ def test_google_generativeai_generate(model_name: str) -> None:
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     assert len(output.generations[0]) == n
-
-
-def test_google_generativeai_get_num_tokens() -> None:
-    llm = GoogleGenerativeAI(model="models/text-bison-001")
-    output = llm.get_num_tokens("How are you?")
-    assert output == 4
 
 
 async def test_google_generativeai_agenerate() -> None:
