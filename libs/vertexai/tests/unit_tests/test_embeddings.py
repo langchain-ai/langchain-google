@@ -2,7 +2,7 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import root_validator
+from pydantic import root_validator, model_validator
 
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
@@ -41,7 +41,7 @@ class MockVertexAIEmbeddings(VertexAIEmbeddings):
     def _init_vertexai(cls, values: Dict) -> None:
         pass
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
-        values["client"] = MagicMock()
-        return values
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
+        self.client = MagicMock()
+        return self

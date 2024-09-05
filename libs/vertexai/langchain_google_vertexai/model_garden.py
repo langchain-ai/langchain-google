@@ -39,7 +39,7 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator, model_validator
 from langchain_core.runnables import (
     Runnable,
     RunnableMap,
@@ -142,28 +142,28 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         from anthropic import (  # type: ignore
             AnthropicVertex,
             AsyncAnthropicVertex,
         )
 
-        values["client"] = AnthropicVertex(
-            project_id=values["project"],
-            region=values["location"],
-            max_retries=values["max_retries"],
-            access_token=values["access_token"],
-            credentials=values["credentials"],
+        self.client = AnthropicVertex(
+            project_id=self.project,
+            region=self.location,
+            max_retries=self.max_retries,
+            access_token=self.access_token,
+            credentials=self.credentials,
         )
-        values["async_client"] = AsyncAnthropicVertex(
-            project_id=values["project"],
-            region=values["location"],
-            max_retries=values["max_retries"],
-            access_token=values["access_token"],
-            credentials=values["credentials"],
+        self.async_client = AsyncAnthropicVertex(
+            project_id=self.project,
+            region=self.location,
+            max_retries=self.max_retries,
+            access_token=self.access_token,
+            credentials=self.credentials,
         )
-        return values
+        return self
 
     @property
     def _default_params(self):

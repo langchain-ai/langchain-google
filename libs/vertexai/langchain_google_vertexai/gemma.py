@@ -21,7 +21,7 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator, model_validator
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai._utils import enforce_stop_tokens
@@ -207,11 +207,11 @@ class _GemmaLocalKaggleBase(_GemmaBase):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that llama-cpp-python library is installed."""
         try:
-            os.environ["KERAS_BACKEND"] = values["keras_backend"]
+            os.environ["KERAS_BACKEND"] = self.keras_backend
             from keras_nlp.models import GemmaCausalLM  # type: ignore
         except ImportError:
             raise ImportError(
@@ -220,8 +220,8 @@ class _GemmaLocalKaggleBase(_GemmaBase):
                 "use this  model: pip install keras-nlp keras>=3 kaggle"
             )
 
-        values["client"] = GemmaCausalLM.from_preset(values["model_name"])
-        return values
+        self.client = GemmaCausalLM.from_preset(self.model_name)
+        return self
 
     @property
     def _default_params(self) -> Dict[str, Any]:

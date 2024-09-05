@@ -17,7 +17,7 @@ from google.api_core.exceptions import (
 from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
-from pydantic import root_validator
+from pydantic import root_validator, model_validator
 from vertexai.language_models import (  # type: ignore
     TextEmbeddingInput,
     TextEmbeddingModel,
@@ -100,24 +100,24 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     # Instance context
     instance: Dict[str, Any] = {}  #: :meta private:
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validates that the python package exists in environment."""
         cls._init_vertexai(values)
-        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")  # type: ignore
+        _, user_agent = get_user_agent(f"{cls.__name__}_{self.model_name}")  # type: ignore
         with telemetry.tool_context_manager(user_agent):
             if (
-                GoogleEmbeddingModelType(values["model_name"])
+                GoogleEmbeddingModelType(self.model_name)
                 == GoogleEmbeddingModelType.MULTIMODAL
             ):
-                values["client"] = MultiModalEmbeddingModel.from_pretrained(
-                    values["model_name"]
+                self.client = MultiModalEmbeddingModel.from_pretrained(
+                    self.model_name
                 )
             else:
-                values["client"] = TextEmbeddingModel.from_pretrained(
-                    values["model_name"]
+                self.client = TextEmbeddingModel.from_pretrained(
+                    self.model_name
                 )
-        return values
+        return self
 
     def __init__(
         self,
