@@ -9,7 +9,8 @@ from langchain_core.callbacks.manager import (
 )
 from langchain_core.language_models.llms import BaseLLM, LangSmithParams
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
-from pydantic import Field, root_validator, model_validator
+from pydantic import ConfigDict, Field, model_validator, root_validator
+from typing_extensions import Self
 from vertexai.generative_models import (  # type: ignore[import-untyped]
     Candidate,
     GenerativeModel,
@@ -35,10 +36,6 @@ from langchain_google_vertexai._utils import (
     get_generation_info,
     is_gemini_model,
 )
-from pydantic import ConfigDict
-from typing_extensions import Self
-
-
 
 
 def _completion_with_retry(
@@ -124,7 +121,9 @@ class VertexAI(_VertexAICommon, BaseLLM):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    model_config = ConfigDict(populate_by_name=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -138,7 +137,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        tuned_model_name = (self.tuned_model_name or None)
+        tuned_model_name = self.tuned_model_name or None
         safety_settings = self.safety_settings
         self.model_family = GoogleModelFamily(self.model_name)
         is_gemini = is_gemini_model(self.model_family)

@@ -22,7 +22,8 @@ from google.cloud.aiplatform_v1beta1.services.prediction_service import (
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
-from pydantic import BaseModel, Field, root_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, root_validator
+from typing_extensions import Self
 from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
 )
@@ -42,10 +43,6 @@ from langchain_google_vertexai._utils import (
     get_user_agent,
     is_gemini_model,
 )
-from pydantic import ConfigDict
-from typing_extensions import Self
-
-
 
 _PALM_DEFAULT_MAX_OUTPUT_TOKENS = TextGenerationModel._DEFAULT_MAX_OUTPUT_TOKENS
 _PALM_DEFAULT_TEMPERATURE = 0.0
@@ -95,7 +92,10 @@ class _VertexAIBase(BaseModel):
     "when making API calls. If not provided, credentials will be ascertained from "
     "the environment."
 
-    model_config = ConfigDict(populate_by_name=True,arbitrary_types_allowed=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+    )
 
     @model_validator(mode="before")
     @classmethod

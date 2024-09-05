@@ -24,11 +24,9 @@ from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
 )
 from langchain_core.language_models.llms import create_base_retry_decorator
-from pydantic import root_validator, model_validator
+from pydantic import ConfigDict, model_validator, root_validator
 
 from langchain_google_vertexai._base import _VertexAIBase
-from pydantic import ConfigDict
-
 
 
 def _get_token(credentials: Optional[Credentials] = None) -> str:
@@ -103,7 +101,10 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
     model_family: Optional[VertexMaaSModelFamily] = None
     timeout: int = 120
 
-    model_config = ConfigDict(populate_by_name=True,arbitrary_types_allowed=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -21,15 +21,12 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from pydantic import BaseModel, Field, root_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, root_validator
+from typing_extensions import Self
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai._utils import enforce_stop_tokens
 from langchain_google_vertexai.model_garden import VertexAIModelGarden
-from pydantic import ConfigDict
-from typing_extensions import Self
-
-
 
 USER_CHAT_TEMPLATE = "<start_of_turn>user\n{prompt}<end_of_turn>\n"
 MODEL_CHAT_TEMPLATE = "<start_of_turn>model\n{prompt}<end_of_turn>\n"
@@ -131,7 +128,9 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    model_config = ConfigDict(populate_by_name=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @property
     def _llm_type(self) -> str:
@@ -201,7 +200,9 @@ class _GemmaLocalKaggleBase(_GemmaBase):
     model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
 
-    model_config = ConfigDict(populate_by_name=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
@@ -311,7 +312,9 @@ class _GemmaLocalHFBase(_GemmaBase):
     model_name: str = Field(default="google/gemma-2b", alias="model")
     """Gemma model name."""
 
-    model_config = ConfigDict(populate_by_name=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:

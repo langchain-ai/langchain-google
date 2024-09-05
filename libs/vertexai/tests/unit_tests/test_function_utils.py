@@ -6,9 +6,9 @@ from unittest.mock import Mock, patch
 import google.cloud.aiplatform_v1beta1.types as gapic
 import pytest
 import vertexai.generative_models as vertexai  # type: ignore
-from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool, tool
 from langchain_core.utils.json_schema import dereference_refs
+from pydantic import BaseModel, Field
 
 from langchain_google_vertexai.functions_utils import (
     _format_base_tool_to_function_declaration,

@@ -11,8 +11,8 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain_core.outputs import LLMResult
-from pydantic import BaseModel
 from langchain_core.tools import tool
+from pydantic import BaseModel
 
 from langchain_google_vertexai.model_garden import (
     ChatAnthropicVertex,

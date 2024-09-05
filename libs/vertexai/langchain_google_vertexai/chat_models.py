@@ -128,7 +128,6 @@ from pydantic import ConfigDict
 from typing_extensions import Self
 
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -1028,7 +1027,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    model_config = ConfigDict(populate_by_name=True,arbitrary_types_allowed=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+    )
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -1042,8 +1044,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        safety_settings = (self.safety_settings or None)
-        tuned_model_name = (self.tuned_model_name or None)
+        safety_settings = self.safety_settings or None
+        tuned_model_name = self.tuned_model_name or None
         self.model_family = GoogleModelFamily(self.model_name)
 
         if self.model_name == "chat-bison-default":

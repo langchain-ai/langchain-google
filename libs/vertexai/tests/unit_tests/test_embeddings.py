@@ -2,12 +2,11 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import root_validator, model_validator
+from pydantic import model_validator, root_validator
+from typing_extensions import Self
 
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
-from typing_extensions import Self
-
 
 
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:

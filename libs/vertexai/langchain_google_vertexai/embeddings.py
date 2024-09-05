@@ -17,7 +17,8 @@ from google.api_core.exceptions import (
 from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
-from pydantic import root_validator, model_validator
+from pydantic import model_validator, root_validator
+from typing_extensions import Self
 from vertexai.language_models import (  # type: ignore
     TextEmbeddingInput,
     TextEmbeddingModel,
@@ -31,8 +32,6 @@ from vertexai.vision_models import (  # type: ignore
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import get_user_agent
-from typing_extensions import Self
-
 
 logger = logging.getLogger(__name__)
 
@@ -112,13 +111,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 GoogleEmbeddingModelType(self.model_name)
                 == GoogleEmbeddingModelType.MULTIMODAL
             ):
-                self.client = MultiModalEmbeddingModel.from_pretrained(
-                    self.model_name
-                )
+                self.client = MultiModalEmbeddingModel.from_pretrained(self.model_name)
             else:
-                self.client = TextEmbeddingModel.from_pretrained(
-                    self.model_name
-                )
+                self.client = TextEmbeddingModel.from_pretrained(self.model_name)
         return self
 
     def __init__(

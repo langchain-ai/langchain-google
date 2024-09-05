@@ -2,12 +2,11 @@ from typing import Any, Dict
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from pydantic import root_validator, model_validator
+from pydantic import model_validator, root_validator
+from typing_extensions import Self
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai.llms import VertexAI
-from typing_extensions import Self
-
 
 
 def test_model_name() -> None:

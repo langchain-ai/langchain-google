@@ -21,7 +21,6 @@ import vertexai.generative_models as vertexai  # type: ignore
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
-from pydantic import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -29,6 +28,7 @@ from langchain_core.utils.function_calling import (
     convert_to_openai_tool,
 )
 from langchain_core.utils.json_schema import dereference_refs
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
