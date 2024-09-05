@@ -22,7 +22,7 @@ from google.cloud.aiplatform_v1beta1.services.prediction_service import (
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator, model_validator
 from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
 )
@@ -95,8 +95,9 @@ class _VertexAIBase(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True,arbitrary_types_allowed=True,)
 
-    @root_validator(pre=True)
-    def validate_params_base(cls, values: dict) -> dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_params_base(cls, values: dict) -> Any:
         if "model" in values and "model_name" not in values:
             values["model_name"] = values.pop("model")
         if values.get("project") is None:

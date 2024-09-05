@@ -24,7 +24,7 @@ from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
 )
 from langchain_core.language_models.llms import create_base_retry_decorator
-from pydantic import root_validator
+from pydantic import root_validator, model_validator
 
 from langchain_google_vertexai._base import _VertexAIBase
 from pydantic import ConfigDict
@@ -127,8 +127,9 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
             timeout=self.timeout,
         )
 
-    @root_validator(pre=True)
-    def validate_environment_model_garden(cls, values: Dict) -> Dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment_model_garden(cls, values: Dict) -> Any:
         """Validate that the python package exists in environment."""
         family = VertexMaaSModelFamily(values["model_name"])
         values["model_family"] = family
