@@ -39,13 +39,13 @@ def test_format_json_schema_to_gapic():
     class B(BaseModel):
         object_field: Optional[A] = Field(description="Class A")
         array_field: Sequence[A]
-        int_field: int = Field(description="int field", minimum=1, maximum=10)
+        int_field: int = Field(description="int field", ge=1, le=10)
         str_field: str = Field(
-            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", example="ABCD"
+            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", examples=["ABCD"]
         )
         str_enum_field: StringEnum
 
-    schema = B.schema()
+    schema = B.model_json_schema()
     result = _format_json_schema_to_gapic(dereference_refs(schema))
 
     expected = {
