@@ -105,7 +105,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     def validate_environment(cls, values: Dict) -> Any:
         """Validates that the python package exists in environment."""
         cls._init_vertexai(values)
-        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")  # type: ignore
+        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")
         with telemetry.tool_context_manager(user_agent):
             if (
                 GoogleEmbeddingModelType(values["model_name"])

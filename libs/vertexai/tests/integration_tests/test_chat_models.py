@@ -302,7 +302,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
         prompt=prompt_template,
     )
     agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent,  # type: ignore[arg-type]
+        agent=agent,
         tools=tools,  # type: ignore[arg-type]
         verbose=False,
         stream_runnable=False,

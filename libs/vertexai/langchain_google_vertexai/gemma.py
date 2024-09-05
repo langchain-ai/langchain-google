@@ -238,7 +238,7 @@ class _GemmaLocalKaggleBase(_GemmaBase):
         return {**self._default_params, **params}
 
 
-class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):  # type: ignore
+class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):
     """Local gemma chat model loaded from Kaggle."""
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
@@ -268,7 +268,7 @@ class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):  # type: ignore
         return "gemma_local_kaggle"
 
 
-class GemmaChatLocalKaggle(_GemmaLocalKaggleBase, BaseChatModel):  # type: ignore
+class GemmaChatLocalKaggle(_GemmaLocalKaggleBase, BaseChatModel):
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
@@ -359,7 +359,7 @@ class _GemmaLocalHFBase(_GemmaBase):
         )[0]
 
 
-class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):  # type: ignore
+class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):
     """Local gemma model loaded from HuggingFace."""
 
     def _generate(
@@ -381,7 +381,7 @@ class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):  # type: ignore
         return "gemma_local_hf"
 
 
-class GemmaChatLocalHF(_GemmaLocalHFBase, BaseChatModel):  # type: ignore
+class GemmaChatLocalHF(_GemmaLocalHFBase, BaseChatModel):
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
