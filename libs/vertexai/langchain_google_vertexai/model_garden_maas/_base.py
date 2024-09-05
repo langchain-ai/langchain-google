@@ -25,6 +25,7 @@ from langchain_core.callbacks import (
 )
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
+from typing_extensions import Self
 
 from langchain_google_vertexai._base import _VertexAIBase
 
@@ -128,17 +129,16 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
             timeout=self.timeout,
         )
 
-    @model_validator(mode="before")
-    @classmethod
-    def validate_environment_model_garden(cls, values: Dict) -> Any:
+    @model_validator(mode="after")
+    def validate_environment_model_garden(self) -> Self:
         """Validate that the python package exists in environment."""
-        family = VertexMaaSModelFamily(values["model_name"])
-        values["model_family"] = family
+        family = VertexMaaSModelFamily(self.model_name)
+        self.model_family = family
         if family == VertexMaaSModelFamily.MISTRAL:
-            model = values["model_name"].split("@")[0]
-            values["full_model_name"] = values["model_name"]
-            values["model_name"] = model
-        return values
+            model = self.model_name.split("@")[0] if self.model_name else None
+            self.full_model_name = self.model_name
+            self.model_name = model
+        return self
 
     def _enrich_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fix params to be compliant with Vertex AI."""
