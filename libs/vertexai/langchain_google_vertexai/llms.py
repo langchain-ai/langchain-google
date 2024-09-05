@@ -134,19 +134,19 @@ class VertexAI(_VertexAICommon, BaseLLM):
         """Get the namespace of the langchain object."""
         return ["langchain", "llms", "vertexai"]
 
-    @model_validator(mode="after")
-    def validate_environment(self) -> Self:
+    @root_validator(pre=False, skip_on_failure=True)
+    def validate_environment(cls, values: Dict) -> Dict:
         """Validate that the python package exists in environment."""
-        tuned_model_name = self.tuned_model_name
-        safety_settings = self.safety_settings
-        self.model_family = GoogleModelFamily(self.model_name)
-        is_gemini = is_gemini_model(self.model_family)
+        tuned_model_name = values.get("tuned_model_name")
+        safety_settings = values["safety_settings"]
+        values["model_family"] = GoogleModelFamily(values["model_name"])
+        is_gemini = is_gemini_model(values["model_family"])
         cls._init_vertexai(values)
 
         if safety_settings and (not is_gemini or tuned_model_name):
             raise ValueError("Safety settings are only supported for Gemini models")
 
-        if self.model_family == GoogleModelFamily.CODEY:
+        if values["model_family"] == GoogleModelFamily.CODEY:
             model_cls = CodeGenerationModel
             preview_model_cls = PreviewCodeGenerationModel
         elif is_gemini:
@@ -157,31 +157,31 @@ class VertexAI(_VertexAICommon, BaseLLM):
             preview_model_cls = PreviewTextGenerationModel
 
         if tuned_model_name:
-            generative_model_name = self.tuned_model_name
+            generative_model_name = values["tuned_model_name"]
         else:
-            generative_model_name = self.model_name
+            generative_model_name = values["model_name"]
 
         if is_gemini:
-            self.client = model_cls(
+            values["client"] = model_cls(
                 model_name=generative_model_name, safety_settings=safety_settings
             )
-            self.client_preview = preview_model_cls(
+            values["client_preview"] = preview_model_cls(
                 model_name=generative_model_name, safety_settings=safety_settings
             )
         else:
             if tuned_model_name:
-                self.client = model_cls.get_tuned_model(generative_model_name)
-                self.client_preview = preview_model_cls.get_tuned_model(
+                values["client"] = model_cls.get_tuned_model(generative_model_name)
+                values["client_preview"] = preview_model_cls.get_tuned_model(
                     generative_model_name
                 )
             else:
-                self.client = model_cls.from_pretrained(generative_model_name)
-                self.client_preview = preview_model_cls.from_pretrained(
+                values["client"] = model_cls.from_pretrained(generative_model_name)
+                values["client_preview"] = preview_model_cls.from_pretrained(
                     generative_model_name
                 )
-        if self.streaming and self.n > 1:
+        if values["streaming"] and values["n"] > 1:
             raise ValueError("Only one candidate can be generated with streaming!")
-        return self
+        return values
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
