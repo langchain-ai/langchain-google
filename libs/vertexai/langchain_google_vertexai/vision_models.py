@@ -95,7 +95,7 @@ class _BaseImageTextModel(BaseModel):
     def _prepare_params(self, **kwargs: Any) -> Dict[str, Any]:
         params = self._default_params
         for key, value in kwargs.items():
-            if key in params and value is not None:
+            if value is not None:
                 params[key] = value
         return params
 
@@ -222,7 +222,7 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
                 "{'type': 'image_url', 'image_url': {'image': <image_str>}}"
             )
 
-        captions = self._get_captions(image, **messages[0].additional_kwargs)
+        captions = self._get_captions(image, **messages[0].additional_kwargs, **kwargs)
 
         generations = [
             ChatGeneration(message=AIMessage(content=caption)) for caption in captions
@@ -285,7 +285,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
             )
 
         answers = self._ask_questions(
-            image=image, query=user_question, **messages[0].additional_kwargs
+            image=image, query=user_question, **messages[0].additional_kwargs, **kwargs
         )
 
         generations = [
@@ -357,7 +357,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
         mapping = {"number_of_results": "number_of_images"}
         for key, value in kwargs.items():
             key = mapping.get(key, key)
-            if key in params and value is not None:
+            if value is not None:
                 params[key] = value
         return {k: v for k, v in params.items() if v is not None}
 
@@ -473,7 +473,7 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             )
 
         image_str_list = self._generate_images(
-            prompt=user_query, **messages[0].additional_kwargs
+            prompt=user_query, **messages[0].additional_kwargs, **kwargs
         )
         image_content_part_list = [
             create_image_content_part(image_str=image_str)
@@ -522,7 +522,7 @@ class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             )
 
         image_str_list = self._edit_images(
-            image_str=image_str, prompt=user_query, **messages[0].additional_kwargs
+            image_str=image_str, prompt=user_query, **messages[0].additional_kwargs, **kwargs
         )
         image_content_part_list = [
             create_image_content_part(image_str=image_str)
