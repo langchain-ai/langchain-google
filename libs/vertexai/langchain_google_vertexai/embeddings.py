@@ -17,7 +17,7 @@ from google.api_core.exceptions import (
 from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
-from pydantic import model_validator
+from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
 from vertexai.language_models import (  # type: ignore
     TextEmbeddingInput,
@@ -100,6 +100,11 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
 
     # Instance context
     instance: Dict[str, Any] = {}  #: :meta private:
+
+    model_config = ConfigDict(
+        extra="forbid",
+        protected_namespaces=(),
+    )
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
