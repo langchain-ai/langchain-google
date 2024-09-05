@@ -316,9 +316,8 @@ class _GemmaLocalHFBase(_GemmaBase):
         populate_by_name=True,
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def validate_environment(cls, values: Dict) -> Any:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that llama-cpp-python library is installed."""
         try:
             from transformers import AutoTokenizer, GemmaForCausalLM  # type: ignore
@@ -329,15 +328,15 @@ class _GemmaLocalHFBase(_GemmaBase):
                 "use this  model: pip install transformers>=4.38.1"
             )
 
-        values["tokenizer"] = AutoTokenizer.from_pretrained(
-            values["model_name"], token=values["hf_access_token"]
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, token=self.hf_access_token
         )
-        values["client"] = GemmaForCausalLM.from_pretrained(
-            values["model_name"],
-            token=values["hf_access_token"],
-            cache_dir=values["cache_dir"],
+        self.client = GemmaForCausalLM.from_pretrained(
+            self.model_name,
+            token=self.hf_access_token,
+            cache_dir=self.cache_dir,
         )
-        return values
+        return self
 
     @property
     def _default_params(self) -> Dict[str, Any]:
