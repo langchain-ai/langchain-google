@@ -765,7 +765,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Tool calling:
         .. code-block:: python
 
-            from langchain_core.pydantic_v1 import BaseModel, Field
+            from pydantic import BaseModel, Field
 
             class GetWeather(BaseModel):
                 '''Get the current weather in a given location'''
@@ -803,7 +803,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             from typing import Optional
 
-            from langchain_core.pydantic_v1 import BaseModel, Field
+            from pydantic import BaseModel, Field
 
             class Joke(BaseModel):
                 '''Joke to tell user.'''
@@ -1657,7 +1657,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Example: Pydantic schema, exclude raw:
             .. code-block:: python
 
-                from langchain_core.pydantic_v1 import BaseModel
+                from pydantic import BaseModel
                 from langchain_google_vertexai import ChatVertexAI
 
                 class AnswerWithJustification(BaseModel):
@@ -1676,7 +1676,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Example: Pydantic schema, include raw:
             .. code-block:: python
 
-                from langchain_core.pydantic_v1 import BaseModel
+                from pydantic import BaseModel
                 from langchain_google_vertexai import ChatVertexAI
 
                 class AnswerWithJustification(BaseModel):
@@ -1697,7 +1697,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Example: Dict schema, exclude raw:
             .. code-block:: python
 
-                from langchain_core.pydantic_v1 import BaseModel
+                from pydantic import BaseModel
                 from langchain_core.utils.function_calling import convert_to_openai_function
                 from langchain_google_vertexai import ChatVertexAI
 

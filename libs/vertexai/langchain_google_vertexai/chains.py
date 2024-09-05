@@ -111,7 +111,7 @@ def create_structured_runnable(
 
                 from langchain_google_vertexai import ChatVertexAI, create_structured_runnable
                 from langchain_core.prompts import ChatPromptTemplate
-                from langchain_core.pydantic_v1 import BaseModel, Field
+                from pydantic import BaseModel, Field
 
 
                 class RecordPerson(BaseModel):
