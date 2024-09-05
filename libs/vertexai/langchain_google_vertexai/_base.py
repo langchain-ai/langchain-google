@@ -43,6 +43,8 @@ from langchain_google_vertexai._utils import (
     is_gemini_model,
 )
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 _PALM_DEFAULT_MAX_OUTPUT_TOKENS = TextGenerationModel._DEFAULT_MAX_OUTPUT_TOKENS

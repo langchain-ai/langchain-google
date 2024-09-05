@@ -6,6 +6,8 @@ from pydantic import root_validator, model_validator
 
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
+from typing_extensions import Self
+
 
 
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:

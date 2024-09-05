@@ -31,6 +31,8 @@ from vertexai.vision_models import (  # type: ignore
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import get_user_agent
+from typing_extensions import Self
+
 
 logger = logging.getLogger(__name__)
 

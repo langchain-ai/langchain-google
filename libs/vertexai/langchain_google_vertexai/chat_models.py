@@ -125,6 +125,8 @@ from langchain_google_vertexai.functions_utils import (
     _ToolType,
 )
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 logger = logging.getLogger(__name__)

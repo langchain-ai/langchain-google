@@ -27,6 +27,8 @@ from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai._utils import enforce_stop_tokens
 from langchain_google_vertexai.model_garden import VertexAIModelGarden
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 USER_CHAT_TEMPLATE = "<start_of_turn>user\n{prompt}<end_of_turn>\n"

@@ -36,6 +36,8 @@ from langchain_google_vertexai._utils import (
     is_gemini_model,
 )
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 

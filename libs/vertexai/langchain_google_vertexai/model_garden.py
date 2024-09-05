@@ -59,6 +59,8 @@ from langchain_google_vertexai._anthropic_utils import (
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 
