@@ -137,7 +137,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        tuned_model_name = self.tuned_model_name or None
+        tuned_model_name = self.tuned_model_name
         safety_settings = self.safety_settings
         self.model_family = GoogleModelFamily(self.model_name)
         is_gemini = is_gemini_model(self.model_family)

@@ -1044,8 +1044,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        safety_settings = self.safety_settings or None
-        tuned_model_name = self.tuned_model_name or None
+        safety_settings = self.safety_settings
+        tuned_model_name = self.tuned_model_name
         self.model_family = GoogleModelFamily(self.model_name)
 
         if self.model_name == "chat-bison-default":
@@ -1056,9 +1056,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
             self.model_name = "chat-bison"
 
-        if (self.full_model_name or None) is not None:
+        if self.full_model_name is not None:
             pass
-        elif (self.tuned_model_name or None) is not None:
+        elif self.tuned_model_name is not None:
             self.full_model_name = _format_model_name(
                 self.tuned_model_name,
                 location=self.location,
