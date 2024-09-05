@@ -22,7 +22,7 @@ from google.cloud.aiplatform_v1beta1.services.prediction_service import (
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
-from pydantic import BaseModel, ConfigDict, Field, model_validator, root_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,

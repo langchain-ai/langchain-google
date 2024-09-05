@@ -24,7 +24,7 @@ from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
 )
 from langchain_core.language_models.llms import create_base_retry_decorator
-from pydantic import ConfigDict, model_validator, root_validator
+from pydantic import ConfigDict, model_validator
 
 from langchain_google_vertexai._base import _VertexAIBase
 

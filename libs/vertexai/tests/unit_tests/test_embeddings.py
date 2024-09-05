@@ -2,7 +2,7 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import model_validator, root_validator
+from pydantic import model_validator
 from typing_extensions import Self
 
 from langchain_google_vertexai import VertexAIEmbeddings

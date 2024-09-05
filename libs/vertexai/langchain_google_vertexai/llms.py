@@ -9,7 +9,7 @@ from langchain_core.callbacks.manager import (
 )
 from langchain_core.language_models.llms import BaseLLM, LangSmithParams
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
-from pydantic import ConfigDict, Field, model_validator, root_validator
+from pydantic import ConfigDict, Field, model_validator
 from typing_extensions import Self
 from vertexai.generative_models import (  # type: ignore[import-untyped]
     Candidate,
