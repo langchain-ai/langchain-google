@@ -118,7 +118,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "default_metadata": self.default_metadata,
         }
         self._init_vertexai(values)
-        _, user_agent = get_user_agent(f"{self.__name__}_{self.model_name}")  # type: ignore
+        _, user_agent = get_user_agent(f"{self.__class__.__name__}_{self.model_name}")
         with telemetry.tool_context_manager(user_agent):
             if (
                 GoogleEmbeddingModelType(self.model_name)
