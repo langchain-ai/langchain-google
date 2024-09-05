@@ -134,8 +134,9 @@ class VertexAI(_VertexAICommon, BaseLLM):
         """Get the namespace of the langchain object."""
         return ["langchain", "llms", "vertexai"]
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Any:
         """Validate that the python package exists in environment."""
         tuned_model_name = values.get("tuned_model_name")
         safety_settings = values["safety_settings"]
