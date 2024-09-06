@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from langchain_core.pydantic_v1 import SecretStr
 
 from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
@@ -75,7 +76,7 @@ def test_invalid_api_key_error_handling() -> None:
     """Test error handling with an invalid API key."""
     with pytest.raises(GoogleGenerativeAIError):
         GoogleGenerativeAIEmbeddings(
-            model=_MODEL, google_api_key="invalid_key"
+            model=_MODEL, google_api_key=SecretStr("invalid_key")
         ).embed_query("Hello world")
 
 
