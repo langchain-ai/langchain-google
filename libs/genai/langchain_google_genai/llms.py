@@ -227,9 +227,10 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                 client_options=self.client_options,
             )
         else:
-            google_api_key = self.google_api_key
-            if isinstance(google_api_key, SecretStr):
-                google_api_key = google_api_key.get_secret_value()
+            if isinstance(self.google_api_key, SecretStr):
+                google_api_key: Optional[str] = self.google_api_key.get_secret_value()
+            else:
+                google_api_key = self.google_api_key
             genai.configure(
                 api_key=google_api_key,
                 transport=self.transport,

@@ -4,7 +4,7 @@ Note: This test must be run with the GOOGLE_API_KEY environment variable set to 
       valid API key.
 """
 
-from typing import Generator
+from typing import Dict, Generator
 
 import pytest
 from langchain_core.outputs import LLMResult
@@ -23,7 +23,7 @@ def test_google_generativeai_call(model_name: str) -> None:
     if model_name:
         llm = GoogleGenerativeAI(max_output_tokens=10, model=model_name)
     else:
-        llm = GoogleGenerativeAI(max_output_tokens=10)
+        llm = GoogleGenerativeAI(max_output_tokens=10)  # type: ignore[call-arg]
     output = llm("Say foo:")
     assert isinstance(output, str)
     assert llm._llm_type == "google_palm"
@@ -69,8 +69,8 @@ def test_safety_settings_gemini() -> None:
     assert len(output.generations[0]) > 0
 
     # safety filters
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    safety_settings: Dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,  # type: ignore[dict-item]
     }
 
     # test with safety filters directly to generate

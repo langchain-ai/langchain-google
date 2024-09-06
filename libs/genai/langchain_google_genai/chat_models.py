@@ -875,9 +875,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         client_info = get_client_info("ChatGoogleGenerativeAI")
         google_api_key = None
         if not self.credentials:
-            google_api_key = self.google_api_key
-            if isinstance(google_api_key, SecretStr):
-                google_api_key = google_api_key.get_secret_value()
+            if isinstance(self.google_api_key, SecretStr):
+                google_api_key = self.google_api_key.get_secret_value()
+            else:
+                google_api_key = self.google_api_key
         transport: Optional[str] = self.transport
         self.client = genaix.build_generative_service(
             credentials=self.credentials,

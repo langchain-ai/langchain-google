@@ -467,7 +467,7 @@ class GoogleVectorStore(VectorStore):
         return (
             RunnablePassthrough[str]()
             | {
-                "prompt": RunnablePassthrough(),
+                "prompt": RunnablePassthrough(),  # type: ignore[dict-item]
                 "passages": self.as_retriever(),
             }
             | RunnableLambda(_toAqaInput)
