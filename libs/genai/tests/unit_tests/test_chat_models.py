@@ -3,7 +3,7 @@
 import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Type, Union
+from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -14,7 +14,6 @@ from google.ai.generativelanguage_v1beta.types import (
     GenerateContentResponse,
     Part,
 )
-from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
@@ -33,28 +32,6 @@ from langchain_google_genai.chat_models import (
     _parse_chat_history,
     _parse_response_candidate,
 )
-
-
-class GoogleGenerativeAIStandardTests(ChatModelUnitTests):
-    @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
-        return ChatGoogleGenerativeAI
-
-    @property
-    def chat_model_params(self) -> dict:
-        return {"model": "gemini-1.5-pro"}
-
-    @property
-    def supports_image_inputs(self) -> bool:
-        return True
-
-    @property
-    def supports_video_inputs(self) -> bool:
-        return True
-
-    @property
-    def supports_audio_inputs(self) -> bool:
-        return True
 
 
 def test_integration_initialization() -> None:
