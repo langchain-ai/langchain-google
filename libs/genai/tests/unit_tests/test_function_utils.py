@@ -2,7 +2,7 @@ from typing import Any
 
 import google.ai.generativelanguage as glm
 import pytest
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langchain_core.tools import tool
 
 from langchain_google_genai._function_utils import (

@@ -24,7 +24,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
-from langchain_core.pydantic_v1 import SecretStr
+from pydantic import SecretStr
 from langchain_standard_tests.unit_tests import ChatModelUnitTests
 from pytest import CaptureFixture
 

@@ -9,7 +9,7 @@ https://developers.generativeai.google/guide
 from typing import Any, List, Optional
 
 import google.ai.generativelanguage as genai
-from langchain_core.pydantic_v1 import BaseModel, PrivateAttr
+from pydantic import BaseModel, PrivateAttr
 from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
 

@@ -75,7 +75,7 @@ from langchain_core.output_parsers.openai_tools import (
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
+from pydantic import BaseModel, Field, SecretStr, root_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils import secret_from_env
 from langchain_core.utils.pydantic import is_basemodel_subclass
@@ -103,6 +103,8 @@ from langchain_google_genai._image_utils import ImageBytesLoader
 from langchain_google_genai.llms import _BaseGoogleGenerativeAI
 
 from . import _genai_extension as genaix
+from pydantic import ConfigDict
+
 
 IMAGE_TYPES: Tuple = ()
 try:
@@ -832,8 +834,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Gemini does not support system messages; any unsupported messages will
     raise an error."""
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True,)
 
     @property
     def lc_secrets(self) -> Dict[str, str]:
