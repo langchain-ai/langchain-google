@@ -86,16 +86,16 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        google_api_key = self.google_api_key or None
+        google_api_key = self.google_api_key
         if isinstance(google_api_key, SecretStr):
             google_api_key = google_api_key.get_secret_value()
         client_info = get_client_info("GoogleGenerativeAIEmbeddings")
 
         self.client = build_generative_service(
-            credentials=(self.credentials or None),
+            credentials=self.credentials,
             api_key=google_api_key,
             client_info=client_info,
-            client_options=(self.client_options or None),
+            client_options=self.client_options,
         )
         return self
 

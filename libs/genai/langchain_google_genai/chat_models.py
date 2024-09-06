@@ -858,32 +858,32 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        if (self.temperature or None) is not None and not 0 <= self.temperature <= 1:
+        if self.temperature is not None and not 0 <= self.temperature <= 1:
             raise ValueError("temperature must be in the range [0.0, 1.0]")
 
-        if (self.top_p or None) is not None and not 0 <= self.top_p <= 1:
+        if self.top_p is not None and not 0 <= self.top_p <= 1:
             raise ValueError("top_p must be in the range [0.0, 1.0]")
 
-        if (self.top_k or None) is not None and self.top_k <= 0:
+        if self.top_k is not None and self.top_k <= 0:
             raise ValueError("top_k must be positive")
 
         if not self.model.startswith("models/"):
             self.model = f"models/{self.model}"
 
-        additional_headers = (self.additional_headers or None) or {}
+        additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
         client_info = get_client_info("ChatGoogleGenerativeAI")
         google_api_key = None
-        if not (self.credentials or None):
-            google_api_key = self.google_api_key or None
+        if not self.credentials:
+            google_api_key = self.google_api_key
             if isinstance(google_api_key, SecretStr):
                 google_api_key = google_api_key.get_secret_value()
-        transport: Optional[str] = self.transport or None
+        transport: Optional[str] = self.transport
         self.client = genaix.build_generative_service(
-            credentials=(self.credentials or None),
+            credentials=self.credentials,
             api_key=google_api_key,
             client_info=client_info,
-            client_options=(self.client_options or None),
+            client_options=self.client_options,
             transport=transport,
         )
 
@@ -894,10 +894,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # within an asyncio event loop to avoid the error
         if _is_event_loop_running():
             self.async_client = genaix.build_generative_async_service(
-                credentials=(self.credentials or None),
+                credentials=self.credentials,
                 api_key=google_api_key,
                 client_info=client_info,
-                client_options=(self.client_options or None),
+                client_options=self.client_options,
                 transport=transport,
             )
         else:

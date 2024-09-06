@@ -220,20 +220,20 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        if self.credentials or None:
+        if self.credentials:
             genai.configure(
-                credentials=(self.credentials or None),
-                transport=(self.transport or None),
-                client_options=(self.client_options or None),
+                credentials=self.credentials,
+                transport=self.transport,
+                client_options=self.client_options,
             )
         else:
-            google_api_key = self.google_api_key or None
+            google_api_key = self.google_api_key
             if isinstance(google_api_key, SecretStr):
                 google_api_key = google_api_key.get_secret_value()
             genai.configure(
                 api_key=google_api_key,
-                transport=(self.transport or None),
-                client_options=(self.client_options or None),
+                transport=self.transport,
+                client_options=self.client_options,
             )
 
         model_name = self.model
