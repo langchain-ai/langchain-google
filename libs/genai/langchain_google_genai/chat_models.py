@@ -84,7 +84,6 @@ from pydantic import (
     Field,
     SecretStr,
     model_validator,
-    root_validator,
 )
 from tenacity import (
     before_sleep_log,

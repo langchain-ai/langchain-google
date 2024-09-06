@@ -13,7 +13,7 @@ from langchain_core.language_models import LangSmithParams, LanguageModelInput
 from langchain_core.language_models.llms import BaseLLM, create_base_retry_decorator
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.utils import secret_from_env
-from pydantic import BaseModel, Field, SecretStr, model_validator, root_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from typing_extensions import Self
 
 from langchain_google_genai._enums import (
