@@ -576,4 +576,7 @@ def test_serialize() -> None:
         secrets_map={"GOOGLE_API_KEY": "test-key"},
         valid_namespaces=["langchain_google_genai"],
     )
+    # Pydantic 2 equality will fail on complex attributes like clients with different IDs
+    llm.client = None
+    llm_loaded.client = None
     assert llm == llm_loaded
