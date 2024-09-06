@@ -547,10 +547,10 @@ files = [
 
 [[package]]
 name = "langchain-core"
-version = "0.2.33"
+version = "0.3.0.dev2"
 description = "Building applications with LLMs through composability"
 optional = false
-python-versions = ">=3.8.1,<4.0"
+python-versions = ">=3.9,<4.0"
 files = []
 develop = false
 
@@ -569,8 +569,8 @@ typing-extensions = ">=4.7"
 [package.source]
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
-reference = "HEAD"
-resolved_reference = "c1bd4e05bcd180a36ba7b5d89ca2b5ce4f1e5d4a"
+reference = "v0.3/dev_releases"
+resolved_reference = "70f9d5a1f36114834aa6ae80b66ee21dd302b2a4"
 subdirectory = "libs/core"
 
 [[package]]
@@ -578,20 +578,21 @@ name = "langchain-standard-tests"
 version = "0.1.1"
 description = "Standard tests for LangChain implementations"
 optional = false
-python-versions = ">=3.8.1,<4.0"
+python-versions = ">=3.9,<4.0"
 files = []
 develop = false
 
 [package.dependencies]
 httpx = "^0.27.0"
-langchain-core = ">=0.1.40,<0.3"
+langchain-core = ">=0.3.0.dev1"
 pytest = ">=7,<9"
+syrupy = "^4"
 
 [package.source]
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
-reference = "HEAD"
-resolved_reference = "b83f1eb0d56dbf99605a1fce93953ee09d77aabf"
+reference = "v0.3/dev_releases"
+resolved_reference = "70f9d5a1f36114834aa6ae80b66ee21dd302b2a4"
 subdirectory = "libs/standard-tests"
 
 [[package]]
@@ -1537,4 +1538,4 @@ images = ["pillow"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "6cdb00c9e430e592cea5d0bd158053ceb9e7e64734345fbb75cac364a8ee30c3"
+content-hash = "dbd21956a77f5416a98b8be28da9feccd8fe83481bae76bb1a32e5defe388ba9"
