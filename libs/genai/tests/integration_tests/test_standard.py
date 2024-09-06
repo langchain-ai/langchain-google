@@ -2,10 +2,10 @@
 
 from typing import Type
 
+import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_standard_tests.integration_tests import ChatModelIntegrationTests
-import pytest
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -31,7 +31,7 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     def test_structured_output(self, model: BaseChatModel) -> None:
         super().test_structured_output(model)
-    
+
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
         super().test_structured_output_pydantic_2_v1(model)
