@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Optional, Type
+from typing import Dict, Generator, List, Optional
 
 import pytest
 from langchain_core.messages import (
@@ -15,7 +15,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.tools import tool
-from langchain_standard_tests.integration_tests import ChatModelIntegrationTests
 from pydantic import BaseModel
 
 from langchain_google_genai import (
