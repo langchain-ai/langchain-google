@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
@@ -8,10 +8,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
-        self.tokens = []
-        self.generations = []
+        self.tokens: List[Any] = []
+        self.generations: List[Any] = []
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         self.tokens.append(token)
