@@ -8,7 +8,7 @@ from google.ai.generativelanguage_v1beta.types import (
     EmbedContentRequest,
 )
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel, Field, SecretStr, root_validator
+from pydantic import BaseModel, Field, SecretStr, root_validator, model_validator
 from langchain_core.utils import secret_from_env
 
 from langchain_google_genai._common import (
@@ -82,21 +82,21 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         "Example: `{'timeout': 10}`",
     )
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        google_api_key = values.get("google_api_key")
+        google_api_key = (self.google_api_key or None)
         if isinstance(google_api_key, SecretStr):
             google_api_key = google_api_key.get_secret_value()
         client_info = get_client_info("GoogleGenerativeAIEmbeddings")
 
-        values["client"] = build_generative_service(
-            credentials=values.get("credentials"),
+        self.client = build_generative_service(
+            credentials=(self.credentials or None),
             api_key=google_api_key,
             client_info=client_info,
-            client_options=values.get("client_options"),
+            client_options=(self.client_options or None),
         )
-        return values
+        return self
 
     @staticmethod
     def _split_by_punctuation(text: str) -> List[str]:

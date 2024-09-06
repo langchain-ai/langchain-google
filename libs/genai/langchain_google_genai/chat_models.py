@@ -75,7 +75,7 @@ from langchain_core.output_parsers.openai_tools import (
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from pydantic import BaseModel, Field, SecretStr, root_validator
+from pydantic import BaseModel, Field, SecretStr, root_validator, model_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils import secret_from_env
 from langchain_core.utils.pydantic import is_basemodel_subclass
@@ -848,38 +848,38 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def is_lc_serializable(self) -> bool:
         return True
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
         if (
-            values.get("temperature") is not None
-            and not 0 <= values["temperature"] <= 1
+            (self.temperature or None) is not None
+            and not 0 <= self.temperature <= 1
         ):
             raise ValueError("temperature must be in the range [0.0, 1.0]")
 
-        if values.get("top_p") is not None and not 0 <= values["top_p"] <= 1:
+        if (self.top_p or None) is not None and not 0 <= self.top_p <= 1:
             raise ValueError("top_p must be in the range [0.0, 1.0]")
 
-        if values.get("top_k") is not None and values["top_k"] <= 0:
+        if (self.top_k or None) is not None and self.top_k <= 0:
             raise ValueError("top_k must be positive")
 
-        if not values["model"].startswith("models/"):
-            values["model"] = f"models/{values['model']}"
+        if not self.model.startswith("models/"):
+            self.model = f"models/{self.model}"
 
-        additional_headers = values.get("additional_headers") or {}
-        values["default_metadata"] = tuple(additional_headers.items())
+        additional_headers = (self.additional_headers or None) or {}
+        self.default_metadata = tuple(additional_headers.items())
         client_info = get_client_info("ChatGoogleGenerativeAI")
         google_api_key = None
-        if not values.get("credentials"):
-            google_api_key = values.get("google_api_key")
+        if not (self.credentials or None):
+            google_api_key = (self.google_api_key or None)
             if isinstance(google_api_key, SecretStr):
                 google_api_key = google_api_key.get_secret_value()
-        transport: Optional[str] = values.get("transport")
-        values["client"] = genaix.build_generative_service(
-            credentials=values.get("credentials"),
+        transport: Optional[str] = (self.transport or None)
+        self.client = genaix.build_generative_service(
+            credentials=(self.credentials or None),
             api_key=google_api_key,
             client_info=client_info,
-            client_options=values.get("client_options"),
+            client_options=(self.client_options or None),
             transport=transport,
         )
 
@@ -889,17 +889,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # this check ensures that async client is only initialized
         # within an asyncio event loop to avoid the error
         if _is_event_loop_running():
-            values["async_client"] = genaix.build_generative_async_service(
-                credentials=values.get("credentials"),
+            self.async_client = genaix.build_generative_async_service(
+                credentials=(self.credentials or None),
                 api_key=google_api_key,
                 client_info=client_info,
-                client_options=values.get("client_options"),
+                client_options=(self.client_options or None),
                 transport=transport,
             )
         else:
-            values["async_client"] = None
+            self.async_client = None
 
-        return values
+        return self
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:

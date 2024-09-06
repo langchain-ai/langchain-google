@@ -12,7 +12,7 @@ from langchain_core.callbacks import (
 from langchain_core.language_models import LangSmithParams, LanguageModelInput
 from langchain_core.language_models.llms import BaseLLM, create_base_retry_decorator
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
-from pydantic import BaseModel, Field, SecretStr, root_validator
+from pydantic import BaseModel, Field, SecretStr, root_validator, model_validator
 from langchain_core.utils import secret_from_env
 
 from langchain_google_genai._enums import (
@@ -216,28 +216,28 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
 
     client: Any = None  #: :meta private:
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        if values.get("credentials"):
+        if (self.credentials or None):
             genai.configure(
-                credentials=values.get("credentials"),
-                transport=values.get("transport"),
-                client_options=values.get("client_options"),
+                credentials=(self.credentials or None),
+                transport=(self.transport or None),
+                client_options=(self.client_options or None),
             )
         else:
-            google_api_key = values.get("google_api_key")
+            google_api_key = (self.google_api_key or None)
             if isinstance(google_api_key, SecretStr):
                 google_api_key = google_api_key.get_secret_value()
             genai.configure(
                 api_key=google_api_key,
-                transport=values.get("transport"),
-                client_options=values.get("client_options"),
+                transport=(self.transport or None),
+                client_options=(self.client_options or None),
             )
 
-        model_name = values["model"]
+        model_name = self.model
 
-        safety_settings = values["safety_settings"]
+        safety_settings = self.safety_settings
 
         if safety_settings and (
             not GoogleModelFamily(model_name) == GoogleModelFamily.GEMINI
@@ -245,28 +245,28 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             raise ValueError("Safety settings are only supported for Gemini models")
 
         if GoogleModelFamily(model_name) == GoogleModelFamily.GEMINI:
-            values["client"] = genai.GenerativeModel(
+            self.client = genai.GenerativeModel(
                 model_name=model_name, safety_settings=safety_settings
             )
         else:
-            values["client"] = genai
+            self.client = genai
 
-        if values["temperature"] is not None and not 0 <= values["temperature"] <= 1:
+        if self.temperature is not None and not 0 <= self.temperature <= 1:
             raise ValueError("temperature must be in the range [0.0, 1.0]")
 
-        if values["top_p"] is not None and not 0 <= values["top_p"] <= 1:
+        if self.top_p is not None and not 0 <= self.top_p <= 1:
             raise ValueError("top_p must be in the range [0.0, 1.0]")
 
-        if values["top_k"] is not None and values["top_k"] <= 0:
+        if self.top_k is not None and self.top_k <= 0:
             raise ValueError("top_k must be positive")
 
-        if values["max_output_tokens"] is not None and values["max_output_tokens"] <= 0:
+        if self.max_output_tokens is not None and self.max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be greater than zero")
 
-        if values["timeout"] is not None and values["timeout"] <= 0:
+        if self.timeout is not None and self.timeout <= 0:
             raise ValueError("timeout must be greater than zero")
 
-        return values
+        return self
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
