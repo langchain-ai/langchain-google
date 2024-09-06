@@ -14,6 +14,9 @@ test tests integration_test integration_tests:
 check_imports: $(shell find langchain_google_genai -name '*.py')
 	poetry run python ./scripts/check_imports.py $^
 
+test_watch:
+	poetry run ptw --snapshot-update --now . -- -vv $(TEST_FILE)
+
 # Run unit tests and generate a coverage report.
 coverage:
 	poetry run pytest --cov \
