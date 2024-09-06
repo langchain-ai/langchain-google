@@ -19,6 +19,8 @@ from langchain_google_genai._enums import (
     HarmBlockThreshold,
     HarmCategory,
 )
+from typing_extensions import Self
+
 
 
 class GoogleModelFamily(str, Enum):

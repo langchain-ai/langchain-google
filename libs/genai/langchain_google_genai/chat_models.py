@@ -104,6 +104,8 @@ from langchain_google_genai.llms import _BaseGoogleGenerativeAI
 
 from . import _genai_extension as genaix
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 IMAGE_TYPES: Tuple = ()

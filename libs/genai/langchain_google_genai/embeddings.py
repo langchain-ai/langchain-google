@@ -16,6 +16,8 @@ from langchain_google_genai._common import (
     get_client_info,
 )
 from langchain_google_genai._genai_extension import build_generative_service
+from typing_extensions import Self
+
 
 _MAX_TOKENS_PER_BATCH = 20000
 _DEFAULT_BATCH_SIZE = 100
