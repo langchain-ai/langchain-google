@@ -9,7 +9,7 @@ from langchain_standard_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-rate_limiter = InMemoryRateLimiter(requests_per_second=0.5)
+rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
 
 class TestGeminiAIStandard(ChatModelIntegrationTests):
