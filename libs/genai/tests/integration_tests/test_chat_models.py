@@ -1,4 +1,5 @@
 """Test ChatGoogleGenerativeAI chat model."""
+
 import asyncio
 import json
 from typing import Generator, List, Optional, Type

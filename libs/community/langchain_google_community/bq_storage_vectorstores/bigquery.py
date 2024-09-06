@@ -63,7 +63,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     def get_documents(
         self,
         ids: Optional[List[str]] = None,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
         **kwargs: Any,
     ) -> List[Document]:
         """Search documents by their ids or metadata values.
@@ -90,22 +90,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         else:
             job_config = None
             id_expr = "TRUE"
-        if filter:
-            # Pull BQ Vector Store information if not already done.
-            if not self.table_schema:
-                self._validate_bq_table()
-            filter_expressions = []
-            for column, value in filter.items():
-                filter_expressions.append(f"{column} = '{value}'")
-            filter_expression_str = " AND ".join(filter_expressions)
-            where_filter_expr = f" AND ({filter_expression_str})"
-        else:
-            where_filter_expr = ""
+
+        where_filter_expr = self._create_filters(filter)
 
         job = self._bq_client.query(  # type: ignore[union-attr]
             f"""
-                    SELECT * FROM `{self.full_table_id}` WHERE {id_expr}
-                    {where_filter_expr}
+                    SELECT * FROM `{self.full_table_id}`
+                    WHERE {id_expr} AND {where_filter_expr}
                     """,
             job_config=job_config,
         )
@@ -188,7 +179,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
         embeddings: List[List[float]],
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
         batch_size: Union[int, None] = 100,
     ) -> List[List[List[Any]]]:
@@ -201,12 +192,21 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Args:
             embeddings: A list of lists, where each inner list represents a
                 query embedding.
-            filter: (Optional) A dictionary specifying filter criteria for document
-                on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding
+                values. The method will generate SQL expressions based on the data
+                types defined
+                in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                        {
+                            "str_property": "foo",
+                            "int_property": 123
+                        }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: The number of top results to return for each query.
             batch_size: The size of batches to process embeddings.
 
@@ -235,24 +235,66 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             with_embeddings=True,
         )
 
+    def _create_filters(
+        self,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
+    ) -> str:
+        """Creates a SQL WHERE clause based on the provided filter criteria.
+
+        This function generates a SQL WHERE clause from a given filter, which can either
+        be a dictionary of column-value pairs or a pre-formatted SQL string.
+        If no filter is provided, it returns a default clause that
+        evaluates to TRUE.
+
+        Args:
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to
+                their corresponding
+                values. The method will generate SQL expressions based on the
+                data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is
+                    used directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+
+        Returns:
+            A string representing the SQL WHERE clause. This clause can be directly
+            used in SQL queries to filter results. If no filter is provided, it returns
+            the string "TRUE" to indicate that no filtering should be applied.
+        """
+        if filter:
+            # Pull BQ Vector Store information if not already done.
+            if not self.table_schema:
+                self._validate_bq_table()
+            if isinstance(filter, Dict):  # If Dict filters is passed
+                filter_expressions = []
+                for column, value in filter.items():
+                    if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
+                        filter_expressions.append(f"{column} = {value}")
+                    else:
+                        filter_expressions.append(f"{column} = '{value}'")
+                where_filter_expr = " AND ".join(filter_expressions)
+            else:  # If SQL clauses filters is passed
+                where_filter_expr = filter
+        else:
+            where_filter_expr = "TRUE"
+        return where_filter_expr
+
     def _create_search_query(
         self,
         num_embeddings: int,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
         table_to_query: Any = None,
         fields_to_exclude: Optional[List[str]] = None,
     ) -> str:
-        if filter:
-            filter_expressions = []
-            for column, value in filter.items():
-                if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
-                    filter_expressions.append(f"base.{column} = {value}")
-                else:
-                    filter_expressions.append(f"base.{column} = '{value}'")
-            where_filter_expr = " AND ".join(filter_expressions)
-        else:
-            where_filter_expr = "TRUE"
+        # Get where filter
+        where_filter_expr = self._create_filters(filter)
 
         if table_to_query is not None:
             embeddings_query = f"""
@@ -295,15 +337,22 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             distance_type => "{self.distance_type}",
             top_k => {k}
         )
+        """
+        # Wrap the Inner Query with an Outer SELECT to eliminate "base." column prefix
+        full_query_wrapper = f"""
+        SELECT *
+        FROM (
+            {full_query}
+        ) AS result
         WHERE {where_filter_expr}
         ORDER BY row_num, score
         """
-        return full_query
+        return full_query_wrapper
 
     def _search_embeddings(
         self,
         embeddings: List[List[float]],
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
     ) -> list:
         from google.cloud import bigquery  # type: ignore[attr-defined]
@@ -400,7 +449,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         self,
         embeddings: Optional[List[List[float]]] = None,
         queries: Optional[List[str]] = None,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
         expire_hours_temp_table: int = 12,
     ) -> List[List[List[Any]]]:
