@@ -459,7 +459,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return self.embed([text], 1, "RETRIEVAL_QUERY")[0]
 
     def embed_image(
-        self, image_path: str, contextual_text: Optional[str] = None
+        self,
+        image_path: str,
+        contextual_text: Optional[str] = None,
+        dimensions: Optional[int] = None,
     ) -> List[float]:
         """Embed an image.
 
@@ -479,5 +482,5 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         image = Image(bytes_image)
         result: MultiModalEmbeddingResponse = self.instance[
             "get_embeddings_with_retry"
-        ](image=image, contextual_text=contextual_text)
+        ](image=image, contextual_text=contextual_text, dimension=dimensions)
         return result.image_embedding

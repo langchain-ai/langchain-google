@@ -77,10 +77,19 @@ def test_langchain_google_vertexai_large_batches() -> None:
 
 
 @pytest.mark.release
-def test_langchain_google_vertexai_image_embeddings(tmp_image) -> None:
+@pytest.mark.parametrize(
+    "dim, expected_dim",
+    [(None, 1408), (512, 512)],
+)
+def test_langchain_google_vertexai_image_embeddings(
+    dim, expected_dim, tmp_image
+) -> None:
     model = VertexAIEmbeddings(model_name="multimodalembedding")
-    output = model.embed_image(tmp_image)
-    assert len(output) == 1408
+    kwargs = {}
+    if dim:
+        kwargs["dimensions"] = dim
+    output = model.embed_image(tmp_image, **kwargs)
+    assert len(output) == expected_dim
 
 
 @pytest.mark.release
