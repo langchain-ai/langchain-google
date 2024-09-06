@@ -30,6 +30,7 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,14 @@ def _format_base_tool_to_function_declaration(
             ),
         )
 
-    schema = tool.args_schema.schema()
+    if issubclass(tool.args_schema, BaseModel):
+        schema = tool.args_schema.model_json_schema()
+    elif issubclass(tool.args_schema, BaseModelV1):
+        schema = tool.args_schema.schema()
+    else:
+        raise NotImplementedError(
+            f"args_schema must be a Pydantic BaseModel, got {tool.args_schema}."
+        )
     parameters = _dict_to_gapic_schema(schema)
 
     return gapic.FunctionDeclaration(
@@ -247,7 +255,15 @@ def _convert_pydantic_to_genai_function(
     tool_name: Optional[str] = None,
     tool_description: Optional[str] = None,
 ) -> gapic.FunctionDeclaration:
-    schema = dereference_refs(pydantic_model.schema())
+    if issubclass(pydantic_model, BaseModel):
+        schema = pydantic_model.model_json_schema()
+    elif issubclass(pydantic_model, BaseModelV1):
+        schema = pydantic_model.schema()
+    else:
+        raise NotImplementedError(
+            f"pydantic_model must be a Pydantic BaseModel, got {pydantic_model}"
+        )
+    schema = dereference_refs(schema)
     schema.pop("definitions", None)
     function_declaration = gapic.FunctionDeclaration(
         name=tool_name if tool_name else schema.get("title"),

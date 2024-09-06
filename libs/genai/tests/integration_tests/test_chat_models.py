@@ -430,7 +430,11 @@ def test_chat_google_genai_function_calling_with_structured_output(
     assert response == MyModel(name="Erick", age=27)
 
     model = llm.with_structured_output(
-        {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
+        {
+            "name": "MyModel",
+            "description": "MyModel",
+            "parameters": MyModel.model_json_schema(),
+        }
     )
     response = model.invoke([message])
     expected = [
