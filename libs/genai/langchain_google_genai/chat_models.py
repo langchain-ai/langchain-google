@@ -75,10 +75,17 @@ from langchain_core.output_parsers.openai_tools import (
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from pydantic import BaseModel, Field, SecretStr, root_validator, model_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils import secret_from_env
 from langchain_core.utils.pydantic import is_basemodel_subclass
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    model_validator,
+    root_validator,
+)
 from tenacity import (
     before_sleep_log,
     retry,
@@ -86,6 +93,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from typing_extensions import Self
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
@@ -103,10 +111,6 @@ from langchain_google_genai._image_utils import ImageBytesLoader
 from langchain_google_genai.llms import _BaseGoogleGenerativeAI
 
 from . import _genai_extension as genaix
-from pydantic import ConfigDict
-from typing_extensions import Self
-
-
 
 IMAGE_TYPES: Tuple = ()
 try:
@@ -836,7 +840,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Gemini does not support system messages; any unsupported messages will
     raise an error."""
 
-    model_config = ConfigDict(populate_by_name=True,)
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @property
     def lc_secrets(self) -> Dict[str, str]:
@@ -853,10 +859,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        if (
-            (self.temperature or None) is not None
-            and not 0 <= self.temperature <= 1
-        ):
+        if (self.temperature or None) is not None and not 0 <= self.temperature <= 1:
             raise ValueError("temperature must be in the range [0.0, 1.0]")
 
         if (self.top_p or None) is not None and not 0 <= self.top_p <= 1:
@@ -873,10 +876,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         client_info = get_client_info("ChatGoogleGenerativeAI")
         google_api_key = None
         if not (self.credentials or None):
-            google_api_key = (self.google_api_key or None)
+            google_api_key = self.google_api_key or None
             if isinstance(google_api_key, SecretStr):
                 google_api_key = google_api_key.get_secret_value()
-        transport: Optional[str] = (self.transport or None)
+        transport: Optional[str] = self.transport or None
         self.client = genaix.build_generative_service(
             credentials=(self.credentials or None),
             api_key=google_api_key,

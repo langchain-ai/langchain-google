@@ -15,9 +15,9 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from pydantic import BaseModel
 from langchain_core.tools import tool
 from langchain_standard_tests.integration_tests import ChatModelIntegrationTests
+from pydantic import BaseModel
 
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,

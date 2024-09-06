@@ -21,9 +21,9 @@ from typing import (
 import google.ai.generativelanguage as genai
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel, PrivateAttr
 from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 from langchain_core.vectorstores import VectorStore
+from pydantic import BaseModel, PrivateAttr
 
 from . import _genai_extension as genaix
 from .genai_aqa import (

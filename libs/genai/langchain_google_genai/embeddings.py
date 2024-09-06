@@ -8,16 +8,15 @@ from google.ai.generativelanguage_v1beta.types import (
     EmbedContentRequest,
 )
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel, Field, SecretStr, root_validator, model_validator
 from langchain_core.utils import secret_from_env
+from pydantic import BaseModel, Field, SecretStr, model_validator, root_validator
+from typing_extensions import Self
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     get_client_info,
 )
 from langchain_google_genai._genai_extension import build_generative_service
-from typing_extensions import Self
-
 
 _MAX_TOKENS_PER_BATCH = 20000
 _DEFAULT_BATCH_SIZE = 100
@@ -87,7 +86,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        google_api_key = (self.google_api_key or None)
+        google_api_key = self.google_api_key or None
         if isinstance(google_api_key, SecretStr):
             google_api_key = google_api_key.get_secret_value()
         client_info = get_client_info("GoogleGenerativeAIEmbeddings")
