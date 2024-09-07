@@ -30,6 +30,8 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel
 
+from langchain_google_vertexai._json_schema_utils import transform_schema_v2_to_v1
+
 logger = logging.getLogger(__name__)
 
 _FunctionDeclarationLike = Union[
@@ -101,7 +103,7 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _dict_to_gapic_schema(schema: Dict[str, Any]) -> gapic.Schema:
-    dereferenced_schema = dereference_refs(schema)
+    dereferenced_schema = transform_schema_v2_to_v1(dereference_refs(schema))
     formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
     json_schema = json.dumps(formatted_schema)
     return gapic.Schema.from_json(json_schema)

@@ -10,6 +10,7 @@ from langchain_core.tools import BaseTool, tool
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel, Field
 
+from langchain_google_vertexai._json_schema_utils import transform_schema_v2_to_v1
 from langchain_google_vertexai.functions_utils import (
     _format_base_tool_to_function_declaration,
     _format_dict_to_function_declaration,
@@ -41,18 +42,22 @@ def test_format_json_schema_to_gapic():
         array_field: Sequence[A]
         int_field: int = Field(description="int field", ge=1, le=10)
         str_field: str = Field(
-            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", examples=["ABCD"]
+            min_length=1,
+            max_length=10,
+            pattern="^[A-Z]{1,10}$",
+            example="ABCD",  # type: ignore[call-arg]
         )
         str_enum_field: StringEnum
 
-    schema = B.model_json_schema()
-    result = _format_json_schema_to_gapic(dereference_refs(schema))
+    schema = transform_schema_v2_to_v1(dereference_refs(B.model_json_schema()))
+    result = _format_json_schema_to_gapic(schema)
 
     expected = {
         "properties": {
             "object_field": {
                 "description": "Class A",
                 "properties": {"int_field": {"type": "INTEGER", "title": "Int Field"}},
+                "required": [],
                 "title": "A",
                 "type": "OBJECT",
             },
@@ -62,6 +67,7 @@ def test_format_json_schema_to_gapic():
                     "properties": {
                         "int_field": {"type": "INTEGER", "title": "Int Field"}
                     },
+                    "required": [],
                     "title": "A",
                     "type": "OBJECT",
                 },
@@ -70,8 +76,8 @@ def test_format_json_schema_to_gapic():
             },
             "int_field": {
                 "description": "int field",
-                "maximum": 10.0,
-                "minimum": 1.0,
+                "maximum": 10,
+                "minimum": 1,
                 "title": "Int Field",
                 "type": "INTEGER",
             },
@@ -84,7 +90,6 @@ def test_format_json_schema_to_gapic():
                 "type": "STRING",
             },
             "str_enum_field": {
-                "description": "An enumeration.",
                 "enum": ["pear", "banana"],
                 "title": "StringEnum",
                 "type": "STRING",
@@ -92,7 +97,7 @@ def test_format_json_schema_to_gapic():
         },
         "type": "OBJECT",
         "title": "B",
-        "required": ["array_field", "int_field", "str_field", "str_enum_field"],
+        "required": ["array_field", "int_field", "str_enum_field", "str_field"],
     }
     assert result == expected
 
