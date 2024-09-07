@@ -1,4 +1,7 @@
+import logging
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 
 def _simplify_anyof(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -8,6 +11,11 @@ def _simplify_anyof(schema: Dict[str, Any]) -> Dict[str, Any]:
         types = [subschema.get("type") for subschema in anyof]
         if "null" in types:
             # Remove 'null' type and simplify the schema
+            if len(anyof) > 2:
+                logger.warning(
+                    "Only first non-null value for 'allOf' key is supported. "
+                    f"Got {len(anyof)} total values."
+                )
             non_null_schema = next(
                 subschema for subschema in anyof if subschema.get("type") != "null"
             )
