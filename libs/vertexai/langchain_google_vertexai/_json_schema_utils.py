@@ -17,8 +17,12 @@ def _simplify_anyof(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def transform_schema_v2_to_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Transform a Pydantic v2 schema to be more like a Pydantic v1 schema.
+    """Transform a Pydantic V2 schema to be more like a Pydantic V1 schema.
+
+    This function accounts for two differences:
+    1. Rename '$defs' to 'definitions'.
+    2. Optional fields in Pydantic V2 are represented as 'anyOf' with a 'null' type.
+        In Pydantic V1, they are instead omitted from `required` fields.
     """
     transformed_schema: Dict[str, Any] = {}
     required_fields = set(schema.get("required", []))
