@@ -13,6 +13,11 @@ on:
         required: true
         type: string
         default: 'libs/vertexai'
+      dangerous-nonmaster-release:
+        required: false
+        type: boolean
+        default: false
+        description: "Release from a non-master branch (danger!)"
 
 env:
   PYTHON_VERSION: "3.11"
@@ -20,7 +25,7 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || inputs.dangerous-nonmaster-release
     runs-on: ubuntu-latest
 
     outputs:
@@ -75,6 +80,7 @@ jobs:
     permissions: write-all
     with:
       working-directory: ${{ inputs.working-directory }}
+      dangerous-nonmaster-release: ${{ inputs.dangerous-nonmaster-release }}
     secrets: inherit
 
   pre-release-checks:
@@ -176,7 +182,7 @@ jobs:
         id: min-version
         run: |
           poetry run pip install packaging
-          min_versions="$(poetry run python $GITHUB_WORKSPACE/.github/scripts/get_min_versions.py pyproject.toml)"
+          min_versions="$(poetry run python $GITHUB_WORKSPACE/.github/scripts/get_min_versions.py pyproject.toml release)"
           echo "min-versions=$min_versions" >> "$GITHUB_OUTPUT"
           echo "min-versions=$min_versions"
 
@@ -270,4 +276,4 @@ jobs:
           draft: false
           generateReleaseNotes: true
           tag: ${{ inputs.working-directory }}/v${{ needs.build.outputs.version }}
-          commit: main
+          commit: ${{ github.sha }}
