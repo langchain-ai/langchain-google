@@ -547,7 +547,7 @@ files = [
 
 [[package]]
 name = "langchain-core"
-version = "0.3.0.dev2"
+version = "0.3.0.dev4"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = ">=3.9,<4.0"
@@ -556,12 +556,9 @@ develop = false
 
 [package.dependencies]
 jsonpatch = "^1.33"
-langsmith = "^0.1.75"
+langsmith = "^0.1.112"
 packaging = ">=23.2,<25"
-pydantic = [
-    {version = ">=1,<3", markers = "python_full_version < \"3.12.4\""},
-    {version = ">=2.7.4,<3.0.0", markers = "python_full_version >= \"3.12.4\""},
-]
+pydantic = "^2.7.4"
 PyYAML = ">=5.3"
 tenacity = "^8.1.0,!=8.4.0"
 typing-extensions = ">=4.7"
@@ -569,8 +566,8 @@ typing-extensions = ">=4.7"
 [package.source]
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
-reference = "v0.3/dev_releases"
-resolved_reference = "70f9d5a1f36114834aa6ae80b66ee21dd302b2a4"
+reference = "v0.3rc"
+resolved_reference = "7a57b4fbbfa6470c0c191e6e8de6af36597ea89d"
 subdirectory = "libs/core"
 
 [[package]]
@@ -591,26 +588,27 @@ syrupy = "^4"
 [package.source]
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
-reference = "v0.3/dev_releases"
-resolved_reference = "70f9d5a1f36114834aa6ae80b66ee21dd302b2a4"
+reference = "v0.3rc"
+resolved_reference = "7a57b4fbbfa6470c0c191e6e8de6af36597ea89d"
 subdirectory = "libs/standard-tests"
 
 [[package]]
 name = "langsmith"
-version = "0.1.99"
+version = "0.1.116"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langsmith-0.1.99-py3-none-any.whl", hash = "sha256:ef8d1d74a2674c514aa429b0171a9fbb661207dc3835142cca0e8f1bf97b26b0"},
-    {file = "langsmith-0.1.99.tar.gz", hash = "sha256:b5c6a1f158abda61600a4a445081ee848b4a28b758d91f2793dc02aeffafcaf1"},
+    {file = "langsmith-0.1.116-py3-none-any.whl", hash = "sha256:4b5ea64c81ba5ca309695c85dc3fb4617429a985129ed5d9eca00d1c9d6483f4"},
+    {file = "langsmith-0.1.116.tar.gz", hash = "sha256:5ccd7f5c1840f7c507ab3ee56334a1391de28c8bf72669782e2d82cafeefffa7"},
 ]
 
 [package.dependencies]
+httpx = ">=0.23.0,<1"
 orjson = ">=3.9.14,<4.0.0"
 pydantic = [
-    {version = ">=1,<3", markers = "python_full_version < \"3.12.4\""},
     {version = ">=2.7.4,<3.0.0", markers = "python_full_version >= \"3.12.4\""},
+    {version = ">=1,<3", markers = "python_full_version < \"3.12.4\""},
 ]
 requests = ">=2,<3"
 
@@ -983,8 +981,8 @@ files = [
 annotated-types = ">=0.4.0"
 pydantic-core = "2.20.1"
 typing-extensions = [
-    {version = ">=4.6.1", markers = "python_version < \"3.13\""},
     {version = ">=4.12.2", markers = "python_version >= \"3.13\""},
+    {version = ">=4.6.1", markers = "python_version < \"3.13\""},
 ]
 
 [package.extras]
@@ -1535,4 +1533,4 @@ images = ["pillow"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "1ee875aa6ee4b42d3c5af1023953bb3e1a1f543bb13d6d0fd8c20d3676a7a8ff"
+content-hash = "58167fdcf43aca65e0f09b8e87a6b226cd37a474710fd4c9920af8a1640fe891"
