@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 from unittest.mock import Mock, patch
 
 import google.cloud.aiplatform_v1beta1.types as gapic
@@ -239,6 +239,27 @@ def test_format_json_schema_to_gapic_v1():
         gapic_schema.properties["str_field"].example
         == expected["properties"]["str_field"]["example"]  # type: ignore
     )
+
+
+def test_format_json_schema_to_gapic_union_types() -> None:
+    """Test that union types are consistent between v1 and v2."""
+
+    class RecordPerson_v1(BaseModelV1):
+        name: str
+        age: Union[int, str]
+
+    class RecordPerson(BaseModel):
+        name: str
+        age: Union[int, str]
+
+    schema_v1 = RecordPerson_v1.schema()
+    schema_v2 = RecordPerson.model_json_schema()
+
+    result_v1 = _format_json_schema_to_gapic_v1(schema_v1)
+    result_v2 = _format_json_schema_to_gapic(schema_v2)
+    result_v1["title"] = "RecordPerson"
+
+    assert result_v1 == result_v2
 
 
 # reusable test inputs
