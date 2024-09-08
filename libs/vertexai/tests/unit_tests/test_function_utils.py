@@ -27,6 +27,28 @@ from langchain_google_vertexai.functions_utils import (
 
 
 def test_format_json_schema_to_gapic():
+    # Simple case
+    class RecordPerson(BaseModel):
+        """Record some identifying information about a person."""
+
+        name: str
+        age: Optional[int]
+
+    schema = RecordPerson.model_json_schema()
+    result = _format_json_schema_to_gapic(schema)
+    expected = {
+        "title": "RecordPerson",
+        "type": "OBJECT",
+        "description": "Record some identifying information about a person.",
+        "properties": {
+            "name": {"title": "Name", "type": "STRING"},
+            "age": {"type": "INTEGER", "title": "Age"},
+        },
+        "required": ["name"],
+    }
+    assert result == expected
+
+    # Nested case
     class StringEnum(str, Enum):
         pear = "pear"
         banana = "banana"
@@ -41,7 +63,10 @@ def test_format_json_schema_to_gapic():
         array_field: Sequence[A]
         int_field: int = Field(description="int field", ge=1, le=10)
         str_field: str = Field(
-            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", examples=["ABCD"]
+            min_length=1,
+            max_length=10,
+            pattern="^[A-Z]{1,10}$",
+            example="ABCD",  # type: ignore[call-arg]
         )
         str_enum_field: StringEnum
 
@@ -53,6 +78,7 @@ def test_format_json_schema_to_gapic():
             "object_field": {
                 "description": "Class A",
                 "properties": {"int_field": {"type": "INTEGER", "title": "Int Field"}},
+                "required": [],
                 "title": "A",
                 "type": "OBJECT",
             },
@@ -62,6 +88,7 @@ def test_format_json_schema_to_gapic():
                     "properties": {
                         "int_field": {"type": "INTEGER", "title": "Int Field"}
                     },
+                    "required": [],
                     "title": "A",
                     "type": "OBJECT",
                 },
@@ -70,8 +97,8 @@ def test_format_json_schema_to_gapic():
             },
             "int_field": {
                 "description": "int field",
-                "maximum": 10.0,
-                "minimum": 1.0,
+                "maximum": 10,
+                "minimum": 1,
                 "title": "Int Field",
                 "type": "INTEGER",
             },
@@ -84,7 +111,6 @@ def test_format_json_schema_to_gapic():
                 "type": "STRING",
             },
             "str_enum_field": {
-                "description": "An enumeration.",
                 "enum": ["pear", "banana"],
                 "title": "StringEnum",
                 "type": "STRING",

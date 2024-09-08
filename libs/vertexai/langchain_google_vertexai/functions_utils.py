@@ -69,19 +69,25 @@ _ALLOWED_SCHEMA_FIELDS.extend(
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
 
-def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
+def _format_json_schema_to_gapic(
+    schema: Dict[str, Any],
+    parent_key: Optional[str] = None,
+    required_fields: Optional[list] = None,
+) -> Dict[str, Any]:
     converted_schema: Dict[str, Any] = {}
     for key, value in schema.items():
         if key == "definitions":
             continue
         elif key == "items":
-            converted_schema["items"] = _format_json_schema_to_gapic(value)
+            converted_schema["items"] = _format_json_schema_to_gapic(
+                value, parent_key, required_fields
+            )
         elif key == "properties":
             if "properties" not in converted_schema:
                 converted_schema["properties"] = {}
             for pkey, pvalue in value.items():
                 converted_schema["properties"][pkey] = _format_json_schema_to_gapic(
-                    pvalue
+                    pvalue, pkey, schema.get("required", [])
                 )
             continue
         elif key in ["type", "_type"]:
@@ -92,7 +98,19 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
                     "Only first value for 'allOf' key is supported. "
                     f"Got {len(value)}, ignoring other than first value!"
                 )
-            return _format_json_schema_to_gapic(value[0])
+            return _format_json_schema_to_gapic(value[0], parent_key, required_fields)
+        elif key == "anyOf":
+            if len(value) == 2 and any(v.get("type") == "null" for v in value):
+                non_null_type = next(v for v in value if v.get("type") != "null")
+                converted_schema.update(
+                    _format_json_schema_to_gapic(
+                        non_null_type, parent_key, required_fields
+                    )
+                )
+                # Remove the field from required if it exists
+                if required_fields and parent_key in required_fields:
+                    required_fields.remove(parent_key)
+                continue
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
