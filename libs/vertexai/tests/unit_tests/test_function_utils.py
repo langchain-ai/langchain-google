@@ -9,11 +9,18 @@ import vertexai.generative_models as vertexai  # type: ignore
 from langchain_core.tools import BaseTool, tool
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel, Field
+from pydantic.v1 import (
+    BaseModel as BaseModelV1,
+)
+from pydantic.v1 import (
+    Field as FieldV1,
+)
 
 from langchain_google_vertexai.functions_utils import (
     _format_base_tool_to_function_declaration,
     _format_dict_to_function_declaration,
     _format_json_schema_to_gapic,
+    _format_json_schema_to_gapic_v1,
     _format_pydantic_to_function_declaration,
     _format_to_gapic_function_declaration,
     _format_to_gapic_tool,
@@ -111,6 +118,108 @@ def test_format_json_schema_to_gapic():
                 "type": "STRING",
             },
             "str_enum_field": {
+                "enum": ["pear", "banana"],
+                "title": "StringEnum",
+                "type": "STRING",
+            },
+        },
+        "type": "OBJECT",
+        "title": "B",
+        "required": ["array_field", "int_field", "str_field", "str_enum_field"],
+    }
+    assert result == expected
+
+    gapic_schema = cast(gapic.Schema, gapic.Schema.from_json(json.dumps(result)))
+    assert gapic_schema.type_ == gapic.Type.OBJECT
+    assert gapic_schema.title == expected["title"]
+    assert gapic_schema.required == expected["required"]
+    assert (
+        gapic_schema.properties["str_field"].example
+        == expected["properties"]["str_field"]["example"]  # type: ignore
+    )
+
+
+def test_format_json_schema_to_gapic_v1():
+    # Simple case
+    class RecordPerson(BaseModelV1):
+        """Record some identifying information about a person."""
+
+        name: str
+        age: Optional[int]
+
+    schema = RecordPerson.schema()
+    result = _format_json_schema_to_gapic_v1(schema)
+    expected = {
+        "title": "RecordPerson",
+        "type": "OBJECT",
+        "description": "Record some identifying information about a person.",
+        "properties": {
+            "name": {"title": "Name", "type": "STRING"},
+            "age": {"type": "INTEGER", "title": "Age"},
+        },
+        "required": ["name"],
+    }
+    assert result == expected
+
+    # Nested case
+    class StringEnum(str, Enum):
+        pear = "pear"
+        banana = "banana"
+
+    class A(BaseModelV1):
+        """Class A"""
+
+        int_field: Optional[int]
+
+    class B(BaseModelV1):
+        object_field: Optional[A] = FieldV1(description="Class A")
+        array_field: Sequence[A]
+        int_field: int = FieldV1(description="int field", minimum=1, maximum=10)
+        str_field: str = FieldV1(
+            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", example="ABCD"
+        )
+        str_enum_field: StringEnum
+
+    schema = B.schema()
+    result = _format_json_schema_to_gapic_v1(dereference_refs(schema))
+
+    expected = {
+        "properties": {
+            "object_field": {
+                "description": "Class A",
+                "properties": {"int_field": {"type": "INTEGER", "title": "Int Field"}},
+                "title": "A",
+                "type": "OBJECT",
+            },
+            "array_field": {
+                "items": {
+                    "description": "Class A",
+                    "properties": {
+                        "int_field": {"type": "INTEGER", "title": "Int Field"}
+                    },
+                    "title": "A",
+                    "type": "OBJECT",
+                },
+                "type": "ARRAY",
+                "title": "Array Field",
+            },
+            "int_field": {
+                "description": "int field",
+                "maximum": 10.0,
+                "minimum": 1.0,
+                "title": "Int Field",
+                "type": "INTEGER",
+            },
+            "str_field": {
+                "example": "ABCD",
+                "maxLength": 10,
+                "minLength": 1,
+                "pattern": "^[A-Z]{1,10}$",
+                "title": "Str Field",
+                "type": "STRING",
+            },
+            "str_enum_field": {
+                "description": "An enumeration.",
                 "enum": ["pear", "banana"],
                 "title": "StringEnum",
                 "type": "STRING",
