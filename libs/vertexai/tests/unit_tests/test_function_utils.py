@@ -320,7 +320,7 @@ class SearchModel(BaseModel):
     question: str
 
 
-search_model_schema = SearchModel.schema()
+search_model_schema = SearchModel.model_json_schema()
 search_model_dict = {
     "name": search_model_schema["title"],
     "description": search_model_schema["description"],

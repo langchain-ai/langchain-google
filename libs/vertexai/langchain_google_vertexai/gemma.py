@@ -77,6 +77,8 @@ class _GemmaBase(BaseModel):
     top_k: Optional[int] = None
     """The top-k value to use for sampling."""
 
+    model_config = ConfigDict(protected_namespaces=())
+
     @property
     def _default_params(self) -> Dict[str, Any]:
         """Get the default parameters for calling gemma."""
