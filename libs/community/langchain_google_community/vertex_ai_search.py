@@ -17,7 +17,7 @@ from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.load import Serializable, load
-from pydantic import Extra, Field, root_validator
+from pydantic import Extra, Field, root_validator, model_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
@@ -66,8 +66,9 @@ class _BaseVertexAISearchRetriever(Serializable):
     def __reduce__(self) -> Any:
         return _load, (self.to_json(),)
 
-    @root_validator(pre=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Any:
         """Validates the environment."""
         try:
             from google.cloud import discoveryengine_v1beta  # noqa: F401
