@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForToolRun
-from pydantic import BaseModel, Extra, root_validator
+from pydantic import BaseModel, Extra, root_validator, model_validator
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
 from pydantic import ConfigDict
@@ -64,16 +64,16 @@ class GoogleSearchAPIWrapper(BaseModel):
         res = cse.list(q=search_term, cx=self.google_cse_id, **kwargs).execute()
         return res.get("items", [])
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that api key and python package exists in environment."""
         google_api_key = get_from_dict_or_env(
             values, "google_api_key", "GOOGLE_API_KEY"
         )
-        values["google_api_key"] = google_api_key
+        self.google_api_key = google_api_key
 
         google_cse_id = get_from_dict_or_env(values, "google_cse_id", "GOOGLE_CSE_ID")
-        values["google_cse_id"] = google_cse_id
+        self.google_cse_id = google_cse_id
 
         try:
             from googleapiclient.discovery import build  # type: ignore[import]
@@ -85,9 +85,9 @@ class GoogleSearchAPIWrapper(BaseModel):
             )
 
         service = build("customsearch", "v1", developerKey=google_api_key)
-        values["search_engine"] = service
+        self.search_engine = service
 
-        return values
+        return self
 
     def run(self, query: str) -> str:
         """Run query through GoogleSearch and parse result."""

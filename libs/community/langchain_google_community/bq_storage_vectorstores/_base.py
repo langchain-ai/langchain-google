@@ -13,7 +13,7 @@ import numpy as np
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel, ConfigDict, root_validator
+from pydantic import BaseModel, ConfigDict, root_validator, model_validator
 from langchain_core.vectorstores import VectorStore
 
 from langchain_google_community._utils import get_client_info
@@ -114,8 +114,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     ) -> list[list[list[Any]]]:
         ...
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_vals(cls, values: dict) -> dict:
+    @model_validator(mode="after")
+    def validate_vals(self) -> Self:
         try:
             import pandas  # noqa: F401
             from google.cloud import bigquery  # type: ignore[attr-defined]
@@ -128,41 +128,41 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 "Please, install feature store dependency group: "
                 "`pip install langchain-google-community[featurestore]`"
             )
-        values["_logger"] = base.Logger(__name__)
-        values["_bq_client"] = bigquery.Client(
-            project=values["project_id"],
-            location=values["location"],
-            credentials=values["credentials"],
+        self._logger = base.Logger(__name__)
+        self._bq_client = bigquery.Client(
+            project=self.project_id,
+            location=self.location,
+            credentials=self.credentials,
             client_info=get_client_info(module="bigquery-vector-search"),
         )
-        if values["embedding_dimension"] is None:
-            values["embedding_dimension"] = len(values["embedding"].embed_query("test"))
+        if self.embedding_dimension is None:
+            self.embedding_dimension = len(self.embedding.embed_query("test"))
         full_table_id = (
-            f"{values['project_id']}.{values['dataset_name']}.{values['table_name']}"
+            f"{self.project_id}.{self.dataset_name}.{self.table_name}"
         )
-        values["_full_table_id"] = full_table_id
-        temp_dataset_id = f"{values['dataset_name']}_temp"
+        self._full_table_id = full_table_id
+        temp_dataset_id = f"{self.dataset_name}_temp"
         if not check_bq_dataset_exists(
-            client=values["_bq_client"], dataset_id=values["dataset_name"]
+            client=self._bq_client, dataset_id=self.dataset_name
         ):
-            values["_bq_client"].create_dataset(
-                dataset=values["dataset_name"], exists_ok=True
+            self._bq_client.create_dataset(
+                dataset=self.dataset_name, exists_ok=True
             )
         if not check_bq_dataset_exists(
-            client=values["_bq_client"], dataset_id=temp_dataset_id
+            client=self._bq_client, dataset_id=temp_dataset_id
         ):
-            values["_bq_client"].create_dataset(dataset=temp_dataset_id, exists_ok=True)
+            self._bq_client.create_dataset(dataset=temp_dataset_id, exists_ok=True)
         table_ref = bigquery.TableReference.from_string(full_table_id)
-        values["_bq_client"].create_table(table_ref, exists_ok=True)
-        values["_logger"].info(
+        self._bq_client.create_table(table_ref, exists_ok=True)
+        self._logger.info(
             f"BigQuery table {full_table_id} "
             f"initialized/validated as persistent storage. "
             f"Access via BigQuery console:\n "
-            f"https://console.cloud.google.com/bigquery?project={values['project_id']}"
-            f"&ws=!1m5!1m4!4m3!1s{values['project_id']}!2s{values['dataset_name']}!3s"
-            f"{values['table_name']}"
+            f"https://console.cloud.google.com/bigquery?project={self.project_id}"
+            f"&ws=!1m5!1m4!4m3!1s{self.project_id}!2s{self.dataset_name}!3s"
+            f"{self.table_name}"
         )
-        return values
+        return self
 
     @property
     def embeddings(self) -> Optional[Embeddings]:

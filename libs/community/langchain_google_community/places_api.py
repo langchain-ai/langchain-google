@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
-from pydantic import BaseModel, Extra, Field, root_validator
+from pydantic import BaseModel, Extra, Field, root_validator, model_validator
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
 from pydantic import ConfigDict
@@ -37,24 +37,24 @@ class GooglePlacesAPIWrapper(BaseModel):
 
     model_config = ConfigDict(extra="forbid",arbitrary_types_allowed=True,)
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that api key is in your environment variable."""
         gplaces_api_key = get_from_dict_or_env(
             values, "gplaces_api_key", "GPLACES_API_KEY"
         )
-        values["gplaces_api_key"] = gplaces_api_key
+        self.gplaces_api_key = gplaces_api_key
         try:
             import googlemaps  # type: ignore[import]
 
-            values["google_map_client"] = googlemaps.Client(gplaces_api_key)
+            self.google_map_client = googlemaps.Client(gplaces_api_key)
         except ImportError:
             raise ImportError(
                 "Could not import googlemaps python package. "
                 "Please, install places dependency group: "
                 "`pip install langchain-google-community[places]`"
             )
-        return values
+        return self
 
     def run(self, query: str) -> str:
         """Run Places search and get k number of places that exists that match."""
