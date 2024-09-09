@@ -12,7 +12,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "v0.3rc" }
+langchain-core = { version = "^0.3.0.dev4", allow-prereleases = true }
 google-cloud-aiplatform = "^1.56.0"
 google-cloud-storage = "^2.17.0"
 # optional dependencies
