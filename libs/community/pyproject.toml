@@ -11,9 +11,9 @@ license = "MIT"
 "Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/community"
 
 [tool.poetry.dependencies]
-python = ">=3.8.1,<4.0"
-langchain-core = ">=0.2.9,<0.3"
-langchain-community = "^0.2.1"
+python = ">=3.9,<4.0"
+langchain-core = { version = "^0.3.0.dev4", allow-prereleases = true }
+langchain-community = { version = "^0.3.0.dev1", allow-prereleases = true }
 google-api-core = "^2.17.1"
 google-api-python-client = "^2.122.0"
 grpcio = "^1.62.0"
