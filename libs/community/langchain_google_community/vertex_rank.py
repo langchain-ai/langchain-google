@@ -6,11 +6,9 @@ from google.auth.credentials import Credentials  # type: ignore
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
-from pydantic import Extra, Field
+from pydantic import ConfigDict, Extra, Field
 
 from langchain_google_community._utils import get_client_info
-from pydantic import ConfigDict
-
 
 if TYPE_CHECKING:
     from google.cloud import discoveryengine_v1alpha  # type: ignore
@@ -192,4 +190,7 @@ class VertexAIRank(BaseDocumentCompressor):
         """
         return self._rerank_documents(query, documents)
 
-    model_config = ConfigDict(extra="ignore",arbitrary_types_allowed=True,)
+    model_config = ConfigDict(
+        extra="ignore",
+        arbitrary_types_allowed=True,
+    )

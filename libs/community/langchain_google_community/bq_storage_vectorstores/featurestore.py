@@ -13,7 +13,8 @@ from google.api_core.exceptions import (
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import root_validator, model_validator
+from pydantic import model_validator, root_validator
+from typing_extensions import Self
 
 from langchain_google_community._utils import get_client_info, get_user_agent
 from langchain_google_community.bq_storage_vectorstores._base import (
@@ -23,8 +24,6 @@ from langchain_google_community.bq_storage_vectorstores.utils import (
     cast_proto_type,
     doc_match_filter,
 )
-from typing_extensions import Self
-
 
 # Constants for index creation
 MIN_INDEX_ROWS = 5
@@ -94,9 +93,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         )
 
         vertexai.init(project=self.project_id, location=self.location)
-        self._user_agent = get_user_agent(
-            f"{USER_AGENT_PREFIX}-VertexFSVectorStore"
-        )[1]
+        self._user_agent = get_user_agent(f"{USER_AGENT_PREFIX}-VertexFSVectorStore")[1]
 
         if self.algorithm_config is None:
             self.algorithm_config = utils.TreeAhConfig()
@@ -125,9 +122,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             client_options={"api_endpoint": endpoint},
             client_info=get_client_info(module=self._user_agent),
         )
-        self.feature_view = _get_feature_view(
-            self.online_store, self.view_name
-        )
+        self.feature_view = _get_feature_view(self.online_store, self.view_name)
 
         self._logger.info(
             "VertexFSVectorStore initialized with Feature Store Vector Search. \n"

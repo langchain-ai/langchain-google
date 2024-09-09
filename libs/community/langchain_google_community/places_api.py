@@ -4,13 +4,17 @@ import logging
 from typing import Any, Dict, Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
-from pydantic import BaseModel, Extra, Field, root_validator, model_validator
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
-from pydantic import ConfigDict
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Extra,
+    Field,
+    model_validator,
+    root_validator,
+)
 from typing_extensions import Self
-
-
 
 
 class GooglePlacesAPIWrapper(BaseModel):
@@ -37,7 +41,10 @@ class GooglePlacesAPIWrapper(BaseModel):
     google_map_client: Any = None  #: :meta private:
     top_k_results: Optional[int] = None
 
-    model_config = ConfigDict(extra="forbid",arbitrary_types_allowed=True,)
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+    )
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:

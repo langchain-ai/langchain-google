@@ -4,13 +4,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
-from pydantic import root_validator, model_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.utils import get_from_dict_or_env
-
-from langchain_google_community._utils import get_client_info
+from pydantic import model_validator, root_validator
 from typing_extensions import Self
 
+from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
     from google.cloud.contentwarehouse_v1 import (  # type: ignore[import]

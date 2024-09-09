@@ -6,9 +6,9 @@ import pytest
 from google.cloud import discoveryengine_v1alpha  # type: ignore
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
-from pydantic import Field
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
+from pydantic import Field
 
 from langchain_google_community.vertex_rank import VertexAIRank
 

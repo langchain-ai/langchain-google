@@ -17,14 +17,12 @@ from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.load import Serializable, load
-from pydantic import Extra, Field, root_validator, model_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
+from pydantic import ConfigDict, Extra, Field, model_validator, root_validator
 
 from langchain_google_community._utils import get_client_info
-from pydantic import ConfigDict
-
 
 if TYPE_CHECKING:
     from google.cloud.discoveryengine_v1beta import (  # type: ignore[import, attr-defined]
@@ -261,7 +259,11 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     _client: SearchServiceClient
     _serving_config: str
 
-    model_config = ConfigDict(extra="forbid",arbitrary_types_allowed=True,underscore_attrs_are_private=True,)
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+        underscore_attrs_are_private=True,
+    )
 
     def __init__(self, **kwargs: Any) -> None:
         """Initializes private fields."""
@@ -419,7 +421,11 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
     _client: ConversationalSearchServiceClient
     _serving_config: str
 
-    model_config = ConfigDict(extra="ignore",arbitrary_types_allowed=True,underscore_attrs_are_private=True,)
+    model_config = ConfigDict(
+        extra="ignore",
+        arbitrary_types_allowed=True,
+        underscore_attrs_are_private=True,
+    )
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)

@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Unio
 from google.api_core.exceptions import ClientError
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import root_validator, model_validator
+from pydantic import model_validator, root_validator
 
 if TYPE_CHECKING:
     from google.cloud.bigquery.table import Table
 
+from typing_extensions import Self
+
 from langchain_google_community.bq_storage_vectorstores._base import (
     BaseBigQueryVectorStore,
 )
-from typing_extensions import Self
-
 
 _vector_table_lock = Lock()  # process-wide BigQueryVectorSearch table lock
 

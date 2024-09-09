@@ -3,13 +3,10 @@
 from typing import Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForToolRun
-from pydantic import BaseModel, Extra, root_validator, model_validator
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict, Extra, model_validator, root_validator
 from typing_extensions import Self
-
-
 
 
 class GoogleSearchAPIWrapper(BaseModel):
@@ -57,7 +54,9 @@ class GoogleSearchAPIWrapper(BaseModel):
     k: int = 10
     siterestrict: bool = False
 
-    model_config = ConfigDict(extra="forbid",)
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     def _google_search_results(self, search_term: str, **kwargs: Any) -> List[dict]:
         cse = self.search_engine.cse()

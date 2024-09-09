@@ -13,18 +13,15 @@ import numpy as np
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel, ConfigDict, root_validator, model_validator
 from langchain_core.vectorstores import VectorStore
+from pydantic import BaseModel, ConfigDict, model_validator, root_validator
+from typing_extensions import Self
 
 from langchain_google_community._utils import get_client_info
 from langchain_google_community.bq_storage_vectorstores.utils import (
     check_bq_dataset_exists,
     validate_column_in_bq_schema,
 )
-from pydantic import ConfigDict
-from typing_extensions import Self
-
-
 
 _vector_table_lock = Lock()  # process-wide BigQueryVectorSearch table lock
 
@@ -79,7 +76,9 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _logger: Any = None
     _full_table_id: Optional[str] = None
 
-    model_config = ConfigDict(arbitrary_types_allowed=True,)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+    )
 
     @abstractmethod
     def sync_data(self) -> None:
@@ -139,17 +138,13 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         )
         if self.embedding_dimension is None:
             self.embedding_dimension = len(self.embedding.embed_query("test"))
-        full_table_id = (
-            f"{self.project_id}.{self.dataset_name}.{self.table_name}"
-        )
+        full_table_id = f"{self.project_id}.{self.dataset_name}.{self.table_name}"
         self._full_table_id = full_table_id
         temp_dataset_id = f"{self.dataset_name}_temp"
         if not check_bq_dataset_exists(
             client=self._bq_client, dataset_id=self.dataset_name
         ):
-            self._bq_client.create_dataset(
-                dataset=self.dataset_name, exists_ok=True
-            )
+            self._bq_client.create_dataset(dataset=self.dataset_name, exists_ok=True)
         if not check_bq_dataset_exists(
             client=self._bq_client, dataset_id=temp_dataset_id
         ):

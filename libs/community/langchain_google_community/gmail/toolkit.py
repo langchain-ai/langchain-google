@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List
 
 from langchain_community.agent_toolkits.base import BaseToolkit
-from pydantic import Field
 from langchain_core.tools import BaseTool
+from pydantic import ConfigDict, Field
 
 from langchain_google_community.gmail.create_draft import GmailCreateDraft
 from langchain_google_community.gmail.get_message import GmailGetMessage
@@ -12,8 +12,6 @@ from langchain_google_community.gmail.get_thread import GmailGetThread
 from langchain_google_community.gmail.search import GmailSearch
 from langchain_google_community.gmail.send_message import GmailSendMessage
 from langchain_google_community.gmail.utils import build_resource_service
-from pydantic import ConfigDict
-
 
 if TYPE_CHECKING:
     # This is for linting and IDE typehints
@@ -44,7 +42,9 @@ class GmailToolkit(BaseToolkit):
 
     api_resource: Resource = Field(default_factory=build_resource_service)
 
-    model_config = ConfigDict(arbitrary_types_allowed=True,)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+    )
 
     def get_tools(self) -> List[BaseTool]:
         """Get the tools in the toolkit."""
