@@ -36,7 +36,7 @@ class GooglePlacesAPIWrapper(BaseModel):
     class Config:
         """Configuration for this pydantic object."""
 
-        extra = Extra.forbid
+        extra="forbid"
         arbitrary_types_allowed = True
 
     @root_validator(pre=False, skip_on_failure=True)

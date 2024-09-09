@@ -261,7 +261,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     class Config:
         """Configuration for this pydantic object."""
 
-        extra = Extra.forbid
+        extra="forbid"
         arbitrary_types_allowed = True
         underscore_attrs_are_private = True
 
@@ -424,7 +424,7 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
     class Config:
         """Configuration for this pydantic object."""
 
-        extra = Extra.ignore
+        extra="ignore"
         arbitrary_types_allowed = True
         underscore_attrs_are_private = True
 

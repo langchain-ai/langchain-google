@@ -191,5 +191,5 @@ class VertexAIRank(BaseDocumentCompressor):
         return self._rerank_documents(query, documents)
 
     class Config:
-        extra = Extra.ignore
+        extra="ignore"
         arbitrary_types_allowed = True

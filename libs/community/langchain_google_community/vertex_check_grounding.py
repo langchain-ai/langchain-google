@@ -240,5 +240,5 @@ class VertexAICheckGroundingWrapper(
         return False
 
     class Config:
-        extra = Extra.ignore
+        extra="ignore"
         arbitrary_types_allowed = True
