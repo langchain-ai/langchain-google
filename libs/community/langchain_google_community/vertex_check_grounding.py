@@ -3,10 +3,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
 from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field
+from pydantic import BaseModel, Extra, Field
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 
 from langchain_google_community._utils import get_client_info
+from pydantic import ConfigDict
+
 
 if TYPE_CHECKING:
     from google.cloud import discoveryengine_v1alpha  # type: ignore
@@ -239,6 +241,4 @@ class VertexAICheckGroundingWrapper(
     def is_lc_serializable(cls) -> bool:
         return False
 
-    class Config:
-        extra="ignore"
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(extra="ignore",arbitrary_types_allowed=True,)

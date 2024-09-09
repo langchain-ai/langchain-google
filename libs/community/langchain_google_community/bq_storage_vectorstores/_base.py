@@ -13,7 +13,7 @@ import numpy as np
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import BaseModel, ConfigDict, root_validator
+from pydantic import BaseModel, ConfigDict, root_validator
 from langchain_core.vectorstores import VectorStore
 
 from langchain_google_community._utils import get_client_info
@@ -21,6 +21,8 @@ from langchain_google_community.bq_storage_vectorstores.utils import (
     check_bq_dataset_exists,
     validate_column_in_bq_schema,
 )
+from pydantic import ConfigDict
+
 
 _vector_table_lock = Lock()  # process-wide BigQueryVectorSearch table lock
 
@@ -75,8 +77,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _logger: Any = None
     _full_table_id: Optional[str] = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True,)
 
     @abstractmethod
     def sync_data(self) -> None:

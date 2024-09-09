@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Unio
 from google.api_core.exceptions import ClientError
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import root_validator
 
 if TYPE_CHECKING:
     from google.cloud.bigquery.table import Table

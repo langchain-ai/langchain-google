@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import BaseModel, root_validator, validator
+from pydantic import BaseModel, root_validator, validator
 
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
