@@ -22,6 +22,8 @@ from langchain_google_community.bq_storage_vectorstores.utils import (
     validate_column_in_bq_schema,
 )
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 _vector_table_lock = Lock()  # process-wide BigQueryVectorSearch table lock

@@ -8,6 +8,8 @@ from pydantic import BaseModel, Extra, Field, root_validator, model_validator
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
 from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 
 

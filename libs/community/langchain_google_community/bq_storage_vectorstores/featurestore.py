@@ -23,6 +23,8 @@ from langchain_google_community.bq_storage_vectorstores.utils import (
     cast_proto_type,
     doc_match_filter,
 )
+from typing_extensions import Self
+
 
 # Constants for index creation
 MIN_INDEX_ROWS = 5

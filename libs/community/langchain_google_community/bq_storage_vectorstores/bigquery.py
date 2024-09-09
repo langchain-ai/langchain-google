@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 from langchain_google_community.bq_storage_vectorstores._base import (
     BaseBigQueryVectorStore,
 )
+from typing_extensions import Self
+
 
 _vector_table_lock = Lock()  # process-wide BigQueryVectorSearch table lock
 
