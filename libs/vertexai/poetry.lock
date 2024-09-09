@@ -1367,7 +1367,7 @@ subdirectory = "libs/core"
 
 [[package]]
 name = "langchain-mistralai"
-version = "0.1.13"
+version = "0.2.0.dev1"
 description = "An integration package connecting Mistral and LangChain"
 optional = false
 python-versions = ">=3.9,<4.0"
@@ -1377,15 +1377,14 @@ develop = false
 [package.dependencies]
 httpx = ">=0.25.2,<1"
 httpx-sse = ">=0.3.1,<1"
-langchain-core = "^0.3.0.dev"
-pydantic = ">2,<3"
+langchain-core = "^0.3.0.dev4"
 tokenizers = ">=0.15.1,<1"
 
 [package.source]
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "v0.3rc"
-resolved_reference = "6c8d626d701b9a9e365270d06a80e3a82de19963"
+resolved_reference = "2070d659a06d1919093df56b6a63180f56ef8afa"
 subdirectory = "libs/partners/mistralai"
 
 [[package]]
@@ -2757,4 +2756,4 @@ mistral = ["langchain-mistralai"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "fd6089e49c9de43f254f7643f0a5e6bb631f21f2e1e8558d4d7e82dbdb2de2f9"
+content-hash = "00bdba3e2d330934ca0bd2384a01fdaaa42f3f4eefe33eafede493f946f5f604"
