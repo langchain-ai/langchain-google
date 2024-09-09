@@ -73,7 +73,7 @@ def test_format_json_schema_to_gapic():
             min_length=1,
             max_length=10,
             pattern="^[A-Z]{1,10}$",
-            example="ABCD",  # type: ignore[call-arg]
+            json_schema_extra={"example": "ABCD"},
         )
         str_enum_field: StringEnum
 
