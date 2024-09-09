@@ -4,7 +4,7 @@ from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
-from pydantic import BaseModel, ConfigDict, Extra, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from langchain_google_community._utils import get_client_info
 

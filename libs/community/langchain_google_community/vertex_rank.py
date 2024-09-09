@@ -6,7 +6,7 @@ from google.auth.credentials import Credentials  # type: ignore
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
-from pydantic import ConfigDict, Extra, Field
+from pydantic import ConfigDict, Field
 
 from langchain_google_community._utils import get_client_info
 

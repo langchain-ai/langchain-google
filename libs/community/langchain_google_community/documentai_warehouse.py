@@ -6,8 +6,7 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.utils import get_from_dict_or_env
-from pydantic import model_validator, root_validator
-from typing_extensions import Self
+from pydantic import model_validator
 
 from langchain_google_community._utils import get_client_info
 
@@ -43,8 +42,9 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
     """The limit on the number of documents returned."""
     client: "DocumentServiceClient" = None  #: :meta private:
 
-    @model_validator(mode="after")
-    def validate_environment(self) -> Self:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Any:
         """Validates the environment."""
         try:  # noqa: F401
             from google.cloud.contentwarehouse_v1 import DocumentServiceClient
@@ -55,13 +55,13 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
                 "`pip install langchain-google-community[docai]`"
             ) from exc
 
-        self.project_number = get_from_dict_or_env(
+        values["project_number"] = get_from_dict_or_env(
             values, "project_number", "PROJECT_NUMBER"
         )
-        self.client = DocumentServiceClient(
+        values["client"] = DocumentServiceClient(
             client_info=get_client_info(module="document-ai-warehouse")
         )
-        return self
+        return values
 
     def _prepare_request_metadata(self, user_ldap: str) -> "RequestMetadata":
         from google.cloud.contentwarehouse_v1 import RequestMetadata, UserInfo

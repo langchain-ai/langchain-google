@@ -13,7 +13,7 @@ from google.api_core.exceptions import (
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import model_validator, root_validator
+from pydantic import model_validator
 from typing_extensions import Self
 
 from langchain_google_community._utils import get_client_info, get_user_agent

@@ -20,7 +20,7 @@ from langchain_core.load import Serializable, load
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
-from pydantic import ConfigDict, Extra, Field, model_validator, root_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from langchain_google_community._utils import get_client_info
 
