@@ -99,9 +99,9 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             self.algorithm_config = utils.TreeAhConfig()
         if self.distance_measure_type is None:
             self.distance_measure_type = utils.DistanceMeasureType.DOT_PRODUCT_DISTANCE
-        if (self.online_store_name or None) is None:
+        if self.online_store_name is None:
             self.online_store_name = self.dataset_name
-        if (self.view_name or None) is None:
+        if self.view_name is None:
             self.view_name = self.table_name
 
         api_endpoint = f"{self.location}-aiplatform.googleapis.com"
@@ -513,7 +513,9 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             BigQueryVectorStore,
         )
 
-        base_params = self.dict(include=BaseBigQueryVectorStore.__fields__.keys())
+        base_params = self.model_dump(
+            include=set(BaseBigQueryVectorStore.model_fields.keys())
+        )
         base_params["embedding"] = self.embedding
         all_params = {**base_params, **kwargs}
         bq_obj = BigQueryVectorStore(**all_params)

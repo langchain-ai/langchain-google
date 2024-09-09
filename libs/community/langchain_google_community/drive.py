@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, model_validator, validator
 
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
@@ -194,8 +194,9 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
 
         return authorized_identities
 
-    @root_validator
-    def validate_inputs(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_inputs(cls, values: Dict[str, Any]) -> Any:
         """Validate that either folder_id or document_ids is set, but not both."""
         if values.get("folder_id") and (
             values.get("document_ids") or values.get("file_ids")

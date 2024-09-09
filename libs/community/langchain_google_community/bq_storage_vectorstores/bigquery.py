@@ -128,7 +128,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         self._have_index = self._have_index
         self._last_index_check = self._last_index_check
 
-        if (self._have_index or None) or (self._creating_index or None):
+        if self._have_index or self._creating_index:
             return self
 
         table = self._bq_client.get_table(self._full_table_id)  # type: ignore[union-attr]
@@ -567,7 +567,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             VertexFSVectorStore,
         )
 
-        base_params = self.dict(include=BaseBigQueryVectorStore.__fields__.keys())
+        base_params = self.model_dump(
+            include=set(BaseBigQueryVectorStore.model_fields.keys())
+        )
         base_params["embedding"] = self.embedding
         all_params = {**base_params, **kwargs}
         fs_obj = VertexFSVectorStore(**all_params)
