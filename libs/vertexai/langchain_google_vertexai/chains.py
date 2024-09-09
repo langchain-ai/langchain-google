@@ -51,7 +51,12 @@ def _create_structured_runnable_extra_step(
     *,
     prompt: Optional[BasePromptTemplate] = None,
 ) -> Runnable:
-    names = [schema.schema()["title"] for schema in functions]
+    names = [
+        schema.model_json_schema()["title"]
+        if hasattr(schema, "model_json_schema")
+        else schema.schema()["title"]
+        for schema in functions
+    ]
     if hasattr(llm, "is_gemini_advanced") and llm._is_gemini_advanced:  # type: ignore
         llm_with_functions = llm.bind(
             functions=functions,
