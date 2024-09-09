@@ -95,6 +95,7 @@ class _VertexAIBase(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
+        protected_namespaces=(),
     )
 
     @model_validator(mode="before")

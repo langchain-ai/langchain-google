@@ -66,6 +66,7 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
     model_config = ConfigDict(
         populate_by_name=True,
+        protected_namespaces=(),
     )
 
     # Needed so that mypy doesn't flag missing aliased init args.

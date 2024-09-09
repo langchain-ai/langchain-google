@@ -130,6 +130,7 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
 
     model_config = ConfigDict(
         populate_by_name=True,
+        protected_namespaces=(),
     )
 
     @property
