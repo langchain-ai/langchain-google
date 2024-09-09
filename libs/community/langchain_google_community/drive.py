@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
-from pydantic import BaseModel, model_validator, validator
+from pydantic import BaseModel, field_validator, model_validator
 
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
@@ -242,7 +242,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
             values["file_types"] = [full_form(file_type) for file_type in file_types]
         return values
 
-    @validator("credentials_path")
+    @field_validator("credentials_path")
     def validate_credentials_path(cls, v: Any, **kwargs: Any) -> Any:
         """Validate that credentials_path exists."""
         if not v.exists():
