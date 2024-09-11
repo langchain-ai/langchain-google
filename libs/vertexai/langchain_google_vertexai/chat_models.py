@@ -62,7 +62,7 @@ from langchain_core.output_parsers.openai_tools import (
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.pydantic_v1 import BaseModel, root_validator, Field
+from pydantic import BaseModel, Field, model_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import is_basemodel_subclass
@@ -124,6 +124,9 @@ from langchain_google_vertexai.functions_utils import (
     _format_to_gapic_tool,
     _ToolType,
 )
+from pydantic import ConfigDict
+from typing_extensions import Self
+
 
 logger = logging.getLogger(__name__)
 
@@ -762,7 +765,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Tool calling:
         .. code-block:: python
 
-            from langchain_core.pydantic_v1 import BaseModel, Field
+            from pydantic import BaseModel, Field
 
             class GetWeather(BaseModel):
                 '''Get the current weather in a given location'''
@@ -800,7 +803,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             from typing import Optional
 
-            from langchain_core.pydantic_v1 import BaseModel, Field
+            from pydantic import BaseModel, Field
 
             class Joke(BaseModel):
                 '''Joke to tell user.'''
@@ -1024,11 +1027,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+    )
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -1039,57 +1041,65 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        safety_settings = values.get("safety_settings")
-        tuned_model_name = values.get("tuned_model_name")
-        values["model_family"] = GoogleModelFamily(values["model_name"])
+        safety_settings = self.safety_settings
+        tuned_model_name = self.tuned_model_name
+        self.model_family = GoogleModelFamily(self.model_name)
 
-        if values["model_name"] == "chat-bison-default":
+        if self.model_name == "chat-bison-default":
             logger.warning(
                 "Model_name will become a required arg for VertexAIEmbeddings "
                 "starting from Sep-01-2024. Currently the default is set to "
                 "chat-bison"
             )
-            values["model_name"] = "chat-bison"
+            self.model_name = "chat-bison"
 
-        if values.get("full_model_name") is not None:
+        if self.full_model_name is not None:
             pass
-        elif values.get("tuned_model_name") is not None:
-            values["full_model_name"] = _format_model_name(
-                values["tuned_model_name"],
-                location=values["location"],
-                project=values["project"],
+        elif self.tuned_model_name is not None:
+            self.full_model_name = _format_model_name(
+                self.tuned_model_name,
+                location=self.location,
+                project=cast(str, self.project),
             )
         else:
-            values["full_model_name"] = _format_model_name(
-                values["model_name"],
-                location=values["location"],
-                project=values["project"],
+            self.full_model_name = _format_model_name(
+                self.model_name,
+                location=self.location,
+                project=cast(str, self.project),
             )
 
-        if safety_settings and not is_gemini_model(values["model_family"]):
+        if safety_settings and not is_gemini_model(self.model_family):
             raise ValueError("Safety settings are only supported for Gemini models")
 
         if tuned_model_name:
-            generative_model_name = values["tuned_model_name"]
+            generative_model_name = self.tuned_model_name
         else:
-            generative_model_name = values["model_name"]
+            generative_model_name = self.model_name
 
-        if not is_gemini_model(values["model_family"]):
-            cls._init_vertexai(values)
-            if values["model_family"] == GoogleModelFamily.CODEY:
+        if not is_gemini_model(self.model_family):
+            values = {
+                "project": self.project,
+                "location": self.location,
+                "credentials": self.credentials,
+                "api_transport": self.api_transport,
+                "api_endpoint": self.api_endpoint,
+                "default_metadata": self.default_metadata,
+            }
+            self._init_vertexai(values)
+            if self.model_family == GoogleModelFamily.CODEY:
                 model_cls = CodeChatModel
                 model_cls_preview = PreviewCodeChatModel
             else:
                 model_cls = ChatModel
                 model_cls_preview = PreviewChatModel
-            values["client"] = model_cls.from_pretrained(generative_model_name)
-            values["client_preview"] = model_cls_preview.from_pretrained(
+            self.client = model_cls.from_pretrained(generative_model_name)
+            self.client_preview = model_cls_preview.from_pretrained(
                 generative_model_name
             )
-        return values
+        return self
 
     @property
     def _is_gemini_advanced(self) -> bool:
@@ -1647,7 +1657,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Example: Pydantic schema, exclude raw:
             .. code-block:: python
 
-                from langchain_core.pydantic_v1 import BaseModel
+                from pydantic import BaseModel
                 from langchain_google_vertexai import ChatVertexAI
 
                 class AnswerWithJustification(BaseModel):
@@ -1666,7 +1676,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Example: Pydantic schema, include raw:
             .. code-block:: python
 
-                from langchain_core.pydantic_v1 import BaseModel
+                from pydantic import BaseModel
                 from langchain_google_vertexai import ChatVertexAI
 
                 class AnswerWithJustification(BaseModel):
@@ -1687,7 +1697,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         Example: Dict schema, exclude raw:
             .. code-block:: python
 
-                from langchain_core.pydantic_v1 import BaseModel
+                from pydantic import BaseModel
                 from langchain_core.utils.function_calling import convert_to_openai_function
                 from langchain_google_vertexai import ChatVertexAI
 

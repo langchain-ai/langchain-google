@@ -114,7 +114,7 @@ def _parse_response_candidate_llama(
     )
 
 
-class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):  # type: ignore[misc]
+class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
     """Integration for Llama 3.1 on Google Cloud Vertex AI Model-as-a-Service.
 
     For more information, see:

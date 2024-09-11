@@ -21,7 +21,6 @@ import vertexai.generative_models as vertexai  # type: ignore
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -29,6 +28,7 @@ from langchain_core.utils.function_calling import (
     convert_to_openai_tool,
 )
 from langchain_core.utils.json_schema import dereference_refs
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -69,18 +69,19 @@ _ALLOWED_SCHEMA_FIELDS.extend(
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
 
-def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
+def _format_json_schema_to_gapic_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Format a JSON schema from a Pydantic V1 BaseModel to gapic."""
     converted_schema: Dict[str, Any] = {}
     for key, value in schema.items():
         if key == "definitions":
             continue
         elif key == "items":
-            converted_schema["items"] = _format_json_schema_to_gapic(value)
+            converted_schema["items"] = _format_json_schema_to_gapic_v1(value)
         elif key == "properties":
             if "properties" not in converted_schema:
                 converted_schema["properties"] = {}
             for pkey, pvalue in value.items():
-                converted_schema["properties"][pkey] = _format_json_schema_to_gapic(
+                converted_schema["properties"][pkey] = _format_json_schema_to_gapic_v1(
                     pvalue
                 )
             continue
@@ -92,7 +93,7 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
                     "Only first value for 'allOf' key is supported. "
                     f"Got {len(value)}, ignoring other than first value!"
                 )
-            return _format_json_schema_to_gapic(value[0])
+            return _format_json_schema_to_gapic_v1(value[0])
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
@@ -100,9 +101,64 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
     return converted_schema
 
 
-def _dict_to_gapic_schema(schema: Dict[str, Any]) -> gapic.Schema:
+def _format_json_schema_to_gapic(
+    schema: Dict[str, Any],
+    parent_key: Optional[str] = None,
+    required_fields: Optional[list] = None,
+) -> Dict[str, Any]:
+    """Format a JSON schema from a Pydantic V2 BaseModel to gapic."""
+    converted_schema: Dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "definitions":
+            continue
+        elif key == "items":
+            converted_schema["items"] = _format_json_schema_to_gapic(
+                value, parent_key, required_fields
+            )
+        elif key == "properties":
+            if "properties" not in converted_schema:
+                converted_schema["properties"] = {}
+            for pkey, pvalue in value.items():
+                converted_schema["properties"][pkey] = _format_json_schema_to_gapic(
+                    pvalue, pkey, schema.get("required", [])
+                )
+            continue
+        elif key in ["type", "_type"]:
+            converted_schema["type"] = str(value).upper()
+        elif key == "allOf":
+            if len(value) > 1:
+                logger.warning(
+                    "Only first value for 'allOf' key is supported. "
+                    f"Got {len(value)}, ignoring other than first value!"
+                )
+            return _format_json_schema_to_gapic(value[0], parent_key, required_fields)
+        elif key == "anyOf":
+            if len(value) == 2 and any(v.get("type") == "null" for v in value):
+                non_null_type = next(v for v in value if v.get("type") != "null")
+                converted_schema.update(
+                    _format_json_schema_to_gapic(
+                        non_null_type, parent_key, required_fields
+                    )
+                )
+                # Remove the field from required if it exists
+                if required_fields and parent_key in required_fields:
+                    required_fields.remove(parent_key)
+                continue
+        elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
+            logger.warning(f"Key '{key}' is not supported in schema, ignoring")
+        else:
+            converted_schema[key] = value
+    return converted_schema
+
+
+def _dict_to_gapic_schema(
+    schema: Dict[str, Any], pydantic_version: str = "v1"
+) -> gapic.Schema:
     dereferenced_schema = dereference_refs(schema)
-    formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
+    if pydantic_version == "v1":
+        formatted_schema = _format_json_schema_to_gapic_v1(dereferenced_schema)
+    else:
+        formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
     json_schema = json.dumps(formatted_schema)
     return gapic.Schema.from_json(json_schema)
 
@@ -124,8 +180,14 @@ def _format_base_tool_to_function_declaration(
             ),
         )
 
-    schema = tool.args_schema.schema()
-    parameters = _dict_to_gapic_schema(schema)
+    if hasattr(tool.args_schema, "model_json_schema"):
+        schema = tool.args_schema.model_json_schema()
+        pydantic_version = "v2"
+    else:
+        schema = tool.args_schema.schema()
+        pydantic_version = "v1"
+
+    parameters = _dict_to_gapic_schema(schema, pydantic_version=pydantic_version)
 
     return gapic.FunctionDeclaration(
         name=tool.name or schema.get("title"),
@@ -137,12 +199,17 @@ def _format_base_tool_to_function_declaration(
 def _format_pydantic_to_function_declaration(
     pydantic_model: Type[BaseModel],
 ) -> gapic.FunctionDeclaration:
-    schema = pydantic_model.schema()
+    if hasattr(pydantic_model, "model_json_schema"):
+        schema = pydantic_model.model_json_schema()
+        pydantic_version = "v2"
+    else:
+        schema = pydantic_model.schema()
+        pydantic_version = "v1"
 
     return gapic.FunctionDeclaration(
         name=schema["title"],
         description=schema.get("description", ""),
-        parameters=_dict_to_gapic_schema(schema),
+        parameters=_dict_to_gapic_schema(schema, pydantic_version=pydantic_version),
     )
 
 
