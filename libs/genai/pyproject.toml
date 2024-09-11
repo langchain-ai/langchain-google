@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-genai"
-version = "1.0.10"
+version = "2.0.0.dev1"
 description = "An integration package connecting Google's genai package and LangChain"
 authors = []
 readme = "README.md"
@@ -12,9 +12,10 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = ">=0.2.33,<0.3"
+langchain-core = { version = "^0.3.0.dev4", allow-prereleases = true }
 google-generativeai = "^0.7.0"
 pillow = { version = "^10.1.0", optional = true }
+pydantic = ">=2,<3"
 
 [tool.poetry.extras]
 images = ["pillow"]
@@ -30,8 +31,8 @@ syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
 numpy = "^1.26.2"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
-langchain-standard-tests = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "v0.3rc" }
+langchain-standard-tests = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests", branch = "v0.3rc" }
 
 [tool.codespell]
 ignore-words-list = "rouge"
@@ -56,12 +57,12 @@ optional = true
 ruff = "^0.1.5"
 
 [tool.poetry.group.typing.dependencies]
-mypy = "^0.991"
+mypy = "^1.10"
 types-requests = "^2.28.11.5"
 types-google-cloud-ndb = "^2.2.0.1"
 types-pillow = "^10.1.0.2"
 types-protobuf = "^4.24.0.20240302"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "v0.3rc" }
 numpy = "^1.26.2"
 
 [tool.poetry.group.dev]
@@ -72,7 +73,7 @@ pillow = "^10.1.0"
 types-requests = "^2.31.0.10"
 types-pillow = "^10.1.0.2"
 types-google-cloud-ndb = "^2.2.0.1"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "v0.3rc" }
 
 [tool.ruff.lint]
 select = [

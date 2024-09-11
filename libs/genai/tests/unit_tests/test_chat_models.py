@@ -23,7 +23,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
-from langchain_core.pydantic_v1 import SecretStr
+from pydantic import SecretStr
 from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
@@ -37,7 +37,7 @@ def test_integration_initialization() -> None:
     """Test chat model initialization."""
     llm = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("..."),
+        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
         top_k=2,
         top_p=1,
         temperature=0.7,
@@ -53,7 +53,7 @@ def test_integration_initialization() -> None:
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("..."),
+        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
         max_output_tokens=10,
     )
     ls_params = llm._get_ls_params()
@@ -67,7 +67,7 @@ def test_integration_initialization() -> None:
 
     ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("..."),
+        api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
         temperature=0.7,
@@ -81,13 +81,14 @@ def test_initialization_inside_threadpool() -> None:
         executor.submit(
             ChatGoogleGenerativeAI,
             model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),
+            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
         ).result()
 
 
 def test_initalization_without_async() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano", google_api_key=SecretStr("secret-api-key")
+        model="gemini-nano",
+        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
     )
     assert chat.async_client is None
 
@@ -95,7 +96,8 @@ def test_initalization_without_async() -> None:
 def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         return ChatGoogleGenerativeAI(
-            model="gemini-nano", google_api_key=SecretStr("secret-api-key")
+            model="gemini-nano",
+            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
         )
 
     loop = asyncio.get_event_loop()
@@ -105,14 +107,16 @@ def test_initialization_with_async() -> None:
 
 def test_api_key_is_string() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano", google_api_key=SecretStr("secret-api-key")
+        model="gemini-nano",
+        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
     )
     assert isinstance(chat.google_api_key, SecretStr)
 
 
 def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano", google_api_key=SecretStr("secret-api-key")
+        model="gemini-nano",
+        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
     )
     print(chat.google_api_key, end="")  # noqa: T201
     captured = capsys.readouterr()
@@ -265,7 +269,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     ):
         chat = ChatGoogleGenerativeAI(
             model="gemini-pro",
-            google_api_key=param_secret_api_key,
+            google_api_key=param_secret_api_key,  # type: ignore[call-arg]
             client_options=param_client_options,
             transport=param_transport,
             additional_headers=headers,
@@ -541,11 +545,15 @@ def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> N
 
 
 def test_serialize() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")
+    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")  # type: ignore[call-arg]
     serialized = dumps(llm)
     llm_loaded = loads(
         serialized,
         secrets_map={"GOOGLE_API_KEY": "test-key"},
         valid_namespaces=["langchain_google_genai"],
     )
+    # Pydantic 2 equality will fail on complex attributes like clients with
+    # different IDs
+    llm.client = None
+    llm_loaded.client = None
     assert llm == llm_loaded

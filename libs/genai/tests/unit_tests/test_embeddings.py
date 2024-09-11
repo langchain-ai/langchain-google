@@ -8,7 +8,7 @@ from google.ai.generativelanguage_v1beta.types import (
     ContentEmbedding,
     EmbedContentRequest,
 )
-from langchain_core.pydantic_v1 import SecretStr
+from pydantic import SecretStr
 from pytest import CaptureFixture
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings

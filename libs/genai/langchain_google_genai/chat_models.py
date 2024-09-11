@@ -75,10 +75,16 @@ from langchain_core.output_parsers.openai_tools import (
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils import secret_from_env
 from langchain_core.utils.pydantic import is_basemodel_subclass
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    model_validator,
+)
 from tenacity import (
     before_sleep_log,
     retry,
@@ -86,6 +92,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from typing_extensions import Self
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
@@ -696,7 +703,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Tool calling:
         .. code-block:: python
 
-            from langchain_core.pydantic_v1 import BaseModel, Field
+            from pydantic import BaseModel, Field
 
 
             class GetWeather(BaseModel):
@@ -741,7 +748,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             from typing import Optional
 
-            from langchain_core.pydantic_v1 import BaseModel, Field
+            from pydantic import BaseModel, Field
 
 
             class Joke(BaseModel):
@@ -832,8 +839,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Gemini does not support system messages; any unsupported messages will
     raise an error."""
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @property
     def lc_secrets(self) -> Dict[str, str]:
@@ -847,38 +855,36 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def is_lc_serializable(self) -> bool:
         return True
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        if (
-            values.get("temperature") is not None
-            and not 0 <= values["temperature"] <= 1
-        ):
+        if self.temperature is not None and not 0 <= self.temperature <= 1:
             raise ValueError("temperature must be in the range [0.0, 1.0]")
 
-        if values.get("top_p") is not None and not 0 <= values["top_p"] <= 1:
+        if self.top_p is not None and not 0 <= self.top_p <= 1:
             raise ValueError("top_p must be in the range [0.0, 1.0]")
 
-        if values.get("top_k") is not None and values["top_k"] <= 0:
+        if self.top_k is not None and self.top_k <= 0:
             raise ValueError("top_k must be positive")
 
-        if not values["model"].startswith("models/"):
-            values["model"] = f"models/{values['model']}"
+        if not self.model.startswith("models/"):
+            self.model = f"models/{self.model}"
 
-        additional_headers = values.get("additional_headers") or {}
-        values["default_metadata"] = tuple(additional_headers.items())
+        additional_headers = self.additional_headers or {}
+        self.default_metadata = tuple(additional_headers.items())
         client_info = get_client_info("ChatGoogleGenerativeAI")
         google_api_key = None
-        if not values.get("credentials"):
-            google_api_key = values.get("google_api_key")
-            if isinstance(google_api_key, SecretStr):
-                google_api_key = google_api_key.get_secret_value()
-        transport: Optional[str] = values.get("transport")
-        values["client"] = genaix.build_generative_service(
-            credentials=values.get("credentials"),
+        if not self.credentials:
+            if isinstance(self.google_api_key, SecretStr):
+                google_api_key = self.google_api_key.get_secret_value()
+            else:
+                google_api_key = self.google_api_key
+        transport: Optional[str] = self.transport
+        self.client = genaix.build_generative_service(
+            credentials=self.credentials,
             api_key=google_api_key,
             client_info=client_info,
-            client_options=values.get("client_options"),
+            client_options=self.client_options,
             transport=transport,
         )
 
@@ -888,17 +894,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # this check ensures that async client is only initialized
         # within an asyncio event loop to avoid the error
         if _is_event_loop_running():
-            values["async_client"] = genaix.build_generative_async_service(
-                credentials=values.get("credentials"),
+            self.async_client = genaix.build_generative_async_service(
+                credentials=self.credentials,
                 api_key=google_api_key,
                 client_info=client_info,
-                client_options=values.get("client_options"),
+                client_options=self.client_options,
                 transport=transport,
             )
         else:
-            values["async_client"] = None
+            self.async_client = None
 
-        return values
+        return self
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:
