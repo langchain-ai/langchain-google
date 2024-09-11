@@ -45,7 +45,7 @@ class VertexAICheckGroundingWrapper(
     location_id: str = Field(default="global")
     grounding_config: str = Field(default="default_grounding_config")
     citation_threshold: Optional[float] = Field(default=0.6)
-    client: Any
+    client: Any = None
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
 

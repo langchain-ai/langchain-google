@@ -64,7 +64,7 @@ class VertexAIRank(BaseDocumentCompressor):
     title_field: Optional[str] = Field(default=None)
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
-    client: Any
+    client: Any = None
 
     def __init__(self, **kwargs: Any):
         """
