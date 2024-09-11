@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from google.api_core import exceptions as core_exceptions  # type: ignore
 from google.auth.credentials import Credentials  # type: ignore
 from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from pydantic import BaseModel, ConfigDict, Field
 
 from langchain_google_community._utils import get_client_info
 
@@ -45,7 +45,7 @@ class VertexAICheckGroundingWrapper(
     location_id: str = Field(default="global")
     grounding_config: str = Field(default="default_grounding_config")
     citation_threshold: Optional[float] = Field(default=0.6)
-    client: Any
+    client: Any = None
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
 
@@ -239,6 +239,7 @@ class VertexAICheckGroundingWrapper(
     def is_lc_serializable(cls) -> bool:
         return False
 
-    class Config:
-        extra = Extra.ignore
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        extra="ignore",
+        arbitrary_types_allowed=True,
+    )
