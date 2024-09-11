@@ -320,13 +320,14 @@ def _parse_chat_history_gemini(
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
                 parts.append(Part(function_call=function_call))
 
-            prev_content = vertex_messages[-1]
-            prev_content_is_model = prev_content and prev_content.role == "model"
-            if prev_content_is_model:
-                prev_parts = list(prev_content.parts)
-                prev_parts.extend(parts)
-                vertex_messages[-1] = Content(role=role, parts=prev_parts)
-                continue
+            if len(vertex_messages) > 0:
+                prev_content = vertex_messages[-1]
+                prev_content_is_model = prev_content and prev_content.role == "model"
+                if prev_content_is_model:
+                    prev_parts = list(prev_content.parts)
+                    prev_parts.extend(parts)
+                    vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                    continue
 
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
@@ -478,15 +479,13 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
