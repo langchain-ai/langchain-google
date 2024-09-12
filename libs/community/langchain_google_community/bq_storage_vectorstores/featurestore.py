@@ -77,6 +77,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     filter_columns: Optional[List[str]] = None
     crowding_column: Optional[str] = None
     distance_measure_type: Optional[str] = None
+    online_store: Any = None
     _user_agent: str = ""
     feature_view: Any = None
     _admin_client: Any = None
