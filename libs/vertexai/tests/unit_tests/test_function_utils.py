@@ -275,7 +275,7 @@ search_exp = gapic.FunctionDeclaration(
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
         description="Search tool",
-        title="searchSchema",
+        title="search",
         properties={"question": gapic.Schema(type=gapic.Type.STRING, title="Question")},
         required=["question"],
     ),
