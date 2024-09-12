@@ -117,7 +117,7 @@ def test_native_serialization(spec: Optional[Dict]) -> None:
     retriever_loaded = load(
         json.loads(serialized), valid_namespaces=["langchain_google_community"]
     )
-    assert retriever == retriever_loaded
+    assert retriever.model_dump() == retriever_loaded.model_dump()
 
 
 @pytest.mark.extended
@@ -128,4 +128,4 @@ def test_cloudpickle(spec: Optional[Dict]) -> None:
     )
     serialized = cloudpickle.dumps(retriever)
     retriever_loaded = pickle.loads(serialized)
-    assert retriever == retriever_loaded
+    assert retriever.model_dump() == retriever_loaded.model_dump()
