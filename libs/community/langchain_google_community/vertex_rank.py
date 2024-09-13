@@ -6,7 +6,7 @@ from google.auth.credentials import Credentials  # type: ignore
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
-from langchain_core.pydantic_v1 import Extra, Field
+from pydantic import ConfigDict, Field
 
 from langchain_google_community._utils import get_client_info
 
@@ -64,7 +64,7 @@ class VertexAIRank(BaseDocumentCompressor):
     title_field: Optional[str] = Field(default=None)
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
-    client: Any
+    client: Any = None
 
     def __init__(self, **kwargs: Any):
         """
@@ -190,6 +190,7 @@ class VertexAIRank(BaseDocumentCompressor):
         """
         return self._rerank_documents(query, documents)
 
-    class Config:
-        extra = Extra.ignore
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        extra="ignore",
+        arbitrary_types_allowed=True,
+    )

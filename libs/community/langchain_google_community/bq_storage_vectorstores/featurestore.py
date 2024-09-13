@@ -13,7 +13,8 @@ from google.api_core.exceptions import (
 )
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import model_validator
+from typing_extensions import Self
 
 from langchain_google_community._utils import get_client_info, get_user_agent
 from langchain_google_community.bq_storage_vectorstores._base import (
@@ -76,12 +77,13 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     filter_columns: Optional[List[str]] = None
     crowding_column: Optional[str] = None
     distance_measure_type: Optional[str] = None
+    online_store: Any = None
     _user_agent: str = ""
     feature_view: Any = None
     _admin_client: Any = None
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def _initialize_bq_vector_index(cls, values: dict) -> dict:
+    @model_validator(mode="after")
+    def _initialize_bq_vector_index(self) -> Self:
         import vertexai
         from google.cloud.aiplatform_v1beta1 import (
             FeatureOnlineStoreAdminServiceClient,
@@ -91,49 +93,43 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             utils,  # type: ignore[import-untyped]
         )
 
-        vertexai.init(project=values["project_id"], location=values["location"])
-        values["_user_agent"] = get_user_agent(
-            f"{USER_AGENT_PREFIX}-VertexFSVectorStore"
-        )[1]
+        vertexai.init(project=self.project_id, location=self.location)
+        self._user_agent = get_user_agent(f"{USER_AGENT_PREFIX}-VertexFSVectorStore")[1]
 
-        if values["algorithm_config"] is None:
-            values["algorithm_config"] = utils.TreeAhConfig()
-        if values["distance_measure_type"] is None:
-            values[
-                "distance_measure_type"
-            ] = utils.DistanceMeasureType.DOT_PRODUCT_DISTANCE
-        if values.get("online_store_name") is None:
-            values["online_store_name"] = values["dataset_name"]
-        if values.get("view_name") is None:
-            values["view_name"] = values["table_name"]
+        if self.algorithm_config is None:
+            self.algorithm_config = utils.TreeAhConfig()
+        if self.distance_measure_type is None:
+            self.distance_measure_type = utils.DistanceMeasureType.DOT_PRODUCT_DISTANCE
+        if self.online_store_name is None:
+            self.online_store_name = self.dataset_name
+        if self.view_name is None:
+            self.view_name = self.table_name
 
-        api_endpoint = f"{values['location']}-aiplatform.googleapis.com"
-        values["_admin_client"] = FeatureOnlineStoreAdminServiceClient(
+        api_endpoint = f"{self.location}-aiplatform.googleapis.com"
+        self._admin_client = FeatureOnlineStoreAdminServiceClient(
             client_options={"api_endpoint": api_endpoint},
-            client_info=get_client_info(module=values["_user_agent"]),
+            client_info=get_client_info(module=self._user_agent),
         )
-        values["online_store"] = _create_online_store(
-            project_id=values["project_id"],
-            location=values["location"],
-            online_store_name=values["online_store_name"],
-            _admin_client=values["_admin_client"],
-            _logger=values["_logger"],
+        self.online_store = _create_online_store(
+            project_id=self.project_id,
+            location=self.location,
+            online_store_name=self.online_store_name,
+            _admin_client=self._admin_client,
+            _logger=self._logger,
         )
-        gca_resource = values["online_store"].gca_resource
+        gca_resource = self.online_store.gca_resource
         endpoint = gca_resource.dedicated_serving_endpoint.public_endpoint_domain_name
-        values["_search_client"] = FeatureOnlineStoreServiceClient(
+        self._search_client = FeatureOnlineStoreServiceClient(
             client_options={"api_endpoint": endpoint},
-            client_info=get_client_info(module=values["_user_agent"]),
+            client_info=get_client_info(module=self._user_agent),
         )
-        values["feature_view"] = _get_feature_view(
-            values["online_store"], values["view_name"]
-        )
+        self.feature_view = _get_feature_view(self.online_store, self.view_name)
 
-        values["_logger"].info(
+        self._logger.info(
             "VertexFSVectorStore initialized with Feature Store Vector Search. \n"
             "Optional batch serving available via .to_bq_vector_store() method."
         )
-        return values
+        return self
 
     def _init_store(self) -> None:
         from google.cloud.aiplatform_v1beta1 import FeatureOnlineStoreServiceClient
@@ -518,7 +514,9 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             BigQueryVectorStore,
         )
 
-        base_params = self.dict(include=BaseBigQueryVectorStore.__fields__.keys())
+        base_params = self.model_dump(
+            include=set(BaseBigQueryVectorStore.model_fields.keys())
+        )
         base_params["embedding"] = self.embedding
         all_params = {**base_params, **kwargs}
         bq_obj = BigQueryVectorStore(**all_params)

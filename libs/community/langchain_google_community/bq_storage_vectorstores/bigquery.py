@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Unio
 from google.api_core.exceptions import ClientError
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import model_validator
 
 if TYPE_CHECKING:
     from google.cloud.bigquery.table import Table
+
+from typing_extensions import Self
 
 from langchain_google_community.bq_storage_vectorstores._base import (
     BaseBigQueryVectorStore,
@@ -114,67 +116,67 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             docs.append(doc)
         return docs
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def initialize_bq_vector_index(cls, values: dict) -> dict:
+    @model_validator(mode="after")
+    def initialize_bq_vector_index(self) -> Self:
         """
         A vector index in BigQuery table enables efficient
         approximate vector search.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
-        values["_creating_index"] = values.get("_creating_index", False)
-        values["_have_index"] = values.get("_have_index", False)
-        values["_last_index_check"] = values.get("_last_index_check", datetime.min)
+        self._creating_index = self._creating_index
+        self._have_index = self._have_index
+        self._last_index_check = self._last_index_check
 
-        if values.get("_have_index") or values.get("_creating_index"):
-            return values
+        if self._have_index or self._creating_index:
+            return self
 
-        table = values["_bq_client"].get_table(values["_full_table_id"])  # type: ignore[union-attr]
+        table = self._bq_client.get_table(self._full_table_id)  # type: ignore[union-attr]
 
         # Update existing table schema
         schema = table.schema.copy()
         if schema:  ## Check if table has a schema
-            values["table_schema"] = {field.name: field.field_type for field in schema}
+            self.table_schema = {field.name: field.field_type for field in schema}
 
         if (table.num_rows or 0) < MIN_INDEX_ROWS:
-            values["_logger"].debug("Not enough rows to create a vector index.")
-            return values
+            self._logger.debug("Not enough rows to create a vector index.")
+            return self
 
-        if datetime.utcnow() - values["_last_index_check"] < INDEX_CHECK_INTERVAL:
-            return values
+        if datetime.utcnow() - self._last_index_check < INDEX_CHECK_INTERVAL:
+            return self
 
         with _vector_table_lock:
-            values["_last_index_check"] = datetime.utcnow()
+            self._last_index_check = datetime.utcnow()
             # Check if index exists, create if necessary
             check_query = (
-                f"SELECT 1 FROM `{values['project_id']}."
-                f"{values['dataset_name']}"
+                f"SELECT 1 FROM `{self.project_id}."
+                f"{self.dataset_name}"
                 ".INFORMATION_SCHEMA.VECTOR_INDEXES` WHERE"
-                f" table_name = '{values['table_name']}'"
+                f" table_name = '{self.table_name}'"
             )
-            job = values["_bq_client"].query(  # type: ignore[union-attr]
+            job = self._bq_client.query(  # type: ignore[union-attr]
                 check_query, api_method=bigquery.enums.QueryApiMethod.QUERY
             )
             if job.result().total_rows == 0:
                 # Need to create an index. Make it in a separate thread.
-                values["_logger"].debug("Trying to create a vector index.")
+                self._logger.debug("Trying to create a vector index.")
                 Thread(
                     target=_create_bq_index,
                     kwargs={
-                        "bq_client": values["_bq_client"],
-                        "table_name": values["table_name"],
-                        "full_table_id": values["_full_table_id"],
-                        "embedding_field": values["embedding_field"],
-                        "distance_type": values["distance_type"],
-                        "logger": values["_logger"],
+                        "bq_client": self._bq_client,
+                        "table_name": self.table_name,
+                        "full_table_id": self._full_table_id,
+                        "embedding_field": self.embedding_field,
+                        "distance_type": self.distance_type,
+                        "logger": self._logger,
                     },
                     daemon=True,
                 ).start()
 
             else:
-                values["_logger"].debug("Vector index already exists.")
-                values["_have_index"] = True
-            return values
+                self._logger.debug("Vector index already exists.")
+                self._have_index = True
+            return self
 
     def _similarity_search_by_vectors_with_scores_and_embeddings(
         self,
@@ -565,7 +567,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             VertexFSVectorStore,
         )
 
-        base_params = self.dict(include=BaseBigQueryVectorStore.__fields__.keys())
+        base_params = self.model_dump(
+            include=set(BaseBigQueryVectorStore.model_fields.keys())
+        )
         base_params["embedding"] = self.embedding
         all_params = {**base_params, **kwargs}
         fs_obj = VertexFSVectorStore(**all_params)

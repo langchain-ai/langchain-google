@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Generator, List, Optional
+from typing import Dict, Generator, List, Optional
 
 import pytest
 from langchain_core.messages import (
@@ -14,8 +14,8 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.tools import tool
+from pydantic import BaseModel
 
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,
@@ -244,8 +244,8 @@ def test_generativeai_get_num_tokens_gemini() -> None:
 
 
 def test_safety_settings_gemini() -> None:
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    safety_settings: Dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
     }
     # test with safety filters on bind
     llm = ChatGoogleGenerativeAI(temperature=0, model="gemini-pro").bind(
@@ -286,8 +286,8 @@ def test_chat_function_calling_with_multiple_parts() -> None:
 
     tools = [search]
 
-    safety = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    safety: Dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     llm = ChatGoogleGenerativeAI(
         model="models/gemini-1.5-pro-latest", safety_settings=safety
@@ -358,8 +358,8 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         name: str
         age: int
 
-    safety = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    safety: Dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     # Test .bind_tools with BaseModel
     message = HumanMessage(content="My name is Erick and I am 27 years old")
@@ -418,8 +418,8 @@ def test_chat_google_genai_function_calling_with_structured_output(
         name: str
         age: int
 
-    safety = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
+    safety: Dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     llm = ChatGoogleGenerativeAI(model=model_name, safety_settings=safety)
     model = llm.with_structured_output(MyModel)
@@ -430,7 +430,11 @@ def test_chat_google_genai_function_calling_with_structured_output(
     assert response == MyModel(name="Erick", age=27)
 
     model = llm.with_structured_output(
-        {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
+        {
+            "name": "MyModel",
+            "description": "MyModel",
+            "parameters": MyModel.model_json_schema(),
+        }
     )
     response = model.invoke([message])
     expected = [

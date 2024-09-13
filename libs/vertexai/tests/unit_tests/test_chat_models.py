@@ -28,7 +28,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     InputOutputTextPair,

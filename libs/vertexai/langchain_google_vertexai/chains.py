@@ -13,8 +13,8 @@ from langchain_core.output_parsers import (
     StrOutputParser,
 )
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable
+from pydantic import BaseModel
 
 from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
 
@@ -51,7 +51,12 @@ def _create_structured_runnable_extra_step(
     *,
     prompt: Optional[BasePromptTemplate] = None,
 ) -> Runnable:
-    names = [schema.schema()["title"] for schema in functions]
+    names = [
+        schema.model_json_schema()["title"]
+        if hasattr(schema, "model_json_schema")
+        else schema.schema()["title"]
+        for schema in functions
+    ]
     if hasattr(llm, "is_gemini_advanced") and llm._is_gemini_advanced:  # type: ignore
         llm_with_functions = llm.bind(
             functions=functions,
@@ -111,7 +116,7 @@ def create_structured_runnable(
 
                 from langchain_google_vertexai import ChatVertexAI, create_structured_runnable
                 from langchain_core.prompts import ChatPromptTemplate
-                from langchain_core.pydantic_v1 import BaseModel, Field
+                from pydantic import BaseModel, Field
 
 
                 class RecordPerson(BaseModel):

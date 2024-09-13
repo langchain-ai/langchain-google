@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Tuple, Type
 
 from langchain_core.language_models import BaseChatModel
 from langchain_standard_tests.unit_tests import ChatModelUnitTests
@@ -15,6 +15,14 @@ class TestGeminiAIStandard(ChatModelUnitTests):
     def chat_model_params(self) -> dict:
         return {"model": "models/gemini-1.0-pro-001"}
 
+    @property
+    def init_from_env_params(self) -> Tuple[dict, dict, dict]:
+        return (
+            {"GOOGLE_API_KEY": "api_key"},
+            self.chat_model_params,
+            {"google_api_key": "api_key"},
+        )
+
 
 class TestGemini_15_AIStandard(ChatModelUnitTests):
     @property
@@ -24,3 +32,11 @@ class TestGemini_15_AIStandard(ChatModelUnitTests):
     @property
     def chat_model_params(self) -> dict:
         return {"model": "models/gemini-1.5-pro-001"}
+
+    @property
+    def init_from_env_params(self) -> Tuple[dict, dict, dict]:
+        return (
+            {"GOOGLE_API_KEY": "api_key"},
+            self.chat_model_params,
+            {"google_api_key": "api_key"},
+        )

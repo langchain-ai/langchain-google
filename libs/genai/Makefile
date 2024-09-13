@@ -14,6 +14,9 @@ test tests integration_test integration_tests:
 check_imports: $(shell find langchain_google_genai -name '*.py')
 	poetry run python ./scripts/check_imports.py $^
 
+test_watch:
+	poetry run ptw --snapshot-update --now . -- -vv $(TEST_FILE)
+
 # Run unit tests and generate a coverage report.
 coverage:
 	poetry run pytest --cov \
@@ -36,7 +39,6 @@ lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test
 
 lint lint_diff lint_package lint_tests:
-	./scripts/check_pydantic.sh .
 	./scripts/lint_imports.sh
 	poetry run ruff check .
 	poetry run ruff format $(PYTHON_FILES) --diff

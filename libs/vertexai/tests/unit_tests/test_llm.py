@@ -2,7 +2,8 @@ from typing import Any, Dict
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import model_validator
+from typing_extensions import Self
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai.llms import VertexAI
@@ -80,9 +81,9 @@ def test_vertexai_args_passed() -> None:
 
 def test_extract_response() -> None:
     class FakeModelGarden(_BaseVertexAIModelGarden):
-        @root_validator(pre=False, skip_on_failure=True)
-        def validate_environment(cls, values: Dict) -> Dict:
-            return values
+        @model_validator(mode="after")
+        def validate_environment(self) -> Self:
+            return self
 
     prompts_results = [
         ("a prediction", "a prediction"),
