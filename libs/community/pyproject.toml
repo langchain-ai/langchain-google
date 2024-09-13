@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-community"
-version = "2.0.0.dev2"
+version = "2.0.0"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 readme = "README.md"
@@ -12,8 +12,8 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = { version = "^0.3.0.dev4", allow-prereleases = true }
-langchain-community = { version = "^0.3.0.dev1", allow-prereleases = true }
+langchain-core = ">=0.3.0,<0.4"
+langchain-community = "^0.3.0"
 google-api-core = "^2.17.1"
 google-api-python-client = "^2.122.0"
 google-cloud-core = "^2.4.1"
