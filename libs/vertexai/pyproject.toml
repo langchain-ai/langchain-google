@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-vertexai"
-version = "2.0.0.dev1"
+version = "2.0.0"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 readme = "README.md"
@@ -12,12 +12,12 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = { version = "^0.3.0.dev4", allow-prereleases = true }
+langchain-core = ">=0.3.0,<0.4"
 google-cloud-aiplatform = "^1.56.0"
 google-cloud-storage = "^2.17.0"
 # optional dependencies
 anthropic = { extras = ["vertexai"], version = ">=0.30.0,<1", optional = true }
-langchain-mistralai = { version = "^0.2.0.dev1", allow-prereleases = true }
+langchain-mistralai = { version = ">=0.2.0,<1", optional = true }
 httpx = "^0.27.0"
 httpx-sse = "^0.4.0"
 pydantic = ">=2,<3"
@@ -40,9 +40,9 @@ numpy = [
   { version = "^1.26.0", python = ">=3.12" },
 ]
 google-api-python-client = "^2.117.0"
-langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain", branch = "v0.3rc" }
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "v0.3rc" }
-langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests", branch = "v0.3rc"}
+langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
+langchain-standard-tests = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests"}
 
 
 [tool.codespell]
@@ -69,8 +69,8 @@ optional = true
 numexpr = { version = "^2.8.8", python = ">=3.9,<4.0" }
 google-api-python-client = "^2.114.0"
 google-cloud-datastore = "^2.19.0"
-langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain", branch = "v0.3rc" }
-langchain-mistralai = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/partners/mistralai", branch = "v0.3rc"}
+langchain = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/langchain" }
+langchain-mistralai = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/partners/mistralai"}
 
 [tool.poetry.group.lint]
 optional = true
@@ -84,12 +84,12 @@ mypy = "^1"
 types-google-cloud-ndb = "^2.2.0.20240106"
 types-protobuf = "^4.24.0.4"
 types-requests = "^2.31.0"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "v0.3rc" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
 
 
 [tool.poetry.group.dev.dependencies]
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "v0.3rc" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
 [tool.ruff.lint]
 select = [
