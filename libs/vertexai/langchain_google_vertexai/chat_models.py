@@ -57,13 +57,13 @@ from langchain_core.messages.tool import (
 )
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
-    JsonOutputToolsParser,
+    JsonOutputKeyToolsParser,
     PydanticToolsParser,
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import BaseModel, Field, model_validator
-from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableGenerator
+from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from vertexai.generative_models import (  # type: ignore
@@ -1719,15 +1719,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """  # noqa: E501
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
+        tool_name = _get_tool_name(schema)
         if isinstance(schema, type) and is_basemodel_subclass(schema):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
         else:
-            parser = JsonOutputToolsParser(first_tool_only=True) | RunnableGenerator(
-                _yield_args
-            )
-        tool_choice = _get_tool_name(schema) if self._is_gemini_advanced else None
+            parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
+        tool_choice = tool_name if self._is_gemini_advanced else None
         llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
