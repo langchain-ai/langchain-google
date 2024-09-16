@@ -473,30 +473,31 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
 
     def embed_image(
         self,
-        image_path: str,
+        uris: List[str],
         contextual_text: Optional[str] = None,
         dimensions: Optional[int] = None,
-    ) -> List[float]:
+    ) -> List[List[float]]:
         """Embed an image.
 
         Args:
-            image_path: Path to image (local, Google Cloud Storage or web) to generate
+            uris: URI paths to image (local, Google Cloud Storage or web) to generate
             embeddings for.
             contextual_text: Text to generate embeddings for.
 
         Returns:
-            Embedding for the image.
+            Embeddings for the image URIs.
         """
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
 
         image_loader = ImageBytesLoader()
-        bytes_image = image_loader.load_bytes(image_path)
-        image = Image(bytes_image)
-        result: MultiModalEmbeddingResponse = self.instance[
-            "get_embeddings_with_retry"
-        ](image=image, contextual_text=contextual_text, dimension=dimensions)
-        return result.image_embedding
+        embeddings = []
+        for image_path in uris:
+            bytes_image = image_loader.load_bytes(image_path)
+            image = Image(bytes_image)
+            result: MultiModalEmbeddingResponse = self.instance[
+                "get_embeddings_with_retry"
+            ](image=image, contextual_text=contextual_text, dimension=dimensions)
+            embeddings.append(result.image_embedding)
 
-
-VertexAIEmbeddings.model_rebuild()
+        return embeddings
