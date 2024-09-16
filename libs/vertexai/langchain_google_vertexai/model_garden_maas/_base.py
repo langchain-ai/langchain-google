@@ -6,6 +6,7 @@ from typing import (
     AsyncIterator,
     Callable,
     Dict,
+    List,
     Optional,
     Union,
 )
@@ -28,6 +29,16 @@ from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
 
 from langchain_google_vertexai._base import _VertexAIBase
+
+_MISTRAL_MODELS: List[str] = [
+    "mistral-nemo@2407",
+    "mistral-large@2407",
+]
+_LLAMA_MODELS: List[str] = [
+    "meta/llama3-405b-instruct-maas",
+    "meta/llama3-70b-instruct-maas",
+    "meta/llama3-8b-instruct-maas",
+]
 
 
 def _get_token(credentials: Optional[Credentials] = None) -> str:
@@ -85,13 +96,9 @@ class VertexMaaSModelFamily(str, Enum):
     @classmethod
     def _missing_(cls, value: Any) -> "VertexMaaSModelFamily":
         model_name = value.lower()
-        llama_models = {
-            "meta/llama3-405b-instruct-maas",
-        }
-        mistral_models = {"mistral-nemo@2407", "mistral-large@2407"}
-        if model_name in llama_models:
+        if model_name in _LLAMA_MODELS:
             return VertexMaaSModelFamily.LLAMA
-        if model_name in mistral_models:
+        if model_name in _MISTRAL_MODELS:
             return VertexMaaSModelFamily.MISTRAL
         raise ValueError(f"Model {model_name} is not supported yet!")
 
