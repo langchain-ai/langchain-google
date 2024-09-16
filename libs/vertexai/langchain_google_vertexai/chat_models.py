@@ -282,13 +282,7 @@ def _parse_chat_history_gemini(
     for i, message in enumerate(history):
         if isinstance(message, SystemMessage):
             prev_ai_message = None
-            if i != 0:
-                raise ValueError("SystemMessage should be the first in the history.")
-            if system_instruction is not None:
-                raise ValueError(
-                    "Detected more than one SystemMessage in the list of messages."
-                    "Gemini APIs support the insertion of only one SystemMessage."
-                )
+            system_parts = _convert_to_parts(message)
             if convert_system_message_to_human:
                 logger.warning(
                     "gemini models released from April 2024 support"
@@ -296,18 +290,17 @@ def _parse_chat_history_gemini(
                     "when working with these models,"
                     "set convert_system_message_to_human to False"
                 )
-                system_parts = _convert_to_parts(message)
                 continue
-            system_instruction = Content(role="user", parts=_convert_to_parts(message))
+            if system_instruction is not None:
+                system_instruction.parts.extend(system_parts)  # type: ignore[unreachable]
+            else:
+                system_instruction = Content(role="system", parts=system_parts)
+            system_parts = None
         elif isinstance(message, HumanMessage):
             prev_ai_message = None
             role = "user"
             parts = _convert_to_parts(message)
             if system_parts is not None:
-                if i != 1:
-                    raise ValueError(
-                        "System message should be immediately followed by HumanMessage"
-                    )
                 parts = system_parts + parts
                 system_parts = None
             vertex_messages.append(Content(role=role, parts=parts))
@@ -323,13 +316,14 @@ def _parse_chat_history_gemini(
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
                 parts.append(Part(function_call=function_call))
 
-            prev_content = vertex_messages[-1]
-            prev_content_is_model = prev_content and prev_content.role == "model"
-            if prev_content_is_model:
-                prev_parts = list(prev_content.parts)
-                prev_parts.extend(parts)
-                vertex_messages[-1] = Content(role=role, parts=prev_parts)
-                continue
+            if len(vertex_messages):
+                prev_content = vertex_messages[-1]
+                prev_content_is_model = prev_content and prev_content.role == "model"
+                if prev_content_is_model:
+                    prev_parts = list(prev_content.parts)
+                    prev_parts.extend(parts)
+                    vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                    continue
 
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
@@ -342,16 +336,17 @@ def _parse_chat_history_gemini(
                 )
             )
             parts = [part]
-
-            prev_content = vertex_messages[-1]
-            prev_content_is_function = prev_content and prev_content.role == "function"
-
-            if prev_content_is_function:
-                prev_parts = list(prev_content.parts)
-                prev_parts.extend(parts)
-                # replacing last message
-                vertex_messages[-1] = Content(role=role, parts=prev_parts)
-                continue
+            if len(vertex_messages):
+                prev_content = vertex_messages[-1]
+                prev_content_is_function = (
+                    prev_content and prev_content.role == "function"
+                )
+                if prev_content_is_function:
+                    prev_parts = list(prev_content.parts)
+                    prev_parts.extend(parts)
+                    # replacing last message
+                    vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                    continue
 
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, ToolMessage):
