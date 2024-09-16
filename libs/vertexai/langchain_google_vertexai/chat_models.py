@@ -1856,11 +1856,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         ), total_lc_usage
 
 
-def _yield_args(tool_call_chunks: Iterator[dict]) -> Iterator[dict]:
-    for tc in tool_call_chunks:
-        yield tc["args"]
-
-
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
     """Get UsageMetadata from raw response metadata."""
     input_tokens = raw_metadata.get("prompt_token_count", 0)
