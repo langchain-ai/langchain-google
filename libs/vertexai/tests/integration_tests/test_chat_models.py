@@ -595,6 +595,19 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
 
 
 @pytest.mark.release
+def test_chat_model_multiple_system_message() -> None:
+    model = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    response = model.invoke(
+        [
+            SystemMessage("Be helpful"),
+            AIMessage("Hi, I'm LeoAI. How can I help?"),
+            SystemMessage("Your name is LeoAI"),
+        ]
+    )
+    assert isinstance(response, AIMessage)
+
+
+@pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     class MyModel(BaseModel):
         name: str
