@@ -95,7 +95,7 @@ class GoogleEmbeddingModelVersion(str, Enum):
         return self == GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024
 
 
-class VertexAIEmbeddings(_VertexAICommon, Embeddings):
+class VertexAIEmbeddings(_VertexAICommon, Embeddings):  #
     """Google Cloud VertexAI embedding models."""
 
     # Instance context
