@@ -88,7 +88,7 @@ def test_langchain_google_vertexai_image_embeddings(
     kwargs = {}
     if dim:
         kwargs["dimensions"] = dim
-    output = model.embed_image([tmp_image for i in range(3)], **kwargs)
+    output = model.embed_images([tmp_image for i in range(3)], **kwargs)
     assert len(output) == 3
     assert len(output[0]) == expected_dim
 

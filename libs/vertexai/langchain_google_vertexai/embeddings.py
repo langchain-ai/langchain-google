@@ -474,42 +474,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
 
     def embed_image(
         self,
-        uris: List[str],
+        image_path: str,
         contextual_text: Optional[str] = None,
         dimensions: Optional[int] = None,
-    ) -> List[List[float]]:
-        """Embed an image.
-
-        Args:
-            uris: URI paths to image (local, Google Cloud Storage or web) to generate
-            embeddings for.
-            contextual_text: Text to generate embeddings for.
-
-        Returns:
-            Embeddings for the image URIs.
-        """
-        if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
-            raise NotImplementedError("Only supported for multimodal models")
-
-        image_loader = ImageBytesLoader()
-        embeddings = []
-        for image_path in uris:
-            bytes_image = image_loader.load_bytes(image_path)
-            image = Image(bytes_image)
-            result: MultiModalEmbeddingResponse = self.instance[
-                "get_embeddings_with_retry"
-            ](image=image, contextual_text=contextual_text, dimension=dimensions)
-            embeddings.append(result.image_embedding)
-
-        return embeddings
-
-    def embed_image(
-        self,
-        image_path: Optional[str] = None,
-        contextual_text: Optional[str] = None,
-        dimensions: Optional[int] = None,
-        *,
-        uris: List[str],
     ) -> List[float]:
         """Embed an image.
 
@@ -521,22 +488,42 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             Embedding for the image.
         """
+        warnings.warn(
+            "The `embed_image()` API will be deprecated and replaced by `embed_images()`.\
+                Change your usage to `embed_images([image_path1, image_path2])` and note\
+                    that the result returned will be a list of image embeddings."
+        )
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
 
         image_loader = ImageBytesLoader()
-        if image_path:
-            warnings.warn(
-                "The `image_path` parameter of the `embed_image` API will be deprecated and replaced by `uris`.\
-                          Change your usage to `embed_images([image_path1, image_path2])` and note that\
-                             the result returned will be a list of embeddings."
-            )
-            bytes_image = image_loader.load_bytes(image_path)
-            image = Image(bytes_image)
-            result: MultiModalEmbeddingResponse = self.instance[
-                "get_embeddings_with_retry"
-            ](image=image, contextual_text=contextual_text, dimension=dimensions)
-            return result.image_embedding
+        bytes_image = image_loader.load_bytes(image_path)
+        image = Image(bytes_image)
+        result: MultiModalEmbeddingResponse = self.instance[
+            "get_embeddings_with_retry"
+        ](image=image, contextual_text=contextual_text, dimension=dimensions)
+        return result.image_embedding
+
+    def embed_images(
+        self,
+        uris: List[str],
+        contextual_text: Optional[str] = None,
+        dimensions: Optional[int] = None,
+    ) -> List[float]:
+        """Embed an image.
+
+        Args:
+            uris: Paths to image (local, Google Cloud Storage or web) to generate
+            embeddings for.
+            contextual_text: Text to generate embeddings for.
+
+        Returns:
+            Embedding for the image.
+        """
+        if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
+            raise NotImplementedError("Only supported for multimodal models")
+
+        image_loader = ImageBytesLoader()
 
         embeddings = []
         for image_path in uris:
