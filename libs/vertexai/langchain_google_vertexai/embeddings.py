@@ -19,6 +19,9 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
+from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
+    SafetySettingsType as SafetySettingsType,
+)
 from vertexai.language_models import (  # type: ignore
     TextEmbeddingInput,
     TextEmbeddingModel,
@@ -494,3 +497,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "get_embeddings_with_retry"
         ](image=image, contextual_text=contextual_text, dimension=dimensions)
         return result.image_embedding
+
+
+VertexAIEmbeddings.model_rebuild()
