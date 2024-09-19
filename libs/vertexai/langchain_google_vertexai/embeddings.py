@@ -510,7 +510,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         contextual_text: Optional[str] = None,
         dimensions: Optional[int] = None,
     ) -> List[float]:
-        """Embed an image.
+        """Embed a list of images.
 
         Args:
             uris: Paths to image (local, Google Cloud Storage or web) to generate
