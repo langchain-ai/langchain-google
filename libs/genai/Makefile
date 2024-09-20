@@ -64,9 +64,10 @@ check_imports: $(shell find langchain_google_genai -name '*.py')
 
 help:
 	@echo '----'
-	@echo 'check_imports				- check imports'
+	@echo 'check_imports                - check imports'
 	@echo 'format                       - run code formatters'
 	@echo 'lint                         - run linters'
 	@echo 'test                         - run unit tests'
 	@echo 'tests                        - run unit tests'
+	@echo 'integration_test             - run integration tests(NOTE: "export GOOGLE_API_KEY=..." is needed.)'
 	@echo 'test TEST_FILE=<test_file>   - run all tests in file'
