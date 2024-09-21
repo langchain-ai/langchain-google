@@ -20,7 +20,7 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-1.0-pro-001",
+            "model": "models/gemini-1.5-flash-latest",
             "rate_limiter": rate_limiter,
         }
 
