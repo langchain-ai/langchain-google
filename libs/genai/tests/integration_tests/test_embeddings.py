@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from langchain_core.pydantic_v1 import SecretStr
+from pydantic import SecretStr
 
 from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings

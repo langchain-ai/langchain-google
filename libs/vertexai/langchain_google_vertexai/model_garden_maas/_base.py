@@ -6,6 +6,7 @@ from typing import (
     AsyncIterator,
     Callable,
     Dict,
+    List,
     Optional,
     Union,
 )
@@ -24,9 +25,20 @@ from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
 )
 from langchain_core.language_models.llms import create_base_retry_decorator
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import ConfigDict, model_validator
+from typing_extensions import Self
 
 from langchain_google_vertexai._base import _VertexAIBase
+
+_MISTRAL_MODELS: List[str] = [
+    "mistral-nemo@2407",
+    "mistral-large@2407",
+]
+_LLAMA_MODELS: List[str] = [
+    "meta/llama3-405b-instruct-maas",
+    "meta/llama3-70b-instruct-maas",
+    "meta/llama3-8b-instruct-maas",
+]
 
 
 def _get_token(credentials: Optional[Credentials] = None) -> str:
@@ -84,13 +96,9 @@ class VertexMaaSModelFamily(str, Enum):
     @classmethod
     def _missing_(cls, value: Any) -> "VertexMaaSModelFamily":
         model_name = value.lower()
-        llama_models = {
-            "meta/llama3-405b-instruct-maas",
-        }
-        mistral_models = {"mistral-nemo@2407", "mistral-large@2407"}
-        if model_name in llama_models:
+        if model_name in _LLAMA_MODELS:
             return VertexMaaSModelFamily.LLAMA
-        if model_name in mistral_models:
+        if model_name in _MISTRAL_MODELS:
             return VertexMaaSModelFamily.MISTRAL
         raise ValueError(f"Model {model_name} is not supported yet!")
 
@@ -101,11 +109,10 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
     model_family: Optional[VertexMaaSModelFamily] = None
     timeout: int = 120
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -129,16 +136,16 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
             timeout=self.timeout,
         )
 
-    @root_validator(pre=True)
-    def validate_environment_model_garden(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment_model_garden(self) -> Self:
         """Validate that the python package exists in environment."""
-        family = VertexMaaSModelFamily(values["model_name"])
-        values["model_family"] = family
+        family = VertexMaaSModelFamily(self.model_name)
+        self.model_family = family
         if family == VertexMaaSModelFamily.MISTRAL:
-            model = values["model_name"].split("@")[0]
-            values["full_model_name"] = values["model_name"]
-            values["model_name"] = model
-        return values
+            model = self.model_name.split("@")[0] if self.model_name else None
+            self.full_model_name = self.model_name
+            self.model_name = model
+        return self
 
     def _enrich_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fix params to be compliant with Vertex AI."""

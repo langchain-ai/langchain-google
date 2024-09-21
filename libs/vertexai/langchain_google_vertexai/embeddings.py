@@ -17,7 +17,11 @@ from google.api_core.exceptions import (
 from google.cloud.aiplatform import telemetry
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import ConfigDict, model_validator
+from typing_extensions import Self
+from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
+    SafetySettingsType as SafetySettingsType,
+)
 from vertexai.language_models import (  # type: ignore
     TextEmbeddingInput,
     TextEmbeddingModel,
@@ -100,24 +104,33 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     # Instance context
     instance: Dict[str, Any] = {}  #: :meta private:
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    model_config = ConfigDict(
+        extra="forbid",
+        protected_namespaces=(),
+    )
+
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validates that the python package exists in environment."""
-        cls._init_vertexai(values)
-        _, user_agent = get_user_agent(f"{cls.__name__}_{values['model_name']}")  # type: ignore
+        values = {
+            "project": self.project,
+            "location": self.location,
+            "credentials": self.credentials,
+            "api_transport": self.api_transport,
+            "api_endpoint": self.api_endpoint,
+            "default_metadata": self.default_metadata,
+        }
+        self._init_vertexai(values)
+        _, user_agent = get_user_agent(f"{self.__class__.__name__}_{self.model_name}")
         with telemetry.tool_context_manager(user_agent):
             if (
-                GoogleEmbeddingModelType(values["model_name"])
+                GoogleEmbeddingModelType(self.model_name)
                 == GoogleEmbeddingModelType.MULTIMODAL
             ):
-                values["client"] = MultiModalEmbeddingModel.from_pretrained(
-                    values["model_name"]
-                )
+                self.client = MultiModalEmbeddingModel.from_pretrained(self.model_name)
             else:
-                values["client"] = TextEmbeddingModel.from_pretrained(
-                    values["model_name"]
-                )
-        return values
+                self.client = TextEmbeddingModel.from_pretrained(self.model_name)
+        return self
 
     def __init__(
         self,
@@ -484,3 +497,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "get_embeddings_with_retry"
         ](image=image, contextual_text=contextual_text, dimension=dimensions)
         return result.image_embedding
+
+
+VertexAIEmbeddings.model_rebuild()

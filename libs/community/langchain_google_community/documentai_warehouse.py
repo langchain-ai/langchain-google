@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import root_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.utils import get_from_dict_or_env
+from pydantic import model_validator
 
 from langchain_google_community._utils import get_client_info
 
@@ -42,8 +42,9 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
     """The limit on the number of documents returned."""
     client: "DocumentServiceClient" = None  #: :meta private:
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Any:
         """Validates the environment."""
         try:  # noqa: F401
             from google.cloud.contentwarehouse_v1 import DocumentServiceClient

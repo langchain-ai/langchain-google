@@ -22,9 +22,9 @@ from langchain_core.messages import (
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.tools import tool
+from pydantic import BaseModel
 
 from langchain_google_vertexai import (
     ChatVertexAI,
@@ -302,7 +302,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
         prompt=prompt_template,
     )
     agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent,  # type: ignore[arg-type]
+        agent=agent,
         tools=tools,  # type: ignore[arg-type]
         verbose=False,
         stream_runnable=False,
@@ -595,6 +595,19 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
 
 
 @pytest.mark.release
+def test_chat_model_multiple_system_message() -> None:
+    model = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    response = model.invoke(
+        [
+            SystemMessage("Be helpful"),
+            AIMessage("Hi, I'm LeoAI. How can I help?"),
+            SystemMessage("Your name is LeoAI"),
+        ]
+    )
+    assert isinstance(response, AIMessage)
+
+
+@pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     class MyModel(BaseModel):
         name: str
@@ -616,7 +629,11 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
     assert response == MyModel(name="Erick", age=27)
 
     model = llm.with_structured_output(
-        {"name": "MyModel", "description": "MyModel", "parameters": MyModel.schema()}
+        {
+            "name": "MyModel",
+            "description": "MyModel",
+            "parameters": MyModel.model_json_schema(),
+        }
     )
     response = model.invoke([message])
     assert response == {

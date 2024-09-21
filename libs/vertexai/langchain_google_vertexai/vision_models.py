@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatResult, LLMResult
 from langchain_core.outputs.chat_generation import ChatGeneration
 from langchain_core.outputs.generation import Generation
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from vertexai.preview.vision_models import (  # type: ignore[import-untyped]
     GeneratedImage,
     ImageGenerationModel,
@@ -38,6 +38,8 @@ class _BaseImageTextModel(BaseModel):
     """Language of the query"""
     project: Union[str, None] = Field(default=None)
     """Google cloud project"""
+
+    model_config = ConfigDict(protected_namespaces=())
 
     @property
     def client(self) -> ImageTextModel:
@@ -333,6 +335,8 @@ class _BaseVertexAIImageGenerator(BaseModel):
     """Random seed for the image generation"""
     project: Union[str, None] = Field(default=None)
     """Google cloud project id"""
+
+    model_config = ConfigDict(protected_namespaces=())
 
     @property
     def client(self) -> ImageGenerationModel:

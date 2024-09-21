@@ -22,7 +22,8 @@ from google.cloud.aiplatform_v1beta1.services.prediction_service import (
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing_extensions import Self
 from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
 )
@@ -91,14 +92,15 @@ class _VertexAIBase(BaseModel):
     "when making API calls. If not provided, credentials will be ascertained from "
     "the environment."
 
-    class Config:
-        """Configuration for this pydantic object."""
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        protected_namespaces=(),
+    )
 
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
-
-    @root_validator(pre=True)
-    def validate_params_base(cls, values: dict) -> dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_params_base(cls, values: dict) -> Any:
         if "model" in values and "model_name" not in values:
             values["model_name"] = values.pop("model")
         if values.get("project") is None:
@@ -108,7 +110,7 @@ class _VertexAIBase(BaseModel):
         if values.get("api_endpoint"):
             api_endpoint = values["api_endpoint"]
         else:
-            location = values.get("location", cls.__fields__["location"].default)
+            location = values.get("location", cls.model_fields["location"].default)
             api_endpoint = f"{location}-{constants.PREDICTION_API_BASE_PATH}"
         client_options = ClientOptions(api_endpoint=api_endpoint)
         if values.get("client_cert_source"):
@@ -311,26 +313,26 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
     single_example_per_request: bool = True
     "LLM endpoint currently serves only the first example in the request"
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
 
-        if not values["project"]:
+        if not self.project:
             raise ValueError(
                 "A GCP project should be provided to run inference on Model Garden!"
             )
 
         client_options = ClientOptions(
-            api_endpoint=f"{values['location']}-aiplatform.googleapis.com"
+            api_endpoint=f"{self.location}-aiplatform.googleapis.com"
         )
         client_info = get_client_info(module="vertex-ai-model-garden")
-        values["client"] = PredictionServiceClient(
+        self.client = PredictionServiceClient(
             client_options=client_options, client_info=client_info
         )
-        values["async_client"] = PredictionServiceAsyncClient(
+        self.async_client = PredictionServiceAsyncClient(
             client_options=client_options, client_info=client_info
         )
-        return values
+        return self
 
     @property
     def endpoint_path(self) -> str:

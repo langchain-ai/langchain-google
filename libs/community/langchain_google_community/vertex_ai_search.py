@@ -17,10 +17,10 @@ from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.load import Serializable, load
-from langchain_core.pydantic_v1 import Extra, Field, root_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env
+from pydantic import ConfigDict, Field, PrivateAttr, model_validator
 
 from langchain_google_community._utils import get_client_info
 
@@ -64,8 +64,9 @@ class _BaseVertexAISearchRetriever(Serializable):
     def __reduce__(self) -> Any:
         return _load, (self.to_json(),)
 
-    @root_validator(pre=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Any:
         """Validates the environment."""
         try:
             from google.cloud import discoveryengine_v1beta  # noqa: F401
@@ -255,15 +256,13 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/BoostSpec
     """
 
-    _client: SearchServiceClient
-    _serving_config: str
+    _client: SearchServiceClient = PrivateAttr()
+    _serving_config: str = PrivateAttr()
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
-        arbitrary_types_allowed = True
-        underscore_attrs_are_private = True
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+    )
 
     def __init__(self, **kwargs: Any) -> None:
         """Initializes private fields."""
@@ -418,15 +417,13 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
     conversation_id: str = "-"
     """Vertex AI Search Conversation ID."""
 
-    _client: ConversationalSearchServiceClient
-    _serving_config: str
+    _client: ConversationalSearchServiceClient = PrivateAttr()
+    _serving_config: str = PrivateAttr()
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.ignore
-        arbitrary_types_allowed = True
-        underscore_attrs_are_private = True
+    model_config = ConfigDict(
+        extra="ignore",
+        arbitrary_types_allowed=True,
+    )
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -502,10 +499,10 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
     summary_spec_kwargs: Dict[str, Any] = Field(default_factory=dict)
     """ Additional kwargs for `SearchRequest.ContentSearchSpec.SummarySpec`"""
 
-    class Config(VertexAISearchRetriever.Config):
-        """Redefinition to specify that inherits config from `VertexAISearchRetriever`
-        not BaseTool
-        """
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+    )
 
     def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
         """Adds additional summary_spec parameters to the configuration of the search.

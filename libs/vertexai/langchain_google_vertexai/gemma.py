@@ -21,7 +21,8 @@ from langchain_core.outputs import (
     Generation,
     LLMResult,
 )
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing_extensions import Self
 
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden
 from langchain_google_vertexai._utils import enforce_stop_tokens
@@ -76,6 +77,8 @@ class _GemmaBase(BaseModel):
     top_k: Optional[int] = None
     """The top-k value to use for sampling."""
 
+    model_config = ConfigDict(protected_namespaces=())
+
     @property
     def _default_params(self) -> Dict[str, Any]:
         """Get the default parameters for calling gemma."""
@@ -127,10 +130,10 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+        protected_namespaces=(),
+    )
 
     @property
     def _llm_type(self) -> str:
@@ -200,10 +203,9 @@ class _GemmaLocalKaggleBase(_GemmaBase):
     model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
@@ -211,11 +213,11 @@ class _GemmaLocalKaggleBase(_GemmaBase):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that llama-cpp-python library is installed."""
         try:
-            os.environ["KERAS_BACKEND"] = values["keras_backend"]
+            os.environ["KERAS_BACKEND"] = self.keras_backend
             from keras_nlp.models import GemmaCausalLM  # type: ignore
         except ImportError:
             raise ImportError(
@@ -224,8 +226,8 @@ class _GemmaLocalKaggleBase(_GemmaBase):
                 "use this  model: pip install keras-nlp keras>=3 kaggle"
             )
 
-        values["client"] = GemmaCausalLM.from_preset(values["model_name"])
-        return values
+        self.client = GemmaCausalLM.from_preset(self.model_name)
+        return self
 
     @property
     def _default_params(self) -> Dict[str, Any]:
@@ -239,7 +241,7 @@ class _GemmaLocalKaggleBase(_GemmaBase):
         return {**self._default_params, **params}
 
 
-class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):  # type: ignore
+class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):
     """Local gemma chat model loaded from Kaggle."""
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
@@ -269,7 +271,7 @@ class GemmaLocalKaggle(_GemmaLocalKaggleBase, BaseLLM):  # type: ignore
         return "gemma_local_kaggle"
 
 
-class GemmaChatLocalKaggle(_GemmaLocalKaggleBase, BaseChatModel):  # type: ignore
+class GemmaChatLocalKaggle(_GemmaLocalKaggleBase, BaseChatModel):
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""
@@ -313,13 +315,12 @@ class _GemmaLocalHFBase(_GemmaBase):
     model_name: str = Field(default="google/gemma-2b", alias="model")
     """Gemma model name."""
 
-    class Config:
-        """Configuration for this pydantic object."""
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
-        allow_population_by_field_name = True
-
-    @root_validator()
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that llama-cpp-python library is installed."""
         try:
             from transformers import AutoTokenizer, GemmaForCausalLM  # type: ignore
@@ -330,15 +331,15 @@ class _GemmaLocalHFBase(_GemmaBase):
                 "use this  model: pip install transformers>=4.38.1"
             )
 
-        values["tokenizer"] = AutoTokenizer.from_pretrained(
-            values["model_name"], token=values["hf_access_token"]
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, token=self.hf_access_token
         )
-        values["client"] = GemmaForCausalLM.from_pretrained(
-            values["model_name"],
-            token=values["hf_access_token"],
-            cache_dir=values["cache_dir"],
+        self.client = GemmaForCausalLM.from_pretrained(
+            self.model_name,
+            token=self.hf_access_token,
+            cache_dir=self.cache_dir,
         )
-        return values
+        return self
 
     @property
     def _default_params(self) -> Dict[str, Any]:
@@ -360,7 +361,7 @@ class _GemmaLocalHFBase(_GemmaBase):
         )[0]
 
 
-class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):  # type: ignore
+class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):
     """Local gemma model loaded from HuggingFace."""
 
     def _generate(
@@ -382,7 +383,7 @@ class GemmaLocalHF(_GemmaLocalHFBase, BaseLLM):  # type: ignore
         return "gemma_local_hf"
 
 
-class GemmaChatLocalHF(_GemmaLocalHFBase, BaseChatModel):  # type: ignore
+class GemmaChatLocalHF(_GemmaLocalHFBase, BaseChatModel):
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
     """or multi-turn statements."""

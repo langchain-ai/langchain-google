@@ -28,7 +28,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     InputOutputTextPair,
@@ -354,14 +354,17 @@ def test_parse_history_gemini_function() -> None:
 
 
 @pytest.mark.parametrize(
-    "source_history, expected_history",
+    "source_history, expected_sm, expected_history",
     [
         (
             [
                 AIMessage(
                     content="Mike age is 30",
-                )
+                ),
+                SystemMessage(content="test1"),
+                SystemMessage(content="test2"),
             ],
+            Content(role="system", parts=[Part(text="test1"), Part(text="test2")]),
             [Content(role="model", parts=[Part(text="Mike age is 30")])],
         ),
         (
@@ -370,6 +373,7 @@ def test_parse_history_gemini_function() -> None:
                     content=["Mike age is 30", "Arthur age is 30"],
                 ),
             ],
+            None,
             [
                 Content(
                     role="model",
@@ -393,6 +397,7 @@ def test_parse_history_gemini_function() -> None:
                     ],
                 ),
             ],
+            None,
             [
                 Content(
                     role="model",
@@ -420,6 +425,7 @@ def test_parse_history_gemini_function() -> None:
                     ],
                 ),
             ],
+            None,
             [
                 Content(
                     role="model",
@@ -448,6 +454,7 @@ def test_parse_history_gemini_function() -> None:
                     ],
                 ),
             ],
+            None,
             [
                 Content(
                     role="model",
@@ -487,6 +494,7 @@ def test_parse_history_gemini_function() -> None:
                     ],
                 ),
             ],
+            None,
             [
                 Content(
                     role="model",
@@ -511,12 +519,14 @@ def test_parse_history_gemini_function() -> None:
         ),
     ],
 )
-def test_parse_history_gemini_multi(source_history, expected_history) -> None:
-    source_history.insert(0, HumanMessage(content="Hello"))
-    expected_history.insert(0, Content(role="user", parts=[Part(text="Hello")]))
-    _, result_history = _parse_chat_history_gemini(history=source_history)
+def test_parse_history_gemini_multi(
+    source_history, expected_sm, expected_history
+) -> None:
+    sm, result_history = _parse_chat_history_gemini(history=source_history)
+
     for result, expected in zip(result_history, expected_history):
-        result == expected
+        assert result == expected
+    assert sm == expected_sm
 
 
 def test_default_params_palm() -> None:

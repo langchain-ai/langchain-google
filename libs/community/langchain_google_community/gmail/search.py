@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 
 from langchain_google_community.gmail.base import GmailBaseTool
 from langchain_google_community.gmail.utils import clean_email_body
@@ -130,16 +130,23 @@ class GmailSearch(GmailBaseTool):
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> List[Dict[str, Any]]:
         """Run the tool."""
-        results = (
-            self.api_resource.users()
-            .messages()
-            .list(userId="me", q=query, maxResults=max_results)
-            .execute()
-            .get(resource.value, [])
-        )
-        if resource == Resource.THREADS:
-            return self._parse_threads(results)
-        elif resource == Resource.MESSAGES:
+        if resource == Resource.MESSAGES:
+            results = (
+                self.api_resource.users()
+                .messages()
+                .list(userId="me", q=query, maxResults=max_results)
+                .execute()
+                .get(resource.value, [])
+            )
             return self._parse_messages(results)
+        elif resource == Resource.THREADS:
+            results = (
+                self.api_resource.users()
+                .threads()
+                .list(userId="me", q=query, maxResults=max_results)
+                .execute()
+                .get(resource.value, [])
+            )
+            return self._parse_threads(results)
         else:
             raise NotImplementedError(f"Resource of type {resource} not implemented.")

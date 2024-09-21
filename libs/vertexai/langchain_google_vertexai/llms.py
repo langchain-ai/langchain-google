@@ -9,7 +9,8 @@ from langchain_core.callbacks.manager import (
 )
 from langchain_core.language_models.llms import BaseLLM, LangSmithParams
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
-from langchain_core.pydantic_v1 import Field, root_validator
+from pydantic import ConfigDict, Field, model_validator
+from typing_extensions import Self
 from vertexai.generative_models import (  # type: ignore[import-untyped]
     Candidate,
     GenerativeModel,
@@ -120,10 +121,9 @@ class VertexAI(_VertexAICommon, BaseLLM):
             kwargs["model_name"] = model_name
         super().__init__(**kwargs)
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -134,19 +134,27 @@ class VertexAI(_VertexAICommon, BaseLLM):
         """Get the namespace of the langchain object."""
         return ["langchain", "llms", "vertexai"]
 
-    @root_validator(pre=False, skip_on_failure=True)
-    def validate_environment(cls, values: Dict) -> Dict:
+    @model_validator(mode="after")
+    def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        tuned_model_name = values.get("tuned_model_name")
-        safety_settings = values["safety_settings"]
-        values["model_family"] = GoogleModelFamily(values["model_name"])
-        is_gemini = is_gemini_model(values["model_family"])
-        cls._init_vertexai(values)
+        tuned_model_name = self.tuned_model_name or None
+        safety_settings = self.safety_settings
+        self.model_family = GoogleModelFamily(self.model_name)
+        is_gemini = is_gemini_model(self.model_family)
+        values = {
+            "project": self.project,
+            "location": self.location,
+            "credentials": self.credentials,
+            "api_transport": self.api_transport,
+            "api_endpoint": self.api_endpoint,
+            "default_metadata": self.default_metadata,
+        }
+        self._init_vertexai(values)
 
         if safety_settings and (not is_gemini or tuned_model_name):
             raise ValueError("Safety settings are only supported for Gemini models")
 
-        if values["model_family"] == GoogleModelFamily.CODEY:
+        if self.model_family == GoogleModelFamily.CODEY:
             model_cls = CodeGenerationModel
             preview_model_cls = PreviewCodeGenerationModel
         elif is_gemini:
@@ -157,31 +165,31 @@ class VertexAI(_VertexAICommon, BaseLLM):
             preview_model_cls = PreviewTextGenerationModel
 
         if tuned_model_name:
-            generative_model_name = values["tuned_model_name"]
+            generative_model_name = self.tuned_model_name
         else:
-            generative_model_name = values["model_name"]
+            generative_model_name = self.model_name
 
         if is_gemini:
-            values["client"] = model_cls(
+            self.client = model_cls(
                 model_name=generative_model_name, safety_settings=safety_settings
             )
-            values["client_preview"] = preview_model_cls(
+            self.client_preview = preview_model_cls(
                 model_name=generative_model_name, safety_settings=safety_settings
             )
         else:
             if tuned_model_name:
-                values["client"] = model_cls.get_tuned_model(generative_model_name)
-                values["client_preview"] = preview_model_cls.get_tuned_model(
+                self.client = model_cls.get_tuned_model(generative_model_name)
+                self.client_preview = preview_model_cls.get_tuned_model(
                     generative_model_name
                 )
             else:
-                values["client"] = model_cls.from_pretrained(generative_model_name)
-                values["client_preview"] = preview_model_cls.from_pretrained(
+                self.client = model_cls.from_pretrained(generative_model_name)
+                self.client_preview = preview_model_cls.from_pretrained(
                     generative_model_name
                 )
-        if values["streaming"] and values["n"] > 1:
+        if self.streaming and self.n > 1:
             raise ValueError("Only one candidate can be generated with streaming!")
-        return values
+        return self
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
