@@ -335,21 +335,30 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert response.content == ""
+
+    # function_call
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
     assert function_call["name"] == expected_name
     arguments_str = function_call.get("arguments")
     assert arguments_str
     arguments = json.loads(arguments_str)
-    assert arguments == {
-        "name": "Erick",
-        "age": 27.0,
-    }
+    _check_tool_call_args(arguments)
+
+    # tool_calls
     tool_calls = response.tool_calls
     assert len(tool_calls) == 1
     tool_call = tool_calls[0]
     assert tool_call["name"] == expected_name
-    assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
+    _check_tool_call_args(tool_call["args"])
+
+
+def _check_tool_call_args(tool_call_args: dict) -> None:
+    assert tool_call_args == {
+        "age": 27.0,
+        "name": "Erick",
+        "likes": ["apple", "banana"],
+    }
 
 
 @pytest.mark.extended
@@ -357,21 +366,25 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):
         name: str
         age: int
+        likes: list[str]
 
     safety: Dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     # Test .bind_tools with BaseModel
-    message = HumanMessage(content="My name is Erick and I am 27 years old")
+    message = HumanMessage(
+        content="My name is Erick and I am 27 years old. I like apple and banana."
+    )
     model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
         [MyModel]
     )
     response = model.invoke([message])
+    print("response=", response)
     _check_tool_calls(response, "MyModel")
 
     # Test .bind_tools with function
-    def my_model(name: str, age: int) -> None:
-        """Invoke this with names and ages."""
+    def my_model(name: str, age: int, likes: list[str]) -> None:
+        """Invoke this with names and age and likes."""
         pass
 
     model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
@@ -382,8 +395,8 @@ def test_chat_vertexai_gemini_function_calling() -> None:
 
     # Test .bind_tools with tool
     @tool
-    def my_tool(name: str, age: int) -> None:
-        """Invoke this with names and ages."""
+    def my_tool(name: str, age: int, likes: list[str]) -> None:
+        """Invoke this with names and age and likes."""
         pass
 
     model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
@@ -405,7 +418,9 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert len(gathered.tool_call_chunks) == 1
     tool_call_chunk = gathered.tool_call_chunks[0]
     assert tool_call_chunk["name"] == "my_tool"
-    assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
+    arguments_str = tool_call_chunk["args"]
+    arguments = json.loads(str(arguments_str))
+    _check_tool_call_args(arguments)
 
 
 # Test with model that supports tool choice (gemini 1.5) and one that doesn't
