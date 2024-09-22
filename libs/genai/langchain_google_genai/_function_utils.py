@@ -365,7 +365,7 @@ def _get_type_from_schema(schema: Dict[str, Any]) -> int:
         types = [_get_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]]
         types = [t for t in types if t is not None]  # Remove None values
         if types:
-            return types[-1]  # TODO: update FunctionDeclaration and pass all types?
+            return types[0]  # TODO: update FunctionDeclaration and pass all types?
         else:
             pass
     elif "type" in schema:
