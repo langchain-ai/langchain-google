@@ -489,9 +489,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             Embedding for the image.
         """
         warnings.warn(
-            "The `embed_image()` API will be deprecated and replaced by `embed_images()`.\
-                Change your usage to `embed_images([image_path1, image_path2])` and\
-                    the result returned will be a list of image embeddings."
+            "The `embed_image()` API will be deprecated and replaced by \
+            `embed_images()`. Change your usage to \
+            `embed_images([image_path1, image_path2])` and note\
+            that the result returned will be a list of image embeddings."
         )
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
@@ -509,7 +510,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         uris: List[str],
         contextual_text: Optional[str] = None,
         dimensions: Optional[int] = None,
-    ) -> List[float]:
+    ) -> List[List[float]]:
         """Embed a list of images.
 
         Args:
