@@ -140,25 +140,34 @@ class _BaseVertexAISearchRetriever(Serializable):
             document_dict = MessageToDict(
                 result.document._pb, preserving_proto_field_name=True
             )
-            derived_struct_data = document_dict.get("derived_struct_data")
-            if not derived_struct_data:
+            derived_struct_data = document_dict.get("derived_struct_data", {})
+
+            if not derived_struct_data or chunk_type not in derived_struct_data:
                 continue
 
-            doc_metadata = document_dict.get("struct_data", {})
-            doc_metadata["id"] = document_dict["id"]
-
-            if chunk_type not in derived_struct_data:
-                continue
+            doc_metadata = {
+                "id": document_dict["id"],
+                "source": derived_struct_data.get("link", ""),
+                **document_dict.get("struct_data", {}),
+            }
 
             for chunk in derived_struct_data[chunk_type]:
                 chunk_metadata = doc_metadata.copy()
-                chunk_metadata["source"] = derived_struct_data.get("link", "")
 
-                if (
-                    chunk_type == "extractive_answers"
-                    or chunk_type == "extractive_segments"
-                ):
+                if chunk_type in ("extractive_answers", "extractive_segments"):
                     chunk_metadata["source"] += f":{chunk.get('pageNumber', '')}"
+
+                    if chunk_type == "extractive_segments":
+                        chunk_metadata.update(
+                            {
+                                "previous_segments": chunk.get("previous_segments", []),
+                                "next_segments": chunk.get("next_segments", []),
+                            }
+                        )
+
+                        if self.return_extractive_segment_score:
+                            chunk_metadata["score"] = chunk.get("relevanceScore")
+
                 documents.append(
                     Document(
                         page_content=chunk.get("content", ""), metadata=chunk_metadata
@@ -223,13 +232,25 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     """If True return Extractive Answers, otherwise return Extractive Segments or Snippets."""  # noqa: E501
     max_documents: int = Field(default=5, ge=1, le=100)
     """The maximum number of documents to return."""
-    max_extractive_answer_count: int = Field(default=1, ge=1, le=5)
+    max_extractive_answer_count: int = Field(default=1, ge=1, le=1)
     """The maximum number of extractive answers returned in each search result.
-    At most 5 answers will be returned for each SearchResult.
+    Currently one extractive answer will be returned for each SearchResult.
     """
     max_extractive_segment_count: int = Field(default=1, ge=1, le=1)
     """The maximum number of extractive segments returned in each search result.
     Currently one segment will be returned for each SearchResult.
+    """
+    return_extractive_segment_score: bool = False
+    """If set to True, the relevance score for each extractive segment will be included
+    in the search results. This can be useful for ranking or filtering segments.
+    """
+    num_previous_segments: int = Field(default=1, ge=1, le=3)
+    """Specifies the number of text segments preceding the matched segment to return.
+    This provides context before the relevant text. Value must be between 1 and 3.
+    """
+    num_next_segments: int = Field(default=1, ge=1, le=3)
+    """Specifies the number of text segments following the matched segment to return.
+    This provides context after the relevant text. Value must be between 1 and 3.
     """
     query_expansion_condition: int = Field(default=1, ge=0, le=2)
     """Specification to determine under which conditions query expansion should occur.
@@ -309,10 +330,11 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                     )
                 )
             else:
-                extractive_content_spec = (
-                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                        max_extractive_segment_count=self.max_extractive_segment_count,
-                    )
+                extractive_content_spec = SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                    max_extractive_segment_count=self.max_extractive_segment_count,
+                    num_previous_segments=self.num_previous_segments,
+                    num_next_segments=self.num_next_segments,
+                    return_extractive_segment_score=self.return_extractive_segment_score,
                 )
             content_search_spec = dict(extractive_content_spec=extractive_content_spec)
         elif self.engine_data_type == 1:
