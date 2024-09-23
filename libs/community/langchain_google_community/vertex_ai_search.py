@@ -330,11 +330,13 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                     )
                 )
             else:
-                extractive_content_spec = SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                    max_extractive_segment_count=self.max_extractive_segment_count,
-                    num_previous_segments=self.num_previous_segments,
-                    num_next_segments=self.num_next_segments,
-                    return_extractive_segment_score=self.return_extractive_segment_score,
+                extractive_content_spec = (
+                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                        max_extractive_segment_count=self.max_extractive_segment_count,
+                        num_previous_segments=self.num_previous_segments,
+                        num_next_segments=self.num_next_segments,
+                        return_extractive_segment_score=self.return_extractive_segment_score,
+                    )
                 )
             content_search_spec = dict(extractive_content_spec=extractive_content_spec)
         elif self.engine_data_type == 1:
