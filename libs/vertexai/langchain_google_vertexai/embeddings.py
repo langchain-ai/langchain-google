@@ -475,9 +475,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return self.embed([text], 1, "RETRIEVAL_QUERY")[0]
 
     @deprecated(
-        since="1.0.5",
-        removal="2.0.0",
-        alternative_import="langchain_google_community.BigQueryVectorStore",
+        since="2.0.1", removal="3.0.0", alternative="VertexAIEmbeddings.embed_images()"
     )
     def embed_image(
         self,
