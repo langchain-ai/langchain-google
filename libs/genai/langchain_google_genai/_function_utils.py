@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections
+import importlib
 import json
 import logging
 from typing import (
@@ -199,7 +200,7 @@ def _format_to_gapic_function_declaration(
 ) -> gapic.FunctionDeclaration:
     if isinstance(tool, BaseTool):
         return _format_base_tool_to_function_declaration(tool)
-    elif isinstance(tool, type) and issubclass(tool, BaseModel):
+    elif isinstance(tool, type) and is_basemodel_subclass_safe(tool):
         return _convert_pydantic_to_genai_function(tool)
     elif isinstance(tool, dict):
         if all(k in tool for k in ("name", "description")) and "parameters" not in tool:
@@ -356,3 +357,24 @@ def _tool_choice_to_tool_config(
             "allowed_function_names": allowed_function_names,
         }
     )
+
+
+def is_basemodel_subclass_safe(tool: Type) -> bool:
+    if safe_import("langchain_core.utils.pydantic", "is_basemodel_subclass"):
+        from langchain_core.utils.pydantic import (
+            is_basemodel_subclass,  # type: ignore[import]
+        )
+
+        return is_basemodel_subclass(tool)
+    else:
+        return issubclass(tool, BaseModel)
+
+
+def safe_import(module_name: str, attribute_name: str = "") -> bool:
+    try:
+        module = importlib.import_module(module_name)
+        if attribute_name:
+            return hasattr(module, attribute_name)
+        return True
+    except ImportError:
+        return False

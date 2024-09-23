@@ -77,7 +77,6 @@ from langchain_core.output_parsers.openai_tools import (
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils import secret_from_env
-from langchain_core.utils.pydantic import is_basemodel_subclass
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -104,6 +103,7 @@ from langchain_google_genai._function_utils import (
     _ToolChoiceType,
     _ToolConfigDict,
     convert_to_genai_function_declarations,
+    is_basemodel_subclass_safe,
     tool_to_dict,
 )
 from langchain_google_genai._image_utils import ImageBytesLoader
@@ -827,7 +827,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     google_api_key: Optional[SecretStr] = Field(
         alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
     )
-    """Google AI API key.         
+    """Google AI API key.
     If not specified will be read from env var ``GOOGLE_API_KEY``."""
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
@@ -1189,7 +1189,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
-        if isinstance(schema, type) and is_basemodel_subclass(schema):
+        if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
