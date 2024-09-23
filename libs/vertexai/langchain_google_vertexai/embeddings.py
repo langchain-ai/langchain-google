@@ -535,3 +535,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             ](image=image, contextual_text=contextual_text, dimension=dimensions)
             embeddings.append(result.image_embedding)
         return embeddings
+
+
+VertexAIEmbeddings.model_rebuild()
