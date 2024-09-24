@@ -845,3 +845,14 @@ def test_context_catching():
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
+
+
+@pytest.mark.release
+def test_json_serializable() -> None:
+    llm = ChatVertexAI(
+        model_name="gemini-pro-1.5",
+    )
+    # Needed to init self.client and self.async_client
+    llm.prediction_client
+    llm.async_prediction_client
+    json.loads(llm.model_dump_json())

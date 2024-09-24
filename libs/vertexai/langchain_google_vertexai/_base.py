@@ -52,8 +52,8 @@ _DEFAULT_LOCATION = "us-central1"
 
 
 class _VertexAIBase(BaseModel):
-    client: Any = None  #: :meta private:
-    async_client: Any = None  #: :meta private:
+    client: Any = Field(default=None, exclude=True)  #: :meta private:
+    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     project: Optional[str] = None
     "The default GCP project to use when making Vertex API calls."
     location: str = Field(default=_DEFAULT_LOCATION)
@@ -165,7 +165,7 @@ class _VertexAIBase(BaseModel):
 
 
 class _VertexAICommon(_VertexAIBase):
-    client_preview: Any = None  #: :meta private:
+    client_preview: Any = Field(default=None, exclude=True)  #: :meta private:
     model_name: str = Field(default=None, alias="model")
     "Underlying model name."
     temperature: Optional[float] = None
@@ -301,7 +301,7 @@ class _VertexAICommon(_VertexAIBase):
 class _BaseVertexAIModelGarden(_VertexAIBase):
     """Large language models served from Vertex AI Model Garden."""
 
-    async_client: Any = None  #: :meta private:
+    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     endpoint_id: str
     "A name of an endpoint where the model has been deployed."
     allowed_model_args: Optional[List[str]] = None
