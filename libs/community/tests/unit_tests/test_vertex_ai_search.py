@@ -1,7 +1,8 @@
+from google.cloud.discoveryengine_v1beta import Document as DiscoveryEngineDocument
+from google.cloud.discoveryengine_v1beta.types import SearchResponse
 import pytest
 from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
-from google.cloud.discoveryengine_v1beta.types import SearchResponse
-from google.cloud.discoveryengine_v1beta import Document as DiscoveryEngineDocument
+from unittest.mock import patch, MagicMock
 
 
 @pytest.mark.parametrize(
@@ -79,25 +80,27 @@ def test_get_content_spec_kwargs(
     calls _get_content_spec_kwargs, and asserts that the returned specification
     matches the expected values.
     """
-    retriever_params = {
-        "project_id": "mock-project",
-        "data_store_id": "mock-data-store",
-        "location_id": "global",
-        "engine_data_type": engine_data_type,
-        "get_extractive_answers": get_extractive_answers,
-        **(config or {}),
-    }
+    with patch.object(VertexAISearchRetriever, '_client', new_callable=MagicMock):
 
-    retriever = VertexAISearchRetriever(**retriever_params)
-    content_spec_kwargs = retriever._get_content_spec_kwargs()
+        retriever_params = {
+            "project_id": "mock-project",
+            "data_store_id": "mock-data-store",
+            "location_id": "global",
+            "engine_data_type": engine_data_type,
+            "get_extractive_answers": get_extractive_answers,
+            **(config or {}),
+        }
 
-    assert content_spec_kwargs is not None
-    assert "extractive_content_spec" in content_spec_kwargs
-    extractive_content_spec = content_spec_kwargs["extractive_content_spec"]
+        retriever = VertexAISearchRetriever(**retriever_params)
+        content_spec_kwargs = retriever._get_content_spec_kwargs()
 
-    for key, value in expected_spec.items():
-        assert hasattr(extractive_content_spec, key)
-        assert getattr(extractive_content_spec, key) == value
+        assert content_spec_kwargs is not None
+        assert "extractive_content_spec" in content_spec_kwargs
+        extractive_content_spec = content_spec_kwargs["extractive_content_spec"]
+
+        for key, value in expected_spec.items():
+            assert hasattr(extractive_content_spec, key)
+            assert getattr(extractive_content_spec, key) == value
 
 
 @pytest.fixture
@@ -171,53 +174,37 @@ def test_convert_unstructured_search_response_extractive_segments(
 ):
     """
     Test the _convert_unstructured_search_response method for extractive segments.
-
-    This test verifies that the _convert_unstructured_search_response method
-    correctly converts a SearchResponse containing extractive segments into
-    a list of Document objects. It checks the content and metadata of the
-    resulting documents, including the presence of segment scores and
-    previous/next segments when applicable.
-
-    Args:
-        mock_search_response (SearchResponse): A fixture providing a mock
-            SearchResponse object for testing.
-
-    The test creates a VertexAISearchRetriever instance, calls
-    _convert_unstructured_search_response with the mock response and
-    "extractive_segments" as the chunk type, and then asserts that the
-    returned documents have the expected content and metadata.
     """
+    with patch.object(VertexAISearchRetriever, '_client', new_callable=MagicMock):
+        retriever = VertexAISearchRetriever(
+            project_id="mock-project",
+            data_store_id="mock-data-store",
+            engine_data_type=0,
+            get_extractive_answers=False,
+            return_extractive_segment_score=True,
+        )
 
-    retriever = VertexAISearchRetriever(
-        project_id="mock-project",
-        data_store_id="mock-data-store",
-        engine_data_type=0,
-        get_extractive_answers=False,
-        return_extractive_segment_score=True,
-    )
+        documents = retriever._convert_unstructured_search_response(
+            mock_search_response.results, "extractive_segments"
+        )
 
-    print(mock_search_response.results)
-    documents = retriever._convert_unstructured_search_response(
-        mock_search_response.results, "extractive_segments"
-    )
+        assert len(documents) == 2
 
-    assert len(documents) == 2
+        # Check first document
+        assert documents[0].page_content == "Mock content 1"
+        assert documents[0].metadata["id"] == "mock-id-1"
+        assert documents[0].metadata["source"] == "mock-link-1"
+        assert documents[0].metadata["score"] == 0.9
+        assert len(documents[0].metadata["previous_segments"]) == 3
+        assert len(documents[0].metadata["next_segments"]) == 3
 
-    # Check first document
-    assert documents[0].page_content == "Mock content 1"
-    assert documents[0].metadata["id"] == "mock-id-1"
-    assert documents[0].metadata["source"] == "mock-link-1"
-    assert documents[0].metadata["score"] == 0.9
-    assert len(documents[0].metadata["previous_segments"]) == 3
-    assert len(documents[0].metadata["next_segments"]) == 3
-
-    # Check second document
-    assert documents[1].page_content == "Mock content 2"
-    assert documents[1].metadata["id"] == "mock-id-2"
-    assert documents[1].metadata["source"] == "mock-link-2"
-    assert documents[1].metadata["score"] == 0.95
-    assert len(documents[1].metadata["previous_segments"]) == 0
-    assert len(documents[1].metadata["next_segments"]) == 0
+        # Check second document
+        assert documents[1].page_content == "Mock content 2"
+        assert documents[1].metadata["id"] == "mock-id-2"
+        assert documents[1].metadata["source"] == "mock-link-2"
+        assert documents[1].metadata["score"] == 0.95
+        assert len(documents[1].metadata["previous_segments"]) == 0
+        assert len(documents[1].metadata["next_segments"]) == 0
 
 
 def test_convert_unstructured_search_response_extractive_answers(
@@ -241,31 +228,32 @@ def test_convert_unstructured_search_response_extractive_answers(
     the mock response and "extractive_answers" as the chunk type, and then
     asserts that the returned documents have the expected content and metadata.
     """
-    retriever = VertexAISearchRetriever(
-        project_id="mock-project",
-        data_store_id="mock-data-store",
-        engine_data_type=0,
-        get_extractive_answers=True,
-    )
+    with patch.object(VertexAISearchRetriever, '_client', new_callable=MagicMock):
+        retriever = VertexAISearchRetriever(
+            project_id="mock-project",
+            data_store_id="mock-data-store",
+            engine_data_type=0,
+            get_extractive_answers=True,
+        )
 
-    documents = retriever._convert_unstructured_search_response(
-        mock_search_response.results, "extractive_answers"
-    )
+        documents = retriever._convert_unstructured_search_response(
+            mock_search_response.results, "extractive_answers"
+        )
 
-    assert len(documents) == 2
+        assert len(documents) == 2
 
-    # Check first document
-    assert documents[0].page_content == "Mock extractive answer 1"
-    assert documents[0].metadata["id"] == "mock-id-1"
-    assert documents[0].metadata["source"] == "mock-link-1"
-    assert "score" not in documents[0].metadata
-    assert "previous_segments" not in documents[0].metadata
-    assert "next_segments" not in documents[0].metadata
+        # Check first document
+        assert documents[0].page_content == "Mock extractive answer 1"
+        assert documents[0].metadata["id"] == "mock-id-1"
+        assert documents[0].metadata["source"] == "mock-link-1"
+        assert "score" not in documents[0].metadata
+        assert "previous_segments" not in documents[0].metadata
+        assert "next_segments" not in documents[0].metadata
 
-    # Check second document
-    assert documents[1].page_content == "Mock extractive answer 2"
-    assert documents[1].metadata["id"] == "mock-id-2"
-    assert documents[1].metadata["source"] == "mock-link-2"
-    assert "score" not in documents[1].metadata
-    assert "previous_segments" not in documents[1].metadata
-    assert "next_segments" not in documents[1].metadata
+        # Check second document
+        assert documents[1].page_content == "Mock extractive answer 2"
+        assert documents[1].metadata["id"] == "mock-id-2"
+        assert documents[1].metadata["source"] == "mock-link-2"
+        assert "score" not in documents[1].metadata
+        assert "previous_segments" not in documents[1].metadata
+        assert "next_segments" not in documents[1].metadata
