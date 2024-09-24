@@ -29,7 +29,7 @@ from langchain_google_vertexai._utils import get_user_agent
 class _BaseImageTextModel(BaseModel):
     """Base class for all integrations that use ImageTextModel"""
 
-    cached_client: Any = Field(default=None)
+    cached_client: Any = Field(default=None, exclude=True)
     model_name: str = Field(default="imagetext@001")
     """ Name of the model to use"""
     number_of_results: int = Field(default=1)
@@ -317,7 +317,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
 class _BaseVertexAIImageGenerator(BaseModel):
     """Base class form generation and edition of images."""
 
-    cached_client: Any = Field(default=None)
+    cached_client: Any = Field(default=None, exclude=True)
     model_name: str = Field(default="imagegeneration@002")
     """Name of the base model"""
     negative_prompt: Union[str, None] = Field(default=None)
