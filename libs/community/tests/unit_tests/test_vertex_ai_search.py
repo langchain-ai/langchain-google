@@ -1,6 +1,6 @@
+import pytest
 from google.cloud.discoveryengine_v1beta import Document as DiscoveryEngineDocument
 from google.cloud.discoveryengine_v1beta.types import SearchResponse
-import pytest
 from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
 from unittest.mock import patch, MagicMock
 
@@ -80,7 +80,8 @@ def test_get_content_spec_kwargs(
     calls _get_content_spec_kwargs, and asserts that the returned specification
     matches the expected values.
     """
-    with patch.object(VertexAISearchRetriever, '_client', new_callable=MagicMock):
+    with patch('google.cloud.discoveryengine_v1beta.SearchServiceClient', autospec=True) as mock_client:
+        mock_client.return_value = MagicMock()
 
         retriever_params = {
             "project_id": "mock-project",
@@ -175,7 +176,8 @@ def test_convert_unstructured_search_response_extractive_segments(
     """
     Test the _convert_unstructured_search_response method for extractive segments.
     """
-    with patch.object(VertexAISearchRetriever, '_client', new_callable=MagicMock):
+    with patch('google.cloud.discoveryengine_v1beta.SearchServiceClient', autospec=True) as mock_client:
+        mock_client.return_value = MagicMock()
         retriever = VertexAISearchRetriever(
             project_id="mock-project",
             data_store_id="mock-data-store",
@@ -228,7 +230,8 @@ def test_convert_unstructured_search_response_extractive_answers(
     the mock response and "extractive_answers" as the chunk type, and then
     asserts that the returned documents have the expected content and metadata.
     """
-    with patch.object(VertexAISearchRetriever, '_client', new_callable=MagicMock):
+    with patch('google.cloud.discoveryengine_v1beta.SearchServiceClient', autospec=True) as mock_client:
+        mock_client.return_value = MagicMock()
         retriever = VertexAISearchRetriever(
             project_id="mock-project",
             data_store_id="mock-data-store",
