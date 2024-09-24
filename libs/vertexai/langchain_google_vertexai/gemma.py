@@ -198,7 +198,7 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
 class _GemmaLocalKaggleBase(_GemmaBase):
     """Local gemma model loaded from Kaggle."""
 
-    client: Any = None  #: :meta private:
+    client: Any = Field(default=None, exclude=True)  #: :meta private:
     keras_backend: str = "jax"
     model_name: str = Field(default="gemma_2b_en", alias="model")
     """Gemma model name."""
@@ -309,7 +309,7 @@ class _GemmaLocalHFBase(_GemmaBase):
     """Local gemma model loaded from HuggingFace."""
 
     tokenizer: Any = None  #: :meta private:
-    client: Any = None  #: :meta private:
+    client: Any = Field(default=None, exclude=True)  #: :meta private:
     hf_access_token: str
     cache_dir: Optional[str] = None
     model_name: str = Field(default="google/gemma-2b", alias="model")

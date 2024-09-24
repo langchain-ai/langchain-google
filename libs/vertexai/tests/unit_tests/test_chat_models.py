@@ -75,6 +75,20 @@ def test_init() -> None:
         }
 
 
+def test_json_serializable() -> None:
+    llm = ChatVertexAI(
+        model_name="gemini-pro",
+        project="test-project",
+        max_output_tokens=10,
+        stop=["bar"],
+        location="moon-dark1",
+    )
+    # Needed to init self.client and self.async_client
+    llm.prediction_client
+    llm.async_prediction_client
+    json.loads(llm.model_dump_json())
+
+
 @pytest.mark.parametrize(
     "model,location",
     [
