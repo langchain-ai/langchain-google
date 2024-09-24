@@ -103,8 +103,6 @@ class _VertexAIBase(BaseModel):
     def validate_params_base(cls, values: dict) -> Any:
         if "model" in values and "model_name" not in values:
             values["model_name"] = values.pop("model")
-        if values.get("project") is None:
-            values["project"] = initializer.global_config.project
         if values.get("api_transport") is None:
             values["api_transport"] = initializer.global_config._api_transport
         if values.get("api_endpoint"):
@@ -119,6 +117,12 @@ class _VertexAIBase(BaseModel):
         additional_headers = values.get("additional_headers", {})
         values["default_metadata"] = tuple(additional_headers.items())
         return values
+
+    @model_validator(mode="after")
+    def validate_project(self) -> Any:
+        if self.project is None:
+            self.project = initializer.global_config.project
+        return self
 
     @property
     def prediction_client(self) -> v1beta1PredictionServiceClient:
