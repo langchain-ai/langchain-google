@@ -1012,7 +1012,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """
 
     cached_content: Optional[str] = None
-    """ Optional. Use the model in cache mode. Only supported in Gemini 1.5 and later 
+    """ Optional. Use the model in cache mode. Only supported in Gemini 1.5 and later
         models. Must be a string containing the cache name (A sequence of numbers)
     """
 
