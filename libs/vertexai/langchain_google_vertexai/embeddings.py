@@ -2,6 +2,7 @@ import logging
 import re
 import string
 import threading
+import warnings
 from concurrent.futures import ThreadPoolExecutor, wait
 from enum import Enum, auto
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type
@@ -15,6 +16,7 @@ from google.api_core.exceptions import (
     ServiceUnavailable,
 )
 from google.cloud.aiplatform import telemetry
+from langchain_core._api.deprecation import deprecated
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
@@ -471,6 +473,9 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         """
         return self.embed([text], 1, "RETRIEVAL_QUERY")[0]
 
+    @deprecated(
+        since="2.0.1", removal="3.0.0", alternative="VertexAIEmbeddings.embed_images()"
+    )
     def embed_image(
         self,
         image_path: str,
@@ -487,6 +492,12 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             Embedding for the image.
         """
+        warnings.warn(
+            "The `embed_image()` API will be deprecated and replaced by \
+            `embed_images()`. Change your usage to \
+            `embed_images([image_path1, image_path2])` and note\
+            that the result returned will be a list of image embeddings."
+        )
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
 
@@ -497,6 +508,37 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "get_embeddings_with_retry"
         ](image=image, contextual_text=contextual_text, dimension=dimensions)
         return result.image_embedding
+
+    def embed_images(
+        self,
+        uris: List[str],
+        contextual_text: Optional[str] = None,
+        dimensions: Optional[int] = None,
+    ) -> List[List[float]]:
+        """Embed a list of images.
+
+        Args:
+            uris: Paths to image (local, Google Cloud Storage or web) to generate
+            embeddings for.
+            contextual_text: Text to generate embeddings for.
+
+        Returns:
+            Embedding for the image.
+        """
+        if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
+            raise NotImplementedError("Only supported for multimodal models")
+
+        image_loader = ImageBytesLoader()
+
+        embeddings = []
+        for image_path in uris:
+            bytes_image = image_loader.load_bytes(image_path)
+            image = Image(bytes_image)
+            result: MultiModalEmbeddingResponse = self.instance[
+                "get_embeddings_with_retry"
+            ](image=image, contextual_text=contextual_text, dimension=dimensions)
+            embeddings.append(result.image_embedding)
+        return embeddings
 
 
 VertexAIEmbeddings.model_rebuild()
