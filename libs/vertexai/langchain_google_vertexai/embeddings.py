@@ -15,11 +15,10 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
-
 from google.cloud.aiplatform import telemetry
+from langchain_core._api.deprecation import deprecated
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
-from langchain_core._api.deprecation import deprecated
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
 from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
