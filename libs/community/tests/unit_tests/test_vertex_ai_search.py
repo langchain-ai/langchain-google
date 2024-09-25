@@ -62,8 +62,11 @@ from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
     ],
 )
 def test_get_content_spec_kwargs(
-    engine_data_type, get_extractive_answers, config, expected_spec
-):
+    engine_data_type: int,
+    get_extractive_answers: bool,
+    config: dict,
+    expected_spec: dict,
+) -> None:
     """
     Test the _get_content_spec_kwargs method of VertexAISearchRetriever.
 
@@ -109,7 +112,7 @@ def test_get_content_spec_kwargs(
 
 
 @pytest.fixture
-def mock_search_response():
+def mock_search_response() -> SearchResponse:
     """
     Fixture that creates a mock SearchResponse object for testing purposes.
 
@@ -171,8 +174,8 @@ def mock_search_response():
 
 
 def test_convert_unstructured_search_response_extractive_segments(
-    mock_search_response,
-):
+    mock_search_response: SearchResponse,
+) -> None:
     """
     Test the _convert_unstructured_search_response method for extractive segments.
     """
@@ -212,8 +215,8 @@ def test_convert_unstructured_search_response_extractive_segments(
 
 
 def test_convert_unstructured_search_response_extractive_answers(
-    mock_search_response,
-):
+    mock_search_response: SearchResponse,
+) -> None:
     """
     Test the _convert_unstructured_search_response method for extractive answers.
 

@@ -164,8 +164,7 @@ class _BaseVertexAISearchRetriever(Serializable):
                                 "next_segments": chunk.get("next_segments", []),
                             }
                         )
-
-                        if self.return_extractive_segment_score:
+                        if "relevanceScore" in chunk:
                             chunk_metadata["score"] = chunk.get("relevanceScore")
 
                 documents.append(
