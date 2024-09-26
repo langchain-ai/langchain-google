@@ -158,6 +158,7 @@ def ranker(
 def test_compression_retriever(
     mock_vector_store_retriever: MockVectorStoreRetriever, ranker: VertexAIRank
 ) -> None:
+
     compression_retriever = CustomRankingRetriever(
         base_retriever=mock_vector_store_retriever, ranker=ranker
     )
@@ -254,4 +255,4 @@ def test_compression_retriever(
     for doc, expected in zip(compressed_docs, expected_docs):
         assert doc.page_content == expected.page_content
         assert doc.metadata["id"] == expected.metadata["id"]
-        assert float(doc.metadata.get("relevance_score", 0)) >= 0
+        assert float(doc.metadata.get("relevance_score", 0)) > 0
