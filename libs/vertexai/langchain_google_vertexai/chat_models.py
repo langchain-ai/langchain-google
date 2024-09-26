@@ -303,7 +303,11 @@ def _parse_chat_history_gemini(
             if system_parts is not None:
                 parts = system_parts + parts
                 system_parts = None
-            vertex_messages.append(Content(role=role, parts=parts))
+            if vertex_messages and vertex_messages[-1].role == "user":
+                prev_parts = list(vertex_messages[-1].parts)
+                vertex_messages[-1] = Content(role=role, parts=prev_parts + parts)
+            else:
+                vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, AIMessage):
             prev_ai_message = message
             role = "model"
