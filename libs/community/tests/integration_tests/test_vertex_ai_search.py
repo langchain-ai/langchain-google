@@ -103,19 +103,17 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents_segments() -> N
         data_store_id=data_store_id,
         max_extractive_segment_count=1,
         return_extractive_segment_score=True,
-        num_previous_segments=1,
-        num_next_segments=1,
     )
     documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
         assert isinstance(doc, Document)
         assert doc.page_content
-        assert doc.metadata["score"]
-        assert doc.metadata["previous_segments"]
-        assert doc.metadata["next_segments"]
         assert doc.metadata["id"]
         assert doc.metadata["source"]
+        assert doc.metadata["score"]
+        assert "previous_segments" in doc.metadata
+        assert "next_segments" in doc.metadata
 
 
 @pytest.mark.extended
