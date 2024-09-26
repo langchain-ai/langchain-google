@@ -158,7 +158,6 @@ def ranker(
 def test_compression_retriever(
     mock_vector_store_retriever: MockVectorStoreRetriever, ranker: VertexAIRank
 ) -> None:
-
     compression_retriever = CustomRankingRetriever(
         base_retriever=mock_vector_store_retriever, ranker=ranker
     )
