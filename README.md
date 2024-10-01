@@ -303,4 +303,4 @@ To get a report of current coverage, run the following:
 make coverage
 ```
 
-For detailed information on how to contribute, see [LangChain contribution guide](https://python.langchain.com/v0.2/docs/contributing/).
+For detailed information on how to contribute, see [LangChain contribution guide](https://python.langchain.com/docs/contributing/).
