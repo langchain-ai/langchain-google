@@ -187,6 +187,8 @@ class _VertexAICommon(_VertexAIBase):
     "among the top-k most probable tokens. Top-k is ignored for Codey models."
     n: int = 1
     """How many completions to generate for each prompt."""
+    seed: Optional[int] = None
+    """Random seed for the generation."""
     streaming: bool = False
     """Whether to stream the results or not."""
     model_family: Optional[GoogleModelFamily] = None  #: :meta private:
@@ -241,6 +243,7 @@ class _VertexAICommon(_VertexAIBase):
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
             "candidate_count": self.n,
+            "seed": self.seed,
         }
         if not self.model_family == GoogleModelFamily.CODEY:
             params.update(

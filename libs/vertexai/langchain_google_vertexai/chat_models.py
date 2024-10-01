@@ -142,6 +142,7 @@ _allowed_params = [
     "presence_penalty",
     "frequency_penalty",
     "candidate_count",
+    "seed",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata"]
 
@@ -670,6 +671,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             "gemini-1.5-pro-001", etc.
         temperature: Optional[float]
             Sampling temperature.
+        seed: Optional[int]
+            Sampling integer to use.
         max_tokens: Optional[int]
             Max number of tokens to generate.
         stop: Optional[List[str]]
