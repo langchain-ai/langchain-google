@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 from typing import List, Optional, cast
 
 import pytest
@@ -11,6 +12,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     Content,
     Part,
 )
+from google.oauth2 import service_account
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -912,3 +914,12 @@ def test_langgraph_example() -> None:
         tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
     )
     assert isinstance(step2, AIMessage)
+
+
+def test_init_from_credentials_obj() -> None:
+    credentials_dict = json.loads(os.environ["GOOGLE_VERTEX_AI_WEB_CREDENTIALS"])
+    credentials = service_account.Credentials.from_service_account_info(
+        credentials_dict
+    )
+    llm = ChatVertexAI(model="gemini-1.5-flash", credentials=credentials)
+    llm.invoke("how are you")
