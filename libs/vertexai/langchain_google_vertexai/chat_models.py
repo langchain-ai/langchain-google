@@ -1593,8 +1593,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        # TODO: Update to properly support async streaming from gemini.
         if not self._is_gemini_model:
-            raise NotImplementedError()
+            async for chunk in super()._astream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            ):
+                yield chunk
+            return
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
 
         response_iter = _acompletion_with_retry(
