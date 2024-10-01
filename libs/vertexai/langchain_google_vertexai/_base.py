@@ -121,7 +121,10 @@ class _VertexAIBase(BaseModel):
     @model_validator(mode="after")
     def validate_project(self) -> Any:
         if self.project is None:
-            self.project = initializer.global_config.project
+            if self.credentials and hasattr(self.credentials, "project_id"):
+                self.project = self.credentials.project_id
+            else:
+                self.project = initializer.global_config.project
         return self
 
     @property
