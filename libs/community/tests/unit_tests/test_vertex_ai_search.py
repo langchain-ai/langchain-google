@@ -201,7 +201,7 @@ def test_convert_unstructured_search_response_extractive_segments(
         assert documents[0].page_content == "Mock content 1"
         assert documents[0].metadata["id"] == "mock-id-1"
         assert documents[0].metadata["source"] == "mock-link-1"
-        assert documents[0].metadata["score"] == 0.9
+        assert documents[0].metadata["relevance_score"] == 0.9
         assert len(documents[0].metadata["previous_segments"]) == 3
         assert len(documents[0].metadata["next_segments"]) == 3
 
@@ -209,7 +209,7 @@ def test_convert_unstructured_search_response_extractive_segments(
         assert documents[1].page_content == "Mock content 2"
         assert documents[1].metadata["id"] == "mock-id-2"
         assert documents[1].metadata["source"] == "mock-link-2"
-        assert documents[1].metadata["score"] == 0.95
+        assert documents[1].metadata["relevance_score"] == 0.95
         assert len(documents[1].metadata["previous_segments"]) == 0
         assert len(documents[1].metadata["next_segments"]) == 0
 
@@ -256,7 +256,7 @@ def test_convert_unstructured_search_response_extractive_answers(
         assert documents[0].page_content == "Mock extractive answer 1"
         assert documents[0].metadata["id"] == "mock-id-1"
         assert documents[0].metadata["source"] == "mock-link-1"
-        assert "score" not in documents[0].metadata
+        assert "relevance_score" not in documents[0].metadata
         assert "previous_segments" not in documents[0].metadata
         assert "next_segments" not in documents[0].metadata
 
@@ -264,6 +264,6 @@ def test_convert_unstructured_search_response_extractive_answers(
         assert documents[1].page_content == "Mock extractive answer 2"
         assert documents[1].metadata["id"] == "mock-id-2"
         assert documents[1].metadata["source"] == "mock-link-2"
-        assert "score" not in documents[1].metadata
+        assert "relevance_score" not in documents[1].metadata
         assert "previous_segments" not in documents[1].metadata
         assert "next_segments" not in documents[1].metadata

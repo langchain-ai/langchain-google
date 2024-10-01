@@ -165,7 +165,9 @@ class _BaseVertexAISearchRetriever(Serializable):
                             }
                         )
                         if "relevanceScore" in chunk:
-                            chunk_metadata["score"] = chunk.get("relevanceScore")
+                            chunk_metadata["relevance_score"] = chunk.get(
+                                "relevanceScore"
+                            )
 
                 documents.append(
                     Document(

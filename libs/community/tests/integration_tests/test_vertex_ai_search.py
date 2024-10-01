@@ -111,7 +111,7 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents_segments() -> N
         assert doc.page_content
         assert doc.metadata["id"]
         assert doc.metadata["source"]
-        assert doc.metadata["score"]
+        assert doc.metadata["relevance_score"]
         assert "previous_segments" in doc.metadata
         assert "next_segments" in doc.metadata
 
