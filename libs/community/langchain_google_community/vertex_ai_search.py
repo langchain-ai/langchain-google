@@ -229,6 +229,10 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
     filter: Optional[str] = None
     """Filter expression."""
+    order_by: Optional[str] = None
+    """Comma-separated list of fields to order by."""
+    canonical_filter: Optional[str] = None
+    """Canonical filter expression."""
     get_extractive_answers: bool = False
     """If True return Extractive Answers, otherwise return Extractive Segments or Snippets."""  # noqa: E501
     max_documents: int = Field(default=5, ge=1, le=100)
@@ -385,6 +389,8 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         return SearchRequest(
             query=query,
             filter=self.filter,
+            order_by=self.order_by,
+            canonical_filter=self.canonical_filter,
             serving_config=self._serving_config,
             page_size=self.max_documents,
             content_search_spec=content_search_spec,

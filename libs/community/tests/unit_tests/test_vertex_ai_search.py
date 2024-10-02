@@ -1,10 +1,56 @@
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.auth import credentials as ga_credentials
 from google.cloud.discoveryengine_v1beta import Document as DiscoveryEngineDocument
-from google.cloud.discoveryengine_v1beta.types import SearchResponse
+from google.cloud.discoveryengine_v1beta.types import SearchRequest, SearchResponse
 
 from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
+
+
+def test_search_request_with_auto_populated_fields() -> None:
+    """
+    Test the creation of a search request with automatically populated fields.
+    This test verifies that the VertexAISearchRetriever correctly creates a
+    SearchRequest object with the expected auto-populated fields.
+    """
+
+    # Mock the SearchServiceClient to avoid real network calls
+    with mock.patch(
+        "google.cloud.discoveryengine_v1beta.SearchServiceClient"
+    ) as mock_client_class:
+        mock_client = mock_client_class.return_value
+        mock_client.serving_config_path.return_value = "serving_config_value"
+
+        retriever = VertexAISearchRetriever(
+            project_id="project_id_value",
+            data_store_id="data_store_id_value",
+            location_id="location_id_value",
+            serving_config_id="serving_config_id_value",
+            credentials=ga_credentials.AnonymousCredentials(),
+            filter="filter_value",
+            order_by="title desc",
+            canonical_filter="true",
+        )
+
+        # Assert that serving_config_path was called with the correct arguments
+        mock_client.serving_config_path.assert_called_once_with(
+            project="project_id_value",
+            location="location_id_value",
+            data_store="data_store_id_value",
+            serving_config="serving_config_id_value",
+        )
+
+        search_request = retriever._create_search_request(query="query_value")
+
+        assert isinstance(search_request, SearchRequest)
+        assert search_request.query == "query_value"
+        assert search_request.filter == "filter_value"
+        assert search_request.order_by == "title desc"
+        assert search_request.canonical_filter == "true"
+        assert search_request.serving_config == "serving_config_value"
+        assert search_request.page_size == 5
 
 
 @pytest.mark.parametrize(
