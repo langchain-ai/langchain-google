@@ -237,13 +237,11 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     """If True return Extractive Answers, otherwise return Extractive Segments or Snippets."""  # noqa: E501
     max_documents: int = Field(default=5, ge=1, le=100)
     """The maximum number of documents to return."""
-    max_extractive_answer_count: int = Field(default=1, ge=1, le=1)
-    """The maximum number of extractive answers returned in each search result.
-    Currently one extractive answer will be returned for each SearchResult.
+    max_extractive_answer_count: int = Field(default=1, ge=1, le=5)
+    """The maximum number of extractive answers to return per search result.
     """
-    max_extractive_segment_count: int = Field(default=1, ge=1, le=1)
-    """The maximum number of extractive segments returned in each search result.
-    Currently one segment will be returned for each SearchResult.
+    max_extractive_segment_count: int = Field(default=1, ge=1, le=10)
+    """The maximum number of extractive segments to return per search result.
     """
     return_extractive_segment_score: bool = False
     """If set to True, the relevance score for each extractive segment will be included
