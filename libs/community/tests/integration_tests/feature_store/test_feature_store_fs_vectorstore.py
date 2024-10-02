@@ -13,7 +13,7 @@ from tests.integration_tests.fake import FakeEmbeddings
 # Feature Online store is static to avoid cold start setup time during testing
 TEST_DATASET = "langchain_test_dataset"
 TEST_TABLE_NAME = f"langchain_test_table{str(random.randint(1,100000))}"
-TEST_FOS_NAME = "langchain_test_fos"
+TEST_FOS_NAME = "langchain_test_fos2"
 TEST_VIEW_NAME = f"test{str(random.randint(1,100000))}"
 EMBEDDING_SIZE = 768
 
