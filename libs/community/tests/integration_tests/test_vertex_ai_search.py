@@ -83,7 +83,9 @@ def test_google_vertex_ai_search_boostspec() -> None:
 def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
     """Test the get_relevant_documents() method."""
     data_store_id = os.environ["DATA_STORE_ID"]
-    retriever = VertexAISearchRetriever(data_store_id=data_store_id)
+    retriever = VertexAISearchRetriever(
+        data_store_id=data_store_id, get_extractive_answers=True
+    )
     documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
@@ -91,6 +93,27 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
         assert doc.page_content
         assert doc.metadata["id"]
         assert doc.metadata["source"]
+
+
+@pytest.mark.extended
+def test_google_vertex_ai_multiturnsearch_get_relevant_documents_segments() -> None:
+    """Test the get_relevant_documents() method."""
+    data_store_id = os.environ["DATA_STORE_ID"]
+    retriever = VertexAISearchRetriever(
+        data_store_id=data_store_id,
+        max_extractive_segment_count=1,
+        return_extractive_segment_score=True,
+    )
+    documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
+    assert len(documents) > 0
+    for doc in documents:
+        assert isinstance(doc, Document)
+        assert doc.page_content
+        assert doc.metadata["id"]
+        assert doc.metadata["source"]
+        assert doc.metadata["relevance_score"]
+        assert "previous_segments" in doc.metadata
+        assert "next_segments" in doc.metadata
 
 
 @pytest.mark.extended

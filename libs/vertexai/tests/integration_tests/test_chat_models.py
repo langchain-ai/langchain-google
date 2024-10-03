@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 from typing import List, Optional, cast
 
 import pytest
@@ -11,6 +12,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     Content,
     Part,
 )
+from google.oauth2 import service_account
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -856,3 +858,68 @@ def test_json_serializable() -> None:
     llm.prediction_client
     llm.async_prediction_client
     json.loads(llm.model_dump_json())
+
+
+@pytest.mark.release
+def test_langgraph_example() -> None:
+    llm = ChatVertexAI(
+        model_name="gemini-1.5-pro-001",
+        max_output_tokens=8192,
+        temperature=0.2,
+    )
+
+    add_declaration = {
+        "name": "add",
+        "description": "Adds a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    multiply_declaration = {
+        "name": "multiply",
+        "description": "Multiply a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a helpful assistant tasked with performing "
+                "arithmetic on a set of inputs."
+            )
+        ),
+        HumanMessage(content="Multiply 2 and 3"),
+        HumanMessage(content="No, actually multiply 3 and 3!"),
+    ]
+    step1 = llm.invoke(
+        messages,
+        tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
+    )
+    step2 = llm.invoke(
+        messages
+        + [step1, ToolMessage(content="9", tool_call_id=step1.tool_calls[0]["id"])],  # type: ignore[attr-defined]
+        tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
+    )
+    assert isinstance(step2, AIMessage)
+
+
+def test_init_from_credentials_obj() -> None:
+    credentials_dict = json.loads(os.environ["GOOGLE_VERTEX_AI_WEB_CREDENTIALS"])
+    credentials = service_account.Credentials.from_service_account_info(
+        credentials_dict
+    )
+    llm = ChatVertexAI(model="gemini-1.5-flash", credentials=credentials)
+    llm.invoke("how are you")

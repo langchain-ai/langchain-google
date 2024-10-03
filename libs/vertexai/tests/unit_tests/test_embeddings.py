@@ -13,7 +13,7 @@ def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
     mock_embeddings = MockVertexAIEmbeddings("textembedding-gecko@001")
     assert mock_embeddings.model_type == GoogleEmbeddingModelType.TEXT
     with pytest.raises(NotImplementedError) as e:
-        mock_embeddings.embed_image("test")
+        mock_embeddings.embed_images(["test"])[0]
         assert e.value == "Only supported for multimodal models"
 
 

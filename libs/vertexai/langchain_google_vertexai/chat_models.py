@@ -142,6 +142,7 @@ _allowed_params = [
     "presence_penalty",
     "frequency_penalty",
     "candidate_count",
+    "seed",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata"]
 
@@ -303,7 +304,11 @@ def _parse_chat_history_gemini(
             if system_parts is not None:
                 parts = system_parts + parts
                 system_parts = None
-            vertex_messages.append(Content(role=role, parts=parts))
+            if vertex_messages and vertex_messages[-1].role == "user":
+                prev_parts = list(vertex_messages[-1].parts)
+                vertex_messages[-1] = Content(role=role, parts=prev_parts + parts)
+            else:
+                vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, AIMessage):
             prev_ai_message = message
             role = "model"
@@ -666,6 +671,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             "gemini-1.5-pro-001", etc.
         temperature: Optional[float]
             Sampling temperature.
+        seed: Optional[int]
+            Sampling integer to use.
         max_tokens: Optional[int]
             Max number of tokens to generate.
         stop: Optional[List[str]]
@@ -1589,8 +1596,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        # TODO: Update to properly support async streaming from gemini.
         if not self._is_gemini_model:
-            raise NotImplementedError()
+            async for chunk in super()._astream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            ):
+                yield chunk
+            return
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
 
         response_iter = _acompletion_with_retry(

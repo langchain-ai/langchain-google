@@ -12,6 +12,7 @@ from langchain_google_community.bq_storage_vectorstores.bigquery import (
 from tests.integration_tests.fake import FakeEmbeddings
 
 TEST_DATASET = "langchain_test_dataset"
+TEST_TEMP_DATASET = "temp_langchain_test_dataset"
 TEST_TABLE_NAME = f"langchain_test_table{str(random.randint(1,100000))}"
 TEST_FOS_NAME = "langchain_test_fos"
 EMBEDDING_SIZE = 768
@@ -34,7 +35,8 @@ def store_bq_vectorstore(request: pytest.FixtureRequest) -> BigQueryVectorStore:
         project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
         embedding=embedding_model,
         location="us-central1",
-        dataset_name=TestBigQueryVectorStore_bq_vectorstore.dataset_name,
+        dataset_name=TEST_DATASET,
+        temp_dataset_name=TEST_TEMP_DATASET,
         table_name=TEST_TABLE_NAME,
     )
     TestBigQueryVectorStore_bq_vectorstore.store_bq_vectorstore.add_texts(
@@ -44,7 +46,7 @@ def store_bq_vectorstore(request: pytest.FixtureRequest) -> BigQueryVectorStore:
 
     def teardown() -> None:
         bigquery.Client(location="us-central1").delete_dataset(
-            TestBigQueryVectorStore_bq_vectorstore.dataset_name,
+            TEST_DATASET,
             delete_contents=True,
             not_found_ok=True,
         )
@@ -73,14 +75,15 @@ def existing_store_bq_vectorstore(
             project_id=os.environ.get("PROJECT_ID", None),  # type: ignore[arg-type]
             embedding=embedding_model,
             location="us-central1",
-            dataset_name=TestBigQueryVectorStore_bq_vectorstore.dataset_name,
+            dataset_name=TEST_DATASET,
+            temp_dataset_name=TEST_TEMP_DATASET,
             table_name=TEST_TABLE_NAME,
         )
     )
 
     def teardown() -> None:
         bigquery.Client(location="us-central1").delete_dataset(
-            TestBigQueryVectorStore_bq_vectorstore.dataset_name,
+            TEST_DATASET,
             delete_contents=True,
             not_found_ok=True,
         )
@@ -92,7 +95,6 @@ def existing_store_bq_vectorstore(
 class TestBigQueryVectorStore_bq_vectorstore:
     """BigQueryVectorStore tests class."""
 
-    dataset_name = TEST_DATASET
     store_bq_vectorstore: BigQueryVectorStore
     existing_store_bq_vectorstore: BigQueryVectorStore
     texts = ["apple", "ice cream", "Saturn", "candy", "banana"]
