@@ -47,6 +47,8 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         content_field: Name of the column storing document content (default: "content").
         embedding_field: Name of the column storing text embeddings (default:
             "embedding").
+        temp_dataset_name: Name of the BigQuery dataset to be used to upload temporary
+            BQ tables. If None, will default to "{dataset_name}_temp".
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
@@ -68,6 +70,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     content_field: str = "content"
     embedding_field: str = "embedding"
     doc_id_field: str = "doc_id"
+    temp_dataset_name: Optional[str] = None
     credentials: Optional[Any] = None
     embedding_dimension: Optional[int] = None
     extra_fields: Union[Dict[str, str], None] = None
@@ -138,17 +141,20 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         )
         if self.embedding_dimension is None:
             self.embedding_dimension = len(self.embedding.embed_query("test"))
+        if self.temp_dataset_name is None:
+            self.temp_dataset_name = f"{self.dataset_name}_temp"
         full_table_id = f"{self.project_id}.{self.dataset_name}.{self.table_name}"
         self._full_table_id = full_table_id
-        temp_dataset_id = f"{self.dataset_name}_temp"
         if not check_bq_dataset_exists(
             client=self._bq_client, dataset_id=self.dataset_name
         ):
             self._bq_client.create_dataset(dataset=self.dataset_name, exists_ok=True)
         if not check_bq_dataset_exists(
-            client=self._bq_client, dataset_id=temp_dataset_id
+            client=self._bq_client, dataset_id=self.temp_dataset_name
         ):
-            self._bq_client.create_dataset(dataset=temp_dataset_id, exists_ok=True)
+            self._bq_client.create_dataset(
+                dataset=self.temp_dataset_name, exists_ok=True
+            )
         table_ref = bigquery.TableReference.from_string(full_table_id)
         self._bq_client.create_table(table_ref, exists_ok=True)
         self._logger.info(
@@ -233,18 +239,6 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                         expected_modes=["NULLABLE", "REQUIRED"],
                     )
             self._logger.debug(f"Table {self.full_table_id} validated")
-        return table_ref
-
-    def _initialize_bq_table(self) -> Any:
-        """Validates or creates the BigQuery table."""
-        from google.cloud import bigquery  # type: ignore[attr-defined]
-
-        self._bq_client.create_dataset(dataset=self.dataset_name, exists_ok=True)
-        self._bq_client.create_dataset(
-            dataset=f"{self.dataset_name}_temp", exists_ok=True
-        )
-        table_ref = bigquery.TableReference.from_string(self.full_table_id)
-        self._bq_client.create_table(table_ref, exists_ok=True)
         return table_ref
 
     def add_texts(  # type: ignore[override]

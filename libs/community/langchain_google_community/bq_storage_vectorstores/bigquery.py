@@ -393,7 +393,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         df[self.embedding_field] = embeddings
         table_id = (
             f"{self.project_id}."
-            f"{self.dataset_name}_temp."
+            f"{self.temp_dataset_name}."
             f"{self.table_name}_{uuid.uuid4().hex}"
         )
 
