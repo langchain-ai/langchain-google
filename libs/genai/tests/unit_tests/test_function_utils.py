@@ -1,4 +1,5 @@
-from typing import Any
+from typing import Any, Generator
+from unittest.mock import MagicMock, patch
 
 import google.ai.generativelanguage as glm
 import pytest
@@ -132,12 +133,30 @@ def test_tool_to_dict_glm_tool() -> None:
     assert tool == convert_to_genai_function_declarations([tool_dict])
 
 
+@pytest.fixture
+def mock_safe_import() -> Generator[MagicMock, None, None]:
+    with patch("langchain_google_genai._function_utils.safe_import") as mock:
+        yield mock
+
+
 def test_tool_to_dict_pydantic() -> None:
     class MyModel(BaseModel):
         name: str
         age: int
         likes: list[str]
 
-    tool = convert_to_genai_function_declarations([MyModel])
-    tool_dict = tool_to_dict(tool)
-    assert tool == convert_to_genai_function_declarations([tool_dict])
+    gapic_tool = convert_to_genai_function_declarations([MyModel])
+    tool_dict = tool_to_dict(gapic_tool)
+    assert gapic_tool == convert_to_genai_function_declarations([tool_dict])
+
+
+def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    mock_safe_import.return_value = False
+
+    gapic_tool = convert_to_genai_function_declarations([MyModel])
+    tool_dict = tool_to_dict(gapic_tool)
+    assert gapic_tool == convert_to_genai_function_declarations([tool_dict])

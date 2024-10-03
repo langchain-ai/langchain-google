@@ -10,11 +10,12 @@ from langchain_core.outputs import ChatResult, LLMResult
 from langchain_core.outputs.chat_generation import ChatGeneration
 from langchain_core.outputs.generation import Generation
 from pydantic import BaseModel, ConfigDict, Field
-from vertexai.preview.vision_models import (  # type: ignore[import-untyped]
+from vertexai.vision_models import (  # type: ignore[import-untyped]
     GeneratedImage,
+    Image,
     ImageGenerationModel,
+    ImageTextModel,
 )
-from vertexai.vision_models import Image, ImageTextModel  # type: ignore[import-untyped]
 
 from langchain_google_vertexai._image_utils import (
     ImageBytesLoader,
@@ -29,7 +30,7 @@ from langchain_google_vertexai._utils import get_user_agent
 class _BaseImageTextModel(BaseModel):
     """Base class for all integrations that use ImageTextModel"""
 
-    cached_client: Any = Field(default=None)
+    cached_client: Any = Field(default=None, exclude=True)
     model_name: str = Field(default="imagetext@001")
     """ Name of the model to use"""
     number_of_results: int = Field(default=1)
@@ -97,7 +98,7 @@ class _BaseImageTextModel(BaseModel):
     def _prepare_params(self, **kwargs: Any) -> Dict[str, Any]:
         params = self._default_params
         for key, value in kwargs.items():
-            if key in params and value is not None:
+            if value is not None:
                 params[key] = value
         return params
 
@@ -110,6 +111,7 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
         image: Image,
         number_of_results: Optional[int] = None,
         language: Optional[str] = None,
+        **kwargs,
     ) -> List[str]:
         """Uses the sdk methods to generate a list of captions.
 
@@ -123,7 +125,7 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
         """
         with telemetry.tool_context_manager(self._user_agent):
             params = self._prepare_params(
-                number_of_results=number_of_results, language=language
+                number_of_results=number_of_results, language=language, **kwargs
             )
             captions = self.client.get_captions(image=image, **params)
             return captions
@@ -224,7 +226,7 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
                 "{'type': 'image_url', 'image_url': {'image': <image_str>}}"
             )
 
-        captions = self._get_captions(image, **messages[0].additional_kwargs)
+        captions = self._get_captions(image, **messages[0].additional_kwargs, **kwargs)
 
         generations = [
             ChatGeneration(message=AIMessage(content=caption)) for caption in captions
@@ -287,7 +289,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
             )
 
         answers = self._ask_questions(
-            image=image, query=user_question, **messages[0].additional_kwargs
+            image=image, query=user_question, **messages[0].additional_kwargs, **kwargs
         )
 
         generations = [
@@ -317,7 +319,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
 class _BaseVertexAIImageGenerator(BaseModel):
     """Base class form generation and edition of images."""
 
-    cached_client: Any = Field(default=None)
+    cached_client: Any = Field(default=None, exclude=True)
     model_name: str = Field(default="imagegeneration@002")
     """Name of the base model"""
     negative_prompt: Union[str, None] = Field(default=None)
@@ -361,7 +363,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
         mapping = {"number_of_results": "number_of_images"}
         for key, value in kwargs.items():
             key = mapping.get(key, key)
-            if key in params and value is not None:
+            if value is not None:
                 params[key] = value
         return {k: v for k, v in params.items() if v is not None}
 
@@ -477,7 +479,7 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             )
 
         image_str_list = self._generate_images(
-            prompt=user_query, **messages[0].additional_kwargs
+            prompt=user_query, **messages[0].additional_kwargs, **kwargs
         )
         image_content_part_list = [
             create_image_content_part(image_str=image_str)
@@ -526,7 +528,10 @@ class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             )
 
         image_str_list = self._edit_images(
-            image_str=image_str, prompt=user_query, **messages[0].additional_kwargs
+            image_str=image_str,
+            prompt=user_query,
+            **messages[0].additional_kwargs,
+            **kwargs,
         )
         image_content_part_list = [
             create_image_content_part(image_str=image_str)
