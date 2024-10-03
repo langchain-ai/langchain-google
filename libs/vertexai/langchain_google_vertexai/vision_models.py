@@ -10,11 +10,12 @@ from langchain_core.outputs import ChatResult, LLMResult
 from langchain_core.outputs.chat_generation import ChatGeneration
 from langchain_core.outputs.generation import Generation
 from pydantic import BaseModel, ConfigDict, Field
-from vertexai.preview.vision_models import (  # type: ignore[import-untyped]
+from vertexai.vision_models import (  # type: ignore[import-untyped]
     GeneratedImage,
+    Image,
     ImageGenerationModel,
+    ImageTextModel,
 )
-from vertexai.vision_models import Image, ImageTextModel  # type: ignore[import-untyped]
 
 from langchain_google_vertexai._image_utils import (
     ImageBytesLoader,
@@ -110,6 +111,7 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
         image: Image,
         number_of_results: Optional[int] = None,
         language: Optional[str] = None,
+        **kwargs,
     ) -> List[str]:
         """Uses the sdk methods to generate a list of captions.
 
@@ -123,7 +125,7 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
         """
         with telemetry.tool_context_manager(self._user_agent):
             params = self._prepare_params(
-                number_of_results=number_of_results, language=language
+                number_of_results=number_of_results, language=language, **kwargs
             )
             captions = self.client.get_captions(image=image, **params)
             return captions
@@ -526,7 +528,10 @@ class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             )
 
         image_str_list = self._edit_images(
-            image_str=image_str, prompt=user_query, **messages[0].additional_kwargs, **kwargs
+            image_str=image_str,
+            prompt=user_query,
+            **messages[0].additional_kwargs,
+            **kwargs,
         )
         image_content_part_list = [
             create_image_content_part(image_str=image_str)
