@@ -229,17 +229,19 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
     filter: Optional[str] = None
     """Filter expression."""
+    order_by: Optional[str] = None
+    """Comma-separated list of fields to order by."""
+    canonical_filter: Optional[str] = None
+    """Canonical filter expression."""
     get_extractive_answers: bool = False
     """If True return Extractive Answers, otherwise return Extractive Segments or Snippets."""  # noqa: E501
     max_documents: int = Field(default=5, ge=1, le=100)
     """The maximum number of documents to return."""
-    max_extractive_answer_count: int = Field(default=1, ge=1, le=1)
-    """The maximum number of extractive answers returned in each search result.
-    Currently one extractive answer will be returned for each SearchResult.
+    max_extractive_answer_count: int = Field(default=1, ge=1, le=5)
+    """The maximum number of extractive answers to return per search result.
     """
-    max_extractive_segment_count: int = Field(default=1, ge=1, le=1)
-    """The maximum number of extractive segments returned in each search result.
-    Currently one segment will be returned for each SearchResult.
+    max_extractive_segment_count: int = Field(default=1, ge=1, le=10)
+    """The maximum number of extractive segments to return per search result.
     """
     return_extractive_segment_score: bool = False
     """If set to True, the relevance score for each extractive segment will be included
@@ -385,6 +387,8 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         return SearchRequest(
             query=query,
             filter=self.filter,
+            order_by=self.order_by,
+            canonical_filter=self.canonical_filter,
             serving_config=self._serving_config,
             page_size=self.max_documents,
             content_search_spec=content_search_spec,
