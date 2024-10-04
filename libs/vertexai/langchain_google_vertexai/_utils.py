@@ -231,7 +231,7 @@ def enforce_stop_tokens(text: str, stop: List[str]) -> str:
 
 
 def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -> dict:
-    """Given an OpenAPI schema with a property '$defs' replaces all occurrences of 
+    """Given an OpenAPI schema with a property '$defs' replaces all occurrences of
     referenced items in the dictionary.
 
     Args:
