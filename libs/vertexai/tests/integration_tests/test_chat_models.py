@@ -789,7 +789,7 @@ def test_structured_output_schema_json():
     with pytest.raises(ValueError, match="response_mime_type"):
         response = model.invoke("List a few popular cookie recipes")
 
-pytest.mark.extended
+@pytest.mark.extended
 def test_structured_output_schema_enum():
 
     model = ChatVertexAI(

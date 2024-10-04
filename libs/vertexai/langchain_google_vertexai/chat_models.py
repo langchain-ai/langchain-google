@@ -1115,10 +1115,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             updated_params["response_mime_type"] = self.response_mime_type
 
         if self.response_schema is not None:
-            allowed_mime_types = (
-                "application/json",
-                "text/x.enum"
-            )
+            allowed_mime_types = ("application/json", "text/x.enum")
             if self.response_mime_type not in allowed_mime_types:
                 error_message = (
                     "`response_schema` is only supported when "
