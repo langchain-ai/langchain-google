@@ -3,7 +3,7 @@
 import base64
 import json
 import os
-from typing import List, Optional, cast
+from typing import List, Optional, cast, Literal
 
 import pytest
 from google.cloud import storage
@@ -609,8 +609,11 @@ def test_chat_model_multiple_system_message() -> None:
     assert isinstance(response, AIMessage)
 
 
-@pytest.mark.release
-def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
+# @pytest.mark.release
+@pytest.mark.parametrize("method", [None, "json_mode"])
+def test_chat_vertexai_gemini_with_structured_output(
+    method: Optional[Literal["json_mode"]],
+) -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -623,25 +626,27 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
         safety_settings=safety,
         rate_limiter=rate_limiter,
     )
-    model = llm.with_structured_output(MyModel)
+    model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
     response = model.invoke([message])
     assert isinstance(response, MyModel)
     assert response == MyModel(name="Erick", age=27)
 
-    model = llm.with_structured_output(
-        {
-            "name": "MyModel",
-            "description": "MyModel",
-            "parameters": MyModel.model_json_schema(),
+    if method is None:  # This wont work with json_schema as it expects an OpenAPI dict
+        model = llm.with_structured_output(
+            {
+                "name": "MyModel",
+                "description": "MyModel",
+                "parameters": MyModel.model_json_schema(),
+            },
+            method=method,
+        )
+        response = model.invoke([message])
+        assert response == {
+            "name": "Erick",
+            "age": 27,
         }
-    )
-    response = model.invoke([message])
-    assert response == {
-        "name": "Erick",
-        "age": 27,
-    }
 
     model = llm.with_structured_output(
         {
@@ -653,7 +658,8 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
                 "age": {"type": "integer"},
             },
             "required": ["name", "age"],
-        }
+        },
+        method=method,
     )
     response = model.invoke([message])
     assert response == {
