@@ -3,15 +3,11 @@
 import base64
 import json
 import os
-from typing import List, Optional, cast, Literal
+from typing import List, Literal, Optional, cast
 
 import pytest
 from google.cloud import storage
-from google.cloud.aiplatform_v1beta1.types import (
-    Blob,
-    Content,
-    Part,
-)
+from google.cloud.aiplatform_v1beta1.types import Blob, Content, Part
 from google.oauth2 import service_account
 from langchain_core.messages import (
     AIMessage,
@@ -35,9 +31,7 @@ from langchain_google_vertexai import (
     HarmCategory,
     create_context_cache,
 )
-from langchain_google_vertexai.chat_models import (
-    _parse_chat_history_gemini,
-)
+from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 model_names_to_test = ["codechat-bison", _DEFAULT_MODEL_NAME]
