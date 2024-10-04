@@ -21,9 +21,9 @@ model_names = ["gemini-pro"]
 def test_google_generativeai_call(model_name: str) -> None:
     """Test valid call to Google GenerativeAI text API."""
     if model_name:
-        llm = GoogleGenerativeAI(max_output_tokens=10, model=model_name)
+        llm = GoogleGenerativeAI(max_tokens=10, model=model_name)
     else:
-        llm = GoogleGenerativeAI(max_output_tokens=10)  # type: ignore[call-arg]
+        llm = GoogleGenerativeAI(max_tokens=10)  # type: ignore[call-arg]
     output = llm("Say foo:")
     assert isinstance(output, str)
     assert llm._llm_type == "google_palm"

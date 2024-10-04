@@ -13,7 +13,7 @@ from langchain_core.language_models import LangSmithParams, LanguageModelInput
 from langchain_core.language_models.llms import BaseLLM, create_base_retry_decorator
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from langchain_core.utils import secret_from_env
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from typing_extensions import Self
 
 from langchain_google_genai._enums import (
@@ -139,7 +139,7 @@ Supported examples:
     top_k: Optional[int] = None
     """Decode using top-k sampling: consider the set of top_k most probable tokens.
        Must be positive."""
-    max_output_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     """Maximum number of tokens to include in a candidate. Must be greater than zero.
        If unset, will default to 64."""
     n: int = 1
@@ -216,6 +216,9 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     """
 
     client: Any = None  #: :meta private:
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
