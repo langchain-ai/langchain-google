@@ -603,7 +603,7 @@ def test_chat_model_multiple_system_message() -> None:
     assert isinstance(response, AIMessage)
 
 
-# @pytest.mark.release
+@pytest.mark.release
 @pytest.mark.parametrize("method", [None, "json_mode"])
 def test_chat_vertexai_gemini_with_structured_output(
     method: Optional[Literal["json_mode"]],
@@ -660,6 +660,28 @@ def test_chat_vertexai_gemini_with_structured_output(
         "name": "Erick",
         "age": 27,
     }
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
+    class Argument(BaseModel):
+        description: str
+
+    class Reason(BaseModel):
+        strength: int
+        argument: list[Argument]
+
+    class Response(BaseModel):
+        response: str
+        reasons: list[Reason]
+
+    model = ChatVertexAI(model_name="gemini-1.5-pro-001").with_structured_output(
+        Response, method="json_mode"
+    )
+
+    response = model.invoke("Why is Real Madrid better than Barcelona?")
+
+    assert isinstance(response, Response)
 
 
 @pytest.mark.release

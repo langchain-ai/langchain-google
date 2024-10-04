@@ -115,6 +115,7 @@ from langchain_google_vertexai._utils import (
     get_generation_info,
     _format_model_name,
     is_gemini_model,
+    replace_defs_in_schema,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
@@ -482,15 +483,13 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -1655,7 +1654,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 will be caught and returned as well. The final output is always a dict
                 with keys "raw", "parsed", and "parsing_error".
             method: If set to 'json_schema' it will use controlled genetration to
-                generate the response rather than function calling.
+                generate the response rather than function calling. Does not work with
+                schemas with references or Pydantic models with self-references.
 
         Returns:
             A Runnable that takes any ChatModel input. If include_raw is True then a
@@ -1741,6 +1741,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # gemini api doesn't support. We can implement a postprocessing function
                 # that takes care of this if necessary.
                 schema_json = schema.model_json_schema()
+                schema_json = replace_defs_in_schema(schema_json)
                 self.response_schema = schema_json
                 parser = PydanticOutputParser(pydantic_object=schema)
             else:
