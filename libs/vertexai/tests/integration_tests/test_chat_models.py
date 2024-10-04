@@ -927,7 +927,6 @@ def test_init_from_credentials_obj() -> None:
 
 @pytest.mark.release
 def test_response_metadata_avg_logprobs() -> None:
-
     llm = ChatVertexAI(model="gemini-1.5-flash")
     response = llm.invoke("Hello!")
     probs = response.response_metadata.get("avg_logprobs")
