@@ -68,7 +68,9 @@ class _VertexAIBase(BaseModel):
     "Optional list of stop words to use when generating."
     model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
-    full_model_name: Optional[str] = None  #: :meta private:
+    full_model_name: Optional[str] = Field(
+        default=None, exclude=True
+    )  #: :meta private:
     "The full name of the model's endpoint."
     client_options: Optional["ClientOptions"] = Field(
         default=None, exclude=True

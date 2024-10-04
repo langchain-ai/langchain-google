@@ -10,7 +10,6 @@
     'kwargs': dict({
       'default_metadata': list([
       ]),
-      'full_model_name': 'projects/test-project/locations/us-central1/publishers/google/models/gemini-1.0-pro-001',
       'location': 'us-central1',
       'max_output_tokens': 100,
       'max_retries': 2,
@@ -39,7 +38,6 @@
     'kwargs': dict({
       'default_metadata': list([
       ]),
-      'full_model_name': 'projects/test-project/locations/us-central1/publishers/google/models/gemini-1.5-pro-001',
       'location': 'us-central1',
       'max_output_tokens': 100,
       'max_retries': 2,
