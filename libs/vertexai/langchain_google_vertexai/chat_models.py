@@ -1734,7 +1734,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         if method == "json_mode":
             if isinstance(schema, type):
-                # TODO: This gets the json schema. For nested properties it fails
+                # TODO: This gets the json schema of a pydantic model. It fails for
+                # nested models because the generated schema contains $refs that the
+                # gemini api doesn't support. We can implement a postprocessing function
+                # that takes care of this if necessary.
                 schema_json = schema.model_json_schema()
                 self.response_schema = schema_json
                 parser = PydanticOutputParser(pydantic_object=schema)

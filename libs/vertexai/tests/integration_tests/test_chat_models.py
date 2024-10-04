@@ -627,7 +627,7 @@ def test_chat_vertexai_gemini_with_structured_output(
     assert isinstance(response, MyModel)
     assert response == MyModel(name="Erick", age=27)
 
-    if method is None:  # This wont work with json_schema as it expects an OpenAPI dict
+    if method is None:  # This won't work with json_schema as it expects an OpenAPI dict
         model = llm.with_structured_output(
             {
                 "name": "MyModel",
