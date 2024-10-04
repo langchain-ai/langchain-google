@@ -1008,13 +1008,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         supported in Gemini 1.5 and later models. Supported mimetype:
             * "text/plain": (default) Text output.
             * "application/json": JSON response in the candidates.
+            * "text/x.enum": Enum in plain text.
        The model also needs to be prompted to output the appropriate response
        type, otherwise the behavior is undefined. This is a preview feature.
     """
 
     response_schema: Optional[Dict[str, Any]] = None
-    """ Optional. Enforce an schema to the output. Only works when `response_mime_type`
-        is set to `application/json`.
+    """ Optional. Enforce an schema to the output.
         The format of the dictionary should follow Open API schema.
     """
 
@@ -1115,10 +1115,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             updated_params["response_mime_type"] = self.response_mime_type
 
         if self.response_schema is not None:
-            if self.response_mime_type != "application/json":
+            allowed_mime_types = ("application/json", "text/x.enum")
+            if self.response_mime_type not in allowed_mime_types:
                 error_message = (
                     "`response_schema` is only supported when "
-                    "`response_mime_type` is set to `application/json`."
+                    f"`response_mime_type` is set to one of {allowed_mime_types}"
                 )
                 raise ValueError(error_message)
 

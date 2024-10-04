@@ -742,7 +742,7 @@ def test_prediction_client_transport():
 
 
 @pytest.mark.extended
-def test_structured_output_schema():
+def test_structured_output_schema_json():
     model = ChatVertexAI(
         rate_limiter=rate_limiter,
         model_name="gemini-1.5-pro-001",
@@ -788,6 +788,30 @@ def test_structured_output_schema():
     )
     with pytest.raises(ValueError, match="response_mime_type"):
         response = model.invoke("List a few popular cookie recipes")
+
+
+@pytest.mark.extended
+def test_structured_output_schema_enum():
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-001",
+        response_schema={"type": "STRING", "enum": ["drama", "comedy", "documentary"]},
+        response_mime_type="text/x.enum",
+        rate_limiter=rate_limiter,
+    )
+
+    response = model.invoke(
+        """
+        The film aims to educate and inform viewers about real-life subjects, events, or
+        people. It offers a factual record of a particular topic by combining interviews
+        , historical footage and narration. The primary purpose of a film is to present 
+        information and provide insights into various aspects of reality.
+        """
+    )
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+    assert response.content in ("drama", "comedy", "documentary")
 
 
 @pytest.mark.extended
