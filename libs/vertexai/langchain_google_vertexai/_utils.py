@@ -176,6 +176,7 @@ def get_generation_info(
             "finish_reason": (
                 candidate.finish_reason.name if candidate.finish_reason else None
             ),
+            "avg_logprobs": candidate.avg_logprobs
         }
         try:
             if candidate.grounding_metadata:
