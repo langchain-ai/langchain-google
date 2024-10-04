@@ -1121,8 +1121,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
             if self.response_mime_type not in allowed_mime_types:
                 error_message = (
-                    f"`response_schema` is only supported when "
-                    "`response_mime_type` is set to one of {allowed_mime_types}"
+                    "`response_schema` is only supported when "
+                    f"`response_mime_type` is set to one of {allowed_mime_types}"
                 )
                 raise ValueError(error_message)
 
