@@ -1084,6 +1084,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generative_model_name = self.model_name
 
         if not is_gemini_model(self.model_family):
+            logger.warning(
+                "Non-Gemini models are deprecated. "
+                "They will be remoced starting from Dec-01-2024. "
+            )
             values = {
                 "project": self.project,
                 "location": self.location,
