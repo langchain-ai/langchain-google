@@ -31,6 +31,9 @@ import google.api_core
 # TODO: remove ignore once the google package is published with types
 import proto  # type: ignore[import]
 import requests
+from google.ai.generativelanguage_v1beta import (
+    GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
+)
 from google.ai.generativelanguage_v1beta.types import (
     Blob,
     Candidate,
@@ -823,7 +826,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     """  # noqa: E501
 
     client: Any = Field(default=None, exclude=True)  #: :meta private:
-    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
+    async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
     google_api_key: Optional[SecretStr] = Field(
         alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
     )
@@ -887,24 +890,31 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             client_options=self.client_options,
             transport=transport,
         )
+        self.async_client_running = None
+        return self
 
+    @property
+    def async_client(self) -> v1betaGenerativeServiceAsyncClient:
+        google_api_key = None
+        if not self.credentials:
+            if isinstance(self.google_api_key, SecretStr):
+                google_api_key = self.google_api_key.get_secret_value()
+            else:
+                google_api_key = self.google_api_key
         # NOTE: genaix.build_generative_async_service requires
         # a running event loop, which causes an error
         # when initialized inside a ThreadPoolExecutor.
         # this check ensures that async client is only initialized
         # within an asyncio event loop to avoid the error
-        if _is_event_loop_running():
-            self.async_client = genaix.build_generative_async_service(
+        if not self.async_client_running and _is_event_loop_running():
+            self.async_client_running = genaix.build_generative_async_service(
                 credentials=self.credentials,
                 api_key=google_api_key,
-                client_info=client_info,
+                client_info=get_client_info("ChatGoogleGenerativeAI"),
                 client_options=self.client_options,
-                transport=transport,
+                transport=self.transport,
             )
-        else:
-            self.async_client = None
-
-        return self
+        return self.async_client_running
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:
