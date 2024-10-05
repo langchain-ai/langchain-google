@@ -18,6 +18,10 @@ from langchain_google_vertexai.model_garden_maas import (
 )
 
 model_names = _LLAMA_MODELS + _MISTRAL_MODELS
+model_names_with_tools_support = _MISTRAL_MODELS + [
+    "meta/llama3-405b-instruct-maas",
+    "meta/llama-3.2-90b-vision-instruct-maas",
+]
 
 
 @pytest.mark.extended
@@ -63,9 +67,7 @@ async def test_astream(model_name: str) -> None:
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize(
-    "model_name", _MISTRAL_MODELS + ["meta/llama3-405b-instruct-maas"]
-)
+@pytest.mark.parametrize("model_name", model_names_with_tools_support)
 async def test_tools(model_name: str) -> None:
     @tool
     def search(
