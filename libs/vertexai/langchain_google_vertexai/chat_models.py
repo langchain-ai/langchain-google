@@ -56,6 +56,7 @@ from langchain_core.messages.tool import (
     invalid_tool_call,
 )
 from langchain_core.output_parsers.base import OutputParserLike
+from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
     PydanticToolsParser,
@@ -114,6 +115,7 @@ from langchain_google_vertexai._utils import (
     get_generation_info,
     _format_model_name,
     is_gemini_model,
+    replace_defs_in_schema,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
@@ -1627,6 +1629,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         schema: Union[Dict, Type[BaseModel]],
         *,
         include_raw: bool = False,
+        method: Optional[Literal["json_mode"]] = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema.
@@ -1653,6 +1656,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 response will be returned. If an error occurs during output parsing it
                 will be caught and returned as well. The final output is always a dict
                 with keys "raw", "parsed", and "parsing_error".
+            method: If set to 'json_schema' it will use controlled genetration to
+                generate the response rather than function calling. Does not work with
+                schemas with references or Pydantic models with self-references.
 
         Returns:
             A Runnable that takes any ChatModel input. If include_raw is True then a
@@ -1725,17 +1731,40 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # }
 
         """  # noqa: E501
+
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
-        tool_name = _get_tool_name(schema)
-        if isinstance(schema, type) and is_basemodel_subclass(schema):
-            parser: OutputParserLike = PydanticToolsParser(
-                tools=[schema], first_tool_only=True
-            )
+
+        parser: OutputParserLike
+
+        if method == "json_mode":
+            if isinstance(schema, type):
+                # TODO: This gets the json schema of a pydantic model. It fails for
+                # nested models because the generated schema contains $refs that the
+                # gemini api doesn't support. We can implement a postprocessing function
+                # that takes care of this if necessary.
+                schema_json = schema.model_json_schema()
+                schema_json = replace_defs_in_schema(schema_json)
+                self.response_schema = schema_json
+                parser = PydanticOutputParser(pydantic_object=schema)
+            else:
+                parser = JsonOutputParser()
+                self.response_schema = schema
+            self.response_mime_type = "application/json"
+            llm: Runnable = self
+
         else:
-            parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
-        tool_choice = tool_name if self._is_gemini_advanced else None
-        llm = self.bind_tools([schema], tool_choice=tool_choice)
+            tool_name = _get_tool_name(schema)
+            if isinstance(schema, type) and is_basemodel_subclass(schema):
+                parser = PydanticToolsParser(tools=[schema], first_tool_only=True)
+            else:
+                parser = JsonOutputKeyToolsParser(
+                    key_name=tool_name, first_tool_only=True
+                )
+            tool_choice = tool_name if self._is_gemini_advanced else None
+
+            llm = self.bind_tools([schema], tool_choice=tool_choice)
+
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
