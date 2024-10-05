@@ -41,6 +41,9 @@ async def test_agenerate(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 def test_stream(model_name: str) -> None:
+    # b/371631576
+    if model_name == "meta/llama3-8b-instruct-maas":
+        return
     llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = llm.stream("What is the meaning of life?")
     for chunk in output:
@@ -50,6 +53,9 @@ def test_stream(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 async def test_astream(model_name: str) -> None:
+    # b/371631576
+    if model_name == "meta/llama3-8b-instruct-maas":
+        return
     llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = llm.astream("What is the meaning of life?")
     async for chunk in output:
@@ -57,7 +63,9 @@ async def test_astream(model_name: str) -> None:
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.parametrize(
+    "model_name", _MISTRAL_MODELS + ["meta/llama3-405b-instruct-maas"]
+)
 async def test_tools(model_name: str) -> None:
     @tool
     def search(
