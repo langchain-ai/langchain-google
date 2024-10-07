@@ -137,8 +137,9 @@ def _dict_to_gapic_schema(schema: Dict[str, Any]) -> Optional[gapic.Schema]:
 def _format_dict_to_function_declaration(
     tool: Union[FunctionDescription, Dict[str, Any]],
 ) -> gapic.FunctionDeclaration:
+    print(tool)
     return gapic.FunctionDeclaration(
-        name=tool.get("name"),
+        name=tool.get("name") or tool.get("title"),
         description=tool.get("description"),
         parameters=_dict_to_gapic_schema(tool.get("parameters", {})),
     )
@@ -209,7 +210,7 @@ def _format_to_gapic_function_declaration(
         else:
             if (
                 "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
-            ) or "properties" in tool:
+            ):
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
                 function = cast(dict, tool)
