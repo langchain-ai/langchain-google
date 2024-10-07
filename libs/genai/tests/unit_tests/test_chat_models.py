@@ -95,10 +95,12 @@ def test_initalization_without_async() -> None:
 
 def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
-        return ChatGoogleGenerativeAI(
+        model = ChatGoogleGenerativeAI(
             model="gemini-nano",
             google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
         )
+        _ = model.async_client
+        return model
 
     loop = asyncio.get_event_loop()
     chat = loop.run_until_complete(initialize_chat_with_async_client())

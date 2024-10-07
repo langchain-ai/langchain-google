@@ -26,7 +26,7 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     async def test_structured_output_async(self, model: BaseChatModel) -> None:
-        super().test_structured_output_async(model)
+        await super().test_structured_output_async(model)
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     def test_structured_output(self, model: BaseChatModel) -> None:
