@@ -961,7 +961,8 @@ def test_langgraph_example() -> None:
     )
     assert isinstance(step2, AIMessage)
 
-
+@pytest.mark.xfail(reason="can't create service account key on gcp")
+@pytest.mark.release
 def test_init_from_credentials_obj() -> None:
     credentials_dict = json.loads(os.environ["GOOGLE_VERTEX_AI_WEB_CREDENTIALS"])
     credentials = service_account.Credentials.from_service_account_info(
