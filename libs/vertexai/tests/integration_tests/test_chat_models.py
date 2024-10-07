@@ -961,6 +961,7 @@ def test_langgraph_example() -> None:
     )
     assert isinstance(step2, AIMessage)
 
+
 @pytest.mark.xfail(reason="can't create service account key on gcp")
 @pytest.mark.release
 def test_init_from_credentials_obj() -> None:
