@@ -4,7 +4,7 @@ import base64
 import os
 import re
 from enum import Enum
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -71,6 +71,9 @@ class ImageBytesLoader:
 
         if route == Route.LOCAL_FILE:
             return self._bytes_from_file(image_string)
+        
+        if route == Route.BASE64_PDF:
+            return self._bytes_from_b64(image_string)
 
         raise ValueError(
             "Image string must be one of: Google Cloud Storage URI, "
@@ -105,6 +108,10 @@ class ImageBytesLoader:
 
         if route == Route.LOCAL_FILE:
             bytes_ = self._bytes_from_file(image_string)
+
+        mime_type = self._has_known_mimetype(image_string)
+        if mime_type:
+            return Part.from_data(bytes_, mime_type=mime_type)
 
         return Part.from_image(Image.from_bytes(bytes_))
 
@@ -141,7 +148,7 @@ class ImageBytesLoader:
             Image bytes
         """
 
-        pattern = r"data:image/\w{2,4};base64,(.*)"
+        pattern = r"data:\w+/\w{2,4};base64,(.*)"
         match = re.search(pattern, base64_image)
 
         if match is not None:
@@ -215,6 +222,21 @@ class ImageBytesLoader:
             return all([result.scheme, result.netloc])
         except Exception:
             return False
+        
+    def _has_known_mimetype(self, image_url: str) -> Optional[str]:
+        """ Checks weather the image needs other mimetype. Currently only identifies
+        pdfs, otherwise it will return None and it will be treated as an image.
+        """
+
+        # For local files or urls
+        if image_url.endswith(".pdf"):
+            return "application/pdf"
+        
+        # for b64 encoded data
+        if image_url.startswith("data:application/pdf;base64"):
+            return "application/pdf"
+
+        return None
 
 
 def image_bytes_to_b64_string(
