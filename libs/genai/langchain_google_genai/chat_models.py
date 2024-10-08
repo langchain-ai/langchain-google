@@ -1300,12 +1300,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             expire_time: Expiration time for cached resource.
                 `ttl` and `expire_time` are exclusive arguments.
         """
-        system: Optional[Content] = None
+        system: Optional[content_types.ContentType] = None
         genai_contents: list = []
         if all(isinstance(c, BaseMessage) for c in contents):
             system, genai_contents = _parse_chat_history(
                 contents,
                 convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+        elif any(isinstance(c, BaseMessage) for c in contents):
+            raise ValueError(
+                f"'contents' must either be a list of "
+                f"langchain_core.messages.BaseMessage or a list "
+                f"google.generativeai.types.content_types.ContentType, but not a mix "
+                f"of the two. Received {contents}"
             )
         else:
             for content in contents:
