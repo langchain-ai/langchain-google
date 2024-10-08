@@ -4,7 +4,7 @@ import base64
 import os
 import re
 from enum import Enum
-from typing import Dict, Union, Optional
+from typing import Dict, Optional, Union
 from urllib.parse import urlparse
 
 import requests
@@ -120,10 +120,11 @@ class ImageBytesLoader:
         return part._raw_part
 
     def _route(self, image_string: str) -> Route:
+
         if image_string.startswith("gs://"):
             return Route.GOOGLE_CLOUD_STORAGE
 
-        if image_string.startswith("data:image/"):
+        if image_string.startswith("data:"):
             return Route.BASE64
 
         if self._is_url(image_string):
