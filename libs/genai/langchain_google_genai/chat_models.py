@@ -573,10 +573,9 @@ def _response_to_result(
 
     # previous usage metadata needs to be subtracted because gemini api returns
     # already-accumulated token counts with each chunk
-    prev_usage = prev_usage or UsageMetadata()
-    prev_input_tokens = prev_usage.get("input_tokens", 0)
-    prev_output_tokens = prev_usage.get("output_tokens", 0)
-    prev_total_tokens = prev_usage.get("total_tokens", 0)
+    prev_input_tokens = prev_usage["input_tokens"] if prev_usage else 0
+    prev_output_tokens = prev_usage["output_tokens"] if prev_usage else 0
+    prev_total_tokens = prev_usage["total_tokens"] if prev_usage else 0
 
     # Get usage metadata
     try:
@@ -1077,23 +1076,28 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             metadata=self.default_metadata,
         )
 
-        curr_usage_metadata: UsageMetadata | None = None
+        prev_usage_metadata: UsageMetadata | None = None
         for chunk in response:
             _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=curr_usage_metadata
+                chunk, stream=True, prev_usage=prev_usage_metadata
             )
             gen = cast(ChatGenerationChunk, _chat_result.generations[0])
             message = cast(AIMessageChunk, gen.message)
-            curr_usage_metadata = (
+
+            curr_usage_metadata: UsageMetadata | dict[str, int] = (
+                message.usage_metadata or {}
+            )
+
+            prev_usage_metadata = (
                 message.usage_metadata
-                if curr_usage_metadata is None
+                if prev_usage_metadata is None
                 else UsageMetadata(
-                    input_tokens=curr_usage_metadata.get("input_tokens", 0)
-                    + message.usage_metadata.get("input_tokens", 0),
-                    output_tokens=curr_usage_metadata.get("output_tokens", 0)
-                    + message.usage_metadata.get("output_tokens", 0),
-                    total_tokens=curr_usage_metadata.get("total_tokens", 0)
-                    + message.usage_metadata.get("total_tokens", 0),
+                    input_tokens=prev_usage_metadata.get("input_tokens", 0)
+                    + curr_usage_metadata.get("input_tokens", 0),
+                    output_tokens=prev_usage_metadata.get("output_tokens", 0)
+                    + curr_usage_metadata.get("output_tokens", 0),
+                    total_tokens=prev_usage_metadata.get("total_tokens", 0)
+                    + curr_usage_metadata.get("total_tokens", 0),
                 )
             )
 
@@ -1139,7 +1143,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tool_config=tool_config,
                 generation_config=generation_config,
             )
-            curr_usage_metadata: UsageMetadata | None = None
+            prev_usage_metadata: UsageMetadata | None = None
             async for chunk in await _achat_with_retry(
                 request=request,
                 generation_method=self.async_client.stream_generate_content,
@@ -1147,20 +1151,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 metadata=self.default_metadata,
             ):
                 _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=curr_usage_metadata
+                    chunk, stream=True, prev_usage=prev_usage_metadata
                 )
                 gen = cast(ChatGenerationChunk, _chat_result.generations[0])
                 message = cast(AIMessageChunk, gen.message)
-                curr_usage_metadata = (
+
+                curr_usage_metadata: UsageMetadata | dict[str, int] = (
+                    message.usage_metadata or {}
+                )
+
+                prev_usage_metadata = (
                     message.usage_metadata
-                    if curr_usage_metadata is None
+                    if prev_usage_metadata is None
                     else UsageMetadata(
-                        input_tokens=curr_usage_metadata.get("input_tokens", 0)
-                        + message.usage_metadata.get("input_tokens", 0),
-                        output_tokens=curr_usage_metadata.get("output_tokens", 0)
-                        + message.usage_metadata.get("output_tokens", 0),
-                        total_tokens=curr_usage_metadata.get("total_tokens", 0)
-                        + message.usage_metadata.get("total_tokens", 0),
+                        input_tokens=prev_usage_metadata.get("input_tokens", 0)
+                        + curr_usage_metadata.get("input_tokens", 0),
+                        output_tokens=prev_usage_metadata.get("output_tokens", 0)
+                        + curr_usage_metadata.get("output_tokens", 0),
+                        total_tokens=prev_usage_metadata.get("total_tokens", 0)
+                        + curr_usage_metadata.get("total_tokens", 0),
                     )
                 )
 
