@@ -38,6 +38,7 @@ _LLAMA_MODELS: List[str] = [
     "meta/llama3-405b-instruct-maas",
     "meta/llama3-70b-instruct-maas",
     "meta/llama3-8b-instruct-maas",
+    "meta/llama-3.2-90b-vision-instruct-maas",
 ]
 
 

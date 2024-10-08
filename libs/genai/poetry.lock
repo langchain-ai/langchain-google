@@ -212,20 +212,20 @@ python-dateutil = ">=2.7"
 
 [[package]]
 name = "google-ai-generativelanguage"
-version = "0.6.6"
+version = "0.6.10"
 description = "Google Ai Generativelanguage API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google-ai-generativelanguage-0.6.6.tar.gz", hash = "sha256:1739f035caeeeca5c28f887405eec8690f3372daf79fecf26454a97a4f1733a8"},
-    {file = "google_ai_generativelanguage-0.6.6-py3-none-any.whl", hash = "sha256:59297737931f073d55ce1268dcc6d95111ee62850349d2b6cde942b16a4fca5c"},
+    {file = "google_ai_generativelanguage-0.6.10-py3-none-any.whl", hash = "sha256:854a2bf833d18be05ad5ef13c755567b66a4f4a870f099b62c61fe11bddabcf4"},
+    {file = "google_ai_generativelanguage-0.6.10.tar.gz", hash = "sha256:6fa642c964d8728006fe7e8771026fc0b599ae0ebeaf83caf550941e8e693455"},
 ]
 
 [package.dependencies]
 google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
 google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
 proto-plus = ">=1.22.3,<2.0.0dev"
-protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
+protobuf = ">=3.20.2,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0dev"
 
 [[package]]
 name = "google-api-core"
@@ -260,13 +260,13 @@ grpcio-gcp = ["grpcio-gcp (>=0.2.2,<1.0.dev0)"]
 
 [[package]]
 name = "google-api-python-client"
-version = "2.147.0"
+version = "2.148.0"
 description = "Google API Client Library for Python"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google_api_python_client-2.147.0-py2.py3-none-any.whl", hash = "sha256:c6ecfa193c695baa41e84562d8f8f244fcd164419eca3fc9fd7565646668f9b2"},
-    {file = "google_api_python_client-2.147.0.tar.gz", hash = "sha256:e864c2cf61d34c00f05278b8bdb72b93b6fa34f0de9ead51d20435f3b65f91be"},
+    {file = "google_api_python_client-2.148.0-py2.py3-none-any.whl", hash = "sha256:cae8cbd0a9637d42d2e213c598e72427f8b879d6cf5a3dc448498aefad86e4b5"},
+    {file = "google_api_python_client-2.148.0.tar.gz", hash = "sha256:c362581853582a0fec0b8a9f03a4067b4bbbb12720e5492095d166f67bb40320"},
 ]
 
 [package.dependencies]
@@ -316,16 +316,16 @@ httplib2 = ">=0.19.0"
 
 [[package]]
 name = "google-generativeai"
-version = "0.7.2"
+version = "0.8.3"
 description = "Google Generative AI High level API client library and tools."
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "google_generativeai-0.7.2-py3-none-any.whl", hash = "sha256:3117d1ebc92ee77710d4bc25ab4763492fddce9b6332eb25d124cf5d8b78b339"},
+    {file = "google_generativeai-0.8.3-py3-none-any.whl", hash = "sha256:1108ff89d5b8e59f51e63d1a8bf84701cd84656e17ca28d73aeed745e736d9b7"},
 ]
 
 [package.dependencies]
-google-ai-generativelanguage = "0.6.6"
+google-ai-generativelanguage = "0.6.10"
 google-api-core = "*"
 google-api-python-client = "*"
 google-auth = ">=2.15.0"
@@ -423,19 +423,19 @@ protobuf = ["grpcio-tools (>=1.66.2)"]
 
 [[package]]
 name = "grpcio-status"
-version = "1.62.3"
+version = "1.66.2"
 description = "Status proto mapping for gRPC"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.8"
 files = [
-    {file = "grpcio-status-1.62.3.tar.gz", hash = "sha256:289bdd7b2459794a12cf95dc0cb727bd4a1742c37bd823f760236c937e53a485"},
-    {file = "grpcio_status-1.62.3-py3-none-any.whl", hash = "sha256:f9049b762ba8de6b1086789d8315846e094edac2c50beaf462338b301a8fd4b8"},
+    {file = "grpcio_status-1.66.2-py3-none-any.whl", hash = "sha256:e5fe189f6897d12aa9cd74408a17ca41e44fad30871cf84f5cbd17bd713d2455"},
+    {file = "grpcio_status-1.66.2.tar.gz", hash = "sha256:fb55cbb5c2e67062f7a4d5c99e489d074fb57e98678d5c3c6692a2d74d89e9ae"},
 ]
 
 [package.dependencies]
 googleapis-common-protos = ">=1.5.5"
-grpcio = ">=1.62.3"
-protobuf = ">=4.21.6"
+grpcio = ">=1.66.2"
+protobuf = ">=5.26.1,<6.0dev"
 
 [[package]]
 name = "h11"
@@ -583,7 +583,7 @@ typing-extensions = ">=4.7"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "64a16f2cf0f7e303b7e544e7a3eb1d519aeda473"
+resolved_reference = "16f5fdb38b307ee3f3b5065f671b28c90661b698"
 subdirectory = "libs/core"
 
 [[package]]
@@ -605,18 +605,18 @@ syrupy = "^4"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "HEAD"
-resolved_reference = "64a16f2cf0f7e303b7e544e7a3eb1d519aeda473"
+resolved_reference = "16f5fdb38b307ee3f3b5065f671b28c90661b698"
 subdirectory = "libs/standard-tests"
 
 [[package]]
 name = "langsmith"
-version = "0.1.131"
+version = "0.1.132"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langsmith-0.1.131-py3-none-any.whl", hash = "sha256:80c106b1c42307195cc0bb3a596472c41ef91b79d15bcee9938307800336c563"},
-    {file = "langsmith-0.1.131.tar.gz", hash = "sha256:626101a3bf3ca481e5110d5155ace8aa066e4e9cc2fa7d96c8290ade0fbff797"},
+    {file = "langsmith-0.1.132-py3-none-any.whl", hash = "sha256:2320894203675c1c292b818cbecf68b69e47a9f7814d4e950237d1faaafd5dee"},
+    {file = "langsmith-0.1.132.tar.gz", hash = "sha256:007b8fac469138abdba89db931900a26c5d316640e27ff4660d28c92a766aae1"},
 ]
 
 [package.dependencies]
@@ -940,22 +940,22 @@ testing = ["google-api-core (>=1.31.5)"]
 
 [[package]]
 name = "protobuf"
-version = "4.25.5"
+version = "5.28.2"
 description = ""
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "protobuf-4.25.5-cp310-abi3-win32.whl", hash = "sha256:5e61fd921603f58d2f5acb2806a929b4675f8874ff5f330b7d6f7e2e784bbcd8"},
-    {file = "protobuf-4.25.5-cp310-abi3-win_amd64.whl", hash = "sha256:4be0571adcbe712b282a330c6e89eae24281344429ae95c6d85e79e84780f5ea"},
-    {file = "protobuf-4.25.5-cp37-abi3-macosx_10_9_universal2.whl", hash = "sha256:b2fde3d805354df675ea4c7c6338c1aecd254dfc9925e88c6d31a2bcb97eb173"},
-    {file = "protobuf-4.25.5-cp37-abi3-manylinux2014_aarch64.whl", hash = "sha256:919ad92d9b0310070f8356c24b855c98df2b8bd207ebc1c0c6fcc9ab1e007f3d"},
-    {file = "protobuf-4.25.5-cp37-abi3-manylinux2014_x86_64.whl", hash = "sha256:fe14e16c22be926d3abfcb500e60cab068baf10b542b8c858fa27e098123e331"},
-    {file = "protobuf-4.25.5-cp38-cp38-win32.whl", hash = "sha256:98d8d8aa50de6a2747efd9cceba361c9034050ecce3e09136f90de37ddba66e1"},
-    {file = "protobuf-4.25.5-cp38-cp38-win_amd64.whl", hash = "sha256:b0234dd5a03049e4ddd94b93400b67803c823cfc405689688f59b34e0742381a"},
-    {file = "protobuf-4.25.5-cp39-cp39-win32.whl", hash = "sha256:abe32aad8561aa7cc94fc7ba4fdef646e576983edb94a73381b03c53728a626f"},
-    {file = "protobuf-4.25.5-cp39-cp39-win_amd64.whl", hash = "sha256:7a183f592dc80aa7c8da7ad9e55091c4ffc9497b3054452d629bb85fa27c2a45"},
-    {file = "protobuf-4.25.5-py3-none-any.whl", hash = "sha256:0aebecb809cae990f8129ada5ca273d9d670b76d9bfc9b1809f0a9c02b7dbf41"},
-    {file = "protobuf-4.25.5.tar.gz", hash = "sha256:7f8249476b4a9473645db7f8ab42b02fe1488cbe5fb72fddd445e0665afd8584"},
+    {file = "protobuf-5.28.2-cp310-abi3-win32.whl", hash = "sha256:eeea10f3dc0ac7e6b4933d32db20662902b4ab81bf28df12218aa389e9c2102d"},
+    {file = "protobuf-5.28.2-cp310-abi3-win_amd64.whl", hash = "sha256:2c69461a7fcc8e24be697624c09a839976d82ae75062b11a0972e41fd2cd9132"},
+    {file = "protobuf-5.28.2-cp38-abi3-macosx_10_9_universal2.whl", hash = "sha256:a8b9403fc70764b08d2f593ce44f1d2920c5077bf7d311fefec999f8c40f78b7"},
+    {file = "protobuf-5.28.2-cp38-abi3-manylinux2014_aarch64.whl", hash = "sha256:35cfcb15f213449af7ff6198d6eb5f739c37d7e4f1c09b5d0641babf2cc0c68f"},
+    {file = "protobuf-5.28.2-cp38-abi3-manylinux2014_x86_64.whl", hash = "sha256:5e8a95246d581eef20471b5d5ba010d55f66740942b95ba9b872d918c459452f"},
+    {file = "protobuf-5.28.2-cp38-cp38-win32.whl", hash = "sha256:87317e9bcda04a32f2ee82089a204d3a2f0d3c8aeed16568c7daf4756e4f1fe0"},
+    {file = "protobuf-5.28.2-cp38-cp38-win_amd64.whl", hash = "sha256:c0ea0123dac3399a2eeb1a1443d82b7afc9ff40241433296769f7da42d142ec3"},
+    {file = "protobuf-5.28.2-cp39-cp39-win32.whl", hash = "sha256:ca53faf29896c526863366a52a8f4d88e69cd04ec9571ed6082fa117fac3ab36"},
+    {file = "protobuf-5.28.2-cp39-cp39-win_amd64.whl", hash = "sha256:8ddc60bf374785fb7cb12510b267f59067fa10087325b8e1855b898a0d81d276"},
+    {file = "protobuf-5.28.2-py3-none-any.whl", hash = "sha256:52235802093bd8a2811abbe8bf0ab9c5f54cca0a751fdd3f6ac2a21438bffece"},
+    {file = "protobuf-5.28.2.tar.gz", hash = "sha256:59379674ff119717404f7454647913787034f03fe7049cbef1d74a97bb4593f0"},
 ]
 
 [[package]]
@@ -1368,13 +1368,13 @@ files = [
 
 [[package]]
 name = "syrupy"
-version = "4.7.1"
+version = "4.7.2"
 description = "Pytest Snapshot Test Utility"
 optional = false
 python-versions = ">=3.8.1"
 files = [
-    {file = "syrupy-4.7.1-py3-none-any.whl", hash = "sha256:be002267a512a4bedddfae2e026c93df1ea928ae10baadc09640516923376d41"},
-    {file = "syrupy-4.7.1.tar.gz", hash = "sha256:f9d4485f3f27d0e5df6ed299cac6fa32eb40a441915d988e82be5a4bdda335c8"},
+    {file = "syrupy-4.7.2-py3-none-any.whl", hash = "sha256:eae7ba6be5aed190237caa93be288e97ca1eec5ca58760e4818972a10c4acc64"},
+    {file = "syrupy-4.7.2.tar.gz", hash = "sha256:ea45e099f242de1bb53018c238f408a5bb6c82007bc687aefcbeaa0e1c2e935a"},
 ]
 
 [package.dependencies]
@@ -1560,4 +1560,4 @@ images = ["pillow"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "49f53ecbcda0c5d5fe9f09dab7f6b91282b5e6a1e87752d7e2836eac1b83d91e"
+content-hash = "0158c691efd71fea6b832c533ea2c3d0f559c8eec16254f91f1347c26c870c81"

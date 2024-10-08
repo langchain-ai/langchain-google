@@ -21,13 +21,13 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-1.5-flash-latest",
+            "model": "models/gemini-1.5-pro-001",
             "rate_limiter": rate_limiter,
         }
 
-    @pytest.mark.xfail(reason="Gemini 1.0 doesn't support tool_choice='any'")
-    def test_structured_few_shot_examples(self, model: BaseChatModel) -> None:
-        super().test_structured_few_shot_examples(model)
+    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
+    async def test_structured_output_async(self, model: BaseChatModel) -> None:
+        await super().test_structured_output_async(model)
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     def test_structured_output(self, model: BaseChatModel) -> None:

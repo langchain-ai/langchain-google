@@ -137,8 +137,9 @@ def _dict_to_gapic_schema(schema: Dict[str, Any]) -> Optional[gapic.Schema]:
 def _format_dict_to_function_declaration(
     tool: Union[FunctionDescription, Dict[str, Any]],
 ) -> gapic.FunctionDeclaration:
+    print(tool)
     return gapic.FunctionDeclaration(
-        name=tool.get("name"),
+        name=tool.get("name") or tool.get("title"),
         description=tool.get("description"),
         parameters=_dict_to_gapic_schema(tool.get("parameters", {})),
     )
@@ -207,7 +208,9 @@ def _format_to_gapic_function_declaration(
             function = cast(dict, tool)
             function["parameters"] = {}
         else:
-            if "parameters" in tool and tool["parameters"].get("properties"):  # type: ignore[index]
+            if (
+                "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
+            ):
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
                 function = cast(dict, tool)
@@ -270,18 +273,95 @@ def _convert_pydantic_to_genai_function(
         name=tool_name if tool_name else schema.get("title"),
         description=tool_description if tool_description else schema.get("description"),
         parameters={
-            "properties": {
-                k: {
-                    "type_": _get_type_from_schema(v),
-                    "description": v.get("description"),
-                }
-                for k, v in schema["properties"].items()
-            },
+            "properties": _get_properties_from_schema_any(
+                schema.get("properties")
+            ),  # TODO: use _dict_to_gapic_schema() if possible
+            # "items": _get_items_from_schema_any(
+            #     schema
+            # ),  # TODO: fix it https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling?hl#schema
             "required": schema.get("required", []),
             "type_": TYPE_ENUM[schema["type"]],
         },
     )
     return function_declaration
+
+
+def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
+    if isinstance(schema, Dict):
+        return _get_properties_from_schema(schema)
+    return {}
+
+
+def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
+    properties = {}
+    for k, v in schema.items():
+        if not isinstance(k, str):
+            logger.warning(f"Key '{k}' is not supported in schema, type={type(k)}")
+            continue
+        if not isinstance(v, Dict):
+            logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
+            continue
+        properties_item: Dict[str, Union[str, int, Dict, List]] = {}
+        if v.get("type") or v.get("anyOf"):
+            properties_item["type_"] = _get_type_from_schema(v)
+
+        if v.get("enum"):
+            properties_item["enum"] = v["enum"]
+
+        description = v.get("description")
+        if description and isinstance(description, str):
+            properties_item["description"] = description
+
+        if v.get("type") == "array" and v.get("items"):
+            properties_item["items"] = _get_items_from_schema_any(v.get("items"))
+
+        if v.get("type") == "object" and v.get("properties"):
+            properties_item["properties"] = _get_properties_from_schema_any(
+                v.get("properties")
+            )
+        if k == "title" and "description" not in properties_item:
+            properties_item["description"] = k + " is " + str(v)
+
+        properties[k] = properties_item
+
+    return properties
+
+
+def _get_items_from_schema_any(schema: Any) -> Dict[str, Any]:
+    if isinstance(schema, Dict):
+        return _get_items_from_schema(schema)
+    if isinstance(schema, List):
+        return _get_items_from_schema(schema)
+    if isinstance(schema, str):
+        return _get_items_from_schema(schema)
+    return {}
+
+
+def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
+    items: Dict = {}
+    if isinstance(schema, List):
+        for i, v in enumerate(schema):
+            items[f"item{i}"] = _get_properties_from_schema_any(v)
+    elif isinstance(schema, Dict):
+        item: Dict = {}
+        for k, v in schema.items():
+            item["type_"] = _get_type_from_schema(v)
+            if not isinstance(v, Dict):
+                logger.warning(
+                    f"Value '{v}' is not supported in schema, ignoring v={v}"
+                )
+                continue
+            if v.get("type") == "object" and v.get("properties"):
+                item["properties"] = _get_properties_from_schema_any(
+                    v.get("properties")
+                )
+            if k == "title" and "description" not in item:
+                item["description"] = v
+        items = item
+    else:
+        # str
+        items["type_"] = TYPE_ENUM.get(str(schema), glm.Type.STRING)
+    return items
 
 
 def _get_type_from_schema(schema: Dict[str, Any]) -> int:
@@ -294,10 +374,7 @@ def _get_type_from_schema(schema: Dict[str, Any]) -> int:
             pass
     elif "type" in schema:
         stype = str(schema["type"])
-        if stype in TYPE_ENUM:
-            return TYPE_ENUM[stype]
-        else:
-            pass
+        return TYPE_ENUM.get(stype, glm.Type.STRING)
     else:
         pass
     return TYPE_ENUM["string"]  # Default to string if no valid types found

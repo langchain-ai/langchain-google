@@ -3,15 +3,11 @@
 import base64
 import json
 import os
-from typing import List, Optional, cast
+from typing import List, Literal, Optional, cast
 
 import pytest
 from google.cloud import storage
-from google.cloud.aiplatform_v1beta1.types import (
-    Blob,
-    Content,
-    Part,
-)
+from google.cloud.aiplatform_v1beta1.types import Blob, Content, Part
 from google.oauth2 import service_account
 from langchain_core.messages import (
     AIMessage,
@@ -35,9 +31,7 @@ from langchain_google_vertexai import (
     HarmCategory,
     create_context_cache,
 )
-from langchain_google_vertexai.chat_models import (
-    _parse_chat_history_gemini,
-)
+from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 model_names_to_test = ["codechat-bison", _DEFAULT_MODEL_NAME]
@@ -610,7 +604,10 @@ def test_chat_model_multiple_system_message() -> None:
 
 
 @pytest.mark.release
-def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
+@pytest.mark.parametrize("method", [None, "json_mode"])
+def test_chat_vertexai_gemini_with_structured_output(
+    method: Optional[Literal["json_mode"]],
+) -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -623,25 +620,27 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
         safety_settings=safety,
         rate_limiter=rate_limiter,
     )
-    model = llm.with_structured_output(MyModel)
+    model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
     response = model.invoke([message])
     assert isinstance(response, MyModel)
     assert response == MyModel(name="Erick", age=27)
 
-    model = llm.with_structured_output(
-        {
-            "name": "MyModel",
-            "description": "MyModel",
-            "parameters": MyModel.model_json_schema(),
+    if method is None:  # This won't work with json_schema as it expects an OpenAPI dict
+        model = llm.with_structured_output(
+            {
+                "name": "MyModel",
+                "description": "MyModel",
+                "parameters": MyModel.model_json_schema(),
+            },
+            method=method,
+        )
+        response = model.invoke([message])
+        assert response == {
+            "name": "Erick",
+            "age": 27,
         }
-    )
-    response = model.invoke([message])
-    assert response == {
-        "name": "Erick",
-        "age": 27,
-    }
 
     model = llm.with_structured_output(
         {
@@ -653,13 +652,36 @@ def test_chat_vertexai_gemini_function_calling_with_structured_output() -> None:
                 "age": {"type": "integer"},
             },
             "required": ["name", "age"],
-        }
+        },
+        method=method,
     )
     response = model.invoke([message])
     assert response == {
         "name": "Erick",
         "age": 27,
     }
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
+    class Argument(BaseModel):
+        description: str
+
+    class Reason(BaseModel):
+        strength: int
+        argument: list[Argument]
+
+    class Response(BaseModel):
+        response: str
+        reasons: list[Reason]
+
+    model = ChatVertexAI(model_name="gemini-1.5-pro-001").with_structured_output(
+        Response, method="json_mode"
+    )
+
+    response = model.invoke("Why is Real Madrid better than Barcelona?")
+
+    assert isinstance(response, Response)
 
 
 @pytest.mark.release
@@ -940,6 +962,8 @@ def test_langgraph_example() -> None:
     assert isinstance(step2, AIMessage)
 
 
+@pytest.mark.xfail(reason="can't create service account key on gcp")
+@pytest.mark.release
 def test_init_from_credentials_obj() -> None:
     credentials_dict = json.loads(os.environ["GOOGLE_VERTEX_AI_WEB_CREDENTIALS"])
     credentials = service_account.Credentials.from_service_account_info(
@@ -947,3 +971,11 @@ def test_init_from_credentials_obj() -> None:
     )
     llm = ChatVertexAI(model="gemini-1.5-flash", credentials=credentials)
     llm.invoke("how are you")
+
+
+@pytest.mark.release
+def test_response_metadata_avg_logprobs() -> None:
+    llm = ChatVertexAI(model="gemini-1.5-flash")
+    response = llm.invoke("Hello!")
+    probs = response.response_metadata.get("avg_logprobs")
+    assert isinstance(probs, float)
