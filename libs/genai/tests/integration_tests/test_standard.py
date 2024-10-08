@@ -59,15 +59,16 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         return {"invoke": ["cache_read_input"], "stream": ["cache_read_input"]}
 
     def invoke_with_cache_read_input(self, *, stream: bool = False) -> AIMessage:
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-001")
 
         with open(__file__, "r") as f:
-            code = f.read()
+            code = f.read() * 40
         cached_content = llm.create_cached_content(
             [
                 SystemMessage("you are a good coder"),
                 HumanMessage(f"Here is a code file:\n\n```python\n{code}\n```"),
-            ]
+            ],
+            ttl=120,
         )
         cached_llm = llm.bind(cached_content=cached_content)
 

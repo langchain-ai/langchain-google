@@ -1351,7 +1351,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         cached_content = CachedContent.create(
             model=self.model,
             system_instruction=system,
-            contents=contents,
+            contents=genai_contents,
             display_name=display_name,
             tools=genai_tools,
             tool_config=genai_tool_config,
