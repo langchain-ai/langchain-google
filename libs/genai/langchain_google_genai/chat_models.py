@@ -46,7 +46,9 @@ from google.ai.generativelanguage_v1beta.types import (
     ToolConfig,
     VideoMetadata,
 )
+from google.generativeai.caching import CachedContent  # type: ignore[import]
 from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
+from google.generativeai.types import caching_types, content_types
 from google.generativeai.types.content_types import (  # type: ignore[import]
     FunctionDeclarationType,
     ToolDict,
@@ -572,11 +574,13 @@ def _response_to_result(
         input_tokens = response.usage_metadata.prompt_token_count
         output_tokens = response.usage_metadata.candidates_token_count
         total_tokens = response.usage_metadata.total_token_count
-        if input_tokens + output_tokens + total_tokens > 0:
+        cache_read_tokens = response.usage_metadata.cached_content_token_count
+        if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
             lc_usage = UsageMetadata(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=total_tokens,
+                input_token_details={"cache_read": cache_read_tokens},
             )
         else:
             lc_usage = None
@@ -806,7 +810,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             {'input_tokens': 18, 'output_tokens': 5, 'total_tokens': 23}
 
 
-        Response metadata
+    Response metadata
         .. code-block:: python
 
             ai_msg = llm.invoke(messages)
@@ -838,6 +842,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     Gemini does not support system messages; any unsupported messages will
     raise an error."""
+
+    cached_content: Optional[str] = None
+    """The name of the cached content used as context to serve the prediction. 
+
+    Note: only used in explicit caching, where users can have control over caching 
+    (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
+    ``cachedContents/{cachedContent}``.
+    """
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -966,6 +978,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
+        cached_content: Optional[str] = None,
         **kwargs: Any,
     ) -> ChatResult:
         request = self._prepare_request(
@@ -976,6 +989,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             safety_settings=safety_settings,
             tool_config=tool_config,
             generation_config=generation_config,
+            cached_content=cached_content or self.cached_content,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -996,6 +1010,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
+        cached_content: Optional[str] = None,
         **kwargs: Any,
     ) -> ChatResult:
         if not self.async_client:
@@ -1021,6 +1036,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             safety_settings=safety_settings,
             tool_config=tool_config,
             generation_config=generation_config,
+            cached_content=cached_content or self.cached_content,
         )
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
@@ -1041,6 +1057,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
+        cached_content: Optional[str] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         request = self._prepare_request(
@@ -1051,6 +1068,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             safety_settings=safety_settings,
             tool_config=tool_config,
             generation_config=generation_config,
+            cached_content=cached_content or self.cached_content,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -1077,6 +1095,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
+        cached_content: Optional[str] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self.async_client:
@@ -1103,6 +1122,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 safety_settings=safety_settings,
                 tool_config=tool_config,
                 generation_config=generation_config,
+                cached_content=cached_content or self.cached_content,
             )
             async for chunk in await _achat_with_retry(
                 request=request,
@@ -1127,6 +1147,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
+        cached_content: Optional[str] = None,
     ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
         formatted_tools = None
         if tools:
@@ -1158,6 +1179,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=self._prepare_params(
                 stop, generation_config=generation_config
             ),
+            cached_content=cached_content,
         )
         if system_instruction:
             request.system_instruction = system_instruction
@@ -1243,6 +1265,83 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         return self.bind(tools=genai_tools, tool_config=tool_config, **kwargs)
+
+    def create_cached_content(
+        self,
+        contents: Union[List[BaseMessage], content_types.ContentsType],
+        *,
+        display_name: str | None = None,
+        tools: Union[ToolDict, GoogleTool, None] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        ttl: Optional[caching_types.TTLTypes] = None,
+        expire_time: Optional[caching_types.ExpireTimeTypes] = None,
+    ) -> str:
+        """
+
+        Args:
+            display_name: The user-generated meaningful display name
+                of the cached content. `display_name` must be no
+                more than 128 unicode characters.
+            contents: Contents to cache.
+            tools: A list of `Tools` the model may use to generate response.
+            tool_choice: Which tool to require the model to call.
+            ttl: TTL for cached resource (in seconds). Defaults to 1 hour.
+                 `ttl` and `expire_time` are exclusive arguments.
+            expire_time: Expiration time for cached resource.
+                `ttl` and `expire_time` are exclusive arguments.
+        """
+        system: Optional[Content] = None
+        genai_contents: list = []
+        if all(isinstance(c, BaseMessage) for c in contents):
+            system, genai_contents = _parse_chat_history(
+                contents,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+        else:
+            for content in contents:
+                if hasattr(content, "role") and content.role == "system":
+                    if system is not None:
+                        warnings.warn(
+                            "Received multiple pieces of content with role 'system'. "
+                            "Should only be one set of system instructions. Ignoring "
+                            "all but the first 'system' content."
+                        )
+                    else:
+                        system = content
+                elif isinstance(content, dict) and content.get("role") == "system":
+                    if system is not None:
+                        warnings.warn(
+                            "Received multiple pieces of content with role 'system'. "
+                            "Should only be one set of system instructions. Ignoring "
+                            "all but the first 'system' content."
+                        )
+                    else:
+                        system = content
+                else:
+                    genai_contents.append(content)
+        if tools:
+            genai_tools = [convert_to_genai_function_declarations(tools)]
+        else:
+            genai_tools = None
+        if tool_choice and genai_tools:
+            all_names = [f.name for t in genai_tools for f in t.function_declarations]
+            tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
+            genai_tool_config = ToolConfig(
+                function_calling_config=tool_config["function_calling_config"]
+            )
+        else:
+            genai_tool_config = None
+        cached_content = CachedContent.create(
+            model=self.model,
+            system_instruction=system,
+            contents=contents,
+            display_name=display_name,
+            tools=genai_tools,
+            tool_config=genai_tool_config,
+            ttl=ttl,
+            expire_time=expire_time,
+        )
+        return cached_content.name
 
     @property
     def _supports_tool_choice(self) -> bool:
