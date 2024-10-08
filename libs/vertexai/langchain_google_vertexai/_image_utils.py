@@ -71,9 +71,6 @@ class ImageBytesLoader:
 
         if route == Route.LOCAL_FILE:
             return self._bytes_from_file(image_string)
-        
-        if route == Route.BASE64_PDF:
-            return self._bytes_from_b64(image_string)
 
         raise ValueError(
             "Image string must be one of: Google Cloud Storage URI, "
@@ -120,7 +117,6 @@ class ImageBytesLoader:
         return part._raw_part
 
     def _route(self, image_string: str) -> Route:
-
         if image_string.startswith("gs://"):
             return Route.GOOGLE_CLOUD_STORAGE
 
@@ -223,16 +219,16 @@ class ImageBytesLoader:
             return all([result.scheme, result.netloc])
         except Exception:
             return False
-        
+
     def _has_known_mimetype(self, image_url: str) -> Optional[str]:
-        """ Checks weather the image needs other mimetype. Currently only identifies
+        """Checks weather the image needs other mimetype. Currently only identifies
         pdfs, otherwise it will return None and it will be treated as an image.
         """
 
         # For local files or urls
         if image_url.endswith(".pdf"):
             return "application/pdf"
-        
+
         # for b64 encoded data
         if image_url.startswith("data:application/pdf;base64"):
             return "application/pdf"
