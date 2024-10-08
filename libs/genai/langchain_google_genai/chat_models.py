@@ -566,9 +566,16 @@ def _parse_response_candidate(
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
+    prev_usage: Optional[UsageMetadata] = None,
 ) -> ChatResult:
     """Converts a PaLM API response into a LangChain ChatResult."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
+
+    # previous usage metadata needs to be subtracted because gemini api returns
+    # already-accumulated token counts with each chunk
+    prev_input_tokens = prev_usage["input_tokens"] if prev_usage else 0
+    prev_output_tokens = prev_usage["output_tokens"] if prev_usage else 0
+    prev_total_tokens = prev_usage["total_tokens"] if prev_usage else 0
 
     # Get usage metadata
     try:
@@ -577,9 +584,9 @@ def _response_to_result(
         total_tokens = response.usage_metadata.total_token_count
         if input_tokens + output_tokens + total_tokens > 0:
             lc_usage = UsageMetadata(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=total_tokens,
+                input_tokens=input_tokens - prev_input_tokens,
+                output_tokens=output_tokens - prev_output_tokens,
+                total_tokens=total_tokens - prev_total_tokens,
             )
         else:
             lc_usage = None
@@ -1068,9 +1075,31 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
             metadata=self.default_metadata,
         )
+
+        prev_usage_metadata: UsageMetadata | None = None
         for chunk in response:
-            _chat_result = _response_to_result(chunk, stream=True)
+            _chat_result = _response_to_result(
+                chunk, stream=True, prev_usage=prev_usage_metadata
+            )
             gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+            message = cast(AIMessageChunk, gen.message)
+
+            curr_usage_metadata: UsageMetadata | dict[str, int] = (
+                message.usage_metadata or {}
+            )
+
+            prev_usage_metadata = (
+                message.usage_metadata
+                if prev_usage_metadata is None
+                else UsageMetadata(
+                    input_tokens=prev_usage_metadata.get("input_tokens", 0)
+                    + curr_usage_metadata.get("input_tokens", 0),
+                    output_tokens=prev_usage_metadata.get("output_tokens", 0)
+                    + curr_usage_metadata.get("output_tokens", 0),
+                    total_tokens=prev_usage_metadata.get("total_tokens", 0)
+                    + curr_usage_metadata.get("total_tokens", 0),
+                )
+            )
 
             if run_manager:
                 run_manager.on_llm_new_token(gen.text)
@@ -1114,14 +1143,35 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tool_config=tool_config,
                 generation_config=generation_config,
             )
+            prev_usage_metadata: UsageMetadata | None = None
             async for chunk in await _achat_with_retry(
                 request=request,
                 generation_method=self.async_client.stream_generate_content,
                 **kwargs,
                 metadata=self.default_metadata,
             ):
-                _chat_result = _response_to_result(chunk, stream=True)
+                _chat_result = _response_to_result(
+                    chunk, stream=True, prev_usage=prev_usage_metadata
+                )
                 gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+                message = cast(AIMessageChunk, gen.message)
+
+                curr_usage_metadata: UsageMetadata | dict[str, int] = (
+                    message.usage_metadata or {}
+                )
+
+                prev_usage_metadata = (
+                    message.usage_metadata
+                    if prev_usage_metadata is None
+                    else UsageMetadata(
+                        input_tokens=prev_usage_metadata.get("input_tokens", 0)
+                        + curr_usage_metadata.get("input_tokens", 0),
+                        output_tokens=prev_usage_metadata.get("output_tokens", 0)
+                        + curr_usage_metadata.get("output_tokens", 0),
+                        total_tokens=prev_usage_metadata.get("total_tokens", 0)
+                        + curr_usage_metadata.get("total_tokens", 0),
+                    )
+                )
 
                 if run_manager:
                     await run_manager.on_llm_new_token(gen.text)
