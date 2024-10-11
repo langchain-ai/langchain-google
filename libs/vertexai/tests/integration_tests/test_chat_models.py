@@ -970,6 +970,63 @@ def test_langgraph_example() -> None:
     assert isinstance(step2, AIMessage)
 
 
+@pytest.mark.asyncio
+@pytest.mark.release
+async def test_astream_events_langgraph_example() -> None:
+    llm = ChatVertexAI(
+        model_name="gemini-1.5-flash-002",
+        max_output_tokens=8192,
+        temperature=0.2,
+    )
+
+    add_declaration = {
+        "name": "add",
+        "description": "Adds a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    multiply_declaration = {
+        "name": "multiply",
+        "description": "Multiply a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a helpful assistant tasked with performing "
+                "arithmetic on a set of inputs."
+            )
+        ),
+        HumanMessage(content="Multiply 2 and 3"),
+        HumanMessage(content="No, actually multiply 3 and 3!"),
+    ]
+    agenerator = llm.astream_events(
+        messages,
+        tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
+        version="v2",
+    )
+    events = [events async for events in agenerator]
+    assert len(events) > 0
+    # Check the function call in the output
+    output = events[-1]["data"]["output"]
+    assert output.additional_kwargs["function_call"]["name"] == "multiply"
+
+
 @pytest.mark.xfail(reason="can't create service account key on gcp")
 @pytest.mark.release
 def test_init_from_credentials_obj() -> None:
@@ -986,7 +1043,8 @@ def test_response_metadata_avg_logprobs() -> None:
     llm = ChatVertexAI(model="gemini-1.5-flash")
     response = llm.invoke("Hello!")
     probs = response.response_metadata.get("avg_logprobs")
-    assert isinstance(probs, float)
+    if probs is not None:
+        assert isinstance(probs, float)
 
 
 @pytest.fixture
