@@ -1,11 +1,14 @@
 """Test ChatGoogleVertexAI chat model."""
 
 import base64
+import io
 import json
 import os
+import tempfile
 from typing import List, Literal, Optional, cast
 
 import pytest
+import requests
 from google.cloud import storage
 from google.cloud.aiplatform_v1beta1.types import Blob, Content, Part
 from google.oauth2 import service_account
@@ -19,8 +22,13 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, LLMResult
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
 from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_core.runnables import RunnableSerializable
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
@@ -1037,3 +1045,68 @@ def test_response_metadata_avg_logprobs() -> None:
     probs = response.response_metadata.get("avg_logprobs")
     if probs is not None:
         assert isinstance(probs, float)
+
+
+@pytest.fixture
+def multimodal_pdf_chain() -> RunnableSerializable:
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            SystemMessagePromptTemplate.from_template(
+                """
+            Describe the provided document.
+            """
+            ),
+            HumanMessagePromptTemplate.from_template(
+                [
+                    {"type": "text", "text": "# Document"},  # type: ignore
+                    {"type": "image_url", "image_url": {"url": "{image}"}},  # type: ignore
+                ]
+            ),
+        ]
+    )
+
+    model = ChatVertexAI(model_name="gemini-1.5-flash-001")
+
+    chain = prompt | model
+
+    return chain
+
+
+@pytest.mark.release
+def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) -> None:
+    gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf"
+    # GCS URI
+    response = multimodal_pdf_chain.invoke(dict(image=gcs_uri))
+    assert isinstance(response, AIMessage)
+
+
+@pytest.mark.release
+def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) -> None:
+    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
+    # URL
+    response = multimodal_pdf_chain.invoke(dict(image=url))
+    assert isinstance(response, AIMessage)
+
+
+@pytest.mark.release
+def test_multimodal_pdf_input_local(multimodal_pdf_chain: RunnableSerializable) -> None:
+    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
+    request_response = requests.get(url, allow_redirects=True)
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as localfile:
+        localfile.write(request_response.content)
+        response = multimodal_pdf_chain.invoke(dict(image=localfile.name))
+        assert isinstance(response, AIMessage)
+
+
+@pytest.mark.release
+def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) -> None:
+    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
+    request_response = requests.get(url, allow_redirects=True)
+    # B64
+    with io.BytesIO() as stream:
+        stream.write(request_response.content)
+        image_data = base64.b64encode(stream.getbuffer()).decode("utf-8")
+        image = f"data:application/pdf;base64,{image_data}"
+        response = multimodal_pdf_chain.invoke(dict(image=image))
+        assert isinstance(response, AIMessage)
