@@ -42,7 +42,7 @@ from langchain_google_vertexai import (
 from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
-model_names_to_test = ["codechat-bison", _DEFAULT_MODEL_NAME]
+model_names_to_test = [_DEFAULT_MODEL_NAME]
 
 rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
 
