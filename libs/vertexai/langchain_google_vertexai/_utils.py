@@ -1,6 +1,7 @@
 """Utilities to init Vertex AI."""
 
 import dataclasses
+import math
 import re
 from enum import Enum, auto
 from importlib import metadata
@@ -177,9 +178,13 @@ def get_generation_info(
                 candidate.finish_reason.name if candidate.finish_reason else None
             ),
         }
-
         if hasattr(candidate, "avg_logprobs") and candidate.avg_logprobs is not None:
-            info["avg_logprobs"] = candidate.avg_logprobs
+            if (
+                isinstance(candidate.avg_logprobs, float)
+                and not math.isnan(candidate.avg_logprobs)
+                and candidate.avg_logprobs > 0
+            ):
+                info["avg_logprobs"] = candidate.avg_logprobs
 
         try:
             if candidate.grounding_metadata:
