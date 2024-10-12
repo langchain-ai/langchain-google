@@ -315,48 +315,6 @@ google-auth = "*"
 httplib2 = ">=0.19.0"
 
 [[package]]
-name = "google-cloud-core"
-version = "2.4.1"
-description = "Google Cloud API client core library"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "google-cloud-core-2.4.1.tar.gz", hash = "sha256:9b7749272a812bde58fff28868d0c5e2f585b82f37e09a1f6ed2d4d10f134073"},
-    {file = "google_cloud_core-2.4.1-py2.py3-none-any.whl", hash = "sha256:a9e6a4422b9ac5c29f79a0ede9485473338e2ce78d91f2370c01e730eab22e61"},
-]
-
-[package.dependencies]
-google-api-core = ">=1.31.6,<2.0.dev0 || >2.3.0,<3.0.0dev"
-google-auth = ">=1.25.0,<3.0dev"
-
-[package.extras]
-grpc = ["grpcio (>=1.38.0,<2.0dev)", "grpcio-status (>=1.38.0,<2.0.dev0)"]
-
-[[package]]
-name = "google-cloud-datastore"
-version = "2.20.1"
-description = "Google Cloud Datastore API client library"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "google_cloud_datastore-2.20.1-py2.py3-none-any.whl", hash = "sha256:b9383af24d8e90ed6c5d161d72411d82efd9b21c051fa6f4bbd743a49d37ffb3"},
-    {file = "google_cloud_datastore-2.20.1.tar.gz", hash = "sha256:07950b9c8865087c565f45fa3fdd7a05d4c3d99adf79e10c3f596ff08a7d9bba"},
-]
-
-[package.dependencies]
-google-api-core = {version = ">=1.34.0,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
-google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
-google-cloud-core = ">=1.4.0,<3.0.0dev"
-proto-plus = [
-    {version = ">=1.22.2,<2.0.0dev", markers = "python_version >= \"3.11\""},
-    {version = ">=1.22.0,<2.0.0dev", markers = "python_version < \"3.11\""},
-]
-protobuf = ">=3.20.2,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0dev"
-
-[package.extras]
-libcst = ["libcst (>=0.2.5)"]
-
-[[package]]
 name = "google-generativeai"
 version = "0.8.3"
 description = "Google Generative AI High level API client library and tools."
@@ -1643,4 +1601,4 @@ images = ["pillow"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "f9ea640e30e20b4ce3e405fd7a00446c3d91aafea6e299ceb9b3dde0d05cc6e3"
+content-hash = "81c38e40cd9df09c5e98631f9f39ee993193734949fcfabe0715c219d426fdd6"
