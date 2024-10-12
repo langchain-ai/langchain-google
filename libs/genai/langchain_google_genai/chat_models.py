@@ -49,15 +49,10 @@ from google.ai.generativelanguage_v1beta.types import (
     ToolConfig,
     VideoMetadata,
 )
-<<<<<<< HEAD
 from google.generativeai.caching import CachedContent  # type: ignore[import]
 from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
 from google.generativeai.types import caching_types, content_types
 from google.generativeai.types.content_types import (  # type: ignore[import]
-=======
-from google.generativeai.types import Tool as GoogleTool  # type: ignore[import-untyped]
-from google.generativeai.types.content_types import (  # type: ignore[import-untyped]
->>>>>>> 4f0087c (genai: chore for changing mypy settings)
     FunctionDeclarationType,
     ToolDict,
 )
