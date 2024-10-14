@@ -50,11 +50,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
             provided).
-        distance_type (Literal["COSINE", "EUCLIDEAN"]): The distance metric used for
-            similarity search. Defaults to "EUCLIDEAN".
+        distance_type (Literal["COSINE", "EUCLIDEAN", "DOT_PRODUCT"]): The distance
+            metric used for similarity search. Defaults to "EUCLIDEAN".
     """
 
-    distance_type: Literal["COSINE", "EUCLIDEAN"] = "EUCLIDEAN"
+    distance_type: Literal["COSINE", "EUCLIDEAN", "DOT_PRODUCT"] = "EUCLIDEAN"
     _creating_index: bool = False
     _have_index: bool = False
     _last_index_check: datetime = datetime.min
