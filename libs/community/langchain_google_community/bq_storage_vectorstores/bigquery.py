@@ -333,9 +333,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         full_query = f"""{embeddings_query}
         {select_clause}
         FROM VECTOR_SEARCH(
-            TABLE `{self.full_table_id}`,
+            (SELECT * FROM `{self.full_table_id}` WHERE {where_filter_expr}),
             "{self.embedding_field}",
-            (SELECT row_num, {self.embedding_field} from embeddings),
+            (SELECT row_num, {self.embedding_field} FROM embeddings),
             distance_type => "{self.distance_type}",
             top_k => {k}
         )
@@ -346,7 +346,6 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         FROM (
             {full_query}
         ) AS result
-        WHERE {where_filter_expr}
         ORDER BY row_num, score
         """
         return full_query_wrapper
