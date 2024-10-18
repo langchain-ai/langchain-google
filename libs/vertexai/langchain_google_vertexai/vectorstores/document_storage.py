@@ -289,7 +289,10 @@ class DataStoreDocumentStorage(DocumentStorage):
 
             entities = []
             for key, document in zip(keys, documents):
-                entity = self._client.entity(key=key, exclude_from_indexes=[self._text_property_name])
+                entity = self._client.entity(
+                    key=key,
+                    exclude_from_indexes=[self._text_property_name]
+                )
                 entity[self._text_property_name] = document.page_content
                 entity[self._metadata_property_name] = document.metadata
                 entities.append(entity)
