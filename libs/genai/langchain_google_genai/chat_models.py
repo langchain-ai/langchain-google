@@ -1412,7 +1412,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @property
     def _supports_tool_choice(self) -> bool:
-        return "gemini-1.5-pro" in self.model
+        return "gemini-1.5-pro" in self.model or "gemini-1.5-flash" in self.model
 
 
 def _get_tool_name(
