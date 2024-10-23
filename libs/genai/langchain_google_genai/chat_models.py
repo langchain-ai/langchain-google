@@ -1175,10 +1175,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
         formatted_tools = None
+        all_names = []
         if tools:
             formatted_tools = [convert_to_genai_function_declarations(tools)]
+            all_names = [t["function"]["name"] for t in formatted_tools]
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
+            all_names = [
+                f["name"]  # type: ignore[index]
+                for t in formatted_tools
+                for f in t["function_declarations"]
+            ]
 
         system_instruction, history = _parse_chat_history(
             messages,
@@ -1191,11 +1198,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     f"be specified if 'tools' is specified."
                 )
                 raise ValueError(msg)
-            all_names = [
-                f["name"]  # type: ignore[index]
-                for t in formatted_tools
-                for f in t["function_declarations"]
-            ]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
 
         formatted_tool_config = None
