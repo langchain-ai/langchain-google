@@ -206,7 +206,9 @@ def _format_to_gapic_function_declaration(
     elif isinstance(tool, dict):
         if all(k in tool for k in ("type", "function")) and tool["type"] == "function":
             function = tool["function"]
-        elif all(k in tool for k in ("name", "description")) and "parameters" not in tool:
+        elif (
+            all(k in tool for k in ("name", "description")) and "parameters" not in tool
+        ):
             function = cast(dict, tool)
             function["parameters"] = {}
         else:
