@@ -990,6 +990,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
         request = self._prepare_request(
@@ -1001,6 +1002,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_config=tool_config,
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
+            tool_choice=tool_choice,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -1022,6 +1024,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
         if not self.async_client:
@@ -1048,6 +1051,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_config=tool_config,
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
+            tool_choice=tool_choice,
         )
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
@@ -1069,6 +1073,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         request = self._prepare_request(
@@ -1080,6 +1085,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_config=tool_config,
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
+            tool_choice=tool_choice,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -1107,6 +1113,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self.async_client:
@@ -1134,6 +1141,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tool_config=tool_config,
                 generation_config=generation_config,
                 cached_content=cached_content or self.cached_content,
+                tool_choice=tool_choice,
             )
             async for chunk in await _achat_with_retry(
                 request=request,

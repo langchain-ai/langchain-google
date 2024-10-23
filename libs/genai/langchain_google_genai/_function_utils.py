@@ -159,13 +159,11 @@ def convert_to_genai_function_declarations(
     for tool in tools:
         if isinstance(tool, gapic.Tool):
             gapic_tool.function_declarations.extend(tool.function_declarations)
+        elif isinstance(tool, dict) and "function_declarations" not in tool:
+            fd = _format_to_gapic_function_declaration(tool)
+            gapic_tool.function_declarations.append(fd)
         elif isinstance(tool, dict):
-            if "function_declarations" not in tool:
-                fd = _format_to_gapic_function_declaration(tool)
-                gapic_tool.function_declarations.append(fd)
-                continue
-            tool = cast(_ToolDictLike, tool)
-            function_declarations = tool["function_declarations"]
+            function_declarations = cast(_ToolDictLike, tool)["function_declarations"]
             if not isinstance(function_declarations, collections.abc.Sequence):
                 raise ValueError(
                     "function_declarations should be a list"
@@ -210,7 +208,6 @@ def _format_to_gapic_function_declaration(
             all(k in tool for k in ("name", "description")) and "parameters" not in tool
         ):
             function = cast(dict, tool)
-            function["parameters"] = {}
         else:
             if (
                 "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
@@ -218,7 +215,7 @@ def _format_to_gapic_function_declaration(
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
                 function = cast(dict, tool)
-                function["parameters"] = {}
+        function["parameters"] = function.get("parameters") or {}
         return _format_dict_to_function_declaration(cast(FunctionDescription, function))
     elif callable(tool):
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
