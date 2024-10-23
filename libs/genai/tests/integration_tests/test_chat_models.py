@@ -17,11 +17,7 @@ from langchain_core.messages import (
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
-from langchain_google_genai import (
-    ChatGoogleGenerativeAI,
-    HarmBlockThreshold,
-    HarmCategory,
-)
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
 
 _MODEL = "models/gemini-1.0-pro-001"  # TODO: Use nano when it's available.

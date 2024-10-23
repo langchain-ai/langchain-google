@@ -21,8 +21,8 @@ from typing import (
 
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
-import proto  # type: ignore[import]
-from google.generativeai.types.content_types import ToolDict  # type: ignore[import]
+import proto  # type: ignore[import-untyped]
+from google.generativeai.types.content_types import ToolDict  # type: ignore[import-untyped]
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -150,7 +150,7 @@ def convert_to_genai_function_declarations(
     tools: Sequence[_ToolsType],
 ) -> gapic.Tool:
     if not isinstance(tools, collections.abc.Sequence):
-        logger.warning(
+        logger.warning(  # type: ignore[unreachable]
             "convert_to_genai_function_declarations expects a Sequence "
             "and not a single tool."
         )
