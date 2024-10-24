@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-genai"
-version = "2.0.1"
+version = "2.0.3"
 description = "An integration package connecting Google's genai package and LangChain"
 authors = []
 readme = "README.md"
@@ -12,7 +12,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = ">=0.3.9,<0.4"
+langchain-core = "^0.3.12"
 google-generativeai = "^0.8.0"
 pillow = { version = "^10.1.0", optional = true }
 pydantic = ">=2,<3"
@@ -37,11 +37,17 @@ langchain-standard-tests = { git = "https://github.com/langchain-ai/langchain.gi
 [tool.codespell]
 ignore-words-list = "rouge"
 
+
+
+
 [tool.poetry.group.codespell]
 optional = true
 
 [tool.poetry.group.codespell.dependencies]
 codespell = "^2.2.0"
+
+
+
 
 [tool.poetry.group.test_integration]
 optional = true
@@ -50,11 +56,16 @@ optional = true
 pillow = "^10.1.0"
 
 
+
+
 [tool.poetry.group.lint]
 optional = true
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.5"
+
+
+
 
 [tool.poetry.group.typing.dependencies]
 mypy = "^1.10"
@@ -64,6 +75,9 @@ types-pillow = "^10.1.0.2"
 types-protobuf = "^4.24.0.20240302"
 langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 numpy = "^1.26.2"
+
+
+
 
 [tool.poetry.group.dev]
 optional = true
