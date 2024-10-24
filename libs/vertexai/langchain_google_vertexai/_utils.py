@@ -182,7 +182,7 @@ def get_generation_info(
             if (
                 isinstance(candidate.avg_logprobs, float)
                 and not math.isnan(candidate.avg_logprobs)
-                and candidate.avg_logprobs > 0
+                and candidate.avg_logprobs < 0
             ):
                 info["avg_logprobs"] = candidate.avg_logprobs
 
