@@ -1175,7 +1175,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
         formatted_tools = None
-        all_names = []
         if tools:
             formatted_tools = [convert_to_genai_function_declarations(tools)]
         elif functions:
@@ -1193,9 +1192,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
             all_names = [
-                f.name
-                for t in formatted_tools
-                for f in t.function_declarations
+                f.name for t in formatted_tools for f in t.function_declarations
             ]
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
 

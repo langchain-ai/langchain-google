@@ -102,12 +102,7 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
         elif key == "items":
             converted_schema["items"] = _format_json_schema_to_gapic(value)
         elif key == "properties":
-            if "properties" not in converted_schema:
-                converted_schema["properties"] = {}
-            for pkey, pvalue in value.items():
-                converted_schema["properties"][pkey] = _format_json_schema_to_gapic(
-                    pvalue
-                )
+            converted_schema["properties"] = _get_properties_from_schema(value)
             continue
         elif key == "allOf":
             if len(value) > 1:
@@ -216,6 +211,9 @@ def _format_to_gapic_function_declaration(
             else:
                 function = cast(dict, tool)
         function["parameters"] = function.get("parameters") or {}
+        # Empty 'properties' field not supported.
+        if not function["parameters"].get("properties"):
+            function["parameters"] = {}
         return _format_dict_to_function_declaration(cast(FunctionDescription, function))
     elif callable(tool):
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
