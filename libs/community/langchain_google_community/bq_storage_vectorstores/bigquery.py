@@ -50,11 +50,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
             provided).
-        distance_type (Literal["COSINE", "EUCLIDEAN"]): The distance metric used for
-            similarity search. Defaults to "EUCLIDEAN".
+        distance_type (Literal["COSINE", "EUCLIDEAN", "DOT_PRODUCT"]): The distance
+            metric used for similarity search. Defaults to "EUCLIDEAN".
     """
 
-    distance_type: Literal["COSINE", "EUCLIDEAN"] = "EUCLIDEAN"
+    distance_type: Literal["COSINE", "EUCLIDEAN", "DOT_PRODUCT"] = "EUCLIDEAN"
     _creating_index: bool = False
     _have_index: bool = False
     _last_index_check: datetime = datetime.min
@@ -333,9 +333,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         full_query = f"""{embeddings_query}
         {select_clause}
         FROM VECTOR_SEARCH(
-            TABLE `{self.full_table_id}`,
+            (SELECT * FROM `{self.full_table_id}` WHERE {where_filter_expr}),
             "{self.embedding_field}",
-            (SELECT row_num, {self.embedding_field} from embeddings),
+            (SELECT row_num, {self.embedding_field} FROM embeddings),
             distance_type => "{self.distance_type}",
             top_k => {k}
         )
@@ -346,7 +346,6 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         FROM (
             {full_query}
         ) AS result
-        WHERE {where_filter_expr}
         ORDER BY row_num, score
         """
         return full_query_wrapper
