@@ -301,7 +301,7 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
-        if v.get("type") or v.get("anyOf"):
+        if v.get("type") or v.get("anyOf") or v.get("type_"):
             properties_item["type_"] = _get_type_from_schema(v)
 
         if v.get("enum"):
@@ -311,10 +311,10 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
         if description and isinstance(description, str):
             properties_item["description"] = description
 
-        if v.get("type") == "array" and v.get("items"):
+        if properties_item.get("type_") == glm.Type.ARRAY and v.get("items"):
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
 
-        if v.get("type") == "object" and v.get("properties"):
+        if properties_item.get("type_") == glm.Type.OBJECT and v.get("properties"):
             properties_item["properties"] = _get_properties_from_schema_any(
                 v.get("properties")
             )
@@ -327,11 +327,7 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
 
 
 def _get_items_from_schema_any(schema: Any) -> Dict[str, Any]:
-    if isinstance(schema, Dict):
-        return _get_items_from_schema(schema)
-    if isinstance(schema, List):
-        return _get_items_from_schema(schema)
-    if isinstance(schema, str):
+    if isinstance(schema, (dict, list, str)):
         return _get_items_from_schema(schema)
     return {}
 
@@ -342,21 +338,15 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
         for i, v in enumerate(schema):
             items[f"item{i}"] = _get_properties_from_schema_any(v)
     elif isinstance(schema, Dict):
-        item: Dict = {}
-        for k, v in schema.items():
-            item["type_"] = _get_type_from_schema(v)
-            if not isinstance(v, Dict):
-                logger.warning(
-                    f"Value '{v}' is not supported in schema, ignoring v={v}"
-                )
-                continue
-            if v.get("type") == "object" and v.get("properties"):
-                item["properties"] = _get_properties_from_schema_any(
-                    v.get("properties")
-                )
-            if k == "title" and "description" not in item:
-                item["description"] = v
-        items = item
+        items["type_"] = _get_type_from_schema(schema)
+        if items["type_"] == glm.Type.OBJECT and "properties" in schema:
+            items["properties"] = _get_properties_from_schema_any(schema["properties"])
+        if "title" in schema:
+            items["title"] = schema
+        if "title" in schema or "description" in schema:
+            items["description"] = (
+                schema.get("description") or schema.get("title") or ""
+            )
     else:
         # str
         items["type_"] = TYPE_ENUM.get(str(schema), glm.Type.STRING)
@@ -371,8 +361,11 @@ def _get_type_from_schema(schema: Dict[str, Any]) -> int:
             return types[-1]  # TODO: update FunctionDeclaration and pass all types?
         else:
             pass
-    elif "type" in schema:
-        stype = str(schema["type"])
+    elif "type" in schema or "type_" in schema:
+        type_ = schema["type"] if "type" in schema else schema["type_"]
+        if isinstance(type_, int):
+            return type_
+        stype = str(schema["type"]) if "type" in schema else str(schema["type_"])
         return TYPE_ENUM.get(stype, glm.Type.STRING)
     else:
         pass
