@@ -5,6 +5,7 @@ import pytest
 from google.auth import credentials as ga_credentials
 from google.cloud.discoveryengine_v1beta import Document as DiscoveryEngineDocument
 from google.cloud.discoveryengine_v1beta.types import SearchRequest, SearchResponse
+from langchain_community.embeddings import FakeEmbeddings
 
 from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
 
@@ -313,3 +314,67 @@ def test_convert_unstructured_search_response_extractive_answers(
         assert "relevance_score" not in documents[1].metadata
         assert "previous_segments" not in documents[1].metadata
         assert "next_segments" not in documents[1].metadata
+
+
+def test_custom_embedding_with_valid_values() -> None:
+    """
+    Test with a valid custom embedding model and field path.
+    """
+    embeddings = FakeEmbeddings(size=100)
+    retriever = VertexAISearchRetriever(
+        project_id="mock-project",
+        data_store_id="mock-data-store",
+        custom_embedding=embeddings,
+        custom_embedding_field_path="embedding_field",
+        custom_embedding_ratio=0.5,
+    )
+    search_request = retriever._create_search_request(query="query_value")
+    assert search_request.embedding_spec is not None
+    assert search_request.ranking_expression == (
+        "0.5 * dotProduct(embedding_field) + 0.5 * relevance_score"
+    )
+
+
+def test_custom_embedding_with_invalid_ratio() -> None:
+    """
+    Test with an invalid custom embedding ratio.
+    """
+    embeddings = FakeEmbeddings(size=100)
+    retriever = VertexAISearchRetriever(
+        project_id="mock-project",
+        data_store_id="mock-data-store",
+        custom_embedding=embeddings,
+        custom_embedding_field_path="embedding_field",
+        custom_embedding_ratio=1.5,  # Invalid ratio
+    )
+    with pytest.raises(ValueError):
+        retriever._create_search_request(query="query_value")
+
+
+def test_custom_embedding_with_missing_field_path() -> None:
+    """
+    Test with a missing custom embedding field path.
+    """
+    embeddings = FakeEmbeddings(size=100)
+    retriever = VertexAISearchRetriever(
+        project_id="mock-project",
+        data_store_id="mock-data-store",
+        custom_embedding=embeddings,
+        custom_embedding_ratio=0.5,  # Invalid ratio
+    )
+    with pytest.raises(ValueError):
+        retriever._create_search_request(query="query_value")
+
+
+def test_custom_embedding_with_missing_model() -> None:
+    """
+    Test with a missing custom embedding model.
+    """
+    retriever = VertexAISearchRetriever(
+        project_id="mock-project",
+        data_store_id="mock-data-store",
+        custom_embedding_field_path="embedding_field",
+        custom_embedding_ratio=0.5,  # Invalid ratio
+    )
+    with pytest.raises(ValueError):
+        retriever._create_search_request(query="query_value")

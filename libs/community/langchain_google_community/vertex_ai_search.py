@@ -4,7 +4,6 @@ Set the following environment variables before the tests:
 export PROJECT_ID=... - set to your Google Cloud project ID
 export DATA_STORE_ID=... - the ID of the search engine to use for the test
 """
-
 from __future__ import annotations
 
 import json
@@ -16,6 +15,7 @@ from google.api_core.exceptions import InvalidArgument
 from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.load import Serializable, load
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
@@ -279,6 +279,23 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     https://cloud.google.com/generative-ai-app-builder/docs/boost-search-results
     https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/BoostSpec
     """
+    custom_embedding: Optional[Embeddings] = None
+    """Custom embedding model for the retriever. (Bring your own embedding)
+    It needs to match the embedding model that was used to embed docs in the datastore.
+    It needs to be a langchain embedding VertexAIEmbeddings(project="{PROJECT}")
+    If you provide an embedding model, you also need to provide a ranking_expression and
+    a custom_embedding_field_path.
+    https://cloud.google.com/generative-ai-app-builder/docs/bring-embeddings
+    """
+    custom_embedding_field_path: Optional[str] = None
+    """ The field path for the custom embedding used in the Vertex AI datastore schema.
+    """
+    custom_embedding_ratio: Optional[float] = 0.0
+    """Controls the ranking of results. Value should be between 0 and 1.
+    It will generate the ranking_expression in the following manner:
+    "{custom_embedding_ratio} * dotProduct({custom_embedding_field_path}) +
+    {1 - custom_embedding_ratio} * relevance_score"
+    """
 
     _client: SearchServiceClient = PrivateAttr()
     _serving_config: str = PrivateAttr()
@@ -384,6 +401,46 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         else:
             content_search_spec = None
 
+        if (
+            self.custom_embedding is not None
+            or self.custom_embedding_field_path is not None
+        ):
+            if self.custom_embedding is None:
+                raise ValueError(
+                    "Please provide a custom embedding model if you provide a "
+                    "custom_embedding_field_path."
+                )
+            if self.custom_embedding_field_path is None:
+                raise ValueError(
+                    "Please provide a custom_embedding_field_path if you provide a "
+                    "custom embedding model."
+                )
+            if self.custom_embedding_ratio is None:
+                raise ValueError(
+                    "Please provide a custom_embedding_ratio if you provide a "
+                    "custom embedding model or a custom_embedding_field_path."
+                )
+            if not 0 <= self.custom_embedding_ratio <= 1:
+                raise ValueError(
+                    "Custom embedding ratio must be between 0 and 1 "
+                    f"when using custom embeddings. Got {self.custom_embedding_ratio}"
+                )
+            embedding_vector = SearchRequest.EmbeddingSpec.EmbeddingVector(
+                field_path=self.custom_embedding_field_path,
+                vector=self.custom_embedding.embed_query(query),
+            )
+            embedding_spec = SearchRequest.EmbeddingSpec(
+                embedding_vectors=[embedding_vector]
+            )
+            ranking_expression = (
+                f"{self.custom_embedding_ratio} * "
+                f"dotProduct({self.custom_embedding_field_path}) + "
+                f"{1 - self.custom_embedding_ratio} * relevance_score"
+            )
+        else:
+            embedding_spec = None
+            ranking_expression = None
+
         return SearchRequest(
             query=query,
             filter=self.filter,
@@ -397,6 +454,8 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             boost_spec=SearchRequest.BoostSpec(**self.boost_spec)
             if self.boost_spec
             else None,
+            embedding_spec=embedding_spec,
+            ranking_expression=ranking_expression,
         )
 
     def _get_relevant_documents(
