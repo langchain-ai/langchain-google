@@ -378,6 +378,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         datastore_kind: str = "document_id",
         datastore_text_property_name: str = "text",
         datastore_metadata_property_name: str = "metadata",
+        exclude_from_indexes: List[str] = [],
         **kwargs: Dict[str, Any],
     ) -> "VectorSearchVectorStoreDatastore":
         """Takes the object creation out of the constructor.
@@ -399,6 +400,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
                 index must be compatible with stream/batch updates.
             kwargs: Additional keyword arguments to pass to
                 VertexAIVectorSearch.__init__().
+            exclude_from_indexes: Fields to exclude from datastore indexing
 
         Returns:
             A configured VectorSearchVectorStoreDatastore.
@@ -430,6 +432,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
             kind=datastore_kind,
             text_property_name=datastore_text_property_name,
             metadata_property_name=datastore_metadata_property_name,
+            exclude_from_indexes=exclude_from_indexes,
         )
 
         return cls(
