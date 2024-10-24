@@ -281,6 +281,8 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     """
     custom_embedding: Optional[Embeddings] = None
     """Custom embedding model for the retriever. (Bring your own embedding)
+    It needs to match the embedding model that was used to embed docs in the datastore.
+    It needs to be a langchain embedding VertexAIEmbeddings(project="{PROJECT}")
     If you provide an embedding model, you also need to provide a ranking_expression and
     a custom_embedding_field_path.
     https://cloud.google.com/generative-ai-app-builder/docs/bring-embeddings
