@@ -43,9 +43,9 @@ TYPE_ENUM = {
     "boolean": glm.Type.BOOLEAN,
     "array": glm.Type.ARRAY,
     "object": glm.Type.OBJECT,
+    "null": None,
 }
 
-TYPE_ENUM_REVERSE = {v: k for k, v in TYPE_ENUM.items()}
 _ALLOWED_SCHEMA_FIELDS = []
 _ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
 _ALLOWED_SCHEMA_FIELDS.extend(
@@ -303,6 +303,8 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
         if v.get("type") or v.get("anyOf") or v.get("type_"):
             properties_item["type_"] = _get_type_from_schema(v)
+            if _is_nullable_schema(v):
+                properties_item["nullable"] = True
 
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
@@ -347,15 +349,26 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
             items["description"] = (
                 schema.get("description") or schema.get("title") or ""
             )
+        if _is_nullable_schema(schema):
+            items["nullable"] = True
     else:
         # str
-        items["type_"] = TYPE_ENUM.get(str(schema), glm.Type.STRING)
+        items["type_"] = _get_type_from_schema({"type": schema})
+        if _is_nullable_schema({"type": schema}):
+            items["nullable"] = True
+
     return items
 
 
 def _get_type_from_schema(schema: Dict[str, Any]) -> int:
+    return _get_nullable_type_from_schema(schema) or glm.Type.STRING
+
+
+def _get_nullable_type_from_schema(schema: Dict[str, Any]) -> Optional[int]:
     if "anyOf" in schema:
-        types = [_get_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]]
+        types = [
+            _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
+        ]
         types = [t for t in types if t is not None]  # Remove None values
         if types:
             return types[-1]  # TODO: update FunctionDeclaration and pass all types?
@@ -369,7 +382,24 @@ def _get_type_from_schema(schema: Dict[str, Any]) -> int:
         return TYPE_ENUM.get(stype, glm.Type.STRING)
     else:
         pass
-    return TYPE_ENUM["string"]  # Default to string if no valid types found
+    return glm.Type.STRING  # Default to string if no valid types found
+
+
+def _is_nullable_schema(schema: Dict[str, Any]) -> bool:
+    if "anyOf" in schema:
+        types = [
+            _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
+        ]
+        return any(t is None for t in types)
+    elif "type" in schema or "type_" in schema:
+        type_ = schema["type"] if "type" in schema else schema["type_"]
+        if isinstance(type_, int):
+            return False
+        stype = str(schema["type"]) if "type" in schema else str(schema["type_"])
+        return TYPE_ENUM.get(stype, glm.Type.STRING) is None
+    else:
+        pass
+    return False
 
 
 _ToolChoiceType = Union[
