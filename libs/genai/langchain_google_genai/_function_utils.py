@@ -43,9 +43,9 @@ TYPE_ENUM = {
     "boolean": glm.Type.BOOLEAN,
     "array": glm.Type.ARRAY,
     "object": glm.Type.OBJECT,
+    "null": None,
 }
 
-TYPE_ENUM_REVERSE = {v: k for k, v in TYPE_ENUM.items()}
 _ALLOWED_SCHEMA_FIELDS = []
 _ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
 _ALLOWED_SCHEMA_FIELDS.extend(
@@ -102,12 +102,7 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
         elif key == "items":
             converted_schema["items"] = _format_json_schema_to_gapic(value)
         elif key == "properties":
-            if "properties" not in converted_schema:
-                converted_schema["properties"] = {}
-            for pkey, pvalue in value.items():
-                converted_schema["properties"][pkey] = _format_json_schema_to_gapic(
-                    pvalue
-                )
+            converted_schema["properties"] = _get_properties_from_schema(value)
             continue
         elif key == "allOf":
             if len(value) > 1:
@@ -159,13 +154,11 @@ def convert_to_genai_function_declarations(
     for tool in tools:
         if isinstance(tool, gapic.Tool):
             gapic_tool.function_declarations.extend(tool.function_declarations)
+        elif isinstance(tool, dict) and "function_declarations" not in tool:
+            fd = _format_to_gapic_function_declaration(tool)
+            gapic_tool.function_declarations.append(fd)
         elif isinstance(tool, dict):
-            if "function_declarations" not in tool:
-                fd = _format_to_gapic_function_declaration(tool)
-                gapic_tool.function_declarations.append(fd)
-                continue
-            tool = cast(_ToolDictLike, tool)
-            function_declarations = tool["function_declarations"]
+            function_declarations = cast(_ToolDictLike, tool)["function_declarations"]
             if not isinstance(function_declarations, collections.abc.Sequence):
                 raise ValueError(
                     "function_declarations should be a list"
@@ -204,9 +197,12 @@ def _format_to_gapic_function_declaration(
     elif isinstance(tool, type) and is_basemodel_subclass_safe(tool):
         return _convert_pydantic_to_genai_function(tool)
     elif isinstance(tool, dict):
-        if all(k in tool for k in ("name", "description")) and "parameters" not in tool:
+        if all(k in tool for k in ("type", "function")) and tool["type"] == "function":
+            function = tool["function"]
+        elif (
+            all(k in tool for k in ("name", "description")) and "parameters" not in tool
+        ):
             function = cast(dict, tool)
-            function["parameters"] = {}
         else:
             if (
                 "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
@@ -214,7 +210,10 @@ def _format_to_gapic_function_declaration(
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
                 function = cast(dict, tool)
-                function["parameters"] = {}
+        function["parameters"] = function.get("parameters") or {}
+        # Empty 'properties' field not supported.
+        if not function["parameters"].get("properties"):
+            function["parameters"] = {}
         return _format_dict_to_function_declaration(cast(FunctionDescription, function))
     elif callable(tool):
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
@@ -302,8 +301,10 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
-        if v.get("type") or v.get("anyOf"):
+        if v.get("type") or v.get("anyOf") or v.get("type_"):
             properties_item["type_"] = _get_type_from_schema(v)
+            if _is_nullable_schema(v):
+                properties_item["nullable"] = True
 
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
@@ -312,10 +313,10 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
         if description and isinstance(description, str):
             properties_item["description"] = description
 
-        if v.get("type") == "array" and v.get("items"):
+        if properties_item.get("type_") == glm.Type.ARRAY and v.get("items"):
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
 
-        if v.get("type") == "object" and v.get("properties"):
+        if properties_item.get("type_") == glm.Type.OBJECT and v.get("properties"):
             properties_item["properties"] = _get_properties_from_schema_any(
                 v.get("properties")
             )
@@ -328,11 +329,7 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
 
 
 def _get_items_from_schema_any(schema: Any) -> Dict[str, Any]:
-    if isinstance(schema, Dict):
-        return _get_items_from_schema(schema)
-    if isinstance(schema, List):
-        return _get_items_from_schema(schema)
-    if isinstance(schema, str):
+    if isinstance(schema, (dict, list, str)):
         return _get_items_from_schema(schema)
     return {}
 
@@ -343,41 +340,66 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
         for i, v in enumerate(schema):
             items[f"item{i}"] = _get_properties_from_schema_any(v)
     elif isinstance(schema, Dict):
-        item: Dict = {}
-        for k, v in schema.items():
-            item["type_"] = _get_type_from_schema(v)
-            if not isinstance(v, Dict):
-                logger.warning(
-                    f"Value '{v}' is not supported in schema, ignoring v={v}"
-                )
-                continue
-            if v.get("type") == "object" and v.get("properties"):
-                item["properties"] = _get_properties_from_schema_any(
-                    v.get("properties")
-                )
-            if k == "title" and "description" not in item:
-                item["description"] = v
-        items = item
+        items["type_"] = _get_type_from_schema(schema)
+        if items["type_"] == glm.Type.OBJECT and "properties" in schema:
+            items["properties"] = _get_properties_from_schema_any(schema["properties"])
+        if "title" in schema:
+            items["title"] = schema
+        if "title" in schema or "description" in schema:
+            items["description"] = (
+                schema.get("description") or schema.get("title") or ""
+            )
+        if _is_nullable_schema(schema):
+            items["nullable"] = True
     else:
         # str
-        items["type_"] = TYPE_ENUM.get(str(schema), glm.Type.STRING)
+        items["type_"] = _get_type_from_schema({"type": schema})
+        if _is_nullable_schema({"type": schema}):
+            items["nullable"] = True
+
     return items
 
 
 def _get_type_from_schema(schema: Dict[str, Any]) -> int:
+    return _get_nullable_type_from_schema(schema) or glm.Type.STRING
+
+
+def _get_nullable_type_from_schema(schema: Dict[str, Any]) -> Optional[int]:
     if "anyOf" in schema:
-        types = [_get_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]]
+        types = [
+            _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
+        ]
         types = [t for t in types if t is not None]  # Remove None values
         if types:
             return types[-1]  # TODO: update FunctionDeclaration and pass all types?
         else:
             pass
-    elif "type" in schema:
-        stype = str(schema["type"])
+    elif "type" in schema or "type_" in schema:
+        type_ = schema["type"] if "type" in schema else schema["type_"]
+        if isinstance(type_, int):
+            return type_
+        stype = str(schema["type"]) if "type" in schema else str(schema["type_"])
         return TYPE_ENUM.get(stype, glm.Type.STRING)
     else:
         pass
-    return TYPE_ENUM["string"]  # Default to string if no valid types found
+    return glm.Type.STRING  # Default to string if no valid types found
+
+
+def _is_nullable_schema(schema: Dict[str, Any]) -> bool:
+    if "anyOf" in schema:
+        types = [
+            _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
+        ]
+        return any(t is None for t in types)
+    elif "type" in schema or "type_" in schema:
+        type_ = schema["type"] if "type" in schema else schema["type_"]
+        if isinstance(type_, int):
+            return False
+        stype = str(schema["type"]) if "type" in schema else str(schema["type_"])
+        return TYPE_ENUM.get(stype, glm.Type.STRING) is None
+    else:
+        pass
+    return False
 
 
 _ToolChoiceType = Union[
