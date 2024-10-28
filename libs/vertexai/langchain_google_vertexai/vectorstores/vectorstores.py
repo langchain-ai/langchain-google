@@ -375,10 +375,11 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         embedding: Optional[Embeddings] = None,
         stream_update: bool = False,
         datastore_client_kwargs: Optional[Dict[str, Any]] = None,
+        exclude_from_indexes: Optional[List[str]] = None,
         datastore_kind: str = "document_id",
         datastore_text_property_name: str = "text",
         datastore_metadata_property_name: str = "metadata",
-        exclude_from_indexes: List[str] = [],
+        
         **kwargs: Dict[str, Any],
     ) -> "VectorSearchVectorStoreDatastore":
         """Takes the object creation out of the constructor.
@@ -427,6 +428,8 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
 
         datastore_client = sdk_manager.get_datastore_client(**datastore_client_kwargs)
 
+        if exclude_from_indexes is None:
+            exclude_from_indexes = []
         document_storage = DataStoreDocumentStorage(
             datastore_client=datastore_client,
             kind=datastore_kind,

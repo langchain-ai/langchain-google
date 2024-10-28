@@ -234,7 +234,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         kind: str = "document_id",
         text_property_name: str = "text",
         metadata_property_name: str = "metadata",
-        exclude_from_indexes: List[str] = [],
+        exclude_from_indexes: Optional[List[str]] = None,
     ) -> None:
         """Constructor.
         Args:
