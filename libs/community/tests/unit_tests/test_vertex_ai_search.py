@@ -320,61 +320,98 @@ def test_custom_embedding_with_valid_values() -> None:
     """
     Test with a valid custom embedding model and field path.
     """
-    embeddings = FakeEmbeddings(size=100)
-    retriever = VertexAISearchRetriever(
-        project_id="mock-project",
-        data_store_id="mock-data-store",
-        custom_embedding=embeddings,
-        custom_embedding_field_path="embedding_field",
-        custom_embedding_ratio=0.5,
-    )
-    search_request = retriever._create_search_request(query="query_value")
-    assert search_request.embedding_spec is not None
-    assert search_request.ranking_expression == (
-        "0.5 * dotProduct(embedding_field) + 0.5 * relevance_score"
-    )
+    # Mock the SearchServiceClient to avoid real network calls
+    with mock.patch(
+        "google.cloud.discoveryengine_v1beta.SearchServiceClient"
+    ) as mock_client_class:
+        mock_client = mock_client_class.return_value
+        mock_client.serving_config_path.return_value = "serving_config_value"
+        embeddings = FakeEmbeddings(size=100)
+
+        retriever = VertexAISearchRetriever(
+            project_id="project_id_value",
+            data_store_id="data_store_id_value",
+            location_id="location_id_value",
+            serving_config_id="serving_config_id_value",
+            credentials=ga_credentials.AnonymousCredentials(),
+            filter="filter_value",
+            order_by="title desc",
+            canonical_filter="true",
+            custom_embedding=embeddings,
+            custom_embedding_field_path="embedding_field",
+            custom_embedding_ratio=0.5,
+        )
+
+        # Assert that serving_config_path was called with the correct arguments
+        mock_client.serving_config_path.assert_called_once_with(
+            project="project_id_value",
+            location="location_id_value",
+            data_store="data_store_id_value",
+            serving_config="serving_config_id_value",
+        )
+
+        search_request = retriever._create_search_request(query="query_value")
+        assert search_request.embedding_spec is not None
+        assert search_request.ranking_expression == (
+            "0.5 * dotProduct(embedding_field) + 0.5 * relevance_score"
+        )
 
 
 def test_custom_embedding_with_invalid_ratio() -> None:
     """
     Test with an invalid custom embedding ratio.
     """
-    embeddings = FakeEmbeddings(size=100)
-    retriever = VertexAISearchRetriever(
-        project_id="mock-project",
-        data_store_id="mock-data-store",
-        custom_embedding=embeddings,
-        custom_embedding_field_path="embedding_field",
-        custom_embedding_ratio=1.5,  # Invalid ratio
-    )
-    with pytest.raises(ValueError):
-        retriever._create_search_request(query="query_value")
+    with mock.patch(
+        "google.cloud.discoveryengine_v1beta.SearchServiceClient"
+    ) as mock_client_class:
+        mock_client = mock_client_class.return_value
+        mock_client.serving_config_path.return_value = "serving_config_value"
+        embeddings = FakeEmbeddings(size=100)
+        retriever = VertexAISearchRetriever(
+            project_id="mock-project",
+            data_store_id="mock-data-store",
+            custom_embedding=embeddings,
+            custom_embedding_field_path="embedding_field",
+            custom_embedding_ratio=1.5,  # Invalid ratio
+        )
+        with pytest.raises(ValueError):
+            retriever._create_search_request(query="query_value")
 
 
 def test_custom_embedding_with_missing_field_path() -> None:
     """
     Test with a missing custom embedding field path.
     """
-    embeddings = FakeEmbeddings(size=100)
-    retriever = VertexAISearchRetriever(
-        project_id="mock-project",
-        data_store_id="mock-data-store",
-        custom_embedding=embeddings,
-        custom_embedding_ratio=0.5,  # Invalid ratio
-    )
-    with pytest.raises(ValueError):
-        retriever._create_search_request(query="query_value")
+    with mock.patch(
+        "google.cloud.discoveryengine_v1beta.SearchServiceClient"
+    ) as mock_client_class:
+        mock_client = mock_client_class.return_value
+        mock_client.serving_config_path.return_value = "serving_config_value"
+        embeddings = FakeEmbeddings(size=100)
+        retriever = VertexAISearchRetriever(
+            project_id="mock-project",
+            data_store_id="mock-data-store",
+            custom_embedding=embeddings,
+            custom_embedding_ratio=0.5,  # Invalid ratio
+        )
+        with pytest.raises(ValueError):
+            retriever._create_search_request(query="query_value")
 
 
 def test_custom_embedding_with_missing_model() -> None:
     """
     Test with a missing custom embedding model.
     """
-    retriever = VertexAISearchRetriever(
-        project_id="mock-project",
-        data_store_id="mock-data-store",
-        custom_embedding_field_path="embedding_field",
-        custom_embedding_ratio=0.5,  # Invalid ratio
-    )
-    with pytest.raises(ValueError):
-        retriever._create_search_request(query="query_value")
+    with mock.patch(
+        "google.cloud.discoveryengine_v1beta.SearchServiceClient"
+    ) as mock_client_class:
+        mock_client = mock_client_class.return_value
+        mock_client.serving_config_path.return_value = "serving_config_value"
+        retriever = VertexAISearchRetriever(
+            project_id="mock-project",
+            data_store_id="mock-data-store",
+            custom_embedding_field_path="embedding_field",
+            custom_embedding_ratio=0.5,  # Invalid ratio
+        )
+        with pytest.raises(ValueError):
+            retriever._create_search_request(query="query_value")
