@@ -5,7 +5,7 @@ import pytest
 from google.auth import credentials as ga_credentials
 from google.cloud.discoveryengine_v1beta import Document as DiscoveryEngineDocument
 from google.cloud.discoveryengine_v1beta.types import SearchRequest, SearchResponse
-from langchain_community.embeddings import FakeEmbeddings
+from langchain_core.embeddings import FakeEmbeddings
 
 from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
 
