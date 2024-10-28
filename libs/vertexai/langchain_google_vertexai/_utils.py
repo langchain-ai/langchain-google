@@ -186,6 +186,9 @@ def get_generation_info(
             ):
                 info["avg_logprobs"] = candidate.avg_logprobs
 
+        if hasattr(candidate, "logprobs_result"):
+            info["logprobs_result"] = proto.Message.to_dict(candidate.logprobs_result)
+
         try:
             if candidate.grounding_metadata:
                 info["grounding_metadata"] = proto.Message.to_dict(

@@ -1110,3 +1110,13 @@ def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) ->
         image = f"data:application/pdf;base64,{image_data}"
         response = multimodal_pdf_chain.invoke(dict(image=image))
         assert isinstance(response, AIMessage)
+
+
+@pytest.mark.release
+def test_logprobs() -> None:
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=True)
+    msg = llm.invoke('how are you')
+    assert msg.response_metadata['logprobs_result']['chosen_candidates']
+
+    msg = llm.invoke('how are you', logprobs=2)
+    assert msg.response_metadata['logprobs_result']['top_candidates']
