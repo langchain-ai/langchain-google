@@ -1057,6 +1057,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     int, return logprobs for top ``logprobs`` candidates.
     
     **NOTE**: As of 10.28.24 this is only supported for gemini-1.5-flash models.
+    
+    .. versionadded: 2.0.6
     """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
