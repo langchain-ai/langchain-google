@@ -379,7 +379,6 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         datastore_kind: str = "document_id",
         datastore_text_property_name: str = "text",
         datastore_metadata_property_name: str = "metadata",
-        
         **kwargs: Dict[str, Any],
     ) -> "VectorSearchVectorStoreDatastore":
         """Takes the object creation out of the constructor.
