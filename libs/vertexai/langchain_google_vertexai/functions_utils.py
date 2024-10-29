@@ -274,7 +274,7 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 " or mixing with function_declarations is not supported"
             )
         if isinstance(tool, (gapic.Tool, vertexai.Tool)):
-            rt = (
+            rt: gapic.Tool = (
                 tool if isinstance(tool, gapic.Tool) else tool._raw_tool  # type: ignore
             )
             if "retrieval" in rt:
