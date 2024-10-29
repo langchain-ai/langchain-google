@@ -132,7 +132,6 @@ def _dict_to_gapic_schema(schema: Dict[str, Any]) -> Optional[gapic.Schema]:
 def _format_dict_to_function_declaration(
     tool: Union[FunctionDescription, Dict[str, Any]],
 ) -> gapic.FunctionDeclaration:
-    print(tool)
     return gapic.FunctionDeclaration(
         name=tool.get("name") or tool.get("title"),
         description=tool.get("description"),
