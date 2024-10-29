@@ -238,7 +238,7 @@ def _prepare_config(
     client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
     transport: Optional[str] = None,
 ) -> Dict[str, Any]:
-    formatted_client_options = {"api_endpoint": _config.api_endpoint}
+    formatted_client_options: dict = {"api_endpoint": _config.api_endpoint}
     if client_options:
         formatted_client_options.update(**client_options)
     if not credentials and api_key:
