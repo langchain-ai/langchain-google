@@ -302,12 +302,12 @@ def test_multimodal_media_inline_base64_agent() -> None:
     tools = [get_climate_info]
     agent = agents.create_tool_calling_agent(
         llm=llm,
-        tools=tools,  # type: ignore[arg-type]
+        tools=tools,
         prompt=prompt_template,
     )
     agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
         agent=agent,
-        tools=tools,  # type: ignore[arg-type]
+        tools=tools,
         verbose=False,
         stream_runnable=False,
     )
