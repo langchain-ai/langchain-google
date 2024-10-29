@@ -13,6 +13,11 @@ from langchain_google_vertexai.embeddings import (
     VertexAIEmbeddings,
 )
 
+_EMBEDDING_MODELS = [
+    ("textembedding-gecko@004", 768),
+    ("multimodalembedding@001", 1408),
+]
+
 
 @pytest.mark.release
 def test_initialization() -> None:
@@ -33,7 +38,7 @@ def test_initialization() -> None:
 )
 @pytest.mark.parametrize(
     "model_name, embeddings_dim",
-    [("textembedding-gecko@001", 768), ("multimodalembedding@001", 1408)],
+    _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_documents(
     number_of_docs: int, model_name: str, embeddings_dim: int
@@ -51,7 +56,7 @@ def test_langchain_google_vertexai_embedding_documents(
 @pytest.mark.release
 @pytest.mark.parametrize(
     "model_name, embeddings_dim",
-    [("textembedding-gecko@001", 768), ("multimodalembedding@001", 1408)],
+    _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -> None:
     document = "foo bar"
@@ -95,7 +100,7 @@ def test_langchain_google_vertexai_image_embeddings(
 
 @pytest.mark.release
 def test_langchain_google_vertexai_text_model() -> None:
-    embeddings_model = VertexAIEmbeddings(model_name="textembedding-gecko@001")
+    embeddings_model = VertexAIEmbeddings(model_name="textembedding-gecko@004")
     assert isinstance(embeddings_model.client, TextEmbeddingModel)
     assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
 
