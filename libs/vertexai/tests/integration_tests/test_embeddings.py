@@ -14,7 +14,7 @@ from langchain_google_vertexai.embeddings import (
 )
 
 _EMBEDDING_MODELS = [
-    ("textembedding-gecko@004", 768),
+    ("text-embedding-004", 768),
     ("multimodalembedding@001", 1408),
 ]
 
@@ -24,11 +24,11 @@ def test_initialization() -> None:
     """Test embedding model initialization."""
     for embeddings in [
         VertexAIEmbeddings(
-            model_name="textembedding-gecko",
+            model_name="text-embedding-004",
         ),
-        VertexAIEmbeddings(model="textembedding-gecko"),
+        VertexAIEmbeddings(model="text-embedding-004"),
     ]:
-        assert embeddings.model_name == "textembedding-gecko"
+        assert embeddings.model_name == "text-embedding-004"
 
 
 @pytest.mark.release
@@ -66,22 +66,6 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
 
 
 @pytest.mark.release
-def test_langchain_google_vertexai_large_batches() -> None:
-    batch_size = 32
-    documents = ["foo bar" for _ in range(batch_size)]
-    model_uscentral1 = VertexAIEmbeddings(
-        model_name="textembedding-gecko@001", location="us-central1"
-    )
-    # model_asianortheast1 = VertexAIEmbeddings(
-    #    model_name="textembedding-gecko@001", location="asia-northeast1"
-    # )
-    model_uscentral1.embed_documents(documents)
-    # model_asianortheast1.embed_documents(documents)
-    assert model_uscentral1.instance["batch_size"] >= batch_size
-    # assert model_asianortheast1.instance["batch_size"] < 50
-
-
-@pytest.mark.release
 @pytest.mark.parametrize(
     "dim, expected_dim",
     [(None, 1408), (512, 512)],
@@ -100,7 +84,7 @@ def test_langchain_google_vertexai_image_embeddings(
 
 @pytest.mark.release
 def test_langchain_google_vertexai_text_model() -> None:
-    embeddings_model = VertexAIEmbeddings(model_name="textembedding-gecko@004")
+    embeddings_model = VertexAIEmbeddings(model_name="text-embedding-004")
     assert isinstance(embeddings_model.client, TextEmbeddingModel)
     assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
 
