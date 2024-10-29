@@ -20,6 +20,8 @@ from langchain_google_vertexai.vectorstores._utils import (
     to_data_points,
 )
 
+MAX_DATA_POINTS = 10000
+
 
 class Searcher(ABC):
     """Abstract implementation of a similarity searcher."""
@@ -58,6 +60,22 @@ class Searcher(ABC):
             embeddings: List of embedddings for each record.
             metadatas: List of metadata of each record.
         """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def remove_datapoints(
+        self,
+        datapoint_ids: List[str],
+        **kwargs: Any,
+    ) -> None:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_datapoints_by_filter(
+        self,
+        metadata: dict,
+        max_datapoints: int = MAX_DATA_POINTS,
+    ) -> List[str]:
         raise NotImplementedError()
 
     def _postprocess_response(
@@ -104,6 +122,31 @@ class VectorSearchSearcher(Searcher):
         self._deployed_index_id = self._get_deployed_index_id()
         self._staging_bucket = staging_bucket
         self._stream_update = stream_update
+
+    def get_datapoints_by_filter(
+        self,
+        metadata: dict,
+        max_datapoints: int = MAX_DATA_POINTS,
+    ) -> List[str]:
+        """Gets all the datapoints matching the metadata filters (text only)
+        on the specified deployed index.
+        """
+        index_config = self._index.to_dict()["metadata"]["config"]
+        embeddings = [[0.0] * int(index_config.get("dimensions", 1))]
+        filter_ = [
+            Namespace(name=key, allow_tokens=[value]) for key, value in metadata.items()
+        ]
+        neighbors = self.find_neighbors(
+            embeddings=embeddings, k=max_datapoints, filter_=filter_
+        )
+        return [_id for (_id, _) in neighbors[0]] if neighbors else []
+
+    def remove_datapoints(
+        self,
+        datapoint_ids: List[str],
+        **kwargs: Any,
+    ) -> None:
+        self._index.remove_datapoints(datapoint_ids=datapoint_ids)
 
     def add_to_index(
         self,
