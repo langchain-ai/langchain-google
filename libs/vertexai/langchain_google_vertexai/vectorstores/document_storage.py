@@ -234,6 +234,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         kind: str = "document_id",
         text_property_name: str = "text",
         metadata_property_name: str = "metadata",
+        exclude_from_indexes: Optional[List[str]] = None,
     ) -> None:
         """Constructor.
         Args:
@@ -244,6 +245,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         self._client = datastore_client
         self._text_property_name = text_property_name
         self._metadata_property_name = metadata_property_name
+        self.exclude_from_indexes = exclude_from_indexes
         self._kind = kind
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
@@ -289,7 +291,9 @@ class DataStoreDocumentStorage(DocumentStorage):
 
             entities = []
             for key, document in zip(keys, documents):
-                entity = self._client.entity(key=key)
+                entity = self._client.entity(
+                    key=key, exclude_from_indexes=self.exclude_from_indexes
+                )
                 entity[self._text_property_name] = document.page_content
                 entity[self._metadata_property_name] = document.metadata
                 entities.append(entity)

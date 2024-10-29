@@ -375,6 +375,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         embedding: Optional[Embeddings] = None,
         stream_update: bool = False,
         datastore_client_kwargs: Optional[Dict[str, Any]] = None,
+        exclude_from_indexes: Optional[List[str]] = None,
         datastore_kind: str = "document_id",
         datastore_text_property_name: str = "text",
         datastore_metadata_property_name: str = "metadata",
@@ -399,6 +400,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
                 index must be compatible with stream/batch updates.
             kwargs: Additional keyword arguments to pass to
                 VertexAIVectorSearch.__init__().
+            exclude_from_indexes: Fields to exclude from datastore indexing
 
         Returns:
             A configured VectorSearchVectorStoreDatastore.
@@ -425,11 +427,14 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
 
         datastore_client = sdk_manager.get_datastore_client(**datastore_client_kwargs)
 
+        if exclude_from_indexes is None:
+            exclude_from_indexes = []
         document_storage = DataStoreDocumentStorage(
             datastore_client=datastore_client,
             kind=datastore_kind,
             text_property_name=datastore_text_property_name,
             metadata_property_name=datastore_metadata_property_name,
+            exclude_from_indexes=exclude_from_indexes,
         )
 
         return cls(
