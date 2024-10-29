@@ -610,12 +610,17 @@ def _response_to_result(
         ]
         message = _parse_response_candidate(candidate, streaming=stream)
         message.usage_metadata = lc_usage
-        generations.append(
-            (ChatGenerationChunk if stream else ChatGeneration)(
-                message=message,
-                generation_info=generation_info,
+        if stream:
+            generations.append(
+                ChatGenerationChunk(
+                    message=cast(AIMessageChunk, message),
+                    generation_info=generation_info,
+                )
             )
-        )
+        else:
+            generations.append(
+                ChatGeneration(message=message, generation_info=generation_info)
+            )
     if not response.candidates:
         # Likely a "prompt feedback" violation (e.g., toxic input)
         # Raising an error would be different than how OpenAI handles it,
@@ -624,12 +629,14 @@ def _response_to_result(
             "Gemini produced an empty response. Continuing with empty message\n"
             f"Feedback: {response.prompt_feedback}"
         )
-        generations = [
-            (ChatGenerationChunk if stream else ChatGeneration)(
-                message=(AIMessageChunk if stream else AIMessage)(content=""),
-                generation_info={},
-            )
-        ]
+        if stream:
+            generations = [
+                ChatGenerationChunk(
+                    message=AIMessageChunk(content=""), generation_info={}
+                )
+            ]
+        else:
+            generations = [ChatGeneration(message=AIMessage(""), generation_info={})]
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
