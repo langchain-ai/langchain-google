@@ -294,8 +294,12 @@ class DataStoreDocumentStorage(DocumentStorage):
                 entity = self._client.entity(
                     key=key, exclude_from_indexes=self.exclude_from_indexes
                 )
+                metadata_entity = self._client.entity(
+                    exclude_from_indexes=self.exclude_from_indexes
+                )
+                metadata_entity.update(document.metadata)
                 entity[self._text_property_name] = document.page_content
-                entity[self._metadata_property_name] = document.metadata
+                entity[self._metadata_property_name] = metadata_entity
                 entities.append(entity)
 
             self._client.put_multi(entities)
