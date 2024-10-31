@@ -293,6 +293,7 @@ search_vfd_exp = gapic.FunctionDeclaration(
         description="Search tool",
         properties={"question": gapic.Schema(type=gapic.Type.STRING, title="Question")},
         required=["question"],
+        property_ordering=["question"],
     ),
 )
 

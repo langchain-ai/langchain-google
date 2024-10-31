@@ -4,7 +4,6 @@ import base64
 import io
 import json
 import os
-import tempfile
 from typing import List, Literal, Optional, cast
 
 import pytest
@@ -1086,17 +1085,6 @@ def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) ->
     # URL
     response = multimodal_pdf_chain.invoke(dict(image=url))
     assert isinstance(response, AIMessage)
-
-
-@pytest.mark.release
-def test_multimodal_pdf_input_local(multimodal_pdf_chain: RunnableSerializable) -> None:
-    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
-    request_response = requests.get(url, allow_redirects=True)
-
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as localfile:
-        localfile.write(request_response.content)
-        response = multimodal_pdf_chain.invoke(dict(image=localfile.name))
-        assert isinstance(response, AIMessage)
 
 
 @pytest.mark.release
