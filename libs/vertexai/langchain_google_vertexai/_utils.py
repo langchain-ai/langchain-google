@@ -154,6 +154,7 @@ def get_generation_info(
     *,
     stream: bool = False,
     usage_metadata: Optional[Dict] = None,
+    logprobs: Optional[int] = 0,
 ) -> Dict[str, Any]:
     if is_gemini:
         # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
@@ -187,7 +188,45 @@ def get_generation_info(
                 info["avg_logprobs"] = candidate.avg_logprobs
 
         if hasattr(candidate, "logprobs_result"):
-            info["logprobs_result"] = proto.Message.to_dict(candidate.logprobs_result)
+            logprobs_int = logprobs if logprobs is not None else 0
+            log_probs = [
+                {
+                    "token": candidate.token,
+                    "logprob": candidate.log_probability,
+                    "top_logprobs": [],
+                }
+                for candidate in candidate.logprobs_result.chosen_candidates
+            ]
+
+            # Add list of top token candidates for given token
+            top_logprobs = [
+                {"token": candidate.token, "logprob": candidate.log_probability}
+                for top_candidates in candidate.logprobs_result.top_candidates
+                for candidate in top_candidates.candidates
+            ]
+            # Iterate over top_logprobs logprobs_int times
+            for i in range(len(candidate.logprobs_result.chosen_candidates)):
+                for j in range(i * logprobs_int, (i + 1) * logprobs_int):
+                    if j < len(top_logprobs):
+                        log_probs[i]["top_logprobs"].append(top_logprobs[j])
+
+            # Check and add
+            for candidate in log_probs:
+                logprob = candidate.get("logprob")
+                candidate_top_logprobs = candidate.get("top_logprobs", [])
+
+                if (
+                    isinstance(logprob, float)
+                    and not math.isnan(logprob)
+                    and logprob < 0
+                    and all(
+                        isinstance(top_candidate.get("logprob"), float)
+                        and not math.isnan(top_candidate.get("logprob"))
+                        and top_candidate.get("logprob") < 0
+                        for top_candidate in candidate_top_logprobs
+                    )
+                ):
+                    info["logprobs_result"] = log_probs
 
         try:
             if candidate.grounding_metadata:

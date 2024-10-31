@@ -139,7 +139,6 @@ _allowed_params = [
     "top_p",
     "response_mime_type",
     "response_schema",
-    "temperature",
     "max_output_tokens",
     "presence_penalty",
     "frequency_penalty",
@@ -940,24 +939,22 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Logprobs:
         .. code-block:: python
 
-            llm = ChatVertexAI(model="gemini-1.5-flash-001", logprobs=True)
+            llm = ChatVertexAI(model="gemini-1.5-flash-001", logprobs=0) OR llm = ChatVertexAI(model="gemini-1.5-flash-001")
             ai_msg = llm.invoke(messages)
             ai_msg.response_metadata["logprobs_result"]
 
         .. code-block:: python
 
-            {
-                'chosen_candidates': [
-                    {'token': 'J', 'log_probability': 0.0},
-                    {'token': "'", 'log_probability': -4.0052048e-05},
-                    {'token': 'adore', 'log_probability': -0.003931577},
-                    {'token': ' programmer', 'log_probability': -0.13637993},
-                    {'token': '.', 'log_probability': -7.630326e-06},
-                    {'token': ' ', 'log_probability': -3.1950593e-05},
-                    {'token': '\n', 'log_probability': 0.0}
-                ],
-                'top_candidates': []
-            }
+            [
+                {'token': 'J', 'logprob': -1.549651415189146e-06, 'top_logprobs': []},
+                {'token': "'", 'logprob': -1.549651415189146e-06, 'top_logprobs': []},
+                {'token': 'adore', 'logprob': 0.0, 'top_logprobs': []},
+                {'token': ' programmer', 'logprob': -1.1922384146600962e-07, 'top_logprobs': []},
+                {'token': '.', 'logprob': -4.827636439586058e-05, 'top_logprobs': []},
+                {'token': ' ', 'logprob': -0.018011733889579773, 'top_logprobs': []},
+                {'token': '\n', 'logprob': -0.0008687592926435173, 'top_logprobs': []}
+            ]
+
 
 
     Response metadata
@@ -1050,11 +1047,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         models. Must be a string containing the cache name (A sequence of numbers)
     """
 
-    logprobs: Union[bool, int] = False
+    logprobs: Optional[int] = 0
     """Whether to return logprobs as part of AIMessage.response_metadata.
     
-    If False, don't return logprobs. If True, return logprobs for top candidate. If 
-    int, return logprobs for top ``logprobs`` candidates.
+    If unspecified, don't return logprobs (top candidate is still returned from 
+    chosen_candidates). If int, return logprobs for top ``logprobs`` candidates.
     
     **NOTE**: As of 10.28.24 this is only supported for gemini-1.5-flash models.
     
@@ -1230,20 +1227,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         stop: Optional[List[str]] = None,
         stream: bool = False,
         *,
-        logprobs: int | bool = False,
+        logprobs: int | None = False,
         **kwargs: Any,
     ) -> GenerationConfig:
         """Prepares GenerationConfig part of the request.
 
         https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#generationconfig
         """
-        if logprobs and isinstance(logprobs, bool):
-            kwargs["response_logprobs"] = logprobs
-        elif logprobs and isinstance(logprobs, int):
-            kwargs["response_logprobs"] = True
-            kwargs["logprobs"] = logprobs
-        else:
-            pass
+        kwargs["response_logprobs"] = True
+        kwargs["logprobs"] = logprobs
 
         return GenerationConfig(
             **self._prepare_params(
@@ -1295,7 +1287,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         cached_content: Optional[str] = None,
         *,
         tool_choice: Optional[_ToolChoiceType] = None,
-        logprobs: Optional[Union[int, bool]] = None,
+        logprobs: Optional[int] = None,
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(messages)
@@ -1882,7 +1874,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         usage = proto.Message.to_dict(response.usage_metadata)
         lc_usage = _get_usage_metadata_gemini(usage)
         for candidate in response.candidates:
-            info = get_generation_info(candidate, is_gemini=True, usage_metadata=usage)
+            info = get_generation_info(
+                candidate, is_gemini=True, usage_metadata=usage, logprobs=self.logprobs
+            )
             message = _parse_response_candidate(candidate)
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage

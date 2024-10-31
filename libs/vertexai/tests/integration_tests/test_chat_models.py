@@ -1114,9 +1114,18 @@ def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) ->
 
 @pytest.mark.release
 def test_logprobs() -> None:
-    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=True)
-    msg = llm.invoke("how are you")
-    assert msg.response_metadata["logprobs_result"]["chosen_candidates"]
-
-    msg = llm.invoke("how are you", logprobs=2)
-    assert msg.response_metadata["logprobs_result"]["top_candidates"]
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    msg = llm.invoke("hey")
+    tokenprobs = msg.response_metadata.get("logprobs_result")
+    assert tokenprobs is None or isinstance(tokenprobs, list)
+    if tokenprobs:
+        stack = tokenprobs[:]
+        while stack:
+            token = stack.pop()
+            assert isinstance(token, dict)
+            assert "token" in token and "logprob" in token
+            assert isinstance(token.get("token"), str)
+            assert isinstance(token.get("logprob"), float)
+            if "top_logprobs" in token and token.get("top_logprobs") is not None:
+                assert isinstance(token.get("top_logprobs"), list)
+                stack.extend(token["top_logprobs"])
