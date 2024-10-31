@@ -71,13 +71,13 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
     [(None, 1408), (512, 512)],
 )
 def test_langchain_google_vertexai_image_embeddings(
-    dim, expected_dim, tmp_image
+    dim, expected_dim, base64_image
 ) -> None:
     model = VertexAIEmbeddings(model_name="multimodalembedding")
     kwargs = {}
     if dim:
         kwargs["dimensions"] = dim
-    output = model.embed_images([tmp_image for i in range(3)], **kwargs)
+    output = model.embed_images([base64_image for i in range(3)], **kwargs)
     assert len(output) == 3
     assert len(output[0]) == expected_dim
 
