@@ -1128,4 +1128,6 @@ def test_logprobs() -> None:
             assert isinstance(token.get("logprob"), float)
             if "top_logprobs" in token and token.get("top_logprobs") is not None:
                 assert isinstance(token.get("top_logprobs"), list)
-                stack.extend(token["top_logprobs"])
+                stack.extend(token.get("top_logprobs", []))
+    msg2 = llm.invoke("hey", logprobs=False)
+    assert msg2.response_metadata.get("logprobs_result") is None

@@ -579,7 +579,7 @@ def test_default_params_gemini() -> None:
             == "Hello"
         )
         expected = GenerationConfig(
-            candidate_count=1, logprobs=0, response_logprobs=True
+            candidate_count=1,
         )
         assert (
             mock_generate_content.call_args.kwargs["request"].generation_config
@@ -915,8 +915,6 @@ def test_generation_config_gemini() -> None:
         temperature=0.3,
         top_k=3,
         candidate_count=2,
-        logprobs=0,
-        response_logprobs=True,
     )
     assert generation_config == expected
 
