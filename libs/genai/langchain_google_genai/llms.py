@@ -312,7 +312,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                 )
                 generation_info = None
                 if res.usage_metadata is not None:
-                    generation_info = {"usage_metadata": type(res.usage_metadata).to_dict(res.usage_metadata)}
+                    generation_info = {"usage_metadata": res.to_dict().get("usage_metadata")}
 
                 candidates = [
                     "".join([p.text for p in c.content.parts]) for c in res.candidates
