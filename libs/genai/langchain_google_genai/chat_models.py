@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import logging
-import os
 import uuid
 import warnings
 from io import BytesIO
@@ -30,7 +28,6 @@ import google.api_core
 
 # TODO: remove ignore once the google package is published with types
 import proto  # type: ignore[import]
-import requests
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
 )
@@ -286,35 +283,6 @@ def _load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
         raise ValueError(f"Found more than one candidate for {path}!")
     img_bytes = blobs[0].download_as_bytes()
     return PIL.Image.open(BytesIO(img_bytes))
-
-
-def _url_to_pil(image_source: str) -> Image:
-    if PIL is None:
-        raise ImportError(
-            "PIL is required to load images. Please install it "
-            "with `pip install pillow`"
-        )
-    try:
-        if isinstance(image_source, IMAGE_TYPES):
-            return image_source  # type: ignore[return-value]
-        elif _is_url(image_source):
-            if image_source.startswith("gs://"):
-                return _load_image_from_gcs(image_source)
-            response = requests.get(image_source)
-            response.raise_for_status()
-            return PIL.Image.open(BytesIO(response.content))
-        elif _is_b64(image_source):
-            _, encoded = image_source.split(",", 1)
-            data = base64.b64decode(encoded)
-            return PIL.Image.open(BytesIO(data))
-        elif os.path.exists(image_source):
-            return PIL.Image.open(image_source)
-        else:
-            raise ValueError(
-                "The provided string is not a valid URL, base64, or file path."
-            )
-    except Exception as e:
-        raise ValueError(f"Unable to process the provided image source: {e}")
 
 
 def _convert_to_parts(
