@@ -95,7 +95,7 @@ def test_image_bytes_loader():
     file.write(image_bytes)
     file.seek(0)
     with pytest.raises(ValueError):
-        image_bytes_from_file = loader.load_bytes(file.name)
+        loader.load_bytes(file.name)
     file.close()
 
     # Check if fails if nosense string
