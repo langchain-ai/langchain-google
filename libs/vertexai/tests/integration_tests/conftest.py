@@ -1,8 +1,4 @@
-import base64
-
 import pytest
-from _pytest.tmpdir import TempPathFactory
-from vertexai.vision_models import Image  # type: ignore
 
 _DEFAULT_MODEL_NAME = "gemini-1.0-pro-001"
 
