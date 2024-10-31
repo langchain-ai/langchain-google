@@ -41,6 +41,7 @@ def test_google_generativeai_generate(model_name: str) -> None:
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     assert len(output.generations[0]) == n
+    # check the usage data
     assert len(output.generations[0][0].generation_info.get('usage_metadata')) > 0
 
 
