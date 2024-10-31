@@ -310,10 +310,15 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                     generation_config=generation_config,
                     safety_settings=kwargs.pop("safety_settings", None),
                 )
+                generation_info = None
+                if res.usage_metadata is not None:
+                    generation_info = {"usage_metadata": type(res.usage_metadata).to_dict(res.usage_metadata)}
+
                 candidates = [
                     "".join([p.text for p in c.content.parts]) for c in res.candidates
                 ]
-                generations.append([Generation(text=c) for c in candidates])
+                generations.append(
+                    [Generation(text=c, generation_info=generation_info) for c in candidates])
             else:
                 res = _completion_with_retry(
                     self,
