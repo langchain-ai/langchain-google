@@ -1047,7 +1047,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         models. Must be a string containing the cache name (A sequence of numbers)
     """
 
-    logprobs: Optional[int] = 0
+    logprobs: Union[bool, int] = False
     """Whether to return logprobs as part of AIMessage.response_metadata.
     
     If False, don't return logprobs. If True, return logprobs for top candidate. 
