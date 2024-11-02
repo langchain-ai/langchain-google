@@ -1117,7 +1117,6 @@ def test_logprobs() -> None:
     llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
     msg = llm.invoke("hey")
     tokenprobs = msg.response_metadata.get("logprobs_result")
-    print(tokenprobs)
     assert tokenprobs is None or isinstance(tokenprobs, list)
     if tokenprobs:
         stack = tokenprobs[:]
