@@ -1117,6 +1117,7 @@ def test_logprobs() -> None:
     llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
     msg = llm.invoke("hey")
     tokenprobs = msg.response_metadata.get("logprobs_result")
+    print(tokenprobs)
     assert tokenprobs is None or isinstance(tokenprobs, list)
     if tokenprobs:
         stack = tokenprobs[:]
@@ -1129,5 +1130,11 @@ def test_logprobs() -> None:
             if "top_logprobs" in token and token.get("top_logprobs") is not None:
                 assert isinstance(token.get("top_logprobs"), list)
                 stack.extend(token.get("top_logprobs", []))
-    msg2 = llm.invoke("hey", logprobs=False)
-    assert msg2.response_metadata.get("logprobs_result") is None
+
+    llm2 = ChatVertexAI(model="gemini-1.5-flash", logprobs=True)
+    msg2 = llm2.invoke("how are you")
+    assert msg2.response_metadata["logprobs_result"]
+
+    llm3 = ChatVertexAI(model="gemini-1.5-flash", logprobs=False)
+    msg3 = llm3.invoke("howdy")
+    assert msg3.response_metadata.get("logprobs_result") is None
