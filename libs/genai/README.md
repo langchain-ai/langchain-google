@@ -60,7 +60,6 @@ The value of `image_url` can be any of the following:
 
 - A public image URL
 - An accessible gcs file (e.g., "gcs://path/to/file.png")
-- A local file path
 - A base64 encoded image (e.g., `data:image/png;base64,abcd124`)
 - A PIL image
 
