@@ -36,12 +36,12 @@ class GoogleModelFamily(str, Enum):
 
 
 def _create_retry_decorator(
-    llm: BaseLLM,
-    *,
-    max_retries: int = 1,
-    run_manager: Optional[
-        Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
-    ] = None,
+        llm: BaseLLM,
+        *,
+        max_retries: int = 1,
+        run_manager: Optional[
+            Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
+        ] = None,
 ) -> Callable[[Any], Any]:
     """Creates a retry decorator for Vertex / Palm LLMs."""
 
@@ -59,12 +59,12 @@ def _create_retry_decorator(
 
 
 def _completion_with_retry(
-    llm: GoogleGenerativeAI,
-    prompt: LanguageModelInput,
-    is_gemini: bool = False,
-    stream: bool = False,
-    run_manager: Optional[CallbackManagerForLLMRun] = None,
-    **kwargs: Any,
+        llm: GoogleGenerativeAI,
+        prompt: LanguageModelInput,
+        is_gemini: bool = False,
+        stream: bool = False,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
 ) -> Any:
     """Use tenacity to retry the completion call."""
     retry_decorator = _create_retry_decorator(
@@ -73,7 +73,7 @@ def _completion_with_retry(
 
     @retry_decorator
     def _completion_with_retry(
-        prompt: LanguageModelInput, is_gemini: bool, stream: bool, **kwargs: Any
+            prompt: LanguageModelInput, is_gemini: bool, stream: bool, **kwargs: Any
     ) -> Any:
         generation_config = kwargs.get("generation_config", {})
         error_msg = (
@@ -245,7 +245,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         safety_settings = self.safety_settings
 
         if safety_settings and (
-            not GoogleModelFamily(model_name) == GoogleModelFamily.GEMINI
+                not GoogleModelFamily(model_name) == GoogleModelFamily.GEMINI
         ):
             raise ValueError("Safety settings are only supported for Gemini models")
 
@@ -274,7 +274,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         return self
 
     def _get_ls_params(
-        self, stop: Optional[List[str]] = None, **kwargs: Any
+            self, stop: Optional[List[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         ls_params = super()._get_ls_params(stop=stop, **kwargs)
@@ -284,11 +284,11 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         return ls_params
 
     def _generate(
-        self,
-        prompts: List[str],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs: Any,
+            self,
+            prompts: List[str],
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            **kwargs: Any,
     ) -> LLMResult:
         generations: List[List[Generation]] = []
         generation_config = {
@@ -312,13 +312,16 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                 )
                 generation_info = None
                 if res.usage_metadata is not None:
-                    generation_info = {"usage_metadata": res.to_dict().get("usage_metadata")}
+                    generation_info = {
+                        "usage_metadata": res.to_dict().get("usage_metadata")
+                    }
 
                 candidates = [
                     "".join([p.text for p in c.content.parts]) for c in res.candidates
                 ]
                 generations.append(
-                    [Generation(text=c, generation_info=generation_info) for c in candidates])
+                    [Generation(text=c, generation_info=generation_info)
+                     for c in candidates])
             else:
                 res = _completion_with_retry(
                     self,
@@ -339,11 +342,11 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         return LLMResult(generations=generations)
 
     def _stream(
-        self,
-        prompt: str,
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs: Any,
+            self,
+            prompt: str,
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            **kwargs: Any,
     ) -> Iterator[GenerationChunk]:
         generation_config = {
             "stop_sequences": stop,
@@ -356,14 +359,14 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         generation_config = generation_config | kwargs.get("generation_config", {})
 
         for stream_resp in _completion_with_retry(
-            self,
-            prompt,
-            stream=True,
-            is_gemini=True,
-            run_manager=run_manager,
-            generation_config=generation_config,
-            safety_settings=kwargs.pop("safety_settings", None),
-            **kwargs,
+                self,
+                prompt,
+                stream=True,
+                is_gemini=True,
+                run_manager=run_manager,
+                generation_config=generation_config,
+                safety_settings=kwargs.pop("safety_settings", None),
+                **kwargs,
         ):
             chunk = GenerationChunk(text=stream_resp.text)
             yield chunk
