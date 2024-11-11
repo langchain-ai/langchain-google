@@ -90,12 +90,12 @@ def test_image_bytes_loader():
     image_bytes = loader.load_bytes(base64_image)
     assert isinstance(image_bytes, bytes)
 
-    # Check it loads from local file.
+    # Check doesn't load from local file.
     file = NamedTemporaryFile()
     file.write(image_bytes)
     file.seek(0)
-    image_bytes_from_file = loader.load_bytes(file.name)
-    assert image_bytes_from_file == image_bytes
+    with pytest.raises(ValueError):
+        loader.load_bytes(file.name)
     file.close()
 
     # Check if fails if nosense string

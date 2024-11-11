@@ -485,7 +485,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         """Embed an image.
 
         Args:
-            image_path: Path to image (local, Google Cloud Storage or web) to generate
+            image_path: Path to image (Google Cloud Storage or web) to generate
             embeddings for.
             contextual_text: Text to generate embeddings for.
 

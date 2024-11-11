@@ -1,8 +1,4 @@
-import base64
-
 import pytest
-from _pytest.tmpdir import TempPathFactory
-from vertexai.vision_models import Image  # type: ignore
 
 _DEFAULT_MODEL_NAME = "gemini-1.0-pro-001"
 
@@ -30,12 +26,3 @@ def base64_image() -> str:
         "yuRj4Ik9is+hglfbkbfR3cnZm7chlUWLdwmprtCohX4HUtlOcQjLYCu+fzGJH2QRKvP3UN"
         "z8bWk1qMxjGTOMThZ3kvgLI5AzFfo379UAAAAASUVORK5CYII="
     )
-
-
-@pytest.fixture
-def tmp_image(tmp_path_factory: TempPathFactory, base64_image) -> str:
-    img_data = base64.b64decode(base64_image.split(",")[1])
-    image = Image(image_bytes=img_data)
-    fn = tmp_path_factory.mktemp("data") / "img.png"
-    image.save(str(fn))
-    return str(fn)
