@@ -179,7 +179,7 @@ def get_generation_info(
             ),
             "finish_message": (
                 candidate.finish_message if candidate.finish_message else None
-            )
+            ),
         }
         if hasattr(candidate, "avg_logprobs") and candidate.avg_logprobs is not None:
             if (
