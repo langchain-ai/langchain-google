@@ -99,17 +99,16 @@ def _completion_with_retry(
     )
 
 
-def _strip_erroneous_leading_spaces(text: str) -> str:
-    """Strip erroneous leading spaces from text.
+def _strip_erroneous_characters(text: str) -> str:
+    """Strip erroneous leading spaces and trailing newlines from text.
 
     The PaLM API will sometimes erroneously return a single leading space in all
-    lines > 1. This function strips that space.
+    lines > 1. This function strips that space and also removes trailing newlines.
     """
     has_leading_space = all(not line or line[0] == " " for line in text.split("\n")[1:])
     if has_leading_space:
-        return text.replace("\n ", "\n")
-    else:
-        return text
+        text = text.replace("\n ", "\n")
+    return text.rstrip("\n")
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
@@ -327,7 +326,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                 prompt_generations = []
                 for candidate in res.candidates:
                     raw_text = candidate["output"]
-                    stripped_text = _strip_erroneous_leading_spaces(raw_text)
+                    stripped_text = _strip_erroneous_characters(raw_text)
                     prompt_generations.append(Generation(text=stripped_text))
                 generations.append(prompt_generations)
 
