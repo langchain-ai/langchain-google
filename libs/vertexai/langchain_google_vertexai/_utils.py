@@ -129,6 +129,7 @@ class GoogleModelFamily(str, Enum):
         gemini_advanced_models = {
             "medlm-large-1.5-preview",
             "medlm-large-1.5-001",
+            "medlm-large-1.5@001",
         }
         if "gemini-1.5" in model_name or model_name in gemini_advanced_models:
             return GoogleModelFamily.GEMINI_ADVANCED
