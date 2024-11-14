@@ -60,7 +60,7 @@ def create_context_cache(
         tool_config = _format_tool_config(tool_config)
 
     if tools is not None:
-        tools = _format_to_gapic_tool(tools)
+        tools = [_format_to_gapic_tool(tools)]
 
     cached_content = caching.CachedContent.create(
         model_name=model.full_model_name,
