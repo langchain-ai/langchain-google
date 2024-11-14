@@ -12,10 +12,11 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = ">=0.3.15,<0.4"
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch="cc/numpy2" }
 google-generativeai = "^0.8.0"
 pillow = { version = "^10.1.0", optional = true }
 pydantic = ">=2,<3"
+numpy = ">=2,<3"
 
 [tool.poetry.extras]
 images = ["pillow"]
@@ -30,8 +31,7 @@ pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
-numpy = "^1.26.2"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch="cc/numpy2" }
 langchain-standard-tests = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests" }
 
 [tool.codespell]
@@ -73,8 +73,7 @@ types-requests = "^2.28.11.5"
 types-google-cloud-ndb = "^2.2.0.1"
 types-pillow = "^10.1.0.2"
 types-protobuf = "^4.24.0.20240302"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
-numpy = "^1.26.2"
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch="cc/numpy2" }
 
 
 
@@ -87,7 +86,7 @@ pillow = "^10.1.0"
 types-requests = "^2.31.0.10"
 types-pillow = "^10.1.0.2"
 types-google-cloud-ndb = "^2.2.0.1"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch="cc/numpy2" }
 
 [tool.ruff.lint]
 select = [
