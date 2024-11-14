@@ -154,6 +154,7 @@ def get_generation_info(
     *,
     stream: bool = False,
     usage_metadata: Optional[Dict] = None,
+    logprobs: Union[bool, int] = False,
 ) -> Dict[str, Any]:
     if is_gemini:
         # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
@@ -186,8 +187,39 @@ def get_generation_info(
             ):
                 info["avg_logprobs"] = candidate.avg_logprobs
 
-        if hasattr(candidate, "logprobs_result"):
-            info["logprobs_result"] = proto.Message.to_dict(candidate.logprobs_result)
+        if hasattr(candidate, "logprobs_result") and logprobs:
+
+            def is_valid_logprob(prob):
+                return isinstance(prob, float) and not math.isnan(prob) and prob < 0
+
+            chosen_candidates = candidate.logprobs_result.chosen_candidates
+            top_candidates_list = candidate.logprobs_result.top_candidates
+            logprobs_int = 0 if logprobs is True else logprobs
+
+            valid_log_probs = []
+            for i, chosen in enumerate(chosen_candidates):
+                if not is_valid_logprob(chosen.log_probability):
+                    continue
+
+                top_logprobs = []
+                if logprobs_int > 0:
+                    for top in top_candidates_list[i].candidates[:logprobs_int]:
+                        if not is_valid_logprob(top.log_probability):
+                            continue
+                        top_logprobs.append(
+                            {"token": top.token, "logprob": top.log_probability}
+                        )
+
+                valid_log_probs.append(
+                    {
+                        "token": chosen.token,
+                        "logprob": chosen.log_probability,
+                        "top_logprobs": top_logprobs,
+                    }
+                )
+
+            if valid_log_probs:
+                info["logprobs_result"] = valid_log_probs
 
         try:
             if candidate.grounding_metadata:

@@ -139,7 +139,6 @@ _allowed_params = [
     "top_p",
     "response_mime_type",
     "response_schema",
-    "temperature",
     "max_output_tokens",
     "presence_penalty",
     "frequency_penalty",
@@ -946,18 +945,16 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            {
-                'chosen_candidates': [
-                    {'token': 'J', 'log_probability': 0.0},
-                    {'token': "'", 'log_probability': -4.0052048e-05},
-                    {'token': 'adore', 'log_probability': -0.003931577},
-                    {'token': ' programmer', 'log_probability': -0.13637993},
-                    {'token': '.', 'log_probability': -7.630326e-06},
-                    {'token': ' ', 'log_probability': -3.1950593e-05},
-                    {'token': '\n', 'log_probability': 0.0}
-                ],
-                'top_candidates': []
-            }
+            [
+                {'token': 'J', 'logprob': -1.549651415189146e-06, 'top_logprobs': []},
+                {'token': "'", 'logprob': -1.549651415189146e-06, 'top_logprobs': []},
+                {'token': 'adore', 'logprob': 0.0, 'top_logprobs': []},
+                {'token': ' programmer', 'logprob': -1.1922384146600962e-07, 'top_logprobs': []},
+                {'token': '.', 'logprob': -4.827636439586058e-05, 'top_logprobs': []},
+                {'token': ' ', 'logprob': -0.018011733889579773, 'top_logprobs': []},
+                {'token': '\n', 'logprob': -0.0008687592926435173, 'top_logprobs': []}
+            ]
+
 
 
     Response metadata
@@ -1053,8 +1050,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     logprobs: Union[bool, int] = False
     """Whether to return logprobs as part of AIMessage.response_metadata.
     
-    If False, don't return logprobs. If True, return logprobs for top candidate. If 
-    int, return logprobs for top ``logprobs`` candidates.
+    If False, don't return logprobs. If True, return logprobs for top candidate. 
+    If int, return logprobs for top ``logprobs`` candidates.
     
     **NOTE**: As of 10.28.24 this is only supported for gemini-1.5-flash models.
     
@@ -1313,6 +1310,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             pass
         safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
+        logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
             stream=stream, stop=stop, logprobs=logprobs, **kwargs
         )
@@ -1881,8 +1879,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         generations = []
         usage = proto.Message.to_dict(response.usage_metadata)
         lc_usage = _get_usage_metadata_gemini(usage)
+        logprobs = self.logprobs if isinstance(self.logprobs, (int, bool)) else False
         for candidate in response.candidates:
-            info = get_generation_info(candidate, is_gemini=True, usage_metadata=usage)
+            info = get_generation_info(
+                candidate, is_gemini=True, usage_metadata=usage, logprobs=logprobs
+            )
             message = _parse_response_candidate(candidate)
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
