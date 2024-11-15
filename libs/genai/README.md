@@ -8,12 +8,6 @@ This package contains the LangChain integrations for Gemini through their genera
 pip install -U langchain-google-genai
 ```
 
-### Image utilities
-To use image utility methods, like loading images from GCS urls, install with extras group 'images':
-
-```bash
-pip install -e "langchain-google-genai[images]"
-```
 
 ## Chat Models
 
