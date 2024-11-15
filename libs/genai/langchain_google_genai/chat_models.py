@@ -5,7 +5,6 @@ import json
 import logging
 import uuid
 import warnings
-from io import BytesIO
 from operator import itemgetter
 from typing import (
     Any,
@@ -22,7 +21,6 @@ from typing import (
     Union,
     cast,
 )
-from urllib.parse import urlparse
 
 import google.api_core
 
