@@ -31,13 +31,10 @@ syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
 numpy = "^1.26.2"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
-langchain-standard-tests = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests" }
+langchain-tests = "0.3.1"
 
 [tool.codespell]
 ignore-words-list = "rouge"
-
-
 
 
 [tool.poetry.group.codespell]
@@ -47,15 +44,11 @@ optional = true
 codespell = "^2.2.0"
 
 
-
-
 [tool.poetry.group.test_integration]
 optional = true
 
 [tool.poetry.group.test_integration.dependencies]
 pillow = "^10.1.0"
-
-
 
 
 [tool.poetry.group.lint]
@@ -65,18 +58,13 @@ optional = true
 ruff = "^0.1.5"
 
 
-
-
 [tool.poetry.group.typing.dependencies]
 mypy = "^1.10"
 types-requests = "^2.28.11.5"
 types-google-cloud-ndb = "^2.2.0.1"
 types-pillow = "^10.1.0.2"
 types-protobuf = "^4.24.0.20240302"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 numpy = "^1.26.2"
-
-
 
 
 [tool.poetry.group.dev]
@@ -87,7 +75,6 @@ pillow = "^10.1.0"
 types-requests = "^2.31.0.10"
 types-pillow = "^10.1.0.2"
 types-google-cloud-ndb = "^2.2.0.1"
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
 [tool.ruff.lint]
 select = [
