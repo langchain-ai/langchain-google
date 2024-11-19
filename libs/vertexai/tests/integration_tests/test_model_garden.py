@@ -168,7 +168,7 @@ async def test_anthropic_async() -> None:
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     """Check tool calls are as expected."""
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(response.content, list)
     tool_calls = response.tool_calls
     assert len(tool_calls) == 1
     tool_call = tool_calls[0]
