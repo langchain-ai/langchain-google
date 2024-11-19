@@ -368,8 +368,17 @@ def _parse_chat_history(
             continue
         elif isinstance(message, AIMessage):
             role = "model"
-            raw_function_call = message.additional_kwargs.get("function_call")
-            if raw_function_call:
+            if message.tool_calls:
+                parts = []
+                for tool_call in message.tool_calls:
+                    function_call = FunctionCall(
+                        {
+                            "name": tool_call["name"],
+                            "args": tool_call["args"],
+                        }
+                    )
+                    parts.append(Part(function_call=function_call))
+            elif raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
                     {
                         "name": raw_function_call["name"],
