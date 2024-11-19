@@ -5,7 +5,6 @@ import json
 import logging
 import uuid
 import warnings
-from io import BytesIO
 from operator import itemgetter
 from typing import (
     Any,
@@ -22,7 +21,6 @@ from typing import (
     Union,
     cast,
 )
-from urllib.parse import urlparse
 
 import google.api_core
 
@@ -113,16 +111,6 @@ from langchain_google_genai._image_utils import ImageBytesLoader
 from langchain_google_genai.llms import _BaseGoogleGenerativeAI
 
 from . import _genai_extension as genaix
-
-IMAGE_TYPES: Tuple = ()
-try:
-    import PIL
-    from PIL.Image import Image
-
-    IMAGE_TYPES = IMAGE_TYPES + (Image,)
-except ImportError:
-    PIL = None  # type: ignore
-    Image = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -243,46 +231,6 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
 def _is_openai_parts_format(part: dict) -> bool:
     return "type" in part
-
-
-def _is_vision_model(model: str) -> bool:
-    return "vision" in model
-
-
-def _is_url(s: str) -> bool:
-    try:
-        result = urlparse(s)
-        return all([result.scheme, result.netloc])
-    except Exception as e:
-        logger.debug(f"Unable to parse URL: {e}")
-        return False
-
-
-def _is_b64(s: str) -> bool:
-    return s.startswith("data:image")
-
-
-def _load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
-    try:
-        from google.cloud import storage  # type: ignore[attr-defined]
-    except ImportError:
-        raise ImportError(
-            "google-cloud-storage is required to load images from GCS."
-            " Install it with `pip install google-cloud-storage`"
-        )
-    if PIL is None:
-        raise ImportError(
-            "PIL is required to load images. Please install it "
-            "with `pip install pillow`"
-        )
-
-    gcs_client = storage.Client(project=project)
-    pieces = path.split("/")
-    blobs = list(gcs_client.list_blobs(pieces[2], prefix="/".join(pieces[3:])))
-    if len(blobs) > 1:
-        raise ValueError(f"Found more than one candidate for {path}!")
-    img_bytes = blobs[0].download_as_bytes()
-    return PIL.Image.open(BytesIO(img_bytes))
 
 
 def _convert_to_parts(
