@@ -44,7 +44,7 @@ def test_create_structured_runnable() -> None:
 
 @pytest.mark.release
 def test_create_structured_runnable_with_prompt() -> None:
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0)
     prompt = ChatPromptTemplate.from_template(
         "Describe a random {class} and mention their name, {attr} and favorite food"
     )

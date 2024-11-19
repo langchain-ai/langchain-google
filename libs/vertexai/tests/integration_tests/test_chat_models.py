@@ -902,6 +902,76 @@ def test_context_catching():
     assert isinstance(response.content, str)
 
 
+@pytest.mark.extended
+def test_context_catching_tools():
+    from langchain import agents
+
+    @tool
+    def get_secret_number() -> int:
+        """Gets secret number."""
+        return 747
+
+    tools = [get_secret_number]
+    system_instruction = """
+    You are an expert researcher. You always stick to the facts in the sources
+    provided, and never make up new facts.
+
+    You have a get_secret_number function available. Use this tool if someone asks
+    for the secret number.
+        
+    Now look at these research papers, and answer the following questions.
+        
+    """
+
+    cached_content = create_context_cache(
+        model=ChatVertexAI(
+            model_name="gemini-1.5-pro-001",
+        ),
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf",
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
+                        },
+                    },
+                ]
+            ),
+        ],
+        tools=tools,
+    )
+
+    chat = ChatVertexAI(
+        model_name="gemini-1.5-pro-001",
+        cached_content=cached_content,
+    )
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+    agent = agents.create_tool_calling_agent(
+        llm=chat,
+        tools=tools,
+        prompt=prompt,
+    )
+    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+        agent=agent, tools=tools, verbose=False, stream_runnable=False
+    )
+    response = agent_executor.invoke({"input": "what is the secret number?"})
+    assert isinstance(response["output"], str)
+
+
 @pytest.mark.release
 def test_json_serializable() -> None:
     llm = ChatVertexAI(
