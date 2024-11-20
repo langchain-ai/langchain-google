@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Type
+from typing import Any, List, Optional, Type, Union
 
 from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.messages.tool import tool_call
@@ -55,11 +55,18 @@ class ToolsOutputParser(BaseGenerationOutputParser):
         return cls_(**tool_call["args"])
 
 
-def _extract_tool_calls(content: List[dict]) -> List[ToolCall]:
-    tool_calls = []
-    for block in content:
-        if block["type"] == "tool_use":
+def _extract_tool_calls(content: Union[str, List[Union[str, dict]]]) -> List[ToolCall]:
+    """Extract tool calls from a list of content blocks."""
+    if isinstance(content, list):
+        tool_calls = []
+        for block in content:
+            if isinstance(block, str):
+                continue
+            if block["type"] != "tool_use":
+                continue
             tool_calls.append(
                 tool_call(name=block["name"], args=block["input"], id=block["id"])
             )
-    return tool_calls
+        return tool_calls
+    else:
+        return []
