@@ -203,7 +203,7 @@ class ImageBytesLoader:
             storage.Blob
         """
 
-        gcs_client = self._storage_client()
+        gcs_client = self._storage_client
         blob = storage.Blob.from_string(gcs_uri, gcs_client)
         blob.reload(client=gcs_client)
         return blob
