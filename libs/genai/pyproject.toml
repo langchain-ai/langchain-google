@@ -15,6 +15,7 @@ python = ">=3.9,<4.0"
 langchain-core = ">=0.3.15,<0.4"
 google-generativeai = "^0.8.0"
 pydantic = ">=2,<3"
+grpcio = "^1.66.2"
 
 [tool.poetry.group.test]
 optional = true
@@ -26,8 +27,14 @@ pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
-numpy = "^1.26.2"
+types-requests = "^2.31.0.20231231"
+types-protobuf = "^4.24.0.4"
+numpy = [
+  { version = "^1", python = "<3.12" },
+  { version = "^1.26.2", python = ">=3.12" },
+]
 langchain-tests = "0.3.1"
+google-generativeai = "^0.8.0"
 
 [tool.codespell]
 ignore-words-list = "rouge"
@@ -59,7 +66,6 @@ mypy = "^1.10"
 types-requests = "^2.28.11.5"
 types-google-cloud-ndb = "^2.2.0.1"
 types-protobuf = "^4.24.0.20240302"
-numpy = "^1.26.2"
 
 
 [tool.poetry.group.dev]
@@ -68,6 +74,7 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 types-requests = "^2.31.0.10"
 types-google-cloud-ndb = "^2.2.0.1"
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core" }
 
 [tool.ruff.lint]
 select = [
@@ -77,7 +84,17 @@ select = [
 ]
 
 [tool.mypy]
-disallow_untyped_defs = "True"
+disallow_untyped_defs = true
+check_untyped_defs = true
+error_summary = false
+pretty = true
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
 
 [tool.coverage.run]
 omit = ["tests/*"]

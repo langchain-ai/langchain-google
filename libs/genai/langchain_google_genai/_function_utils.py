@@ -21,8 +21,10 @@ from typing import (
 
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
-import proto  # type: ignore[import]
-from google.generativeai.types.content_types import ToolDict  # type: ignore[import]
+import proto  # type: ignore[import-untyped]
+from google.generativeai.types.content_types import (  # type: ignore[import-untyped]
+    ToolDict,
+)
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -144,7 +146,7 @@ def convert_to_genai_function_declarations(
     tools: Sequence[_ToolsType],
 ) -> gapic.Tool:
     if not isinstance(tools, collections.abc.Sequence):
-        logger.warning(
+        logger.warning(  # type: ignore[unreachable]
             "convert_to_genai_function_declarations expects a Sequence "
             "and not a single tool."
         )
@@ -237,7 +239,7 @@ def _format_base_tool_to_function_declaration(
 
     if issubclass(tool.args_schema, BaseModel):
         schema = tool.args_schema.model_json_schema()
-    elif issubclass(tool.args_schema, BaseModelV1):
+    elif issubclass(tool.args_schema, BaseModelV1):  # type: ignore[unreachable]
         schema = tool.args_schema.schema()
     else:
         raise NotImplementedError(
@@ -259,7 +261,7 @@ def _convert_pydantic_to_genai_function(
 ) -> gapic.FunctionDeclaration:
     if issubclass(pydantic_model, BaseModel):
         schema = pydantic_model.model_json_schema()
-    elif issubclass(pydantic_model, BaseModelV1):
+    elif issubclass(pydantic_model, BaseModelV1):  # type: ignore[unreachable]
         schema = pydantic_model.schema()
     else:
         raise NotImplementedError(
@@ -460,7 +462,7 @@ def _tool_choice_to_tool_config(
 def is_basemodel_subclass_safe(tool: Type) -> bool:
     if safe_import("langchain_core.utils.pydantic", "is_basemodel_subclass"):
         from langchain_core.utils.pydantic import (
-            is_basemodel_subclass,  # type: ignore[import]
+            is_basemodel_subclass,
         )
 
         return is_basemodel_subclass(tool)

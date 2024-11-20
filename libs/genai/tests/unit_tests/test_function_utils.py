@@ -41,7 +41,7 @@ def test_format_tool_to_genai_function() -> None:
         """
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([sum_two_numbers])  # type: ignore
+    schema = convert_to_genai_function_declarations([sum_two_numbers])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "sum_two_numbers"
     assert function_declaration.parameters
@@ -52,7 +52,7 @@ def test_format_tool_to_genai_function() -> None:
         """Some description"""
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([do_something_optional])  # type: ignore
+    schema = convert_to_genai_function_declarations([do_something_optional])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "do_something_optional"
     assert function_declaration.parameters

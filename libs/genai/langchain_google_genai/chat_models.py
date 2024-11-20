@@ -25,7 +25,7 @@ from typing import (
 import google.api_core
 
 # TODO: remove ignore once the google package is published with types
-import proto  # type: ignore[import]
+import proto  # type: ignore[import-untyped]
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
 )
@@ -44,10 +44,10 @@ from google.ai.generativelanguage_v1beta.types import (
     ToolConfig,
     VideoMetadata,
 )
-from google.generativeai.caching import CachedContent  # type: ignore[import]
-from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
+from google.generativeai.caching import CachedContent  # type: ignore[import-untyped]
+from google.generativeai.types import Tool as GoogleTool  # type: ignore[import-untyped]
 from google.generativeai.types import caching_types, content_types
-from google.generativeai.types.content_types import (  # type: ignore[import]
+from google.generativeai.types.content_types import (  # type: ignore[import-untyped]
     FunctionDeclarationType,
     ToolDict,
 )
@@ -212,7 +212,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         Any: The result from the chat generation method.
     """
     retry_decorator = _create_retry_decorator()
-    from google.api_core.exceptions import InvalidArgument  # type: ignore
+    from google.api_core.exceptions import InvalidArgument
 
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
@@ -787,10 +787,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     raise an error."""
 
     cached_content: Optional[str] = None
-    """The name of the cached content used as context to serve the prediction. 
+    """The name of the cached content used as context to serve the prediction.
 
-    Note: only used in explicit caching, where users can have control over caching 
-    (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
+    Note: only used in explicit caching, where users can have control over caching
+    (e.g. what content to cache) and enjoy guaranteed cost savings. Format:
     ``cachedContents/{cachedContent}``.
     """
 
@@ -1275,7 +1275,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
         try:
-            formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
+            formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]
         except Exception:
             formatted_tools = [
                 tool_to_dict(convert_to_genai_function_declarations(tools))
@@ -1381,4 +1381,4 @@ def _get_tool_name(
     tool: Union[ToolDict, GoogleTool],
 ) -> str:
     genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
-    return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
+    return [f["name"] for f in genai_tool["function_declarations"]][0]
