@@ -28,7 +28,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
     token_path: Path = Path.home() / ".credentials" / "token.json"
     """Path to the token file."""
     credentials: Any = None
-    """Your own google credentials created via your own mechanism"""    
+    """Your own google credentials created via your own mechanism"""
     folder_id: Optional[str] = None
     """The folder id to load from."""
     document_ids: Optional[List[str]] = None
@@ -281,8 +281,8 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         if self.credentials:
             # use whatever was passed to us
             creds = self.credentials
-            return creds        
-        
+            return creds
+
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
