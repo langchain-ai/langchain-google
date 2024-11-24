@@ -8,8 +8,8 @@ from enum import Enum
 from typing import Any, Dict
 from urllib.parse import urlparse
 
+import filetype  # type: ignore[import]
 import requests
-import filetype
 from google.ai.generativelanguage_v1beta.types import Part
 
 
@@ -88,7 +88,7 @@ class ImageBytesLoader:
             raise ValueError(msg)
 
         inline_data: Dict[str, Any] = {"data": bytes_}
-        
+
         mime_type, _ = mimetypes.guess_type(image_string)
         if not mime_type:
             kind = filetype.guess(bytes_)
