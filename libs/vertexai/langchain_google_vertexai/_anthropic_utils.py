@@ -31,7 +31,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from anthropic.types import RawMessageStreamEvent  # type: ignore
+    from anthropic.types import RawMessageStreamEvent
 
 _message_type_lookups = {
     "human": "user",

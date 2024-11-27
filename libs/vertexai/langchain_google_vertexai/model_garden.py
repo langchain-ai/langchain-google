@@ -148,7 +148,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        from anthropic import (  # type: ignore
+        from anthropic import (
             AnthropicVertex,
             AsyncAnthropicVertex,
         )
