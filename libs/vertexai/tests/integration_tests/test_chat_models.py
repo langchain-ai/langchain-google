@@ -693,6 +693,7 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
     assert isinstance(response, Response)
 
 
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool

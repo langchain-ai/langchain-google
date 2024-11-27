@@ -178,6 +178,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.flaky(retries=3)
 def test_anthropic_tool_calling() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
