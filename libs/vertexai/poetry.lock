@@ -2232,6 +2232,23 @@ pytest = [
 ]
 
 [[package]]
+name = "pytest-retry"
+version = "1.6.3"
+description = "Adds the ability to retry flaky tests in CI environments"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "pytest_retry-1.6.3-py3-none-any.whl", hash = "sha256:e96f7df77ee70b0838d1085f9c3b8b5b7d74bf8947a0baf32e2b8c71b27683c8"},
+    {file = "pytest_retry-1.6.3.tar.gz", hash = "sha256:36ccfa11c8c8f9ddad5e20375182146d040c20c4a791745139c5a99ddf1b557d"},
+]
+
+[package.dependencies]
+pytest = ">=7.0.0"
+
+[package.extras]
+dev = ["black", "flake8", "isort", "mypy"]
+
+[[package]]
 name = "pytest-watcher"
 version = "0.3.5"
 description = "Automatically rerun your tests on file modifications"
@@ -2905,4 +2922,4 @@ mistral = ["langchain-mistralai"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "b047522f04bcdfd163bbe017fcb1f616b81f51dc342e61edc14e8f70d1a1bc2f"
+content-hash = "ac58beb4bb70401121f19c64af1782eee2aebfc0d17d9fe46463559adceb066f"

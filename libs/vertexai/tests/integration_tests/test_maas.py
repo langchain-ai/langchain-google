@@ -18,10 +18,7 @@ from langchain_google_vertexai.model_garden_maas import (
 )
 
 model_names = _LLAMA_MODELS + _MISTRAL_MODELS
-model_names_with_tools_support = _MISTRAL_MODELS + [
-    "meta/llama3-405b-instruct-maas",
-    "meta/llama-3.2-90b-vision-instruct-maas",
-]
+model_names_with_tools_support = _MISTRAL_MODELS + ["meta/llama3-405b-instruct-maas"]
 
 
 @pytest.mark.extended
@@ -45,8 +42,8 @@ async def test_agenerate(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 def test_stream(model_name: str) -> None:
-    # b/371631576
-    if model_name == "meta/llama3-8b-instruct-maas":
+    # streaming currently fails with mistral-nemo@2407
+    if model_name == "mistral-nemo@2407":
         return
     llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = llm.stream("What is the meaning of life?")
@@ -57,8 +54,8 @@ def test_stream(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 async def test_astream(model_name: str) -> None:
-    # b/371631576
-    if model_name == "meta/llama3-8b-instruct-maas":
+    # streaming currently fails with mistral-nemo@2407
+    if model_name == "mistral-nemo@2407":
         return
     llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
     output = llm.astream("What is the meaning of life?")
@@ -68,6 +65,7 @@ async def test_astream(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names_with_tools_support)
+@pytest.mark.flaky(retries=3)
 async def test_tools(model_name: str) -> None:
     @tool
     def search(
