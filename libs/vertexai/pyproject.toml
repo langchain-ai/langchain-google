@@ -20,7 +20,7 @@ anthropic = { extras = ["vertexai"], version = ">=0.35.0,<1", optional = true }
 langchain-mistralai = { version = ">=0.2.0,<1", optional = true }
 httpx = "^0.27.0"
 httpx-sse = "^0.4.0"
-pydantic = ">=2,<3"
+pydantic = "2.9.0"
 
 [tool.poetry.group.test]
 optional = true
@@ -83,6 +83,7 @@ mypy = "^1"
 types-google-cloud-ndb = "^2.2.0.20240106"
 types-protobuf = "^4.24.0.4"
 types-requests = "^2.31.0"
+anthropic = { extras = ["vertexai"], version = ">=0.35.0,<1", optional = true }
 
 
 [tool.poetry.group.dev.dependencies]
