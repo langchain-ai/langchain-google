@@ -12,6 +12,7 @@ from langchain_google_vertexai import ChatVertexAI
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.5)
 
 
+@pytest.mark.first
 class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_class(self) -> Type[BaseChatModel]:

@@ -81,6 +81,7 @@ def test_model_garden_generate(
 
 @pytest.mark.extended
 @pytest.mark.asyncio
+@pytest.mark.first
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
