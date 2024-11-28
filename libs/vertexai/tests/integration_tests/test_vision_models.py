@@ -120,6 +120,7 @@ def test_vertex_ai_visual_qna_chat(base64_image: str):
 
 
 @pytest.mark.release
+@pytest.mark.flaky(retries=3)
 def test_vertex_ai_image_generation_and_edition():
     generator = VertexAIImageGeneratorChat()
 

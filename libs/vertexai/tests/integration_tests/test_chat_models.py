@@ -219,6 +219,7 @@ def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize("file_uri,mime_type", multimodal_inputs)
+@pytest.mark.first
 def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
     llm = ChatVertexAI(model_name="gemini-1.5-pro-001", rate_limiter=rate_limiter)
     storage_client = storage.Client()
@@ -239,6 +240,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 
 
 @pytest.mark.release
+@pytest.mark.first
 def test_multimodal_media_inline_base64_template() -> None:
     llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
     prompt_template = ChatPromptTemplate.from_messages(
@@ -691,6 +693,7 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
     assert isinstance(response, Response)
 
 
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
@@ -844,6 +847,7 @@ def test_structured_output_schema_enum():
 
 
 @pytest.mark.extended
+@pytest.mark.first
 def test_context_catching():
     system_instruction = """
     
@@ -903,6 +907,7 @@ def test_context_catching():
 
 
 @pytest.mark.extended
+@pytest.mark.first
 def test_context_catching_tools():
     from langchain import agents
 

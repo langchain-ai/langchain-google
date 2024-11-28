@@ -11,7 +11,7 @@ _GPU_FLAG = "gpu"
 _LONG_FLAG = "long"
 _EXTENDED_FLAG = "extended"
 
-_PYTEST_FLAGS = [_RELEASE_FLAG, _GPU_FLAG, _LONG_FLAG, _EXTENDED_FLAG]
+_PYTEST_FLAGS = [_RELEASE_FLAG, _GPU_FLAG, _LONG_FLAG, _EXTENDED_FLAG, "first"]
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
