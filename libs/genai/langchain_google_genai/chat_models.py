@@ -47,6 +47,7 @@ from google.ai.generativelanguage_v1beta.types import (
 from google.generativeai.caching import CachedContent  # type: ignore[import]
 from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
 from google.generativeai.types import caching_types, content_types
+from google.generativeai.types import generation_types  # type: ignore[import]
 from google.generativeai.types.content_types import (  # type: ignore[import]
     FunctionDeclarationType,
     ToolDict,
@@ -110,7 +111,7 @@ from langchain_google_genai._function_utils import (
 from langchain_google_genai._image_utils import ImageBytesLoader
 from langchain_google_genai.llms import _BaseGoogleGenerativeAI
 
-from . import _genai_extension as genaix
+from langchain_google_genai import _genai_extension as genaix
 
 logger = logging.getLogger(__name__)
 
@@ -771,6 +772,52 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 'finish_reason': 'STOP',
                 'safety_ratings': [{'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}]
             }
+    
+    JSON Output and Schema Support:
+        .. code-block:: python
+            import typing_extensions as typing
+
+            class Recipe(typing.TypedDict):
+                recipe_name: str
+                ingredients: list[str]
+                rating: float
+            
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-pro",
+                temperature=0,
+                max_tokens=None,
+                timeout=None,
+                max_retries=2,
+                response_mime_type="application/json",
+                response_schema=list[Recipe]
+            )
+
+            # Define the messages
+            
+            messages = [
+                ("system", "You are a helpful assistant"),
+                ("human", "List 2 recipes for a healthy breakfast"),
+            ]
+
+            response = llm.invoke(messages)
+            print(json.dumps(json.loads(response.content), indent=4))
+
+        .. code-block:: python
+            [
+                {
+                    "ingredients": [
+                        "1/2 cup rolled oats",
+                        "1 cup unsweetened almond milk",
+                        "1/4 cup berries",
+                        "1 tablespoon chia seeds",
+                        "1/2 teaspoon cinnamon"
+                    ],
+                    "rating": 4.5,
+                    "recipe_name": "Overnight Oats"
+                },
+            ]
+
+
 
     """  # noqa: E501
 
@@ -790,6 +837,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     Gemini does not support system messages; any unsupported messages will
     raise an error."""
+
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only
+        supported in Gemini 1.5 and later models. Supported mimetype:
+            * "text/plain": (default) Text output.
+            * "application/json": JSON response in the candidates.
+            * "text/x.enum": Enum in plain text.
+    """
+
+    response_schema: Optional[Any] = None
+    """ Optional. Enforce an schema to the output.
+        The value of response_schema must be a either:
+        * A type hint annotation, as defined in the Python typing module module.
+        * An instance of genai.protos.Schema.
+        * An enum class
+    """
 
     cached_content: Optional[str] = None
     """The name of the cached content used as context to serve the prediction. 
@@ -829,6 +892,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         if not self.model.startswith("models/"):
             self.model = f"models/{self.model}"
+
+        if self.response_mime_type is not None and self.response_mime_type not in [
+            "text/plain", "application/json", "text/x.enum"]:
+            raise ValueError(
+                "response_mime_type must be either 'text/plain' "
+                "or 'application/json'"
+            )
+
+        if self.response_schema is not None:
+            if self.response_mime_type not in ["application/json", "text/x.enum"]:
+                raise ValueError(
+                    "response_schema is only supported when response_mime_type is "
+                    "'application/json or 'text/x.enum'"
+                )
 
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
@@ -915,9 +992,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "max_output_tokens": self.max_output_tokens,
                 "top_k": self.top_k,
                 "top_p": self.top_p,
+                "response_mime_type": self.response_mime_type,
+                "response_schema": self.response_schema,
             }.items()
             if v is not None
         }
+        if gen_config.get("response_schema"):
+            generation_types._normalize_schema(gen_config)
+              
         if generation_config:
             gen_config = {**gen_config, **generation_config}
         return GenerationConfig(**gen_config)
