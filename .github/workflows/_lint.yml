@@ -69,7 +69,7 @@ jobs:
         # It doesn't matter how you change it, any change will cause a cache-bust.
         working-directory: ${{ inputs.working-directory }}
         run: |
-          poetry install --with lint,typing
+          poetry install --with lint,typing --all-extras
 
       - name: Install langchain editable
         working-directory: ${{ inputs.working-directory }}
@@ -87,7 +87,6 @@ jobs:
           path: |
             ${{ env.WORKDIR }}/.mypy_cache
           key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/poetry.lock', inputs.working-directory)) }}
-
 
       - name: Analysing the code with our lint
         working-directory: ${{ inputs.working-directory }}
