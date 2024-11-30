@@ -262,7 +262,7 @@ class _BaseVertexAIVectorStore(VectorStore):
     def add_texts_with_embeddings(
         self,
         texts: List[str],
-        embeddings: List[float],
+        embeddings: List[List[float]],
         sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
         metadatas: Union[List[dict], None] = None,
         *,
@@ -270,19 +270,20 @@ class _BaseVertexAIVectorStore(VectorStore):
         is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> List[str]:
-        
+
         if ids is not None and len(set(ids)) != len(ids):
             raise ValueError(
                 "All provided ids should be unique."
                 f"There are {len(ids)-len(set(ids))} duplicates."
             )
+        
         if ids is not None and len(ids) != len(texts):
             raise ValueError(
                 "The number of `ids` should match the number of `texts` "
                 f"{len(ids)} != {len(texts)}"
             )
         
-        if len(embeddings) != len(texts):
+        if isinstance(embeddings, list) and len(embeddings) != len(texts):
             raise ValueError(
                 "The number of `embeddings` should match the number of `texts` "
                 f"{len(embeddings)} != {len(texts)}"
