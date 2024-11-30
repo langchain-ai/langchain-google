@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform import telemetry
@@ -8,6 +8,7 @@ from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndexEndpoint,
 )
 from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
+    HybridQuery,
     MatchNeighbor,
     Namespace,
     NumericNamespace,
@@ -30,14 +31,24 @@ class Searcher(ABC):
     def find_neighbors(
         self,
         embeddings: List[List[float]],
+        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
         k: int = 4,
+        rrf_ranking_alpha: float = 1,
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
     ) -> List[List[Tuple[str, float]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
             embedding: List of embeddings vectors.
+            sparse_embeddings: List of Sparse embedding dictionaries which represents an
+                embedding as a list of dimensions and as a list of sparse values:
+                    ie. [{"values": [0.7, 0.5], "dimensions": [10, 20]}]
             k: Number of neighbors to be retrieved.
+            rrf_ranking_alpha: Reciprocal Ranking Fusion weight, float between 0 and 1.0
+                Weights Dense Search VS Sparse Search, as an example:
+                - rrf_ranking_alpha=1: Only Dense
+                - rrf_ranking_alpha=0: Only Sparse
+                - rrf_ranking_alpha=0.7: 0.7 weighting for dense and 0.3 for sparse
             filter_: List of filters to apply.
         Returns:
             List of lists of Tuples (id, distance) for each embedding vector.
@@ -49,6 +60,7 @@ class Searcher(ABC):
         self,
         ids: List[str],
         embeddings: List[List[float]],
+        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
         **kwargs: Any,
@@ -58,6 +70,7 @@ class Searcher(ABC):
         Args:
             ids: List of unique ids.
             embeddings: List of embedddings for each record.
+            sparse_embeddings: List of sparse embedddings for each record.
             metadatas: List of metadata of each record.
         """
         raise NotImplementedError()
@@ -81,21 +94,46 @@ class Searcher(ABC):
     def _postprocess_response(
         self, response: List[List[MatchNeighbor]]
     ) -> List[List[Tuple[str, float]]]:
-        """Posproceses an endpoint response and converts it to a list of list of
-        tuples instead of using vertexai objects.
+        """Posproceses an endpoint response and converts it to a list of records
+        instead of using vertexai objects.
         Args:
             response: Endpoint response.
         Returns:
-            List of list of tuples of (id, distance).
-        """
-        return [
-            [
-                (neighbor.id, cast(float, neighbor.distance))
-                for neighbor in matching_neighbor_list
+            List of records: [
+                {
+                    "doc_id": doc_id,
+                    "dense_distance": dense_distance,
+                    "sparse_distance": sparse_distance
+                }
             ]
-            for matching_neighbor_list in response
-        ]
-
+        """
+        results = []
+        for matching_neighbor_list in response:
+            for neighbor in matching_neighbor_list:
+                dense_dist = (
+                    cast(float, neighbor.distance)
+                    if neighbor.distance else 0.0
+                )
+                sparse_dist = (
+                    cast(float, neighbor.sparse_distance)
+                    if neighbor.sparse_distance else 0.0
+                )
+                result = {
+                    "doc_id": neighbor.id,
+                    "dense_distance": dense_dist,
+                    "sparse_distance": sparse_dist
+                }
+                results.append(result)
+        return results
+    
+        # return [
+        #     [
+        #         (neighbor.id, cast(float, neighbor.distance), cast(float, neighbor.sparse_distance))
+        #         for neighbor in matching_neighbor_list
+        #     ]
+        #     for matching_neighbor_list in response
+        # ]
+        
 
 class VectorSearchSearcher(Searcher):
     """Class to interface with a VectorSearch index and endpoint."""
@@ -139,7 +177,7 @@ class VectorSearchSearcher(Searcher):
         neighbors = self.find_neighbors(
             embeddings=embeddings, k=max_datapoints, filter_=filter_
         )
-        return [_id for (_id, _) in neighbors[0]] if neighbors else []
+        return [elem["doc_id"] for elem in neighbors[0]] if neighbors else []
 
     def remove_datapoints(
         self,
@@ -152,6 +190,7 @@ class VectorSearchSearcher(Searcher):
         self,
         ids: List[str],
         embeddings: List[List[float]],
+        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
         **kwargs: Any,
@@ -161,11 +200,17 @@ class VectorSearchSearcher(Searcher):
         Args:
             ids: List of unique ids.
             embeddings: List of embedddings for each record.
+            sparse_embeddings: List of sparse embedddings for each record.
             metadatas: List of metadata of each record.
             is_complete_overwrite: Whether to overwrite everything.
         """
 
-        data_points = to_data_points(ids, embeddings, metadatas)
+        data_points = self.to_data_points(
+            ids=ids,
+            embeddings=embeddings,
+            sparse_embeddings=sparse_embeddings,
+            metadatas=metadatas
+        )
 
         if self._stream_update:
             stream_update_index(index=self._index, data_points=data_points)
@@ -185,14 +230,24 @@ class VectorSearchSearcher(Searcher):
     def find_neighbors(
         self,
         embeddings: List[List[float]],
+        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
         k: int = 4,
+        rrf_ranking_alpha: float = 1,
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
     ) -> List[List[Tuple[str, float]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
-            embedding: List of embeddings vectors.
+            embeddings: List of embedding vectors.
+            sparse_embeddings: List of Sparse embedding dictionaries which represents an
+                embedding as a list of dimensions and as a list of sparse values:
+                    ie. [{"values": [0.7, 0.5], "dimensions": [10, 20]}]
             k: Number of neighbors to be retrieved.
+            rrf_ranking_alpha: Reciprocal Ranking Fusion weight, float between 0 and 1.0
+                Weights Dense Search VS Sparse Search, as an example:
+                - rrf_ranking_alpha=1: Only Dense
+                - rrf_ranking_alpha=0: Only Sparse
+                - rrf_ranking_alpha=0.7: 0.7 weighting for dense and 0.3 for sparse
             filter_: List of filters to apply.
         Returns:
             List of lists of Tuples (id, distance) for each embedding vector.
@@ -202,9 +257,28 @@ class VectorSearchSearcher(Searcher):
         # with public and private.
         _, user_agent = get_user_agent("vertex-ai-matching-engine")
         with telemetry.tool_context_manager(user_agent):
+            if sparse_embeddings is None:
+                queries = embeddings
+            else:
+                if len(sparse_embeddings) != len(embeddings):
+                    raise ValueError(
+                        "The number of `sparse_embeddings` should match the number of "
+                        f"`embeddings` {len(sparse_embeddings)} != {len(embeddings)}"
+                    )
+                queries = []
+
+                for embedding, sparse_embedding in zip(embeddings, sparse_embeddings):
+                    hybrid_query = HybridQuery(
+                        sparse_embedding_dimensions=sparse_embedding['dimensions'],
+                        sparse_embedding_values=sparse_embedding['values'],
+                        dense_embedding=embedding,
+                        rrf_ranking_alpha=rrf_ranking_alpha
+                    )
+                    queries.append(hybrid_query)
+
             response = self._endpoint.find_neighbors(
                 deployed_index_id=self._deployed_index_id,
-                queries=embeddings,
+                queries=queries,
                 num_neighbors=k,
                 filter=filter_,
                 numeric_filter=numeric_filter,

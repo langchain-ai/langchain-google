@@ -79,16 +79,19 @@ class _BaseVertexAIVectorStore(VectorStore):
             Lower score represents more similarity.
         """
 
-        embbedings = self._embeddings.embed_query(query)
+        embbeding = self._embeddings.embed_query(query)
 
         return self.similarity_search_by_vector_with_score(
-            embedding=embbedings, k=k, filter=filter, numeric_filter=numeric_filter
+            embedding=embbeding, k=k, filter=filter, numeric_filter=numeric_filter
         )
+    
 
     def similarity_search_by_vector_with_score(
         self,
         embedding: List[float],
+        sparse_embedding: Optional[Dict[str, Union[float, int]]] = None,
         k: int = 4,
+        rrf_ranking_alpha: float = 1,
         filter: Optional[List[Namespace]] = None,
         numeric_filter: Optional[List[NumericNamespace]] = None,
     ) -> List[Tuple[Document, float]]:
@@ -96,7 +99,15 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         Args:
             embedding: Embedding to look up documents similar to.
+            sparse_embedding: Sparse embedding dictionary which represents an embedding
+                as a list of dimensions and as a list of sparse values:
+                    ie. {"values": [0.7, 0.5], "dimensions": [10, 20]}
             k: Number of Documents to return. Defaults to 4.
+            rrf_ranking_alpha: Reciprocal Ranking Fusion weight, float between 0 and 1.0
+                Weights Dense Search VS Sparse Search, as an example:
+                - rrf_ranking_alpha=1: Only Dense
+                - rrf_ranking_alpha=0: Only Sparse
+                - rrf_ranking_alpha=0.7: 0.7 weighting for dense and 0.3 for sparse
             filter: Optional. A list of Namespaces for filtering
                 the matching results.
                 For example:
@@ -117,20 +128,29 @@ class _BaseVertexAIVectorStore(VectorStore):
         """
 
         neighbors_list = self._searcher.find_neighbors(
-            embeddings=[embedding], k=k, filter_=filter, numeric_filter=numeric_filter
+            embeddings=[embedding],
+            sparse_embedding=[sparse_embedding],
+            k=k,
+            rrf_ranking_alpha=rrf_ranking_alpha,
+            filter_=filter,
+            numeric_filter=numeric_filter
         )
         if not neighbors_list:
             return []
-
-        keys = [key for key, _ in neighbors_list[0]]
-        distances = [distance for _, distance in neighbors_list[0]]
+        
+        keys = [elem["doc_id"] for elem in neighbors_list[0]]
+        dense_distances = [elem["dense_distance"] for elem in neighbors_list[0]]
+        sparse_distances = [elem["sparse_distance"] for elem in neighbors_list[0]]
         documents = self._document_storage.mget(keys)
 
         if all(document is not None for document in documents):
             # Ignore typing because mypy doesn't seem to be able to identify that
             # in documents there is no possibility to have None values with the
             # check above.
-            return list(zip(documents, distances))  # type: ignore
+            if sparse_embedding is None:
+                return list(zip(documents, dense_distances))  # type: ignore
+            else:
+                return list(zip(documents, dense_distances, sparse_distances))  # type: ignore
         else:
             missing_docs = [key for key, doc in zip(keys, documents) if doc is None]
             message = f"Documents with ids: {missing_docs} not found in the storage"
@@ -196,7 +216,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         """
         return [
             document
-            for document, _ in self.similarity_search_with_score(
+            for document, _, _ in self.similarity_search_with_score(
                 query, k, filter, numeric_filter
             )
         ]
@@ -228,7 +248,29 @@ class _BaseVertexAIVectorStore(VectorStore):
         # Makes sure is a list and can get the length, should we support iterables?
         # metadata is a list so probably not?
         texts = list(texts)
+        embeddings = self._embeddings.embed_documents(texts)
+                
+        return self.add_texts_with_embeddings(
+            texts=texts,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            ids=ids,
+            is_complete_overwrite=is_complete_overwrite,
+            **kwargs
+        )    
 
+    def add_texts_with_embeddings(
+        self,
+        texts: List[str],
+        embeddings: List[float],
+        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
+        metadatas: Union[List[dict], None] = None,
+        *,
+        ids: Optional[List[str]] = None,
+        is_complete_overwrite: bool = False,
+        **kwargs: Any,
+    ) -> List[str]:
+        
         if ids is not None and len(set(ids)) != len(ids):
             raise ValueError(
                 "All provided ids should be unique."
@@ -238,6 +280,12 @@ class _BaseVertexAIVectorStore(VectorStore):
             raise ValueError(
                 "The number of `ids` should match the number of `texts` "
                 f"{len(ids)} != {len(texts)}"
+            )
+        
+        if len(embeddings) != len(texts):
+            raise ValueError(
+                "The number of `embeddings` should match the number of `texts` "
+                f"{len(embeddings)} != {len(texts)}"
             )
 
         if ids is None:
@@ -259,10 +307,13 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         self._document_storage.mset(list(zip(ids, documents)))
 
-        embeddings = self._embeddings.embed_documents(texts)
-
         self._searcher.add_to_index(
-            ids, embeddings, metadatas, is_complete_overwrite, **kwargs
+            ids=ids,
+            embeddings=embeddings,
+            sparse_embeddings=sparse_embeddings,
+            metadatas=metadatas,
+            is_complete_overwrite=is_complete_overwrite,
+            **kwargs
         )
 
         return ids
