@@ -9,6 +9,7 @@ from langchain_google_vertexai.vectorstores.vectorstores import _BaseVertexAIVec
 def test_to_data_points():
     ids = ["Id1"]
     embeddings = [[0.0, 0.0]]
+    sparse_embeddings = [{"values": [0.9, 0.3], "dimensions": [3, 20]}]
     metadatas = [
         {
             "some_string": "string",
@@ -19,7 +20,12 @@ def test_to_data_points():
     ]
 
     with pytest.warns():
-        result = to_data_points(ids, embeddings, metadatas)
+        result = to_data_points(
+            ids=ids,
+            embeddings=embeddings,
+            sparse_embeddings=sparse_embeddings,
+            metadatas=metadatas
+        )
 
     assert isinstance(result, list)
     assert len(result) == 1
