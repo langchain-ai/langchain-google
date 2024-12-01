@@ -65,7 +65,7 @@ def batch_update_index(
 def to_data_points(
     ids: List[str],
     embeddings: List[List[float]],
-    sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
+    sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
     metadatas: Union[List[Dict[str, Any]], None] = None,
 ) -> List["meidx_types.IndexDataPoint"]:
     """Converts triplets id, embedding, metadata into IndexDataPoints instances.

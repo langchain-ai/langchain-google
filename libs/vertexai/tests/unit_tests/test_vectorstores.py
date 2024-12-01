@@ -1,6 +1,8 @@
+from typing import Dict, List
 from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.documents import Document
 
 from langchain_google_vertexai.vectorstores._utils import to_data_points
 from langchain_google_vertexai.vectorstores.vectorstores import _BaseVertexAIVectorStore
@@ -9,7 +11,9 @@ from langchain_google_vertexai.vectorstores.vectorstores import _BaseVertexAIVec
 def test_to_data_points():
     ids = ["Id1"]
     embeddings = [[0.0, 0.0]]
-    sparse_embeddings = [{"values": [0.9, 0.3], "dimensions": [3, 20]}]
+    sparse_embeddings: List[Dict[str, List[int] | List[float]]] = [
+        {"values": [0.9, 0.3], "dimensions": [3, 20]}
+    ]
     metadatas = [
         {
             "some_string": "string",
@@ -82,3 +86,74 @@ def test_add_texts_with_custom_ids(mocker):
         VectorStore.add_texts(texts=texts, ids=["Id1"])
     with pytest.raises(ValueError):
         VectorStore.add_texts(texts=texts, ids=["Id1", "Id2", "Id2"])
+
+
+def test_add_texts_with_embeddings():
+    texts = ["Text1", "Text2"]
+    embeddings = [[0.1, 0.2, 1.0], [1.0, 0.0, 1.0]]
+    embeddings_wrong_length = [[0.0, 0.0, 1.0]]
+
+    VectorStore = object.__new__(_BaseVertexAIVectorStore)
+    VectorStore._document_storage = MagicMock()
+    VectorStore._embeddings = MagicMock()
+    VectorStore._searcher = MagicMock()
+
+    returned_ids = VectorStore.add_texts_with_embeddings(
+        texts=texts, embeddings=embeddings
+    )
+
+    assert len(returned_ids) == len(texts)
+
+    with pytest.raises(ValueError):
+        VectorStore.add_texts_with_embeddings(
+            texts=texts, embeddings=embeddings_wrong_length
+        )
+
+
+def test_similarity_search_by_vector_with_score_output_shape():
+    embedding = [0.0, 0.5, 0.8]
+    sparse_embedding: Dict[str, List[int] | List[float]] = {
+        "values": [0.9, 0.3],
+        "dimensions": [3, 20],
+    }
+
+    VectorStore = object.__new__(_BaseVertexAIVectorStore)
+    VectorStore._document_storage = MagicMock()
+    VectorStore._embeddings = MagicMock()
+    VectorStore._searcher = MagicMock()
+
+    # Mock the searcher to return some sample neighbors
+    sample_neighbors = [
+        {"doc_id": "doc1", "dense_distance": 0.8, "sparse_distance": 0.5}
+    ]
+    VectorStore._searcher.find_neighbors.return_value = [sample_neighbors]
+
+    # Mock the document storage to return a document for the doc_id
+    sample_document = Document(page_content="test content")
+    VectorStore._document_storage.mget.return_value = [sample_document]
+
+    # Test with sparse embedding
+    result_with_sparse = VectorStore.similarity_search_by_vector_with_score(
+        embedding=embedding, sparse_embedding=sparse_embedding
+    )
+
+    # Should return tuples with (document, dict_of_scores)
+    assert len(result_with_sparse) == 1
+    assert len(result_with_sparse[0]) == 2
+    assert isinstance(result_with_sparse[0][0], Document)
+    assert isinstance(result_with_sparse[0][1], dict)
+    assert "dense_distance" in result_with_sparse[0][1]
+    assert "sparse_distance" in result_with_sparse[0][1]
+    assert isinstance(result_with_sparse[0][1]["dense_distance"], float)
+    assert isinstance(result_with_sparse[0][1]["sparse_distance"], float)
+
+    # Test without sparse embedding (dense-only search)
+    result_without_sparse = VectorStore.similarity_search_by_vector_with_score(
+        embedding=embedding
+    )
+
+    # Should return tuples with (document, float)
+    assert len(result_without_sparse) == 1
+    assert len(result_without_sparse[0]) == 2
+    assert isinstance(result_without_sparse[0][0], Document)
+    assert isinstance(result_without_sparse[0][1], float)

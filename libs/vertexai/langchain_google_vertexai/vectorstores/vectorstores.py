@@ -48,13 +48,13 @@ class _BaseVertexAIVectorStore(VectorStore):
         """Returns the embeddings object."""
         return self._embeddings
 
-    def similarity_search_with_score(
+    def similarity_search_with_score(  # type: ignore[override]
         self,
         query: str,
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
         numeric_filter: Optional[List[NumericNamespace]] = None,
-    ) -> List[Tuple[Document, float]]:
+    ) -> List[Tuple[Document, Union[float, Dict[str, float]]]]:
         """Return docs most similar to query and their cosine distance from the query.
 
         Args:
@@ -76,7 +76,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         Returns:
             List[Tuple[Document, float]]: List of documents most similar to
             the query text and cosine distance in float for each.
-            Lower score represents more similarity.
+            Higher score represents more similarity.
         """
 
         embbeding = self._embeddings.embed_query(query)
@@ -88,12 +88,12 @@ class _BaseVertexAIVectorStore(VectorStore):
     def similarity_search_by_vector_with_score(
         self,
         embedding: List[float],
-        sparse_embedding: Optional[Dict[str, Union[float, int]]] = None,
+        sparse_embedding: Optional[Dict[str, Union[List[int], List[float]]]] = None,
         k: int = 4,
         rrf_ranking_alpha: float = 1,
         filter: Optional[List[Namespace]] = None,
         numeric_filter: Optional[List[NumericNamespace]] = None,
-    ) -> List[Tuple[Document, float]]:
+    ) -> List[Tuple[Document, Union[float, Dict[str, float]]]]:
         """Return docs most similar to the embedding and their cosine distance.
 
         Args:
@@ -121,14 +121,23 @@ class _BaseVertexAIVectorStore(VectorStore):
                 for more detail.
 
         Returns:
-            List[Tuple[Document, float]]: List of documents most similar to
-            the query text and cosine distance in float for each.
-            Lower score represents more similarity.
+            List[Tuple[Document, Union[float, Dict[str, float]]]]:
+            List of documents most similar to the query text and either
+            cosine distance in float for each or dictionary with both dense and sparse
+            scores if running hybrid search.
+            Higher score represents more similarity.
         """
+        if sparse_embedding is not None and not isinstance(sparse_embedding, dict):
+            raise ValueError(
+                "`sparse_embedding` should be a dictionary with the following format: "
+                "{'values': [0.7, 0.5, ...], 'dimensions': [10, 20, ...]}\n"
+                f"{type(sparse_embedding)} != {type({})}"
+            )
 
+        sparse_embeddings = [sparse_embedding] if sparse_embedding is not None else None
         neighbors_list = self._searcher.find_neighbors(
             embeddings=[embedding],
-            sparse_embedding=[sparse_embedding],
+            sparse_embeddings=sparse_embeddings,
             k=k,
             rrf_ranking_alpha=rrf_ranking_alpha,
             filter_=filter,
@@ -138,18 +147,23 @@ class _BaseVertexAIVectorStore(VectorStore):
             return []
 
         keys = [elem["doc_id"] for elem in neighbors_list[0]]
-        dense_distances = [elem["dense_distance"] for elem in neighbors_list[0]]
-        sparse_distances = [elem["sparse_distance"] for elem in neighbors_list[0]]
+        if sparse_embedding is None:
+            distances = [elem["dense_distance"] for elem in neighbors_list[0]]
+        else:
+            distances = [
+                {
+                    "dense_distance": elem["dense_distance"],
+                    "sparse_distance": elem["sparse_distance"],
+                }
+                for elem in neighbors_list[0]
+            ]
         documents = self._document_storage.mget(keys)
 
         if all(document is not None for document in documents):
             # Ignore typing because mypy doesn't seem to be able to identify that
             # in documents there is no possibility to have None values with the
             # check above.
-            if sparse_embedding is None:
-                return list(zip(documents, dense_distances))  # type: ignore
-            else:
-                return list(zip(documents, dense_distances, sparse_distances))  # type: ignore
+            return list(zip(documents, distances))  # type: ignore
         else:
             missing_docs = [key for key, doc in zip(keys, documents) if doc is None]
             message = f"Documents with ids: {missing_docs} not found in the storage"
@@ -215,7 +229,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         """
         return [
             document
-            for document, _, _ in self.similarity_search_with_score(
+            for document, _ in self.similarity_search_with_score(
                 query, k, filter, numeric_filter
             )
         ]
@@ -262,7 +276,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         self,
         texts: List[str],
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         metadatas: Union[List[dict], None] = None,
         *,
         ids: Optional[List[str]] = None,

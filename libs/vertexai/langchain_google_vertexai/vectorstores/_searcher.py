@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Union
 
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform import telemetry
@@ -31,12 +31,12 @@ class Searcher(ABC):
     def find_neighbors(
         self,
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         k: int = 4,
         rrf_ranking_alpha: float = 1,
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
-    ) -> List[List[Tuple[str, float]]]:
+    ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
             embedding: List of embeddings vectors.
@@ -51,7 +51,13 @@ class Searcher(ABC):
                 - rrf_ranking_alpha=0.7: 0.7 weighting for dense and 0.3 for sparse
             filter_: List of filters to apply.
         Returns:
-            List of lists of Tuples (id, distance) for each embedding vector.
+            List of records: [
+                {
+                    "doc_id": doc_id,
+                    "dense_distance": dense_distance,
+                    "sparse_distance": sparse_distance
+                }
+            ]
         """
         raise NotImplementedError()
 
@@ -60,7 +66,7 @@ class Searcher(ABC):
         self,
         ids: List[str],
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
         **kwargs: Any,
@@ -93,8 +99,8 @@ class Searcher(ABC):
 
     def _postprocess_response(
         self, response: List[List[MatchNeighbor]]
-    ) -> List[List[Tuple[str, float]]]:
-        """Posproceses an endpoint response and converts it to a list of records
+    ) -> List[List[Dict[str, Any]]]:
+        """Posproceses an endpoint response and converts it to a list of list of records
         instead of using vertexai objects.
         Args:
             response: Endpoint response.
@@ -107,34 +113,23 @@ class Searcher(ABC):
                 }
             ]
         """
-        results = []
+        queries_results = []
         for matching_neighbor_list in response:
+            query_results = []
             for neighbor in matching_neighbor_list:
-                dense_dist = (
-                    cast(float, neighbor.distance) if neighbor.distance else 0.0
-                )
+                dense_dist = neighbor.distance if neighbor.distance else 0.0
                 sparse_dist = (
-                    cast(float, neighbor.sparse_distance)
-                    if neighbor.sparse_distance
-                    else 0.0
+                    neighbor.sparse_distance if neighbor.sparse_distance else 0.0
                 )
                 result = {
                     "doc_id": neighbor.id,
                     "dense_distance": dense_dist,
                     "sparse_distance": sparse_dist,
                 }
-                results.append(result)
-        return results
+                query_results.append(result)
+            queries_results.append(query_results)
+        return queries_results
 
-        # return [
-        #     [
-        #         (neighbor.id, cast(float, neighbor.distance),
-        #          cast(float, neighbor.sparse_distance))
-        #         for neighbor in matching_neighbor_list
-        #     ]
-        #     for matching_neighbor_list in response
-        # ]
-        
 
 class VectorSearchSearcher(Searcher):
     """Class to interface with a VectorSearch index and endpoint."""
@@ -191,7 +186,7 @@ class VectorSearchSearcher(Searcher):
         self,
         ids: List[str],
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
         **kwargs: Any,
@@ -231,12 +226,12 @@ class VectorSearchSearcher(Searcher):
     def find_neighbors(
         self,
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[Union[float, int]]]]] = None,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         k: int = 4,
         rrf_ranking_alpha: float = 1,
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
-    ) -> List[List[Tuple[str, float]]]:
+    ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
             embeddings: List of embedding vectors.
@@ -251,7 +246,13 @@ class VectorSearchSearcher(Searcher):
                 - rrf_ranking_alpha=0.7: 0.7 weighting for dense and 0.3 for sparse
             filter_: List of filters to apply.
         Returns:
-            List of lists of Tuples (id, distance) for each embedding vector.
+            List of records: [
+                {
+                    "doc_id": doc_id,
+                    "dense_distance": dense_distance,
+                    "sparse_distance": sparse_distance
+                }
+            ]
         """
 
         # No need to implement other method for private VPC, find_neighbors now works
@@ -270,12 +271,12 @@ class VectorSearchSearcher(Searcher):
 
                 for embedding, sparse_embedding in zip(embeddings, sparse_embeddings):
                     hybrid_query = HybridQuery(
-                        sparse_embedding_dimensions=sparse_embedding["dimensions"],
-                        sparse_embedding_values=sparse_embedding["values"],
+                        sparse_embedding_dimensions=sparse_embedding["dimensions"],  # type: ignore
+                        sparse_embedding_values=sparse_embedding["values"],  # type: ignore
                         dense_embedding=embedding,
                         rrf_ranking_alpha=rrf_ranking_alpha,
                     )
-                    queries.append(hybrid_query)
+                    queries.append(hybrid_query)  # type: ignore
 
             response = self._endpoint.find_neighbors(
                 deployed_index_id=self._deployed_index_id,
