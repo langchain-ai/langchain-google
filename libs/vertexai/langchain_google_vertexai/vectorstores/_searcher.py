@@ -111,24 +111,25 @@ class Searcher(ABC):
         for matching_neighbor_list in response:
             for neighbor in matching_neighbor_list:
                 dense_dist = (
-                    cast(float, neighbor.distance)
-                    if neighbor.distance else 0.0
+                    cast(float, neighbor.distance) if neighbor.distance else 0.0
                 )
                 sparse_dist = (
                     cast(float, neighbor.sparse_distance)
-                    if neighbor.sparse_distance else 0.0
+                    if neighbor.sparse_distance
+                    else 0.0
                 )
                 result = {
                     "doc_id": neighbor.id,
                     "dense_distance": dense_dist,
-                    "sparse_distance": sparse_dist
+                    "sparse_distance": sparse_dist,
                 }
                 results.append(result)
         return results
-    
+
         # return [
         #     [
-        #         (neighbor.id, cast(float, neighbor.distance), cast(float, neighbor.sparse_distance))
+        #         (neighbor.id, cast(float, neighbor.distance),
+        #          cast(float, neighbor.sparse_distance))
         #         for neighbor in matching_neighbor_list
         #     ]
         #     for matching_neighbor_list in response
@@ -205,11 +206,11 @@ class VectorSearchSearcher(Searcher):
             is_complete_overwrite: Whether to overwrite everything.
         """
 
-        data_points = self.to_data_points(
+        data_points = to_data_points(
             ids=ids,
             embeddings=embeddings,
             sparse_embeddings=sparse_embeddings,
-            metadatas=metadatas
+            metadatas=metadatas,
         )
 
         if self._stream_update:
@@ -269,10 +270,10 @@ class VectorSearchSearcher(Searcher):
 
                 for embedding, sparse_embedding in zip(embeddings, sparse_embeddings):
                     hybrid_query = HybridQuery(
-                        sparse_embedding_dimensions=sparse_embedding['dimensions'],
-                        sparse_embedding_values=sparse_embedding['values'],
+                        sparse_embedding_dimensions=sparse_embedding["dimensions"],
+                        sparse_embedding_values=sparse_embedding["values"],
                         dense_embedding=embedding,
-                        rrf_ranking_alpha=rrf_ranking_alpha
+                        rrf_ranking_alpha=rrf_ranking_alpha,
                     )
                     queries.append(hybrid_query)
 

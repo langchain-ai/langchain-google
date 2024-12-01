@@ -24,7 +24,7 @@ def test_to_data_points():
             ids=ids,
             embeddings=embeddings,
             sparse_embeddings=sparse_embeddings,
-            metadatas=metadatas
+            metadatas=metadatas,
         )
 
     assert isinstance(result, list)

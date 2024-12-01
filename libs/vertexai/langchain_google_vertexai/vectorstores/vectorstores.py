@@ -84,7 +84,6 @@ class _BaseVertexAIVectorStore(VectorStore):
         return self.similarity_search_by_vector_with_score(
             embedding=embbeding, k=k, filter=filter, numeric_filter=numeric_filter
         )
-    
 
     def similarity_search_by_vector_with_score(
         self,
@@ -133,11 +132,11 @@ class _BaseVertexAIVectorStore(VectorStore):
             k=k,
             rrf_ranking_alpha=rrf_ranking_alpha,
             filter_=filter,
-            numeric_filter=numeric_filter
+            numeric_filter=numeric_filter,
         )
         if not neighbors_list:
             return []
-        
+
         keys = [elem["doc_id"] for elem in neighbors_list[0]]
         dense_distances = [elem["dense_distance"] for elem in neighbors_list[0]]
         sparse_distances = [elem["sparse_distance"] for elem in neighbors_list[0]]
@@ -249,15 +248,15 @@ class _BaseVertexAIVectorStore(VectorStore):
         # metadata is a list so probably not?
         texts = list(texts)
         embeddings = self._embeddings.embed_documents(texts)
-                
+
         return self.add_texts_with_embeddings(
             texts=texts,
             embeddings=embeddings,
             metadatas=metadatas,
             ids=ids,
             is_complete_overwrite=is_complete_overwrite,
-            **kwargs
-        )    
+            **kwargs,
+        )
 
     def add_texts_with_embeddings(
         self,
@@ -270,19 +269,18 @@ class _BaseVertexAIVectorStore(VectorStore):
         is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> List[str]:
-
         if ids is not None and len(set(ids)) != len(ids):
             raise ValueError(
                 "All provided ids should be unique."
                 f"There are {len(ids)-len(set(ids))} duplicates."
             )
-        
+
         if ids is not None and len(ids) != len(texts):
             raise ValueError(
                 "The number of `ids` should match the number of `texts` "
                 f"{len(ids)} != {len(texts)}"
             )
-        
+
         if isinstance(embeddings, list) and len(embeddings) != len(texts):
             raise ValueError(
                 "The number of `embeddings` should match the number of `texts` "
@@ -314,7 +312,7 @@ class _BaseVertexAIVectorStore(VectorStore):
             sparse_embeddings=sparse_embeddings,
             metadatas=metadatas,
             is_complete_overwrite=is_complete_overwrite,
-            **kwargs
+            **kwargs,
         )
 
         return ids

@@ -81,14 +81,16 @@ def to_data_points(
 
     if metadatas is None:
         metadatas = [{}] * len(ids)
-    
+
     if sparse_embeddings is None:
         sparse_embeddings = [{"values": [], "dimensions": []}] * len(ids)
 
     data_points = []
     ignored_fields = set()
 
-    for id_, embedding, sparse_embedding, metadata in zip(ids, embeddings, sparse_embeddings, metadatas):
+    for id_, embedding, sparse_embedding, metadata in zip(
+        ids, embeddings, sparse_embeddings, metadatas
+    ):
         restricts = []
         numeric_restricts = []
 
