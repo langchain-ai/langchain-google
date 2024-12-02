@@ -55,8 +55,8 @@ class Searcher(ABC):
             List of records: [
                 {
                     "doc_id": doc_id,
-                    "dense_distance": dense_distance,
-                    "sparse_distance": sparse_distance
+                    "dense_score": dense_score,
+                    "sparse_score": sparse_score
                 }
             ]
         """
@@ -110,8 +110,8 @@ class Searcher(ABC):
             List of records: [
                 {
                     "doc_id": doc_id,
-                    "dense_distance": dense_distance,
-                    "sparse_distance": sparse_distance
+                    "dense_score": dense_score,
+                    "sparse_score": sparse_score
                 }
             ]
         """
@@ -119,14 +119,14 @@ class Searcher(ABC):
         for matching_neighbor_list in response:
             query_results = []
             for neighbor in matching_neighbor_list:
-                dense_dist = neighbor.distance if neighbor.distance else 0.0
-                sparse_dist = (
+                dense_score = neighbor.distance if neighbor.distance else 0.0
+                sparse_score = (
                     neighbor.sparse_distance if neighbor.sparse_distance else 0.0
                 )
                 result = {
                     "doc_id": neighbor.id,
-                    "dense_distance": dense_dist,
-                    "sparse_distance": sparse_dist,
+                    "dense_score": dense_score,
+                    "sparse_score": sparse_score,
                 }
                 query_results.append(result)
             queries_results.append(query_results)
@@ -253,8 +253,8 @@ class VectorSearchSearcher(Searcher):
             List of records: [
                 {
                     "doc_id": doc_id,
-                    "dense_distance": dense_distance,
-                    "sparse_distance": sparse_distance
+                    "dense_score": dense_score,
+                    "sparse_score": sparse_score
                 }
             ]
         """

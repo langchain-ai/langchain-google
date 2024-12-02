@@ -79,10 +79,10 @@ class _BaseVertexAIVectorStore(VectorStore):
             Higher score represents more similarity.
         """
 
-        embbeding = self._embeddings.embed_query(query)
+        embedding = self._embeddings.embed_query(query)
 
         return self.similarity_search_by_vector_with_score(
-            embedding=embbeding, k=k, filter=filter, numeric_filter=numeric_filter
+            embedding=embedding, k=k, filter=filter, numeric_filter=numeric_filter
         )
 
     def similarity_search_by_vector_with_score(
@@ -148,12 +148,12 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         keys = [elem["doc_id"] for elem in neighbors_list[0]]
         if sparse_embedding is None:
-            distances = [elem["dense_distance"] for elem in neighbors_list[0]]
+            distances = [elem["dense_score"] for elem in neighbors_list[0]]
         else:
             distances = [
                 {
-                    "dense_distance": elem["dense_distance"],
-                    "sparse_distance": elem["sparse_distance"],
+                    "dense_score": elem["dense_score"],
+                    "sparse_score": elem["sparse_score"],
                 }
                 for elem in neighbors_list[0]
             ]

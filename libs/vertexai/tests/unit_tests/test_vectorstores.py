@@ -123,9 +123,7 @@ def test_similarity_search_by_vector_with_score_output_shape():
     VectorStore._searcher = MagicMock()
 
     # Mock the searcher to return some sample neighbors
-    sample_neighbors = [
-        {"doc_id": "doc1", "dense_distance": 0.8, "sparse_distance": 0.5}
-    ]
+    sample_neighbors = [{"doc_id": "doc1", "dense_score": 0.8, "sparse_score": 0.5}]
     VectorStore._searcher.find_neighbors.return_value = [sample_neighbors]
 
     # Mock the document storage to return a document for the doc_id
@@ -142,10 +140,10 @@ def test_similarity_search_by_vector_with_score_output_shape():
     assert len(result_with_sparse[0]) == 2
     assert isinstance(result_with_sparse[0][0], Document)
     assert isinstance(result_with_sparse[0][1], dict)
-    assert "dense_distance" in result_with_sparse[0][1]
-    assert "sparse_distance" in result_with_sparse[0][1]
-    assert isinstance(result_with_sparse[0][1]["dense_distance"], float)
-    assert isinstance(result_with_sparse[0][1]["sparse_distance"], float)
+    assert "dense_score" in result_with_sparse[0][1]
+    assert "sparse_score" in result_with_sparse[0][1]
+    assert isinstance(result_with_sparse[0][1]["dense_score"], float)
+    assert isinstance(result_with_sparse[0][1]["sparse_score"], float)
 
     # Test without sparse embedding (dense-only search)
     result_without_sparse = VectorStore.similarity_search_by_vector_with_score(
