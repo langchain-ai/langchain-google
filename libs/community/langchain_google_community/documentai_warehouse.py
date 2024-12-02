@@ -40,7 +40,7 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
     If nothing is provided, all documents in the project will be searched."""
     qa_size_limit: int = 5
     """The limit on the number of documents returned."""
-    client: "DocumentServiceClient" = None  #: :meta private:
+    client: "DocumentServiceClient" = None  # type:ignore[assignment] #: :meta private:
 
     @model_validator(mode="before")
     @classmethod

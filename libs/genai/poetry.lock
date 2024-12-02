@@ -212,6 +212,17 @@ files = [
 test = ["pytest (>=6)"]
 
 [[package]]
+name = "filetype"
+version = "1.2.0"
+description = "Infer file type and MIME type of any file/buffer. No external dependencies."
+optional = false
+python-versions = "*"
+files = [
+    {file = "filetype-1.2.0-py2.py3-none-any.whl", hash = "sha256:7ce71b6880181241cf7ac8697a2f1eb6a8bd9b429f7ad6d27b8db9ba5f1c2d25"},
+    {file = "filetype-1.2.0.tar.gz", hash = "sha256:66b56cd6474bf41d8c54660347d37afcc3f7d1970648de365c102ef77548aadb"},
+]
+
+[[package]]
 name = "freezegun"
 version = "1.5.1"
 description = "Let your Python tests travel through time"
@@ -1470,4 +1481,4 @@ watchmedo = ["PyYAML (>=3.10)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "988b5a557506419d3750476d499929c8e3d3f7a0f37f4ca8c5ec5064227f2671"
+content-hash = "07647d94d5cbab0a6be38f492be4a97837ad4164d1437d9a11723235a34c9e45"

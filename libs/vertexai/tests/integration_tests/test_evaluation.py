@@ -29,6 +29,7 @@ def test_evaluate() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.flaky(retries=3)
 def test_evaluate_strings() -> None:
     evaluator = VertexStringEvaluator(
         metric="safety", project_id=os.environ["PROJECT_ID"]
@@ -40,6 +41,7 @@ def test_evaluate_strings() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.flaky(retries=3)
 async def test_aevaluate_strings() -> None:
     evaluator = VertexStringEvaluator(
         metric="question_answering_quality", project_id=os.environ["PROJECT_ID"]
