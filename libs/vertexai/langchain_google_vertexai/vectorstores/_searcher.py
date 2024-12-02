@@ -31,11 +31,12 @@ class Searcher(ABC):
     def find_neighbors(
         self,
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         k: int = 4,
-        rrf_ranking_alpha: float = 1,
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
+        *,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
+        rrf_ranking_alpha: float = 1,
     ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
@@ -66,9 +67,10 @@ class Searcher(ABC):
         self,
         ids: List[str],
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
+        *,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         **kwargs: Any,
     ) -> None:
         """Adds documents to the index.
@@ -186,9 +188,10 @@ class VectorSearchSearcher(Searcher):
         self,
         ids: List[str],
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
+        *,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         **kwargs: Any,
     ) -> None:
         """Adds documents to the index.
@@ -226,11 +229,12 @@ class VectorSearchSearcher(Searcher):
     def find_neighbors(
         self,
         embeddings: List[List[float]],
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
         k: int = 4,
-        rrf_ranking_alpha: float = 1,
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
+        *,
+        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
+        rrf_ranking_alpha: float = 1,
     ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.
         Args:
