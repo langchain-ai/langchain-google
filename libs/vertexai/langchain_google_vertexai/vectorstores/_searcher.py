@@ -35,7 +35,9 @@ class Searcher(ABC):
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
         *,
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
+        sparse_embeddings: Optional[
+            List[Dict[str, Union[List[int], List[float]]]]
+        ] = None,
         rrf_ranking_alpha: float = 1,
     ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.
@@ -70,7 +72,9 @@ class Searcher(ABC):
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
         *,
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
+        sparse_embeddings: Optional[
+            List[Dict[str, Union[List[int], List[float]]]]
+        ] = None,
         **kwargs: Any,
     ) -> None:
         """Adds documents to the index.
@@ -191,7 +195,9 @@ class VectorSearchSearcher(Searcher):
         metadatas: Union[List[dict], None] = None,
         is_complete_overwrite: bool = False,
         *,
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
+        sparse_embeddings: Optional[
+            List[Dict[str, Union[List[int], List[float]]]]
+        ] = None,
         **kwargs: Any,
     ) -> None:
         """Adds documents to the index.
@@ -233,7 +239,9 @@ class VectorSearchSearcher(Searcher):
         filter_: Union[List[Namespace], None] = None,
         numeric_filter: Union[List[NumericNamespace], None] = None,
         *,
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
+        sparse_embeddings: Optional[
+            List[Dict[str, Union[List[int], List[float]]]]
+        ] = None,
         rrf_ranking_alpha: float = 1,
     ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.

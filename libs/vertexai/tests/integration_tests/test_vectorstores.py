@@ -11,7 +11,7 @@ variables:
 """
 
 import os
-from typing import Dict, List
+from typing import Dict, List, Union
 from uuid import uuid4
 
 import pytest
@@ -280,7 +280,7 @@ def test_vector_store_hybrid_search(
 
     query = "What are your favourite animals?"
     embedding = embeddings.embed_query(query)
-    sparse_embedding: Dict[str, List[int] | List[float]] = {
+    sparse_embedding: Dict[str, Union[List[int], List[float]]] = {
         "values": [0.5, 0.7],
         "dimensions": [2, 4],
     }
@@ -317,7 +317,7 @@ def test_add_texts_with_embeddings(
     )
     assert len(ids1) == 2
 
-    sparse_embeddings: List[Dict[str, List[int] | List[float]]] = [
+    sparse_embeddings: List[Dict[str, Union[List[int], List[float]]]] = [
         {"values": [0.5, 0.7], "dimensions": [2, 4]}
     ] * 2
     ids2 = vector_store.add_texts_with_embeddings(

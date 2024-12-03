@@ -278,7 +278,9 @@ class _BaseVertexAIVectorStore(VectorStore):
         embeddings: List[List[float]],
         metadatas: Union[List[dict], None] = None,
         *,
-        sparse_embeddings: Optional[List[Dict[str, List[int] | List[float]]]] = None,
+        sparse_embeddings: Optional[
+            List[Dict[str, Union[List[int], List[float]]]]
+        ] = None,
         ids: Optional[List[str]] = None,
         is_complete_overwrite: bool = False,
         **kwargs: Any,
