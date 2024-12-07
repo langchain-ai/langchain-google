@@ -342,8 +342,6 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
         items["type_"] = _get_type_from_schema(schema)
         if items["type_"] == glm.Type.OBJECT and "properties" in schema:
             items["properties"] = _get_properties_from_schema_any(schema["properties"])
-        if "title" in schema:
-            items["title"] = schema
         if "title" in schema or "description" in schema:
             items["description"] = (
                 schema.get("description") or schema.get("title") or ""
