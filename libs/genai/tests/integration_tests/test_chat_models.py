@@ -158,6 +158,33 @@ def test_chat_google_genai_invoke_multimodal() -> None:
         assert len(chunk.content.strip()) > 0
 
 
+def test_chat_google_genai_invoke_multimodal_by_url() -> None:
+    messages: list = [
+        HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "Guess what's in this picture! You have 3 guesses.",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": "https://picsum.photos/seed/picsum/200/300",
+                },
+            ]
+        ),
+    ]
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
+    response = llm.invoke(messages)
+    assert isinstance(response.content, str)
+    assert len(response.content.strip()) > 0
+
+    # Try streaming
+    for chunk in llm.stream(messages):
+        print(chunk)  # noqa: T201
+        assert isinstance(chunk.content, str)
+        assert len(chunk.content.strip()) > 0
+
+
 def test_chat_google_genai_invoke_multimodal_multiple_messages() -> None:
     messages: list = [
         HumanMessage(content="Hi there"),

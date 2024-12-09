@@ -292,10 +292,19 @@ class DataStoreDocumentStorage(DocumentStorage):
             entities = []
             for key, document in zip(keys, documents):
                 entity = self._client.entity(
-                    key=key, exclude_from_indexes=self.exclude_from_indexes
+                    key=key,
+                    exclude_from_indexes=self.exclude_from_indexes
+                    if self.exclude_from_indexes
+                    else [],
                 )
+                metadata_entity = self._client.entity(
+                    exclude_from_indexes=self.exclude_from_indexes
+                    if self.exclude_from_indexes
+                    else []
+                )
+                metadata_entity.update(document.metadata)
                 entity[self._text_property_name] = document.page_content
-                entity[self._metadata_property_name] = document.metadata
+                entity[self._metadata_property_name] = metadata_entity
                 entities.append(entity)
 
             self._client.put_multi(entities)

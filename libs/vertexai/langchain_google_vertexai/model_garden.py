@@ -148,20 +148,25 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        from anthropic import (  # type: ignore
+        from anthropic import (  # type: ignore[unused-ignore, import-not-found]
             AnthropicVertex,
             AsyncAnthropicVertex,
         )
 
+        if self.project is None:
+            raise ValueError("project is required for ChatAnthropicVertex")
+
+        project_id: str = self.project
+
         self.client = AnthropicVertex(
-            project_id=self.project,
+            project_id=project_id,
             region=self.location,
             max_retries=self.max_retries,
             access_token=self.access_token,
             credentials=self.credentials,
         )
         self.async_client = AsyncAnthropicVertex(
-            project_id=self.project,
+            project_id=project_id,
             region=self.location,
             max_retries=self.max_retries,
             access_token=self.access_token,
@@ -205,14 +210,18 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def _format_output(self, data: Any, **kwargs: Any) -> ChatResult:
         data_dict = data.model_dump()
-        content = [c for c in data_dict["content"] if c["type"] != "tool_use"]
-        content = content[0]["text"] if len(content) == 1 else content
+        content = data_dict["content"]
         llm_output = {
             k: v for k, v in data_dict.items() if k not in ("content", "role", "type")
         }
-        tool_calls = _extract_tool_calls(data_dict["content"])
-        if tool_calls:
-            msg = AIMessage(content=content, tool_calls=tool_calls)
+        if len(content) == 1 and content[0]["type"] == "text":
+            msg = AIMessage(content=content[0]["text"])
+        elif any(block["type"] == "tool_use" for block in content):
+            tool_calls = _extract_tool_calls(content)
+            msg = AIMessage(
+                content=content,
+                tool_calls=tool_calls,
+            )
         else:
             msg = AIMessage(content=content)
         # Collect token usage

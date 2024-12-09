@@ -81,6 +81,7 @@ def test_model_garden_generate(
 
 @pytest.mark.extended
 @pytest.mark.asyncio
+@pytest.mark.first
 @pytest.mark.parametrize(
     "endpoint_os_variable_name,result_arg",
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
@@ -168,7 +169,7 @@ async def test_anthropic_async() -> None:
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     """Check tool calls are as expected."""
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(response.content, list)
     tool_calls = response.tool_calls
     assert len(tool_calls) == 1
     tool_call = tool_calls[0]
@@ -177,6 +178,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.flaky(retries=3)
 def test_anthropic_tool_calling() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-east5"

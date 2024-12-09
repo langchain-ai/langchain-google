@@ -41,6 +41,7 @@ from langchain_google_vertexai.chat_models import (
     _parse_examples,
     _parse_response_candidate,
 )
+from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
 
 def test_init() -> None:
@@ -578,7 +579,9 @@ def test_default_params_gemini() -> None:
             mock_generate_content.call_args.kwargs["request"].contents[0].parts[0].text
             == "Hello"
         )
-        expected = GenerationConfig(candidate_count=1)
+        expected = GenerationConfig(
+            candidate_count=1,
+        )
         assert (
             mock_generate_content.call_args.kwargs["request"].generation_config
             == expected
@@ -909,7 +912,10 @@ def test_generation_config_gemini() -> None:
         temperature=0.3, stop=["stop"], candidate_count=2
     )
     expected = GenerationConfig(
-        stop_sequences=["stop"], temperature=0.3, top_k=3, candidate_count=2
+        stop_sequences=["stop"],
+        temperature=0.3,
+        top_k=3,
+        candidate_count=2,
     )
     assert generation_config == expected
 
@@ -1062,3 +1068,49 @@ def test_init_client_with_custom_api() -> None:
         transport = mock_prediction_service.call_args.kwargs["transport"]
         assert client_options.api_endpoint == "https://example.com"
         assert transport == "rest"
+
+
+def test_anthropic_format_output() -> None:
+    """Test format output handles different content structures correctly."""
+
+    @dataclass
+    class Usage:
+        input_tokens: int
+        output_tokens: int
+
+    @dataclass
+    class Message:
+        def model_dump(self):
+            return {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "123",
+                        "name": "calculator",
+                        "input": {"number": 42},
+                    }
+                ],
+                "model": "baz",
+                "role": "assistant",
+                "usage": Usage(input_tokens=2, output_tokens=1),
+                "type": "message",
+            }
+
+        usage: Usage
+
+    test_msg = Message(usage=Usage(input_tokens=2, output_tokens=1))
+
+    model = ChatAnthropicVertex(project="test-project", location="test-location")
+    result = model._format_output(test_msg)
+
+    message = result.generations[0].message
+    assert isinstance(message, AIMessage)
+    assert message.content == test_msg.model_dump()["content"]
+    assert len(message.tool_calls) == 1
+    assert message.tool_calls[0]["name"] == "calculator"
+    assert message.tool_calls[0]["args"] == {"number": 42}
+    assert message.usage_metadata == {
+        "input_tokens": 2,
+        "output_tokens": 1,
+        "total_tokens": 3,
+    }

@@ -4,6 +4,7 @@ import base64
 import os
 import re
 from enum import Enum
+from functools import cached_property
 from typing import Dict, Optional, Union
 from urllib.parse import urlparse
 
@@ -42,6 +43,10 @@ class ImageBytesLoader:
             project: Google Cloud project id. Defaults to none.
         """
         self._project = project
+
+    @cached_property
+    def _storage_client(self):
+        return storage.Client(project=self._project)
 
     def load_bytes(self, image_string: str) -> bytes:
         """Routes to the correct loader based on the image_string.
@@ -198,7 +203,7 @@ class ImageBytesLoader:
             storage.Blob
         """
 
-        gcs_client = storage.Client(project=self._project)
+        gcs_client = self._storage_client
         blob = storage.Blob.from_string(gcs_uri, gcs_client)
         blob.reload(client=gcs_client)
         return blob
