@@ -102,13 +102,14 @@ def _completion_with_retry(
 def _strip_erroneous_leading_spaces(text: str) -> str:
     """Strip erroneous leading spaces from text.
 
-    The PALM API will sometimes erroneously return a single leading space in all
+    The PaLM API will sometimes erroneously return a single leading space in all
     lines > 1. This function strips that space.
     """
     has_leading_space = all(not line or line[0] == " " for line in text.split("\n")[1:])
     if has_leading_space:
-        text = text.replace("\n ", "\n")
-    return text
+        return text.replace("\n ", "\n")
+    else:
+        return text
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
@@ -317,7 +318,6 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
 
                 candidates = [
                     "".join([p.text for p in c.content.parts]) for c in res.candidates
-                    for c in res.candidates
                 ]
                 generations.append(
                     [
