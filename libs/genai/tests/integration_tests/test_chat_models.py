@@ -535,7 +535,8 @@ def test_json_formatted_output() -> None:
     ]
 
     response = llm.invoke(messages)
-    assert isinstance(response.content, list)
+    response_data = json.loads(response.content)
+    assert isinstance(response_data, list)
     assert len(response.content) > 1
     assert isinstance(response.content[0], MyModel)
     for item in response.content:
