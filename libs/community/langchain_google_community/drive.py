@@ -225,6 +225,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
                 "document": "application/vnd.google-apps.document",
                 "sheet": "application/vnd.google-apps.spreadsheet",
                 "pdf": "application/pdf",
+                "presentation": "application/vnd.google-apps.presentation",
             }
             allowed_types = list(type_mapping.keys()) + list(type_mapping.values())
             short_names = ", ".join([f"'{x}'" for x in type_mapping.keys()])
@@ -376,7 +377,11 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
 
         file = (
             service.files()
-            .get(fileId=id, supportsAllDrives=True, fields="modifiedTime,name")
+            .get(
+                fileId=id,
+                supportsAllDrives=True,
+                fields="modifiedTime,name,webViewLink",
+            )
             .execute()
         )
         request = service.files().export_media(fileId=id, mimeType="text/plain")
@@ -395,7 +400,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
 
         text = fh.getvalue().decode("utf-8")
         metadata = {
-            "source": f"https://docs.google.com/document/d/{id}/edit",
+            "source": f"{file.get('webViewLink')}",
             "title": f"{file.get('name')}",
             "when": f"{file.get('modifiedTime')}",
         }
@@ -426,7 +431,10 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         for file in _files:
             if file["trashed"] and not self.load_trashed_files:
                 continue
-            elif file["mimeType"] == "application/vnd.google-apps.document":
+            elif file["mimeType"] in [
+                "application/vnd.google-apps.document",
+                "application/vnd.google-apps.presentation",
+            ]:
                 returns.append(self._load_document_from_id(file["id"]))  # type: ignore
             elif file["mimeType"] == "application/vnd.google-apps.spreadsheet":
                 returns.extend(self._load_sheet_from_id(file["id"]))  # type: ignore
