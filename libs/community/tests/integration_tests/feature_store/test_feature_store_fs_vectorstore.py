@@ -5,6 +5,7 @@ Test Vertex Feature Store Vector Search with Feature Store vectorstore.
 import os
 import random
 
+import grpc
 import pytest
 
 from langchain_google_community import VertexFSVectorStore
@@ -127,3 +128,33 @@ class TestVertexFSVectorStore_fs_vectorstore:
         """Test getter feature store vectorstore"""
         new_store = store_fs_vectorstore.to_bq_vector_store()
         assert new_store.dataset_name == TEST_DATASET
+
+
+@pytest.mark.extended
+def test_psc_feature_store() -> None:
+    """Test creation of feature store with private service connect enabled"""
+    # ruff: noqa: E501
+    from google.cloud.aiplatform_v1.services.feature_online_store_service.transports.grpc import (
+        FeatureOnlineStoreServiceGrpcTransport,
+    )
+
+    embedding_model = FakeEmbeddings(size=EMBEDDING_SIZE)
+    project_id = os.environ.get("PROJECT_ID", None)
+
+    transport = FeatureOnlineStoreServiceGrpcTransport(
+        channel=grpc.insecure_channel("dummy:10002")
+    )
+    try:
+        vertex_fs = VertexFSVectorStore(
+            project_id=project_id,  # type: ignore[arg-type]
+            location="us-central1",
+            dataset_name=TEST_DATASET + f"_psc_{str(random.randint(1,100000))}",
+            table_name=TEST_TABLE_NAME,
+            embedding=embedding_model,
+            enable_private_service_connect=True,
+            project_allowlist=[project_id],  # type: ignore[list-item]
+            transport=transport,
+        )
+    finally:
+        # Clean up resources
+        vertex_fs.online_store.delete()
