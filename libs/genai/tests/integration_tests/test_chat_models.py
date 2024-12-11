@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Optional
+from typing import Dict, Generator, List, Optional, TypedDict
 
 import pytest
 from langchain_core.messages import (
@@ -513,3 +513,86 @@ def test_astream_without_eventloop() -> None:
     result = asyncio.run(model_astream("How can you help me?"))
     assert len(result) > 0
     assert isinstance(result[0], AIMessageChunk)
+
+def test_json_formatted_output() -> None:
+    """Test that json_mode works as expected with a json_schema."""
+
+    class MyModel(TypedDict):
+        item: str
+        price: float
+    
+    llm = ChatGoogleGenerativeAI(
+        model=_VISION_MODEL,
+        response_mime_type="application/json",
+        response_schema=list[MyModel]
+    )
+
+    messages = [
+                ("system", "You are a helpful assistant"),
+                ("human", "List the prices of common grocery items"),
+    ]
+
+    response = llm.invoke(messages)
+    assert isinstance(response.content, list)
+    assert len(response.content) > 1
+    assert isinstance(response.content[0], MyModel)
+    for item in response.content:
+        assert isinstance(item, MyModel)
+
+
+def test_json_formatted_output_with_nested_schema() -> None:
+    """Test that json_mode works as expected with a nested json_schema."""
+
+    class PriceDetail(TypedDict):
+        amount: float
+        currency: str
+
+    class MyModel(TypedDict):
+        item: str
+        price: PriceDetail
+    
+    llm = ChatGoogleGenerativeAI(
+        model=_VISION_MODEL,
+        response_mime_type="application/json",
+        response_schema=list[MyModel]
+    )
+
+    messages = [
+                ("system", "You are a helpful assistant"),
+                ("human", "List the price details of a common grocery item"),
+    ]
+
+    response = llm.invoke(messages)
+    assert isinstance(response.content, list)
+    assert len(response.content) > 0
+    assert isinstance(response.content[0], MyModel)
+    assert isinstance(response.content[0]['price'], PriceDetail)
+
+
+def test_enum_formatted_output() -> None:
+    """Test that response_mime_type works as expected with text/x.enum."""
+    def test_enum_formatted_output() -> None:
+        """Test that response_mime_type works as expected with text/x.enum."""
+        import enum
+
+        class Types(enum.Enum):
+            PERCUSSION = "Percussion"
+            STRING = "String"
+            WOODWIND = "Woodwind"
+            BRASS = "Brass"
+            KEYBOARD = "Keyboard"
+        
+        llm = ChatGoogleGenerativeAI(
+            model=_VISION_MODEL,
+            response_mime_type="text/x.enum",
+            response_schema=Types
+        )
+
+        messages = [
+                    ("system", "You are a helpful assistant"),
+                    ("human", "What kind of instrument is an organ?"),
+        ]
+
+        response = llm.invoke(messages)
+        assert isinstance(response.content, str)
+        assert response.content in Types._value2member_map_

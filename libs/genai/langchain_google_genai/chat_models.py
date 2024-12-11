@@ -46,8 +46,11 @@ from google.ai.generativelanguage_v1beta.types import (
 )
 from google.generativeai.caching import CachedContent  # type: ignore[import]
 from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
-from google.generativeai.types import caching_types, content_types
-from google.generativeai.types import generation_types  # type: ignore[import]
+from google.generativeai.types import (
+    caching_types,
+    content_types,
+    generation_types,  # type: ignore[import]
+)
 from google.generativeai.types.content_types import (  # type: ignore[import]
     FunctionDeclarationType,
     ToolDict,
@@ -95,6 +98,7 @@ from tenacity import (
 )
 from typing_extensions import Self
 
+from langchain_google_genai import _genai_extension as genaix
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
@@ -110,8 +114,6 @@ from langchain_google_genai._function_utils import (
 )
 from langchain_google_genai._image_utils import ImageBytesLoader
 from langchain_google_genai.llms import _BaseGoogleGenerativeAI
-
-from langchain_google_genai import _genai_extension as genaix
 
 logger = logging.getLogger(__name__)
 
@@ -772,7 +774,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 'finish_reason': 'STOP',
                 'safety_ratings': [{'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}]
             }
-    
+
     JSON Output and Schema Support:
         .. code-block:: python
             import typing_extensions as typing
@@ -781,7 +783,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 recipe_name: str
                 ingredients: list[str]
                 rating: float
-            
+
             llm = ChatGoogleGenerativeAI(
                 model="gemini-1.5-pro",
                 temperature=0,
@@ -793,7 +795,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             # Define the messages
-            
+
             messages = [
                 ("system", "You are a helpful assistant"),
                 ("human", "List 2 recipes for a healthy breakfast"),
@@ -894,7 +896,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             self.model = f"models/{self.model}"
 
         if self.response_mime_type is not None and self.response_mime_type not in [
-            "text/plain", "application/json", "text/x.enum"]:
+            "text/plain",
+            "application/json",
+            "text/x.enum",
+        ]:
             raise ValueError(
                 "response_mime_type must be either 'text/plain' "
                 "or 'application/json'"
@@ -999,7 +1004,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         }
         if gen_config.get("response_schema"):
             generation_types._normalize_schema(gen_config)
-              
+
         if generation_config:
             gen_config = {**gen_config, **generation_config}
         return GenerationConfig(**gen_config)
