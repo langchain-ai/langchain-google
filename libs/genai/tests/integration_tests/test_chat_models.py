@@ -2,10 +2,9 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Optional, TypedDict
+from typing import Dict, Generator, List, Optional
 
 import pytest
-import typing_extensions
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -555,7 +554,8 @@ def test_output_matches_prompt_keys() -> None:
         pytest.fail(f"Response is not valid JSON: {e}")
 
     list_key = prompt_key_names["list_key"]
-    assert list_key in response_data, f"Expected key '{list_key}' is missing in the response."
+    assert list_key in response_data, \
+        f"Expected key '{list_key}' is missing in the response."
     grocery_items = response_data[list_key]
     assert isinstance(grocery_items, list), f"'{list_key}' should be a list."
 
@@ -600,4 +600,6 @@ def test_validate_response_mime_type_and_schema() -> None:
             response_mime_type="application/json",
         ).validate_environment()
     except ValueError as e:
-        pytest.fail(f"Validation failed unexpectedly with a valid MIME type and no schema: {e}")
+        pytest.fail(
+            f"Validation failed unexpectedly with a valid MIME type and no schema: {e}"
+        )
