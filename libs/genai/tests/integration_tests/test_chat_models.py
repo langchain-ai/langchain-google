@@ -3,6 +3,7 @@
 import asyncio
 import json
 from typing import Dict, Generator, List, Optional, TypedDict
+import typing_extensions as typing
 
 import pytest
 from langchain_core.messages import (
@@ -517,7 +518,7 @@ def test_astream_without_eventloop() -> None:
 def test_json_formatted_output() -> None:
     """Test that json_mode works as expected with a json_schema."""
 
-    class MyModel(TypedDict):
+    class MyModel(typing.TypedDict):
         item: str
         price: float
     
@@ -543,7 +544,7 @@ def test_json_formatted_output() -> None:
 def test_json_formatted_output_with_nested_schema() -> None:
     """Test that json_mode works as expected with a nested json_schema."""
 
-    class PriceDetail(TypedDict):
+    class PriceDetail(typing.TypedDict):
         amount: float
         currency: str
 
