@@ -24,8 +24,9 @@ from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (  # type: ignore  # type: ignore
     SafetySettingsType,
+    _convert_schema_dict_to_gapic,
 )
 from vertexai.language_models import (  # type: ignore[import-untyped]
     TextGenerationModel,
@@ -284,9 +285,33 @@ class _VertexAICommon(_VertexAIBase):
         stop_sequences = stop or self.stop
         params_mapping = {"n": "candidate_count"}
         params = {params_mapping.get(k, k): v for k, v in kwargs.items()}
+
         params = {**self._default_params, "stop_sequences": stop_sequences, **params}
+
         if stream or self.streaming:
             params.pop("candidate_count")
+        
+        if "response_schema" in params:
+            
+            params["response_schema"] = _convert_schema_dict_to_gapic(
+                params["response_schema"])
+            
+            if "response_mime_type" not in params:
+                error_message = (
+                    "`response_mime_type` must be set when `response_schema`" 
+                    " is specified."
+                )
+                raise ValueError(error_message)
+            
+            if "response_mime_type" in params:
+                allowed_mime_types = ("application/json", "text/x.enum")
+                if params["response_mime_type"] not in allowed_mime_types:
+                    error_message = (
+                        "`response_schema` is only supported when "
+                        f"`response_mime_type` is set to one of {allowed_mime_types}"
+                    )
+                    raise ValueError(error_message)
+
         return params
 
     def get_num_tokens(self, text: str) -> int:

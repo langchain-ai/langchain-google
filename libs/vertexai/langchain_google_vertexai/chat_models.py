@@ -1148,22 +1148,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     @property
     def _default_params(self) -> Dict[str, Any]:
+        
         updated_params = super()._default_params
 
         if self.response_mime_type is not None:
             updated_params["response_mime_type"] = self.response_mime_type
 
         if self.response_schema is not None:
-            allowed_mime_types = ("application/json", "text/x.enum")
-            if self.response_mime_type not in allowed_mime_types:
-                error_message = (
-                    "`response_schema` is only supported when "
-                    f"`response_mime_type` is set to one of {allowed_mime_types}"
-                )
-                raise ValueError(error_message)
-
-            gapic_response_schema = _convert_schema_dict_to_gapic(self.response_schema)
-            updated_params["response_schema"] = gapic_response_schema
+            updated_params["response_schema"] = self.response_schema
 
         return updated_params
 
@@ -1795,13 +1787,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # that takes care of this if necessary.
                 schema_json = schema.model_json_schema()
                 schema_json = replace_defs_in_schema(schema_json)
-                self.response_schema = schema_json
+                response_schema = schema_json
                 parser = PydanticOutputParser(pydantic_object=schema)
             else:
                 parser = JsonOutputParser()
-                self.response_schema = schema
-            self.response_mime_type = "application/json"
-            llm: Runnable = self
+                response_schema = schema
+            response_mime_type = "application/json"
+            llm: Runnable = self.bind(
+                response_schema=response_schema, response_mime_type=response_mime_type)
 
         else:
             tool_name = _get_tool_name(schema)
