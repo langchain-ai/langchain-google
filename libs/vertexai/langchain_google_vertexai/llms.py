@@ -23,8 +23,8 @@ from vertexai.language_models import (  # type: ignore[import-untyped]
 from vertexai.language_models._language_models import (  # type: ignore[import-untyped]
     TextGenerationResponse,
 )
-from vertexai.preview.generative_models import ( # type: ignore[import-untyped]
-    GenerativeModel as PreviewGenerativeModel
+from vertexai.preview.generative_models import (  # type: ignore[import-untyped]
+    GenerativeModel as PreviewGenerativeModel,
 )
 from vertexai.preview.language_models import (  # type: ignore[import-untyped]
     CodeGenerationModel as PreviewCodeGenerationModel,

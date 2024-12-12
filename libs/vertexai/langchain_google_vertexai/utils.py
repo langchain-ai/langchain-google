@@ -1,9 +1,13 @@
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from langchain_core.messages import BaseMessage
 from vertexai.preview import caching  # type: ignore
 
+from langchain_google_vertexai._utils import (
+    _format_model_name,
+    is_gemini_advanced,
+)
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _parse_chat_history_gemini,
@@ -14,14 +18,11 @@ from langchain_google_vertexai.functions_utils import (
     _ToolConfigDict,
     _ToolsType,
 )
-from langchain_google_vertexai._utils import (
-    is_gemini_advanced,
-    _format_model_name,
-)
+from langchain_google_vertexai.llms import VertexAI
 
 
 def create_context_cache(
-    model: ChatVertexAI,
+    model: Union[ChatVertexAI, VertexAI],
     messages: List[BaseMessage],
     expire_time: Optional[datetime] = None,
     time_to_live: Optional[timedelta] = None,

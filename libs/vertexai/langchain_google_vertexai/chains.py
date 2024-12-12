@@ -16,10 +16,10 @@ from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
-from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
 from langchain_google_vertexai._utils import (
     is_gemini_advanced,
 )
+from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
 
 
 def get_output_parser(
