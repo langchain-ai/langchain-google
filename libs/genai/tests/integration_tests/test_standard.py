@@ -11,6 +11,36 @@ from langchain_standard_tests.integration_tests import ChatModelIntegrationTests
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
+rate_limiter_2_0 = InMemoryRateLimiter(requests_per_second=0.1)
+
+
+class TestGeminiAI2Standard(ChatModelIntegrationTests):
+    @property
+    def chat_model_class(self) -> Type[BaseChatModel]:
+        return ChatGoogleGenerativeAI
+
+    @property
+    def chat_model_params(self) -> dict:
+        return {
+            "model": "models/gemini-2.0-flash-exp",
+            "rate_limiter": rate_limiter_2_0,
+        }
+
+    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
+    async def test_structured_output_async(self, model: BaseChatModel) -> None:
+        await super().test_structured_output_async(model)
+
+    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
+    def test_structured_output(self, model: BaseChatModel) -> None:
+        super().test_structured_output(model)
+
+    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
+    def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
+        super().test_structured_output_pydantic_2_v1(model)
+
+    @pytest.mark.xfail(reason="investigate")
+    def test_bind_runnables_as_tools(self, model: BaseChatModel) -> None:
+        super().test_bind_runnables_as_tools(model)
 
 
 class TestGeminiAIStandard(ChatModelIntegrationTests):
