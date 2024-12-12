@@ -301,7 +301,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         if table_to_query is not None:
             embeddings_query = f"""
             with embeddings as (
-            SELECT {self.embedding_field}, ROW_NUMBER() OVER() as row_num
+            SELECT {self.embedding_field}, row_num
             from `{table_to_query}`
             )"""
 
@@ -390,6 +390,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         df = pd.DataFrame([])
 
         df[self.embedding_field] = embeddings
+        df["row_num"] = list(range(len(df)))
         table_id = (
             f"{self.project_id}."
             f"{self.temp_dataset_name}."
@@ -397,7 +398,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         )
 
         schema = [
-            bigquery.SchemaField(self.embedding_field, "FLOAT64", mode="REPEATED")
+            bigquery.SchemaField(self.embedding_field, "FLOAT64", mode="REPEATED"),
+            bigquery.SchemaField("row_num", "INT64"),
         ]
         table_ref = bigquery.Table(table_id, schema=schema)
         table = self._bq_client.create_table(table_ref)
@@ -483,7 +485,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             )
 
         if queries is not None:
-            embeddings = self.embedding.embed_documents(queries)
+            embeddings = [self.embedding.embed_query(query) for query in queries]
 
         if embeddings is None:
             raise ValueError("Could not obtain embeddings - value is None.")
