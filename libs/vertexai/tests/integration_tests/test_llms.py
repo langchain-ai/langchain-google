@@ -5,10 +5,19 @@ Your end-user credentials would be used to make the calls (make sure you've run
 """
 
 import pytest
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage,
+)
+from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.outputs import LLMResult
 
+from langchain_google_vertexai import create_context_cache
 from langchain_google_vertexai.llms import VertexAI
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
+
+rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
 
 
 @pytest.mark.release
@@ -101,3 +110,63 @@ def test_vertex_call_count_tokens() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
+
+
+@pytest.mark.extended
+@pytest.mark.first
+def test_context_catching():
+    system_instruction = """
+    
+    You are an expert researcher. You always stick to the facts in the sources provided,
+    and never make up new facts.
+    
+    If asked about it, the secret number is 747.
+    
+    Now look at these research papers, and answer the following questions.
+    
+    """
+
+    cached_content = create_context_cache(
+        VertexAI(
+            model_name="gemini-1.5-pro-001",
+            rate_limiter=rate_limiter,
+        ),
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf",
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
+                        },
+                    },
+                ]
+            ),
+        ],
+    )
+
+    # Using cached_content in constructor
+    llm = VertexAI(
+        model_name="gemini-1.5-pro-001",
+        cached_content=cached_content,
+        rate_limiter=rate_limiter,
+    )
+
+    response = llm.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+    # Using cached content in request
+    llm = VertexAI(model_name="gemini-1.5-pro-001", rate_limiter=rate_limiter)
+    response = llm.invoke("What is the secret number?", cached_content=cached_content)
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)

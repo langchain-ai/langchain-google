@@ -14,6 +14,10 @@ from langchain_google_vertexai.functions_utils import (
     _ToolConfigDict,
     _ToolsType,
 )
+from langchain_google_vertexai._utils import (
+    is_gemini_advanced,
+    _format_model_name,
+)
 
 
 def create_context_cache(
@@ -49,8 +53,12 @@ def create_context_cache(
     Returns:
         String with the identificator of the created cache.
     """
-
-    if not model._is_gemini_advanced:
+    model_name = _format_model_name(
+        model=model.model_name,
+        project=model.project,  # type: ignore[arg-type]
+        location=model.location,
+    )
+    if not is_gemini_advanced(model.model_family):  # type: ignore[arg-type]
         error_msg = f"Model {model.full_model_name} doesn't support context catching"
         raise ValueError(error_msg)
 
@@ -63,7 +71,7 @@ def create_context_cache(
         tools = [_format_to_gapic_tool(tools)]
 
     cached_content = caching.CachedContent.create(
-        model_name=model.full_model_name,
+        model_name=model_name,
         system_instruction=system_instruction,
         contents=contents,
         ttl=time_to_live,

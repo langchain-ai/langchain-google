@@ -215,6 +215,11 @@ class _VertexAICommon(_VertexAIBase):
     model_name will be used to determine the model family
     """
 
+    cached_content: Optional[str] = None
+    """ Optional. Use the model in cache mode. Only supported in Gemini 1.5 and later
+        models. Must be a string containing the cache name (A sequence of numbers)
+    """
+
     @property
     def _is_gemini_model(self) -> bool:
         return is_gemini_model(self.model_family)  # type: ignore[arg-type]

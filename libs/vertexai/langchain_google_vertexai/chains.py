@@ -17,6 +17,9 @@ from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
 from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
+from langchain_google_vertexai._utils import (
+    is_gemini_advanced,
+)
 
 
 def get_output_parser(
@@ -57,7 +60,7 @@ def _create_structured_runnable_extra_step(
         else schema.schema()["title"]
         for schema in functions
     ]
-    if hasattr(llm, "is_gemini_advanced") and llm._is_gemini_advanced:  # type: ignore
+    if is_gemini_advanced(llm.model_family):  # type: ignore
         llm_with_functions = llm.bind(
             functions=functions,
             tool_config={

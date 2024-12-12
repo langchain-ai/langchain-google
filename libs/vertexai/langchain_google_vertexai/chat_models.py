@@ -114,6 +114,7 @@ from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
     _format_model_name,
+    is_gemini_advanced,
     is_gemini_model,
     replace_defs_in_schema,
 )
@@ -1119,7 +1120,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if not is_gemini_model(self.model_family):
             logger.warning(
                 "Non-Gemini models are deprecated. "
-                "They will be remoced starting from Dec-01-2024. "
+                "They will be removed starting from Dec-01-2024. "
             )
             values = {
                 "project": self.project,
@@ -1141,10 +1142,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 generative_model_name
             )
         return self
-
-    @property
-    def _is_gemini_advanced(self) -> bool:
-        return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
 
     @property
     def _default_params(self) -> Dict[str, Any]:
@@ -1811,7 +1808,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 parser = JsonOutputKeyToolsParser(
                     key_name=tool_name, first_tool_only=True
                 )
-            tool_choice = tool_name if self._is_gemini_advanced else None
+            tool_choice = tool_name if is_gemini_advanced(self.model_family) else None  # type: ignore[arg-type]
 
             llm = self.bind_tools([schema], tool_choice=tool_choice)
 

@@ -23,6 +23,9 @@ from vertexai.language_models import (  # type: ignore[import-untyped]
 from vertexai.language_models._language_models import (  # type: ignore[import-untyped]
     TextGenerationResponse,
 )
+from vertexai.preview.generative_models import ( # type: ignore[import-untyped]
+    GenerativeModel as PreviewGenerativeModel
+)
 from vertexai.preview.language_models import (  # type: ignore[import-untyped]
     CodeGenerationModel as PreviewCodeGenerationModel,
 )
@@ -55,8 +58,14 @@ def _completion_with_retry(
     def _completion_with_retry_inner(
         prompt: List[Union[str, Image]], is_gemini: bool = False, **kwargs: Any
     ) -> Any:
+        if llm.cached_content is not None:
+            selected_cached_content = llm.cached_content
+            model = llm.client_preview.from_cached_content(selected_cached_content)
+        else:
+            model = llm.client
+
         if is_gemini:
-            return llm.client.generate_content(
+            return model.generate_content(
                 prompt,
                 stream=stream,
                 safety_settings=kwargs.pop("safety_settings", None),
@@ -114,6 +123,10 @@ class VertexAI(_VertexAICommon, BaseLLM):
     """The name of a tuned model. If tuned_model_name is passed
     model_name will be used to determine the model family
     """
+    cached_content: Optional[str] = None
+    """ Optional. Use the model in cache mode. Only supported in Gemini 1.5 and later
+        models. Must be a string containing the cache name (A sequence of numbers)
+    """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
@@ -159,7 +172,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
             preview_model_cls = PreviewCodeGenerationModel
         elif is_gemini:
             model_cls = GenerativeModel
-            preview_model_cls = GenerativeModel
+            preview_model_cls = PreviewGenerativeModel
         else:
             model_cls = TextGenerationModel
             preview_model_cls = PreviewTextGenerationModel
