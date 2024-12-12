@@ -670,6 +670,45 @@ def test_chat_vertexai_gemini_with_structured_output(
         "age": 27,
     }
 
+@pytest.mark.release
+def test_with_structured_output_thread_safety() -> None:
+
+    model = ChatVertexAI(
+        model_name="gemini-1.5-pro-001"
+    )
+
+    structured_model = model.with_structured_output(
+        {
+            "title": "ID Extraction",
+            "description": "Extracts IDs from the input text.",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": ("The type"),
+                        "enum": [
+                            "ORDER_ID",
+                            "PO_ID",
+                            "INVOICE_ID",
+                            "TRACKING_ID",
+                            "OTHER",
+                        ],
+                    },
+                    "value": {"type": "string", "description": "The value of the entity."},
+                },
+            },
+        },
+        method="json_mode",
+    )
+    response = structured_model.invoke(input="Order ID: AE22334455", temperature=0)
+    assert isinstance(response, list)
+    
+    response_2 = model.invoke(input="Order ID: AE22334455", temperature=0)
+    assert isinstance(response_2, AIMessage)
+    
+
 
 @pytest.mark.release
 def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
