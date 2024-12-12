@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-vertexai"
-version = "2.0.8"
+version = "2.0.9"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 readme = "README.md"
