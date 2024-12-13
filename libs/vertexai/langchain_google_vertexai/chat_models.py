@@ -1083,7 +1083,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Validate that the python package exists in environment."""
         safety_settings = self.safety_settings
         tuned_model_name = self.tuned_model_name
-        self.model_family = GoogleModelFamily(self.model_name)
+        try:
+            self.model_family = GoogleModelFamily(self.model_name)
+        except ValueError:
+            self.model_family = None
 
         if self.model_name == "chat-bison-default":
             logger.warning(

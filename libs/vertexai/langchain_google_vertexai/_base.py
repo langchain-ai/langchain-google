@@ -217,7 +217,7 @@ class _VertexAICommon(_VertexAIBase):
 
     @property
     def _is_gemini_model(self) -> bool:
-        return is_gemini_model(self.model_family)  # type: ignore[arg-type]
+        return is_gemini_model(self.model_family)
 
     @property
     def _llm_type(self) -> str:

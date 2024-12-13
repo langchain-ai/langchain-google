@@ -123,7 +123,7 @@ class GoogleModelFamily(str, Enum):
     PALM = auto()
 
     @classmethod
-    def _missing_(cls, value: Any) -> "GoogleModelFamily":
+    def _missing_(cls, value: Any) -> Union["GoogleModelFamily", None]:
         # https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning
         model_name = value.lower()
         gemini_advanced_models = {
@@ -145,10 +145,10 @@ class GoogleModelFamily(str, Enum):
             return GoogleModelFamily.GEMINI
         if "bison" in model_name or "medlm" in model_name:
             return GoogleModelFamily.PALM
-        return GoogleModelFamily.GEMINI
+        return None
 
 
-def is_gemini_model(model_family: GoogleModelFamily) -> bool:
+def is_gemini_model(model_family: Union[GoogleModelFamily, None]) -> bool:
     """Returns True if the model name is a Gemini model."""
     return model_family in [GoogleModelFamily.GEMINI, GoogleModelFamily.GEMINI_ADVANCED]
 
