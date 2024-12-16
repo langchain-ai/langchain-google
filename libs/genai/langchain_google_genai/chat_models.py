@@ -301,10 +301,45 @@ def _convert_to_parts(
     return parts
 
 
+def _get_ai_message_tool_messages_parts(messages: Sequence[BaseMessage], ai_message: AIMessage) -> Sequence[BaseMessage]:
+    tool_calls_ids = [tool_call["id"] for tool_call in ai_message.tool_calls]
+    parts = []
+    for i, message in enumerate(messages):
+        if not tool_calls_ids:
+            break
+        if isinstance(message, ToolMessage):
+            if message.tool_call_id in tool_calls_ids:
+                tool_calls_ids.remove(message.tool_call_id)
+                role = "user"
+                name = message.name  # type: ignore
+                tool_response: Any
+                if not isinstance(message.content, str):
+                    tool_response = message.content
+                else:
+                    try:
+                        tool_response = json.loads(message.content)
+                    except json.JSONDecodeError:
+                        tool_response = message.content  # leave as str representation
+                part = Part(
+                        function_response=FunctionResponse(
+                            name=name,
+                            response=(
+                                {"output": tool_response}
+                                if not isinstance(tool_response, dict)
+                                else tool_response
+                            ),
+                        )
+                    )
+                parts.append(part)
+    return parts
+                
+
+
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
     messages: List[Content] = []
+    last_ai_message = None
 
     if convert_system_message_to_human:
         warnings.warn("Convert_system_message_to_human will be deprecated!")
@@ -316,6 +351,7 @@ def _parse_chat_history(
             continue
         elif isinstance(message, AIMessage):
             role = "model"
+            last_ai_message = message
             if message.tool_calls:
                 parts = []
                 for tool_call in message.tool_calls:
@@ -326,6 +362,9 @@ def _parse_chat_history(
                         }
                     )
                     parts.append(Part(function_call=function_call))
+                tool_messages_parts = _get_ai_message_tool_messages_parts(messages=input_messages, ai_message=message)
+                messages.append(Content(role=role, parts=parts))
+                messages.append(Content(role="user", parts=tool_messages_parts))
             elif raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
                     {
@@ -342,6 +381,8 @@ def _parse_chat_history(
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = [p for p in system_instruction.parts] + parts
                 system_instruction = None
+        elif isinstance(message, ToolMessage):
+            continue
         elif isinstance(message, FunctionMessage):
             role = "user"
             response: Any
@@ -360,40 +401,6 @@ def _parse_chat_history(
                             {"output": response}
                             if not isinstance(response, dict)
                             else response
-                        ),
-                    )
-                )
-            ]
-        elif isinstance(message, ToolMessage):
-            role = "user"
-            prev_message: Optional[BaseMessage] = (
-                input_messages[i - 1] if i > 0 else None
-            )
-            if (
-                prev_message
-                and isinstance(prev_message, AIMessage)
-                and prev_message.tool_calls
-            ):
-                # message.name can be null for ToolMessage
-                name: str = prev_message.tool_calls[0]["name"]
-            else:
-                name = message.name  # type: ignore
-            tool_response: Any
-            if not isinstance(message.content, str):
-                tool_response = message.content
-            else:
-                try:
-                    tool_response = json.loads(message.content)
-                except json.JSONDecodeError:
-                    tool_response = message.content  # leave as str representation
-            parts = [
-                Part(
-                    function_response=FunctionResponse(
-                        name=name,
-                        response=(
-                            {"output": tool_response}
-                            if not isinstance(tool_response, dict)
-                            else tool_response
                         ),
                     )
                 )
