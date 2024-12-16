@@ -362,6 +362,7 @@ def _parse_chat_history(
                 tool_messages_parts = _get_ai_message_tool_messages_parts(messages=input_messages, ai_message=message)
                 messages.append(Content(role=role, parts=parts))
                 messages.append(Content(role="user", parts=tool_messages_parts))
+                continue
             elif raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
                     {
