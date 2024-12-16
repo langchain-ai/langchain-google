@@ -310,7 +310,6 @@ def _get_ai_message_tool_messages_parts(messages: Sequence[BaseMessage], ai_mess
         if isinstance(message, ToolMessage):
             if message.tool_call_id in tool_calls_ids:
                 tool_calls_ids.remove(message.tool_call_id)
-                role = "user"
                 name = message.name  # type: ignore
                 tool_response: Any
                 if not isinstance(message.content, str):
@@ -339,7 +338,6 @@ def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
     messages: List[Content] = []
-    last_ai_message = None
 
     if convert_system_message_to_human:
         warnings.warn("Convert_system_message_to_human will be deprecated!")
@@ -351,7 +349,6 @@ def _parse_chat_history(
             continue
         elif isinstance(message, AIMessage):
             role = "model"
-            last_ai_message = message
             if message.tool_calls:
                 parts = []
                 for tool_call in message.tool_calls:
