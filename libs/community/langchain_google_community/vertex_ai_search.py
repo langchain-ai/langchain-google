@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import json
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import InvalidArgument
 from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from langchain_core.load import Serializable, load
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
@@ -25,12 +24,28 @@ from pydantic import ConfigDict, Field, PrivateAttr, model_validator
 from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
-    from google.cloud.discoveryengine_v1beta import (  # type: ignore[import, attr-defined]
-        ConversationalSearchServiceClient,
-        SearchRequest,
-        SearchResult,
-        SearchServiceClient,
+    from google.cloud.discoveryengine_v1 import (  # noqa: I001
+        ConversationalSearchServiceClient as StableConversationalSearchServiceClient,
+        SearchRequest as StableSearchRequest,
+        SearchResponse as StableSearchResponse,
+        SearchServiceClient as StableClient,
     )
+
+    from google.cloud.discoveryengine_v1beta import (  # noqa: I001
+        ConversationalSearchServiceClient as BetaConversationalSearchServiceClient,
+        SearchRequest as BetaSearchRequest,
+        SearchResponse as BetaSearchResponse,
+        SearchServiceClient as BetaClient,
+    )
+
+    DiscoveryEngineClient = Union[StableClient, BetaClient]
+    DiscoveryEngineSearchRequest = Union[StableSearchRequest, BetaSearchRequest]
+    DiscoveryEngineSearchResult = Union[
+        StableSearchResponse.SearchResult, BetaSearchResponse.SearchResult
+    ]
+    DiscoveryEngineConversationalClient = Union[
+        StableConversationalSearchServiceClient, BetaConversationalSearchServiceClient
+    ]
 
 
 def _load(dump: Dict[str, Any]) -> Any:
@@ -56,6 +71,8 @@ class _BaseVertexAISearchRetriever(Serializable):
     1 - Structured data
     2 - Website data
     """
+    beta: bool = False
+    """Whether to use beta version of Vertex AI Search."""
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -69,7 +86,10 @@ class _BaseVertexAISearchRetriever(Serializable):
     def validate_environment(cls, values: Dict) -> Any:
         """Validates the environment."""
         try:
-            from google.cloud import discoveryengine_v1beta  # noqa: F401
+            if values.get("beta", False):
+                from google.cloud import discoveryengine_v1beta  # noqa: F401
+            else:
+                from google.cloud import discoveryengine_v1  # noqa: F401
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
@@ -111,7 +131,7 @@ class _BaseVertexAISearchRetriever(Serializable):
         )
 
     def _convert_structured_search_response(
-        self, results: Sequence[SearchResult]
+        self, results: Sequence[DiscoveryEngineSearchResult]
     ) -> List[Document]:
         """Converts a sequence of search results to a list of LangChain documents."""
         documents: List[Document] = []
@@ -131,7 +151,7 @@ class _BaseVertexAISearchRetriever(Serializable):
         return documents
 
     def _convert_unstructured_search_response(
-        self, results: Sequence[SearchResult], chunk_type: str
+        self, results: Sequence[DiscoveryEngineSearchResult], chunk_type: str
     ) -> List[Document]:
         """Converts a sequence of search results to a list of LangChain documents."""
         documents: List[Document] = []
@@ -178,7 +198,7 @@ class _BaseVertexAISearchRetriever(Serializable):
         return documents
 
     def _convert_website_search_response(
-        self, results: Sequence[SearchResult], chunk_type: str
+        self, results: Sequence[DiscoveryEngineSearchResult], chunk_type: str
     ) -> List[Document]:
         """Converts a sequence of search results to a list of LangChain documents."""
         documents: List[Document] = []
@@ -222,6 +242,9 @@ class _BaseVertexAISearchRetriever(Serializable):
 class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     """`Google Vertex AI Search` retriever.
 
+    This retriever supports both stable (v1) and beta versions of the Discovery Engine.
+    Beta features are only available when beta=True.
+
     For a detailed explanation of the Vertex AI Search concepts
     and configuration parameters, refer to the product documentation.
     https://cloud.google.com/generative-ai-app-builder/docs/enterprise-search-introduction
@@ -249,55 +272,51 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     """
     num_previous_segments: int = Field(default=1, ge=1, le=3)
     """Specifies the number of text segments preceding the matched segment to return.
-    This provides context before the relevant text. Value must be between 1 and 3.
-    """
+    This provides context before the relevant text. Value must be between 1 and 3."""
     num_next_segments: int = Field(default=1, ge=1, le=3)
     """Specifies the number of text segments following the matched segment to return.
-    This provides context after the relevant text. Value must be between 1 and 3.
-    """
+    This provides context after the relevant text. Value must be between 1 and 3."""
     query_expansion_condition: int = Field(default=1, ge=0, le=2)
     """Specification to determine under which conditions query expansion should occur.
     0 - Unspecified query expansion condition. In this case, server behavior defaults 
-        to disabled
+        to disabled.
     1 - Disabled query expansion. Only the exact search query is used, even if 
         SearchResponse.total_size is zero.
-    2 - Automatic query expansion built by the Search API.
-    """
+    2 - Automatic query expansion built by the Search API."""
     spell_correction_mode: int = Field(default=2, ge=0, le=2)
     """Specification to determine under which conditions query expansion should occur.
     0 - Unspecified spell correction mode. In this case, server behavior defaults 
         to auto.
-    1 - Suggestion only. Search API will try to find a spell suggestion if there is any
-        and put in the `SearchResponse.corrected_query`.
+    1 - Suggestion only. Search API will try to find a spell suggestion if there is 
+        any and put in the `SearchResponse.corrected_query`.
         The spell suggestion will not be used as the search query.
     2 - Automatic spell correction built by the Search API.
-        Search will be based on the corrected query if found.
-    """
+        Search will be based on the corrected query if found."""
     boost_spec: Optional[Dict[Any, Any]] = None
     """BoostSpec for boosting search results. A protobuf should be provided.
     
     https://cloud.google.com/generative-ai-app-builder/docs/boost-search-results
     https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/BoostSpec
     """
-    custom_embedding: Optional[Embeddings] = None
+    custom_embedding: Optional[Any] = None
     """Custom embedding model for the retriever. (Bring your own embedding)
     It needs to match the embedding model that was used to embed docs in the datastore.
     It needs to be a langchain embedding VertexAIEmbeddings(project="{PROJECT}")
-    If you provide an embedding model, you also need to provide a ranking_expression and
-    a custom_embedding_field_path.
+    If you provide an embedding model, you also need to provide a ranking_expression 
+    and a custom_embedding_field_path.
     https://cloud.google.com/generative-ai-app-builder/docs/bring-embeddings
     """
     custom_embedding_field_path: Optional[str] = None
-    """ The field path for the custom embedding used in the Vertex AI datastore schema.
+    """The field path for the custom embedding used in the Vertex AI datastore schema.
     """
-    custom_embedding_ratio: Optional[float] = 0.0
+    custom_embedding_ratio: Optional[float] = Field(default=0.0, ge=0.0, le=1.0)
     """Controls the ranking of results. Value should be between 0 and 1.
     It will generate the ranking_expression in the following manner:
     "{custom_embedding_ratio} * dotProduct({custom_embedding_field_path}) +
     {1 - custom_embedding_ratio} * relevance_score"
     """
 
-    _client: SearchServiceClient = PrivateAttr()
+    _client: DiscoveryEngineClient = PrivateAttr()
     _serving_config: str = PrivateAttr()
 
     model_config = ConfigDict(
@@ -306,9 +325,47 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     )
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initializes private fields."""
+        """Initialize the retriever with the appropriate version of the client."""
         try:
-            from google.cloud.discoveryengine_v1beta import SearchServiceClient
+            super().__init__(**kwargs)
+            self._validate_version_compatibility()
+            self._initialize_client()
+        except Exception as e:
+            print(f"Error initializing VertexAISearchRetriever: {e}")
+            raise e
+        #  For more information, refer to:
+        # https://cloud.google.com/generative-ai-app-builder/docs/locations#specify_a_multi-region_for_your_data_store
+
+    def _validate_version_compatibility(self) -> None:
+        """Validate version compatibility of all components.
+
+        Raises:
+            Warning: If beta features are configured but beta=False
+        """
+        beta_features = {
+            "custom_embedding": self.custom_embedding,
+            "custom_embedding_field_path": self.custom_embedding_field_path,
+            "custom_embedding_ratio": self.custom_embedding_ratio,
+        }
+
+        if not self.beta and any(value is not None for value in beta_features.values()):
+            warnings.warn(
+                "Beta features are configured but beta=False. The following beta features will be ignored:"  # noqa: E501
+                f"{[k for k, v in beta_features.items() if v is not None]}"
+            )
+
+    def _initialize_client(self) -> None:
+        """Initialize the appropriate version of the SearchServiceClient."""
+
+        try:
+            if self.beta:
+                from google.cloud.discoveryengine_v1beta import (  # type: ignore[assignment]
+                    SearchServiceClient,
+                )
+            else:
+                from google.cloud.discoveryengine_v1 import (  # type: ignore[assignment]
+                    SearchServiceClient,
+                )
         except ImportError as exc:
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
@@ -316,14 +373,6 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
 
-        try:
-            super().__init__(**kwargs)
-        except ValueError as e:
-            print(f"Error initializing GoogleVertexAISearchRetriever: {str(e)}")
-            raise
-
-        #  For more information, refer to:
-        # https://cloud.google.com/generative-ai-app-builder/docs/locations#specify_a_multi-region_for_your_data_store
         self._client = SearchServiceClient(
             credentials=self.credentials,
             client_options=self.client_options,
@@ -337,69 +386,13 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             serving_config=self.serving_config_id,
         )
 
-    def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
-        """Prepares a ContentSpec object."""
+    def _get_beta_specific_params(self, query: str) -> Dict[str, Any]:
+        """Get parameters that are only available in beta version."""
 
-        from google.cloud.discoveryengine_v1beta import SearchRequest
+        params: dict[str, Any] = {}
 
-        if self.engine_data_type == 0:
-            if self.get_extractive_answers:
-                extractive_content_spec = (
-                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                        max_extractive_answer_count=self.max_extractive_answer_count,
-                    )
-                )
-            else:
-                extractive_content_spec = (
-                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                        max_extractive_segment_count=self.max_extractive_segment_count,
-                        num_previous_segments=self.num_previous_segments,
-                        num_next_segments=self.num_next_segments,
-                        return_extractive_segment_score=(
-                            self.return_extractive_segment_score
-                        ),
-                    )
-                )
-            content_search_spec = dict(extractive_content_spec=extractive_content_spec)
-        elif self.engine_data_type == 1:
-            content_search_spec = None
-        elif self.engine_data_type == 2:
-            content_search_spec = dict(
-                extractive_content_spec=SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                    max_extractive_answer_count=self.max_extractive_answer_count,
-                ),
-                snippet_spec=SearchRequest.ContentSearchSpec.SnippetSpec(
-                    return_snippet=True
-                ),
-            )
-        else:
-            raise NotImplementedError(
-                "Only data store type 0 (Unstructured), 1 (Structured),"
-                "or 2 (Website) are supported currently."
-                + f" Got {self.engine_data_type}"
-            )
-        return content_search_spec
-
-    def _create_search_request(self, query: str) -> SearchRequest:
-        """Prepares a SearchRequest object."""
-        from google.cloud.discoveryengine_v1beta import SearchRequest
-
-        query_expansion_spec = SearchRequest.QueryExpansionSpec(
-            condition=self.query_expansion_condition,
-        )
-
-        spell_correction_spec = SearchRequest.SpellCorrectionSpec(
-            mode=self.spell_correction_mode
-        )
-
-        content_search_spec_kwargs = self._get_content_spec_kwargs()
-
-        if content_search_spec_kwargs is not None:
-            content_search_spec = SearchRequest.ContentSearchSpec(
-                **content_search_spec_kwargs
-            )
-        else:
-            content_search_spec = None
+        if not self.beta:
+            return params
 
         if (
             self.custom_embedding is not None
@@ -425,44 +418,127 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                     "Custom embedding ratio must be between 0 and 1 "
                     f"when using custom embeddings. Got {self.custom_embedding_ratio}"
                 )
+
+            from google.cloud.discoveryengine_v1beta import SearchRequest
+
             embedding_vector = SearchRequest.EmbeddingSpec.EmbeddingVector(
                 field_path=self.custom_embedding_field_path,
                 vector=self.custom_embedding.embed_query(query),
             )
-            embedding_spec = SearchRequest.EmbeddingSpec(
-                embedding_vectors=[embedding_vector]
+            params.update(
+                {
+                    "embedding_spec": SearchRequest.EmbeddingSpec(
+                        embedding_vectors=[embedding_vector]
+                    ),
+                    "ranking_expression": (
+                        f"{self.custom_embedding_ratio} * "
+                        f"dotProduct({self.custom_embedding_field_path}) + "
+                        f"{1 - self.custom_embedding_ratio} * relevance_score"
+                    ),
+                }
             )
-            ranking_expression = (
-                f"{self.custom_embedding_ratio} * "
-                f"dotProduct({self.custom_embedding_field_path}) + "
-                f"{1 - self.custom_embedding_ratio} * relevance_score"
+
+        return params
+
+    def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
+        """Prepares a ContentSpec object.
+
+        Note:
+            The ContentSearchSpec is identical between beta and stable versions,
+            but we import from the appropriate version for consistency.
+        """
+        if self.beta:
+            from google.cloud.discoveryengine_v1beta import SearchRequest
+        else:
+            from google.cloud.discoveryengine_v1 import SearchRequest
+
+        if self.engine_data_type == 0:
+            if self.get_extractive_answers:
+                extractive_content_spec = (
+                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                        max_extractive_answer_count=self.max_extractive_answer_count,
+                    )
+                )
+            else:
+                extractive_content_spec = (
+                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                        max_extractive_segment_count=self.max_extractive_segment_count,
+                        num_previous_segments=self.num_previous_segments,
+                        num_next_segments=self.num_next_segments,
+                        return_extractive_segment_score=(
+                            self.return_extractive_segment_score
+                        ),
+                    )
+                )
+            content_search_spec = dict(extractive_content_spec=extractive_content_spec)
+        elif self.engine_data_type == 1:
+            content_search_spec = None
+        elif self.engine_data_type == 2:
+            content_search_spec = dict(
+                extractive_content_spec=(
+                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                        max_extractive_answer_count=self.max_extractive_answer_count,
+                    )
+                ),
+                snippet_spec=SearchRequest.ContentSearchSpec.SnippetSpec(
+                    return_snippet=True
+                ),
             )
         else:
-            embedding_spec = None
-            ranking_expression = None
+            raise NotImplementedError(
+                "Only data store type 0 (Unstructured), 1 (Structured),"
+                "or 2 (Website) are supported currently."
+                + f" Got {self.engine_data_type}"
+            )
+        return content_search_spec
 
-        return SearchRequest(
-            query=query,
-            filter=self.filter,
-            order_by=self.order_by,
-            canonical_filter=self.canonical_filter,
-            serving_config=self._serving_config,
-            page_size=self.max_documents,
-            content_search_spec=content_search_spec,
-            query_expansion_spec=query_expansion_spec,
-            spell_correction_spec=spell_correction_spec,
-            boost_spec=SearchRequest.BoostSpec(**self.boost_spec)
+    def _create_search_request(self, query: str) -> "DiscoveryEngineSearchRequest":
+        """Prepares a SearchRequest object."""
+        if self.beta:
+            from google.cloud.discoveryengine_v1beta import SearchRequest
+        else:
+            from google.cloud.discoveryengine_v1 import SearchRequest
+
+        query_expansion_spec = SearchRequest.QueryExpansionSpec(
+            condition=self.query_expansion_condition,
+        )
+
+        spell_correction_spec = SearchRequest.SpellCorrectionSpec(
+            mode=self.spell_correction_mode
+        )
+
+        content_search_spec_kwargs = self._get_content_spec_kwargs()
+        content_search_spec = (
+            SearchRequest.ContentSearchSpec(**content_search_spec_kwargs)
+            if content_search_spec_kwargs is not None
+            else None
+        )
+
+        request_params = {
+            "query": query,
+            "filter": self.filter,
+            "order_by": self.order_by,
+            "canonical_filter": self.canonical_filter,
+            "serving_config": self._serving_config,
+            "page_size": self.max_documents,
+            "content_search_spec": content_search_spec,
+            "query_expansion_spec": query_expansion_spec,
+            "spell_correction_spec": spell_correction_spec,
+            "boost_spec": SearchRequest.BoostSpec(**self.boost_spec)
             if self.boost_spec
             else None,
-            embedding_spec=embedding_spec,
-            ranking_expression=ranking_expression,
-        )
+        }
+
+        # Add beta-specific parameters if applicable
+        beta_params = self._get_beta_specific_params(query)
+        request_params.update(beta_params)
+
+        return SearchRequest(**request_params)
 
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
     ) -> List[Document]:
         """Get documents relevant for a query."""
-
         search_request = self._create_search_request(query)
 
         try:
@@ -502,12 +578,14 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
 
 class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
-    """`Google Vertex AI Search` retriever for multi-turn conversations."""
+    """Google Vertex AI Search retriever for multi-turn conversations.
+    Supports both stable (v1) and beta versions of the Discovery Engine API.
+    """
 
     conversation_id: str = "-"
     """Vertex AI Search Conversation ID."""
 
-    _client: ConversationalSearchServiceClient = PrivateAttr()
+    _client: DiscoveryEngineConversationalClient = PrivateAttr()
     _serving_config: str = PrivateAttr()
 
     model_config = ConfigDict(
@@ -517,9 +595,15 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
-        from google.cloud.discoveryengine_v1beta import (
-            ConversationalSearchServiceClient,
-        )
+
+        if self.beta:
+            from google.cloud.discoveryengine_v1beta import (  # type: ignore[assignment]
+                ConversationalSearchServiceClient,
+            )
+        else:
+            from google.cloud.discoveryengine_v1 import (  # type: ignore[assignment]
+                ConversationalSearchServiceClient,
+            )
 
         self._client = ConversationalSearchServiceClient(
             credentials=self.credentials,
@@ -545,10 +629,17 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
     ) -> List[Document]:
         """Get documents relevant for a query."""
-        from google.cloud.discoveryengine_v1beta import (
-            ConverseConversationRequest,
-            TextInput,
-        )
+
+        if self.beta:
+            from google.cloud.discoveryengine_v1beta import (
+                ConverseConversationRequest,
+                TextInput,
+            )
+        else:
+            from google.cloud.discoveryengine_v1 import (
+                ConverseConversationRequest,
+                TextInput,
+            )
 
         request = ConverseConversationRequest(
             name=self._client.conversation_path(
@@ -575,6 +666,7 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
 class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
     """Class that exposes a tool to interface with an App in Vertex Search and
     Conversation and get the summary of the documents retrieved.
+    Supports both stable (v1) and beta versions of the Discovery Engine API.
     """
 
     summary_prompt: Optional[str] = None
@@ -599,10 +691,16 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
         Returns:
             kwargs for the specification of the content.
         """
-        from google.cloud.discoveryengine_v1beta import SearchRequest
+        # Import appropriate version based on beta flag
+        if self.beta:
+            from google.cloud.discoveryengine_v1beta import SearchRequest
+        else:
+            from google.cloud.discoveryengine_v1 import SearchRequest
 
         kwargs = super()._get_content_spec_kwargs() or {}
 
+        # SummarySpec is identical between beta and stable versions,
+        # but we import from the appropriate version for consistency
         kwargs["summary_spec"] = SearchRequest.ContentSearchSpec.SummarySpec(
             summary_result_count=self.summary_result_count,
             include_citations=self.summary_include_citations,
