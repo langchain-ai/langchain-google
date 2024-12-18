@@ -442,10 +442,10 @@ def _parse_chat_history_gemini(
 
 
 def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
-    """Parse the list of messages. The method expects the messages to be in the order of Human Message followed by an AI Message.
+    """Parse the list of examples. The method expects the examples to be in the order of Human Message followed by an AI Message.
 
     Args:
-        examples: The list of messages to be parsed
+        examples: The list of examples to be parsed
     Returns:
         A parsed example list.
     Raises:
