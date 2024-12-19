@@ -325,6 +325,9 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
                     properties_item["required"] = [
                         k for k, v in v_properties.items() if "default" not in v
                     ]
+            else:
+                # Providing dummy type for object without properties
+                properties_item["type_"] = glm.Type.STRING
 
         if k == "title" and "description" not in properties_item:
             properties_item["description"] = k + " is " + str(v)
