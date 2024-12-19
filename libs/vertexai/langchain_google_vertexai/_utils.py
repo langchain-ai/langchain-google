@@ -153,6 +153,10 @@ def is_gemini_model(model_family: GoogleModelFamily) -> bool:
     return model_family in [GoogleModelFamily.GEMINI, GoogleModelFamily.GEMINI_ADVANCED]
 
 
+def is_gemini_advanced(model_family: GoogleModelFamily) -> bool:
+    return model_family == GoogleModelFamily.GEMINI_ADVANCED
+
+
 def get_generation_info(
     candidate: Union[TextGenerationResponse, Candidate],
     is_gemini: bool,

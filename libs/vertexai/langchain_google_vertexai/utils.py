@@ -1,9 +1,13 @@
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from langchain_core.messages import BaseMessage
 from vertexai.preview import caching  # type: ignore
 
+from langchain_google_vertexai._utils import (
+    _format_model_name,
+    is_gemini_advanced,
+)
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _parse_chat_history_gemini,
@@ -14,10 +18,11 @@ from langchain_google_vertexai.functions_utils import (
     _ToolConfigDict,
     _ToolsType,
 )
+from langchain_google_vertexai.llms import VertexAI
 
 
 def create_context_cache(
-    model: ChatVertexAI,
+    model: Union[ChatVertexAI, VertexAI],
     messages: List[BaseMessage],
     expire_time: Optional[datetime] = None,
     time_to_live: Optional[timedelta] = None,
@@ -49,9 +54,13 @@ def create_context_cache(
     Returns:
         String with the identificator of the created cache.
     """
-
-    if not model._is_gemini_advanced:
-        error_msg = f"Model {model.full_model_name} doesn't support context catching"
+    model_name = _format_model_name(
+        model=model.model_name,
+        project=model.project,  # type: ignore[arg-type]
+        location=model.location,
+    )
+    if not is_gemini_advanced(model.model_family):  # type: ignore[arg-type]
+        error_msg = f"Model {model_name} doesn't support context catching"
         raise ValueError(error_msg)
 
     system_instruction, contents = _parse_chat_history_gemini(messages, model.project)
@@ -63,7 +72,7 @@ def create_context_cache(
         tools = [_format_to_gapic_tool(tools)]
 
     cached_content = caching.CachedContent.create(
-        model_name=model.full_model_name,
+        model_name=model_name,
         system_instruction=system_instruction,
         contents=contents,
         ttl=time_to_live,
