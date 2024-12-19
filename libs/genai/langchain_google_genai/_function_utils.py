@@ -315,10 +315,15 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
         if properties_item.get("type_") == glm.Type.ARRAY and v.get("items"):
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
 
-        if properties_item.get("type_") == glm.Type.OBJECT and v.get("properties"):
-            properties_item["properties"] = _get_properties_from_schema_any(
-                v.get("properties")
-            )
+        if properties_item.get("type_") == glm.Type.OBJECT:
+            v_properties = v.get("properties")
+            if v_properties:
+                properties_item["properties"] = _get_properties_from_schema_any(v_properties)
+                if isinstance(v_properties, dict):
+                    properties_item["required"] = [
+                        k for k, v in v_properties.items() if "default" not in v
+                    ]
+                    
         if k == "title" and "description" not in properties_item:
             properties_item["description"] = k + " is " + str(v)
 
