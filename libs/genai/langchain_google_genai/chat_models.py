@@ -375,10 +375,9 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             else:
-                if message.content:
-                    parts = _convert_to_parts(message.content)
-                else:
-                    continue
+                if not message.content:
+                    message.content = "I should use the available tools to solve the problem now."
+                parts = _convert_to_parts(message.content)
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content)
