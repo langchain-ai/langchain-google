@@ -301,7 +301,9 @@ def _convert_to_parts(
     return parts
 
 
-def _get_ai_message_tool_messages_parts(messages: Sequence[BaseMessage], ai_message: AIMessage) -> Sequence[BaseMessage]:
+def _get_ai_message_tool_messages_parts(
+    messages: Sequence[BaseMessage], ai_message: AIMessage
+) -> list[Part]:
     tool_calls_ids = [tool_call["id"] for tool_call in ai_message.tool_calls]
     parts = []
     for i, message in enumerate(messages):
@@ -320,18 +322,17 @@ def _get_ai_message_tool_messages_parts(messages: Sequence[BaseMessage], ai_mess
                     except json.JSONDecodeError:
                         tool_response = message.content  # leave as str representation
                 part = Part(
-                        function_response=FunctionResponse(
-                            name=name,
-                            response=(
-                                {"output": tool_response}
-                                if not isinstance(tool_response, dict)
-                                else tool_response
-                            ),
-                        )
+                    function_response=FunctionResponse(
+                        name=name,
+                        response=(
+                            {"output": tool_response}
+                            if not isinstance(tool_response, dict)
+                            else tool_response
+                        ),
                     )
+                )
                 parts.append(part)
     return parts
-                
 
 
 def _parse_chat_history(
@@ -350,7 +351,7 @@ def _parse_chat_history(
         elif isinstance(message, AIMessage):
             role = "model"
             if message.tool_calls:
-                parts = []
+                ai_message_parts = []
                 for tool_call in message.tool_calls:
                     function_call = FunctionCall(
                         {
@@ -358,9 +359,11 @@ def _parse_chat_history(
                             "args": tool_call["args"],
                         }
                     )
-                    parts.append(Part(function_call=function_call))
-                tool_messages_parts = _get_ai_message_tool_messages_parts(messages=input_messages, ai_message=message)
-                messages.append(Content(role=role, parts=parts))
+                    ai_message_parts.append(Part(function_call=function_call))
+                tool_messages_parts = _get_ai_message_tool_messages_parts(
+                    messages=input_messages, ai_message=message
+                )
+                messages.append(Content(role=role, parts=ai_message_parts))
                 messages.append(Content(role="user", parts=tool_messages_parts))
                 continue
             elif raw_function_call := message.additional_kwargs.get("function_call"):
@@ -372,7 +375,10 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             else:
-                parts = _convert_to_parts(message.content)
+                if message.content:
+                    parts = _convert_to_parts(message.content)
+                else:
+                    continue
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content)
