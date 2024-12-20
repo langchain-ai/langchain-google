@@ -14,15 +14,22 @@ files = [
 [[package]]
 name = "aiohttp"
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "3.11.11"
 =======
 version = "3.11.8"
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+version = "3.11.11"
+>>>>>>> fcdbe3a (fixed conflicts)
 description = "Async http client/server framework (asyncio)"
 optional = false
 python-versions = ">=3.9"
 files = [
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> fcdbe3a (fixed conflicts)
     {file = "aiohttp-3.11.11-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:a60804bff28662cbcf340a4d61598891f12eea3a66af48ecfdc975ceec21e3c8"},
     {file = "aiohttp-3.11.11-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:4b4fa1cb5f270fb3eab079536b764ad740bb749ce69a94d4ec30ceee1b5940d5"},
     {file = "aiohttp-3.11.11-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:731468f555656767cda219ab42e033355fe48c85fbe3ba83a349631541715ba2"},
@@ -99,6 +106,7 @@ files = [
     {file = "aiohttp-3.11.11-cp39-cp39-win32.whl", hash = "sha256:568c1236b2fde93b7720f95a890741854c1200fba4a3471ff48b2934d2d93fd3"},
     {file = "aiohttp-3.11.11-cp39-cp39-win_amd64.whl", hash = "sha256:943a8b052e54dfd6439fd7989f67fc6a7f2138d0a2cf0a7de5f18aa4fe7eb3b1"},
     {file = "aiohttp-3.11.11.tar.gz", hash = "sha256:bb49c7f1e6ebf3821a42d81d494f538107610c3a705987f53068546b0e90303e"},
+<<<<<<< HEAD
 =======
     {file = "aiohttp-3.11.8-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:2d2ca685c6a851ce64e511fbcb906e4dd97d13e567ca7ecb5cb30b184e15dc6d"},
     {file = "aiohttp-3.11.8-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:52913bb8a0a72a57479f54b281300c9d23036aa9aa3ebbc9a32a643484eadfc2"},
@@ -177,6 +185,8 @@ files = [
     {file = "aiohttp-3.11.8-cp39-cp39-win_amd64.whl", hash = "sha256:da343903214bf9f9d314b913caa499fa19e26d73e6e23a3db7d4898ea6d47028"},
     {file = "aiohttp-3.11.8.tar.gz", hash = "sha256:7bc9d64a2350cbb29a9732334e1a0743cbb6844de1731cbdf5949b235653f3fd"},
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+>>>>>>> fcdbe3a (fixed conflicts)
 ]
 
 [package.dependencies]
@@ -220,14 +230,19 @@ files = [
 [[package]]
 name = "anthropic"
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "0.42.0"
 =======
 version = "0.40.0"
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+version = "0.42.0"
+>>>>>>> fcdbe3a (fixed conflicts)
 description = "The official Python library for the anthropic API"
 optional = false
 python-versions = ">=3.8"
 files = [
+<<<<<<< HEAD
 <<<<<<< HEAD
     {file = "anthropic-0.42.0-py3-none-any.whl", hash = "sha256:46775f65b723c078a2ac9e9de44a46db5c6a4fabeacfd165e5ea78e6817f4eff"},
     {file = "anthropic-0.42.0.tar.gz", hash = "sha256:bf8b0ed8c8cb2c2118038f29c58099d2f99f7847296cafdaa853910bfff4edf4"},
@@ -235,6 +250,10 @@ files = [
     {file = "anthropic-0.40.0-py3-none-any.whl", hash = "sha256:442028ae8790ff9e3b6f8912043918755af1230d193904ae2ef78cc22995280c"},
     {file = "anthropic-0.40.0.tar.gz", hash = "sha256:3efeca6d9e97813f93ed34322c6c7ea2279bf0824cd0aa71b59ce222665e2b87"},
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+    {file = "anthropic-0.42.0-py3-none-any.whl", hash = "sha256:46775f65b723c078a2ac9e9de44a46db5c6a4fabeacfd165e5ea78e6817f4eff"},
+    {file = "anthropic-0.42.0.tar.gz", hash = "sha256:bf8b0ed8c8cb2c2118038f29c58099d2f99f7847296cafdaa853910bfff4edf4"},
+>>>>>>> fcdbe3a (fixed conflicts)
 ]
 
 [package.dependencies]
@@ -1287,14 +1306,19 @@ files = [
 [[package]]
 name = "huggingface-hub"
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "0.27.0"
 =======
 version = "0.26.3"
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+version = "0.27.0"
+>>>>>>> fcdbe3a (fixed conflicts)
 description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
 optional = false
 python-versions = ">=3.8.0"
 files = [
+<<<<<<< HEAD
 <<<<<<< HEAD
     {file = "huggingface_hub-0.27.0-py3-none-any.whl", hash = "sha256:8f2e834517f1f1ddf1ecc716f91b120d7333011b7485f665a9a412eacb1a2a81"},
     {file = "huggingface_hub-0.27.0.tar.gz", hash = "sha256:902cce1a1be5739f5589e560198a65a8edcfd3b830b1666f36e4b961f0454fac"},
@@ -1302,6 +1326,10 @@ files = [
     {file = "huggingface_hub-0.26.3-py3-none-any.whl", hash = "sha256:e66aa99e569c2d5419240a9e553ad07245a5b1300350bfbc5a4945cf7432991b"},
     {file = "huggingface_hub-0.26.3.tar.gz", hash = "sha256:90e1fe62ffc26757a073aaad618422b899ccf9447c2bba8c902a90bef5b42e1d"},
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+    {file = "huggingface_hub-0.27.0-py3-none-any.whl", hash = "sha256:8f2e834517f1f1ddf1ecc716f91b120d7333011b7485f665a9a412eacb1a2a81"},
+    {file = "huggingface_hub-0.27.0.tar.gz", hash = "sha256:902cce1a1be5739f5589e560198a65a8edcfd3b830b1666f36e4b961f0454fac"},
+>>>>>>> fcdbe3a (fixed conflicts)
 ]
 
 [package.dependencies]
@@ -1465,14 +1493,19 @@ files = [
 [[package]]
 name = "langchain"
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "0.3.13"
 =======
 version = "0.3.9"
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+version = "0.3.13"
+>>>>>>> fcdbe3a (fixed conflicts)
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.9"
 files = [
+<<<<<<< HEAD
 <<<<<<< HEAD
     {file = "langchain-0.3.13-py3-none-any.whl", hash = "sha256:dd3549a28dc28b5d4769122b60fad0890aee86928d1bdbba3f9349d9f023315d"},
     {file = "langchain-0.3.13.tar.gz", hash = "sha256:3d618a8e7e496704dc4407d224218ff28baf9416c1241e7bdcdd117e6c70daa8"},
@@ -1480,6 +1513,10 @@ files = [
     {file = "langchain-0.3.9-py3-none-any.whl", hash = "sha256:ade5a1fee2f94f2e976a6c387f97d62cc7f0b9f26cfe0132a41d2bda761e1045"},
     {file = "langchain-0.3.9.tar.gz", hash = "sha256:4950c4ad627d0aa95ce6bda7de453e22059b7e7836b562a8f781fb0b05d7294c"},
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+    {file = "langchain-0.3.13-py3-none-any.whl", hash = "sha256:dd3549a28dc28b5d4769122b60fad0890aee86928d1bdbba3f9349d9f023315d"},
+    {file = "langchain-0.3.13.tar.gz", hash = "sha256:3d618a8e7e496704dc4407d224218ff28baf9416c1241e7bdcdd117e6c70daa8"},
+>>>>>>> fcdbe3a (fixed conflicts)
 ]
 
 [package.dependencies]
@@ -1573,14 +1610,19 @@ langchain-core = ">=0.3.26,<0.4.0"
 [[package]]
 name = "langsmith"
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "0.2.3"
 =======
 version = "0.1.147"
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+version = "0.2.3"
+>>>>>>> fcdbe3a (fixed conflicts)
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = false
 python-versions = "<4.0,>=3.9"
 files = [
+<<<<<<< HEAD
 <<<<<<< HEAD
     {file = "langsmith-0.2.3-py3-none-any.whl", hash = "sha256:4958b6e918f57fedba6ddc55b8534d1e06478bb44c779aa73713ce898ca6ae87"},
     {file = "langsmith-0.2.3.tar.gz", hash = "sha256:54c231b07fdeb0f8472925074a0ec0ed2cb654a0437d63c6ccf76a9da635900d"},
@@ -1588,6 +1630,10 @@ files = [
     {file = "langsmith-0.1.147-py3-none-any.whl", hash = "sha256:7166fc23b965ccf839d64945a78e9f1157757add228b086141eb03a60d699a15"},
     {file = "langsmith-0.1.147.tar.gz", hash = "sha256:2e933220318a4e73034657103b3b1a3a6109cc5db3566a7e8e03be8d6d7def7a"},
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+    {file = "langsmith-0.2.3-py3-none-any.whl", hash = "sha256:4958b6e918f57fedba6ddc55b8534d1e06478bb44c779aa73713ce898ca6ae87"},
+    {file = "langsmith-0.2.3.tar.gz", hash = "sha256:54c231b07fdeb0f8472925074a0ec0ed2cb654a0437d63c6ccf76a9da635900d"},
+>>>>>>> fcdbe3a (fixed conflicts)
 ]
 
 [package.dependencies]
@@ -2085,15 +2131,22 @@ testing = ["google-api-core (>=1.31.5)"]
 [[package]]
 name = "protobuf"
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "5.29.2"
 =======
 version = "5.29.0"
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+version = "5.29.2"
+>>>>>>> fcdbe3a (fixed conflicts)
 description = ""
 optional = false
 python-versions = ">=3.8"
 files = [
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> fcdbe3a (fixed conflicts)
     {file = "protobuf-5.29.2-cp310-abi3-win32.whl", hash = "sha256:c12ba8249f5624300cf51c3d0bfe5be71a60c63e4dcf51ffe9a68771d958c851"},
     {file = "protobuf-5.29.2-cp310-abi3-win_amd64.whl", hash = "sha256:842de6d9241134a973aab719ab42b008a18a90f9f07f06ba480df268f86432f9"},
     {file = "protobuf-5.29.2-cp38-abi3-macosx_10_9_universal2.whl", hash = "sha256:a0c53d78383c851bfa97eb42e3703aefdc96d2036a41482ffd55dc5f529466eb"},
@@ -2105,6 +2158,7 @@ files = [
     {file = "protobuf-5.29.2-cp39-cp39-win_amd64.whl", hash = "sha256:2d2e674c58a06311c8e99e74be43e7f3a8d1e2b2fdf845eaa347fbd866f23355"},
     {file = "protobuf-5.29.2-py3-none-any.whl", hash = "sha256:fde4554c0e578a5a0bcc9a276339594848d1e89f9ea47b4427c80e5d72f90181"},
     {file = "protobuf-5.29.2.tar.gz", hash = "sha256:b2cc8e8bb7c9326996f0e160137b0861f1a82162502658df2951209d0cb0309e"},
+<<<<<<< HEAD
 =======
     {file = "protobuf-5.29.0-cp310-abi3-win32.whl", hash = "sha256:ea7fb379b257911c8c020688d455e8f74efd2f734b72dc1ea4b4d7e9fd1326f2"},
     {file = "protobuf-5.29.0-cp310-abi3-win_amd64.whl", hash = "sha256:34a90cf30c908f47f40ebea7811f743d360e202b6f10d40c02529ebd84afc069"},
@@ -2118,6 +2172,8 @@ files = [
     {file = "protobuf-5.29.0-py3-none-any.whl", hash = "sha256:88c4af76a73183e21061881360240c0cdd3c39d263b4e8fb570aaf83348d608f"},
     {file = "protobuf-5.29.0.tar.gz", hash = "sha256:445a0c02483869ed8513a585d80020d012c6dc60075f96fa0563a724987b1001"},
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+>>>>>>> fcdbe3a (fixed conflicts)
 ]
 
 [[package]]
@@ -3032,7 +3088,11 @@ mistral = ["langchain-mistralai"]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
 <<<<<<< HEAD
+<<<<<<< HEAD
 content-hash = "3778d13e6a5c8680ba3a2e3b7de53b5b9ab35cc8ba76e5c15cab39818afb8f5c"
 =======
 content-hash = "eb13b7dd9993af4f371104870914c2f22ee5c300e5d9be41989d2f2f36a795d3"
 >>>>>>> 3f3c7b6 (fixed unit tests)
+=======
+content-hash = "3778d13e6a5c8680ba3a2e3b7de53b5b9ab35cc8ba76e5c15cab39818afb8f5c"
+>>>>>>> fcdbe3a (fixed conflicts)
