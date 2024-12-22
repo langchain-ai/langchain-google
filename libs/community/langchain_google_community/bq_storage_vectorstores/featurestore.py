@@ -406,6 +406,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             documents.append(
                 [
                     Document(
+                        id=result.entity_id,
                         page_content=content,
                         metadata=metadata,
                     ),
