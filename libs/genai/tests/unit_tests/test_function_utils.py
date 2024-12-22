@@ -6,7 +6,7 @@ import pytest
 from langchain_core.documents import Document
 from langchain_core.tools import InjectedToolArg, tool
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import Annotated
 
 from langchain_google_genai._function_utils import (
@@ -525,3 +525,13 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
     gapic_tool = convert_to_genai_function_declarations([MyModel])
     tool_dict = tool_to_dict(gapic_tool)
     assert gapic_tool == convert_to_genai_function_declarations([tool_dict])
+
+
+def test_tool_input_can_have_optional_arrays() -> None:
+    class ExampleToolInput(BaseModel):
+        numbers: Optional[List[str]] = Field()
+
+    gapic_tool = convert_to_genai_function_declarations([ExampleToolInput])
+    properties = gapic_tool.function_declarations[0].parameters.properties
+    assert properties.get('numbers').items.type_ == 1
+
