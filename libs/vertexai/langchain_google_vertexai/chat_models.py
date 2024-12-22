@@ -442,29 +442,6 @@ def _parse_chat_history_gemini(
 
 
 def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
-    """Parse the list of examples. The method expects the examples to be in the order of Human Message followed by an AI Message.
-
-    Args:
-        examples: The list of examples to be parsed
-    Returns:
-        A parsed example list.
-    Raises:
-        ValueError:
-
-                    - If an odd number of examples are given as argument.
-                    - If an instance of Human Message is not found at every even index in the input examples list.
-                    - If an instance of AI Message is not found at every odd index in the input examples list.
-    
-    A valid list examples can be as follows:
-    .. code-block:: python
-        examples = [
-            HumanMessage(content = "A first sample Human Message"),
-            AIMessage(content = "A first sample AI Message"),
-            HumanMessage(content = "A second sample Human Message"),
-            AIMessage(content = "A second sample AI Message"),
-        ]
-    """
-
     if len(examples) % 2 != 0:
         raise ValueError(
             f"Expect examples to have an even amount of messages, got {len(examples)}."
