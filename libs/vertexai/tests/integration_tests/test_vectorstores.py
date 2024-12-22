@@ -298,36 +298,36 @@ def test_vector_store_hybrid_search(
         assert isinstance(scores["sparse_score"], float)
 
 
-# @pytest.mark.extended
-# @pytest.mark.parametrize(
-#     "vector_store_class", ["vector_store", "datastore_vector_store"]
-# )
-# def test_add_texts_with_embeddings(
-#     vector_store_class: str,
-#     request: pytest.FixtureRequest,
-#     embeddings: VertexAIEmbeddings,
-# ):
-#     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
+@pytest.mark.extended
+@pytest.mark.parametrize(
+    "vector_store_class", ["datastore_vector_store"]
+)
+def test_add_texts_with_embeddings(
+    vector_store_class: str,
+    request: pytest.FixtureRequest,
+    embeddings: VertexAIEmbeddings,
+):
+    vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
-#     texts = ["my favourite animal is the elephant", "my favourite animal is the lion"]
-#     ids = ["idx1", "idx2"]
-#     embs = embeddings.embed_documents(texts)
-#     ids1 = vector_store.add_texts_with_embeddings(
-#         texts=texts, embeddings=embs, ids=ids, is_complete_overwrite=True
-#     )
-#     assert len(ids1) == 2
+    texts = ["my favourite animal is the elephant", "my favourite animal is the lion"]
+    ids = ["idx1", "idx2"]
+    embs = embeddings.embed_documents(texts)
+    ids1 = vector_store.add_texts_with_embeddings(
+        texts=texts, embeddings=embs, ids=ids, is_complete_overwrite=True
+    )
+    assert len(ids1) == 2
 
-#     sparse_embeddings: List[Dict[str, Union[List[int], List[float]]]] = [
-#         {"values": [0.5, 0.7], "dimensions": [2, 4]}
-#     ] * 2
-#     ids2 = vector_store.add_texts_with_embeddings(
-#         texts=texts,
-#         embeddings=embs,
-#         sparse_embeddings=sparse_embeddings,
-#         ids=ids,
-#         is_complete_overwrite=True,
-#     )
-#     assert ids == ids1 == ids2
+    sparse_embeddings: List[Dict[str, Union[List[int], List[float]]]] = [
+        {"values": [0.5, 0.7], "dimensions": [2, 4]}
+    ] * 2
+    ids2 = vector_store.add_texts_with_embeddings(
+        texts=texts,
+        embeddings=embs,
+        sparse_embeddings=sparse_embeddings,
+        ids=ids,
+        is_complete_overwrite=True,
+    )
+    assert ids == ids1 == ids2
 
 
 @pytest.mark.extended
