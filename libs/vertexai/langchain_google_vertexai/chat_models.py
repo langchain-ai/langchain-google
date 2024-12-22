@@ -726,7 +726,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
 
     Stream:
         .. code-block:: python
@@ -737,7 +737,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         .. code-block:: python
 
             AIMessageChunk(content='J', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
-            AIMessageChunk(content="'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content="'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
             AIMessageChunk(content='', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
 
         .. code-block:: python
@@ -750,7 +750,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessageChunk(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
+            AIMessageChunk(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
 
     Async:
         .. code-block:: python
@@ -765,7 +765,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'blocked': False}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+            AIMessage(content="J'adore programmer. \n", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
 
     Tool calling:
         .. code-block:: python
@@ -968,16 +968,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             {'is_blocked': False,
              'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False},
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1},
               {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False},
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1},
               {'category': 'HARM_CATEGORY_HARASSMENT',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False},
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1},
               {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False}],
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1}],
              'usage_metadata': {'prompt_token_count': 17,
               'candidates_token_count': 7,
               'total_token_count': 24}}
@@ -1004,16 +1016,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             {'is_blocked': False,
              'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False},
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1},
               {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False},
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1},
               {'category': 'HARM_CATEGORY_HARASSMENT',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False},
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1},
               {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
                'probability_label': 'NEGLIGIBLE',
-               'blocked': False}],
+               'probability_score': 0.1,
+               'blocked': False,
+               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
+               'severity_score': 0.1}],
              'usage_metadata': {'prompt_token_count': 17,
               'candidates_token_count': 7,
               'total_token_count': 24}}
