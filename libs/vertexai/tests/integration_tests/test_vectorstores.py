@@ -13,7 +13,6 @@ variables:
 import os
 from typing import Dict, List, Union
 from uuid import uuid4
-
 import pytest
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform.matching_engine import (
