@@ -419,6 +419,9 @@ def _parse_response_candidate(
     for part in response_candidate.content.parts:
         try:
             text: Optional[str] = part.text
+            # Remove erroneous newline character if present
+            if text is not None:
+                text = text.rstrip("\n")
         except AttributeError:
             text = None
 
