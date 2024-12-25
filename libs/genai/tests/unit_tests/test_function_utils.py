@@ -39,12 +39,27 @@ def test_tool_with_anyof_nullable_param() -> None:
     oai_tool = convert_to_openai_tool(possibly_none)
     genai_tool = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
-    fn_decl = genai_tool_dict["function_declarations"][0]
-    parameters = fn_decl["parameters"]
-    a_property = parameters["properties"]["a"]
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(
+        function_declarations,
+        list,
+    ), "Expected a list."
 
-    assert a_property["type_"] == glm.Type.STRING, "Expected 'a' to be STRING."
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    a_property = properties.get("a")
+    assert isinstance(a_property, dict), "Expected a dict."
+
+    assert a_property.get("type_") == glm.Type.STRING, "Expected 'a' to be STRING."
     assert a_property.get("nullable") is True, "Expected 'a' to be marked as nullable."
 
 
@@ -77,20 +92,34 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     # Convert to GenAI, then to dict
     genai_tool = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
-    fn_decl = genai_tool_dict["function_declarations"][0]
-    parameters = fn_decl["parameters"]
-    items_property = parameters["properties"]["items"]
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    items_property = properties.get("items")
+    assert isinstance(items_property, dict), "Expected a dict."
 
     # Assertions
-    assert items_property["type_"] == glm.Type.ARRAY, "Expected 'items' to be ARRAY."
     assert (
-        items_property.get("nullable") is True
-    ), "Expected 'items' to be marked as nullable."
+        items_property.get("type_") == glm.Type.ARRAY
+    ), "Expected 'items' to be ARRAY."
+    assert items_property.get("nullable"), "Expected 'items' to be marked as nullable."
     # Check that the array items are recognized as strings
-    assert (
-        items_property["items"]["type_"] == glm.Type.STRING
-    ), "Expected array items to be STRING."
+
+    items = items_property.get("items")
+    assert isinstance(items, dict), "Expected 'items' to be a dict."
+
+    assert items.get("type_") == glm.Type.STRING, "Expected array items to be STRING."
 
 
 def test_tool_with_nested_object_anyof_nullable_param() -> None:
@@ -116,12 +145,24 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
     oai_tool = convert_to_openai_tool(possibly_none_dict)
     genai_tool = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
-    fn_decl = genai_tool_dict["function_declarations"][0]
-    parameters = fn_decl["parameters"]
-    data_property = parameters["properties"]["data"]
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
 
-    assert data_property["type_"] in [
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    data_property = properties.get("data")
+    assert isinstance(data_property, dict), "Expected a dict."
+
+    assert data_property.get("type_") in [
         glm.Type.OBJECT,
         glm.Type.STRING,
     ], "Expected 'data' to be recognized as an OBJECT or fallback to STRING."
@@ -161,14 +202,26 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     # Convert to GenAI, then to dict
     genai_tool = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
-    fn_decl = genai_tool_dict["function_declarations"][0]
-    parameters = fn_decl["parameters"]
-    status_property = parameters["properties"]["status"]
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    status_property = properties.get("status")
+    assert isinstance(status_property, dict), "Expected a dict."
 
     # Assertions
     assert (
-        status_property["type_"] == glm.Type.STRING
+        status_property.get("type_") == glm.Type.STRING
     ), "Expected 'status' to be STRING."
     assert (
         status_property.get("nullable") is True
