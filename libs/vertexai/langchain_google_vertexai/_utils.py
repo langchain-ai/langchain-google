@@ -131,7 +131,11 @@ class GoogleModelFamily(str, Enum):
             "medlm-large-1.5-001",
             "medlm-large-1.5@001",
         }
-        if "gemini-1.5" in model_name or model_name in gemini_advanced_models:
+        if (
+            "gemini-1.5" in model_name
+            or model_name in gemini_advanced_models
+            or "gemini-2" in model_name
+        ):
             return GoogleModelFamily.GEMINI_ADVANCED
         if "gemini" in model_name:
             return GoogleModelFamily.GEMINI
@@ -165,8 +169,10 @@ def get_generation_info(
                 {
                     "category": rating.category.name,
                     "probability_label": rating.probability.name,
+                    "probability_score": rating.probability_score,
                     "blocked": rating.blocked,
                     "severity": rating.severity.name,
+                    "severity_score": rating.severity_score,
                 }
                 for rating in candidate.safety_ratings
             ],

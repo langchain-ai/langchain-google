@@ -13,6 +13,33 @@ rate_limiter = InMemoryRateLimiter(requests_per_second=0.5)
 
 
 @pytest.mark.first
+class TestGemini2AIStandard(ChatModelIntegrationTests):
+    @property
+    def chat_model_class(self) -> Type[BaseChatModel]:
+        return ChatVertexAI
+
+    @property
+    def chat_model_params(self) -> dict:
+        return {
+            "model_name": "gemini-2.0-flash-exp",
+            "rate_limiter": rate_limiter,
+            "temperature": 0,
+        }
+
+    @property
+    def supports_image_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_video_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_audio_inputs(self) -> bool:
+        return True
+
+
+@pytest.mark.first
 class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_class(self) -> Type[BaseChatModel]:
