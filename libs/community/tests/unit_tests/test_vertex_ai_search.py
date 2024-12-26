@@ -54,6 +54,7 @@ def test_version_initialization_stable(mock_stable_client: MagicMock) -> None:
     retriever = VertexAISearchRetriever(
         project_id="project_id_value",
         data_store_id="data_store_id_value",
+        credentials=ga_credentials.AnonymousCredentials(),
     )
 
     assert not retriever.beta
@@ -66,6 +67,7 @@ def test_version_initialization_beta(mock_beta_client: MagicMock) -> None:
         project_id="project_id_value",
         data_store_id="data_store_id_value",
         beta=True,
+        credentials=ga_credentials.AnonymousCredentials(),
     )
 
     assert retriever.beta
@@ -81,6 +83,7 @@ def test_version_compatibility_warning() -> None:
             project_id="project_id_value",
             data_store_id="data_store_id_value",
             beta=False,
+            credentials=ga_credentials.AnonymousCredentials(),
             custom_embedding=fake_embeddings,
             custom_embedding_field_path="embedding_field",
             custom_embedding_ratio=0.5,
@@ -145,6 +148,7 @@ def test_beta_specific_params_in_stable_version() -> None:
         project_id="project_id_value",
         data_store_id="data_store_id_value",
         beta=False,
+        credentials=ga_credentials.AnonymousCredentials(),
         custom_embedding=FakeEmbeddings(size=100),
         custom_embedding_field_path="embedding_field",
         custom_embedding_ratio=0.5,
@@ -206,6 +210,7 @@ def test_custom_embedding_with_missing_field_path() -> None:
             custom_embedding=embeddings,
             custom_embedding_ratio=0.5,
             beta=True,
+            credentials=ga_credentials.AnonymousCredentials(),
         )
         with pytest.raises(ValueError):
             retriever._create_search_request(query="query_value")
@@ -224,6 +229,7 @@ def test_custom_embedding_with_missing_model() -> None:
             custom_embedding_field_path="embedding_field",
             custom_embedding_ratio=0.5,
             beta=True,
+            credentials=ga_credentials.AnonymousCredentials(),
         )
         with pytest.raises(ValueError):
             retriever._create_search_request(query="query_value")
@@ -330,6 +336,7 @@ def test_get_content_spec_kwargs(
                 "engine_data_type": engine_data_type,
                 "get_extractive_answers": get_extractive_answers,
                 "beta": beta_flag,
+                "credentials": ga_credentials.AnonymousCredentials(),
                 **(config or {}),
             }
 
@@ -458,6 +465,7 @@ def test_convert_unstructured_search_response_extractive_segments(
             get_extractive_answers=False,
             return_extractive_segment_score=True,
             beta=beta_flag,
+            credentials=ga_credentials.AnonymousCredentials(),
         )
 
         documents = retriever._convert_unstructured_search_response(
@@ -515,6 +523,7 @@ def test_convert_unstructured_search_response_extractive_answers(
             engine_data_type=0,
             get_extractive_answers=True,
             beta=beta_flag,
+            credentials=ga_credentials.AnonymousCredentials(),
         )
 
         documents = retriever._convert_unstructured_search_response(
