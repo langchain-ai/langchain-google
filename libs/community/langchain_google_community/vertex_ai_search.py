@@ -24,27 +24,32 @@ from pydantic import ConfigDict, Field, PrivateAttr, model_validator
 from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
-    from google.cloud.discoveryengine_v1 import (  # noqa: I001
-        ConversationalSearchServiceClient as StableConversationalSearchServiceClient,
-        SearchRequest as StableSearchRequest,
-        SearchResponse as StableSearchResponse,
-        SearchServiceClient as StableClient,
+    from google.cloud.discoveryengine_v1 import (
+        ConversationalSearchServiceClient,
+        SearchRequest,
+        SearchResponse,
+        SearchServiceClient,
     )
-
-    from google.cloud.discoveryengine_v1beta import (  # noqa: I001
+    from google.cloud.discoveryengine_v1beta import (
         ConversationalSearchServiceClient as BetaConversationalSearchServiceClient,
+    )
+    from google.cloud.discoveryengine_v1beta import (
         SearchRequest as BetaSearchRequest,
+    )
+    from google.cloud.discoveryengine_v1beta import (
         SearchResponse as BetaSearchResponse,
-        SearchServiceClient as BetaClient,
+    )
+    from google.cloud.discoveryengine_v1beta import (
+        SearchServiceClient as BetaSearchServiceClient,
     )
 
-    DiscoveryEngineClient = Union[StableClient, BetaClient]
-    DiscoveryEngineSearchRequest = Union[StableSearchRequest, BetaSearchRequest]
+    DiscoveryEngineClient = Union[SearchServiceClient, BetaSearchServiceClient]
+    DiscoveryEngineSearchRequest = Union[SearchRequest, BetaSearchRequest]
     DiscoveryEngineSearchResult = Union[
-        StableSearchResponse.SearchResult, BetaSearchResponse.SearchResult
+        SearchResponse.SearchResult, BetaSearchResponse.SearchResult
     ]
     DiscoveryEngineConversationalClient = Union[
-        StableConversationalSearchServiceClient, BetaConversationalSearchServiceClient
+        ConversationalSearchServiceClient, BetaConversationalSearchServiceClient
     ]
 
 
@@ -71,8 +76,24 @@ class _BaseVertexAISearchRetriever(Serializable):
     1 - Structured data
     2 - Website data
     """
-    beta: bool = False
+    _beta: bool = PrivateAttr(default=False)
     """Whether to use beta version of Vertex AI Search."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        beta = kwargs.pop("beta", False)
+        super().__init__(**kwargs)
+        self._beta = beta
+
+    @property
+    def beta(self) -> bool:
+        """Get whether beta version is enabled."""
+        return self._beta
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -319,20 +340,11 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     _client: DiscoveryEngineClient = PrivateAttr()
     _serving_config: str = PrivateAttr()
 
-    model_config = ConfigDict(
-        extra="forbid",
-        arbitrary_types_allowed=True,
-    )
-
     def __init__(self, **kwargs: Any) -> None:
         """Initialize the retriever with the appropriate version of the client."""
-        try:
-            super().__init__(**kwargs)
-            self._validate_version_compatibility()
-            self._initialize_client()
-        except Exception as e:
-            print(f"Error initializing VertexAISearchRetriever: {e}")
-            raise e
+        super().__init__(**kwargs)
+        self._validate_version_compatibility()
+        self._initialize_client()
         #  For more information, refer to:
         # https://cloud.google.com/generative-ai-app-builder/docs/locations#specify_a_multi-region_for_your_data_store
 
@@ -412,11 +424,6 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                 raise ValueError(
                     "Please provide a custom_embedding_ratio if you provide a "
                     "custom embedding model or a custom_embedding_field_path."
-                )
-            if not 0 <= self.custom_embedding_ratio <= 1:
-                raise ValueError(
-                    "Custom embedding ratio must be between 0 and 1 "
-                    f"when using custom embeddings. Got {self.custom_embedding_ratio}"
                 )
 
             from google.cloud.discoveryengine_v1beta import SearchRequest

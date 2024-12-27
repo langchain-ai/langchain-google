@@ -5,16 +5,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from google.auth import credentials as ga_credentials
 from google.cloud.discoveryengine_v1 import (
-    SearchResponse as StableSearchResponse,
-)
-from google.cloud.discoveryengine_v1 import (
-    SearchServiceClient as StableClient,
+    SearchResponse,
+    SearchServiceClient,
 )
 from google.cloud.discoveryengine_v1beta import (
     SearchResponse as BetaSearchResponse,
 )
 from google.cloud.discoveryengine_v1beta import (
-    SearchServiceClient as BetaClient,
+    SearchServiceClient as BetaSearchServiceClient,
 )
 from langchain_core.embeddings import FakeEmbeddings
 
@@ -22,7 +20,7 @@ from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
 
 
 @pytest.fixture
-def mock_stable_client() -> Generator[StableClient, None, None]:
+def mock_stable_client() -> Generator[SearchServiceClient, None, None]:
     """Fixture for mocking stable version client."""
     # Mock the SearchServiceClient of stable version to avoid real network calls
     with mock.patch(
@@ -36,7 +34,7 @@ def mock_stable_client() -> Generator[StableClient, None, None]:
 
 
 @pytest.fixture
-def mock_beta_client() -> Generator[BetaClient, None, None]:
+def mock_beta_client() -> Generator[BetaSearchServiceClient, None, None]:
     """Fixture for mocking beta version client."""
     # Mock the SearchServiceClient of beta version to avoid real network calls
     with mock.patch(
@@ -350,7 +348,7 @@ def test_get_content_spec_kwargs(
 @pytest.fixture
 def mock_search_response(
     request: pytest.FixtureRequest,
-) -> Union[StableSearchResponse, BetaSearchResponse]:
+) -> Union[SearchResponse, BetaSearchResponse]:
     """
     Parametrized fixture that creates a mock SearchResponse object for testing purposes.
     Provides both stable (v1) and beta versions of the response.
@@ -368,14 +366,11 @@ def mock_search_response(
         Response = BetaSearchResponse
     else:
         from google.cloud.discoveryengine_v1 import (
-            Document as StableDocument,
-        )
-        from google.cloud.discoveryengine_v1 import (
-            SearchResponse as StableSearchResponse,
+            Document,
+            SearchResponse,
         )
 
-        Document = StableDocument
-        Response = StableSearchResponse
+        Response = SearchResponse
 
     return Response(
         results=[
@@ -443,7 +438,7 @@ def mock_search_response(
     indirect=["mock_search_response"],
 )
 def test_convert_unstructured_search_response_extractive_segments(
-    mock_search_response: Union[StableSearchResponse, BetaSearchResponse],
+    mock_search_response: Union[SearchResponse, BetaSearchResponse],
     expected_module: str,
     beta_flag: bool,
 ) -> None:
@@ -508,7 +503,7 @@ def test_convert_unstructured_search_response_extractive_segments(
     indirect=["mock_search_response"],
 )
 def test_convert_unstructured_search_response_extractive_answers(
-    mock_search_response: Union[StableSearchResponse, BetaSearchResponse],
+    mock_search_response: Union[SearchResponse, BetaSearchResponse],
     expected_module: str,
     beta_flag: bool,
 ) -> None:
