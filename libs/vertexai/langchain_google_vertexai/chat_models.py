@@ -1930,7 +1930,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         prev_total_usage: Optional[UsageMetadata] = None,
     ) -> Tuple[ChatGenerationChunk, Optional[UsageMetadata]]:
         # return an empty completion message if there's no candidates
-        usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
+        usage_metadata = proto.Message.to_dict(response_chunk['usage_metadata'])
 
         # Gather langchain (standard) usage metadata
         # Note: some models (e.g., gemini-1.5-pro with image inputs) return
