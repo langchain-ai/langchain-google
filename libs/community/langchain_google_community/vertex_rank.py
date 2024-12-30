@@ -54,7 +54,7 @@ class VertexAIRank(BaseDocumentCompressor):
         account credentials file.
     """
 
-    project_id: str = Field(default=None)
+    project_id: str = Field(default=None)  # type: ignore
     location_id: str = Field(default="global")
     ranking_config: str = Field(default="default_config")
     model: str = Field(default="semantic-ranker-512@latest")
