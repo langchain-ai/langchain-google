@@ -33,6 +33,7 @@ from langchain_google_vertexai._base import _VertexAIBase
 _MISTRAL_MODELS: List[str] = [
     "mistral-nemo@2407",
     "mistral-large@2407",
+    "mistral-large-2411@001",
 ]
 _LLAMA_MODELS: List[str] = [
     "meta/llama3-405b-instruct-maas",
