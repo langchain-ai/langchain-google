@@ -525,3 +525,12 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
     gapic_tool = convert_to_genai_function_declarations([MyModel])
     tool_dict = tool_to_dict(gapic_tool)
     assert gapic_tool == convert_to_genai_function_declarations([tool_dict])
+
+
+def test_tool_input_can_have_optional_arrays() -> None:
+    class ExampleToolInput(BaseModel):
+        numbers: Optional[List[str]] = Field()
+
+    gapic_tool = convert_to_genai_function_declarations([ExampleToolInput])
+    assert gapic_tool.function_declarations[0].parameters.properties.get('numbers').items.type_ == 1
+

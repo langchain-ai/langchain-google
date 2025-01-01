@@ -314,6 +314,14 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
 
         if properties_item.get("type_") == glm.Type.ARRAY and v.get("items"):
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
+        elif properties_item.get("type_") == glm.Type.ARRAY and v.get("anyOf"):
+            types_with_items = [t for t in v.get("anyOf") if t.get("items")]
+            if len(types_with_items) > 1:
+                logger.warning(
+                    "Only first value for 'anyOf' key is supported in array types."
+                    f"Got {len(types_with_items)} types, using first one: {types_with_items[0]}"
+                )
+            properties_item["items"] = _get_items_from_schema_any(types_with_items[0]['items'])
 
         if properties_item.get("type_") == glm.Type.OBJECT:
             if (
