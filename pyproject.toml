@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "langchain-google"
+version = "0.1.0"
+description = "Google integrations for LangChain"
+authors = ["LangChain"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+
+[tool.poetry.group.places.dependencies]
+googlemaps = "^4.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
