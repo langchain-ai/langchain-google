@@ -406,6 +406,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             documents.append(
                 [
                     Document(
+                        id=result.entity_id,
                         page_content=content,
                         metadata=metadata,
                     ),
@@ -421,6 +422,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         entity_id: Optional[str] = None,
         k: int = 5,
         string_filters: Optional[List[dict]] = None,
+        numeric_filters: Optional[List[dict]] = None,
         per_crowding_attribute_neighbor_count: Optional[int] = None,
         approximate_neighbor_candidates: Optional[int] = None,
         leaf_nodes_search_fraction: Optional[float] = None,
@@ -438,6 +440,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
             embedding=embedding,
             neighbor_count=k,
             string_filters=string_filters,
+            numeric_filters=numeric_filters,
             per_crowding_attribute_neighbor_count=per_crowding_attribute_neighbor_count,
             parameters={
                 "approximate_neighbor_candidates": approximate_neighbor_candidates,

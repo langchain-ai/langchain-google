@@ -41,7 +41,7 @@ class VertexAICheckGroundingWrapper(
         account credentials file.
     """
 
-    project_id: str = Field(default=None)
+    project_id: str = Field(default=None)  # type: ignore
     location_id: str = Field(default="global")
     grounding_config: str = Field(default="default_grounding_config")
     citation_threshold: Optional[float] = Field(default=0.6)
@@ -94,7 +94,7 @@ class VertexAICheckGroundingWrapper(
             client_info=get_client_info(module="vertex-ai-search"),
         )
 
-    def invoke(
+    def invoke(  # type: ignore[override]
         self, input: str, config: Optional[RunnableConfig] = None
     ) -> CheckGroundingResponse:
         """
