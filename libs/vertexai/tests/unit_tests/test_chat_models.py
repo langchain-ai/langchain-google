@@ -1077,6 +1077,8 @@ def test_anthropic_format_output() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
+        cache_creation_input_tokens: Optional[int]
+        cache_read_input_tokens: Optional[int]
 
     @dataclass
     class Message:
@@ -1092,13 +1094,25 @@ def test_anthropic_format_output() -> None:
                 ],
                 "model": "baz",
                 "role": "assistant",
-                "usage": Usage(input_tokens=2, output_tokens=1),
+                "usage": Usage(
+                    input_tokens=2,
+                    output_tokens=1,
+                    cache_creation_input_tokens=1,
+                    cache_read_input_tokens=1,
+                ),
                 "type": "message",
             }
 
         usage: Usage
 
-    test_msg = Message(usage=Usage(input_tokens=2, output_tokens=1))
+    test_msg = Message(
+        usage=Usage(
+            input_tokens=2,
+            output_tokens=1,
+            cache_creation_input_tokens=1,
+            cache_read_input_tokens=1,
+        )
+    )
 
     model = ChatAnthropicVertex(project="test-project", location="test-location")
     result = model._format_output(test_msg)
@@ -1113,4 +1127,6 @@ def test_anthropic_format_output() -> None:
         "input_tokens": 2,
         "output_tokens": 1,
         "total_tokens": 3,
+        "cache_creation_input_tokens": 1,
+        "cache_read_input_tokens": 1,
     }

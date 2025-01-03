@@ -32,6 +32,7 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
 )
+from langchain_core.messages.ai import UsageMetadata
 from langchain_core.outputs import (
     ChatGeneration,
     ChatGenerationChunk,
@@ -59,6 +60,13 @@ from langchain_google_vertexai._anthropic_utils import (
     convert_to_anthropic_tool,
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
+
+
+class CacheUsageMetadata(UsageMetadata):
+    cache_creation_input_tokens: Optional[int]
+    """The number of input tokens used to create the cache entry."""
+    cache_read_input_tokens: Optional[int]
+    """The number of input tokens read from the cache."""
 
 
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
@@ -225,11 +233,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         else:
             msg = AIMessage(content=content)
         # Collect token usage
-        msg.usage_metadata = {
-            "input_tokens": data.usage.input_tokens,
-            "output_tokens": data.usage.output_tokens,
-            "total_tokens": data.usage.input_tokens + data.usage.output_tokens,
-        }
+        msg.usage_metadata = CacheUsageMetadata(
+            input_tokens=data.usage.input_tokens,
+            output_tokens=data.usage.output_tokens,
+            total_tokens=data.usage.input_tokens + data.usage.output_tokens,
+            cache_creation_input_tokens=data.usage.cache_creation_input_tokens,
+            cache_read_input_tokens=data.usage.cache_read_input_tokens,
+        )
         return ChatResult(
             generations=[ChatGeneration(message=msg)],
             llm_output=llm_output,
