@@ -1,13 +1,14 @@
 """Integration tests for Anthropic cache control functionality."""
-
 import os
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
 
+@pytest.mark.extended
 def test_anthropic_system_cache() -> None:
     """Test chat with system message having cache control."""
     project = os.environ["PROJECT_ID"]
@@ -23,13 +24,16 @@ def test_anthropic_system_cache() -> None:
     )
     message = HumanMessage(content="Hello! What can you do for me?")
 
-    response = model.invoke([context, message], model_name="claude-3-5-sonnet-latest")
+    response = model.invoke(
+        [context, message], model_name="claude-3-5-sonnet-v2@20241022"
+    )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert "usage_metadata" in response.additional_kwargs
     assert "cache_creation_input_tokens" in response.additional_kwargs["usage_metadata"]
 
 
+@pytest.mark.extended
 def test_anthropic_mixed_cache() -> None:
     """Test chat with different cache control types."""
     project = os.environ["PROJECT_ID"]
@@ -53,17 +57,20 @@ def test_anthropic_mixed_cache() -> None:
             {
                 "type": "text",
                 "text": "What's your name and what can you help me with?",
-                "cache_control": {"type": "semantic"},
+                "cache_control": {"type": "ephemeral"},
             }
         ]
     )
 
-    response = model.invoke([context, message], model_name="claude-3-5-sonnet-latest")
+    response = model.invoke(
+        [context, message], model_name="claude-3-5-sonnet-v2@20241022"
+    )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert "usage_metadata" in response.additional_kwargs
 
 
+@pytest.mark.extended
 def test_anthropic_conversation_cache() -> None:
     """Test chat conversation with cache control."""
     project = os.environ["PROJECT_ID"]
@@ -84,7 +91,7 @@ def test_anthropic_conversation_cache() -> None:
                 {
                     "type": "text",
                     "text": "What's my name?",
-                    "cache_control": {"type": "semantic"},
+                    "cache_control": {"type": "ephemeral"},
                 }
             ]
         ),
@@ -94,18 +101,19 @@ def test_anthropic_conversation_cache() -> None:
                 {
                     "type": "text",
                     "text": "Can you repeat my name?",
-                    "cache_control": {"type": "semantic"},
+                    "cache_control": {"type": "ephemeral"},
                 }
             ]
         ),
     ]
 
-    response = model.invoke(messages, model_name="claude-3-5-sonnet-latest")
+    response = model.invoke(messages, model_name="claude-3-5-sonnet-v2@20241022")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert "peter" in response.content.lower()  # Should remember the name
 
 
+@pytest.mark.extended
 def test_anthropic_chat_template_cache() -> None:
     """Test chat template with structured content and cache control."""
     project = os.environ["PROJECT_ID"]
