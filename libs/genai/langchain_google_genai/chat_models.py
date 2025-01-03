@@ -301,37 +301,46 @@ def _convert_to_parts(
     return parts
 
 
+def _convert_tool_message_to_part(message: ToolMessage | FunctionMessage) -> Part:
+    """Converts a tool or function message to a google part."""
+    name = message.name
+    response: Any
+    if not isinstance(message.content, str):
+        response = message.content
+    else:
+        try:
+            response = json.loads(message.content)
+        except json.JSONDecodeError:
+            response = message.content  # leave as str representation
+    part = Part(
+        function_response=FunctionResponse(
+            name=name,
+            response=(
+                {"output": response} if not isinstance(response, dict) else response
+            ),
+        )
+    )
+    return part
+
+
 def _get_ai_message_tool_messages_parts(
-    messages: Sequence[BaseMessage], ai_message: AIMessage
+    tool_messages: Sequence[ToolMessage], ai_message: AIMessage
 ) -> list[Part]:
+    """
+    Finds relevant tool messages for the AI message and converts them to a single
+    list of Parts.
+    """
+    # We are interested only in the tool messages that are part of the AI message
     tool_calls_ids = [tool_call["id"] for tool_call in ai_message.tool_calls]
     parts = []
-    for i, message in enumerate(messages):
+    for i, message in enumerate(tool_messages):
         if not tool_calls_ids:
             break
-        if isinstance(message, ToolMessage):
-            if message.tool_call_id in tool_calls_ids:
-                tool_calls_ids.remove(message.tool_call_id)
-                name = message.name  # type: ignore
-                tool_response: Any
-                if not isinstance(message.content, str):
-                    tool_response = message.content
-                else:
-                    try:
-                        tool_response = json.loads(message.content)
-                    except json.JSONDecodeError:
-                        tool_response = message.content  # leave as str representation
-                part = Part(
-                    function_response=FunctionResponse(
-                        name=name,
-                        response=(
-                            {"output": tool_response}
-                            if not isinstance(tool_response, dict)
-                            else tool_response
-                        ),
-                    )
-                )
-                parts.append(part)
+        if message.tool_call_id in tool_calls_ids:
+            # remove the id from the list, so that we do not iterate over it again
+            tool_calls_ids.remove(message.tool_call_id)
+            part = _convert_tool_message_to_part(message)
+            parts.append(part)
     return parts
 
 
@@ -344,7 +353,17 @@ def _parse_chat_history(
         warnings.warn("Convert_system_message_to_human will be deprecated!")
 
     system_instruction: Optional[Content] = None
-    for i, message in enumerate(input_messages):
+    messages_without_tool_messages = [
+        message
+        for message in input_messages
+        if isinstance(
+            message, (SystemMessage, AIMessage, HumanMessage, FunctionMessage)
+        )
+    ]
+    tool_messages = [
+        message for message in input_messages if isinstance(message, ToolMessage)
+    ]
+    for i, message in enumerate(messages_without_tool_messages):
         if i == 0 and isinstance(message, SystemMessage):
             system_instruction = Content(parts=_convert_to_parts(message.content))
             continue
@@ -361,7 +380,7 @@ def _parse_chat_history(
                     )
                     ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
-                    messages=input_messages, ai_message=message
+                    tool_messages=tool_messages, ai_message=message
                 )
                 messages.append(Content(role=role, parts=ai_message_parts))
                 messages.append(Content(role="user", parts=tool_messages_parts))
@@ -375,8 +394,6 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             else:
-                if not message.content:
-                    message.content = "I should use the available tools to solve the problem now."
                 parts = _convert_to_parts(message.content)
         elif isinstance(message, HumanMessage):
             role = "user"
@@ -384,30 +401,9 @@ def _parse_chat_history(
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = [p for p in system_instruction.parts] + parts
                 system_instruction = None
-        elif isinstance(message, ToolMessage):
-            continue
         elif isinstance(message, FunctionMessage):
             role = "user"
-            response: Any
-            if not isinstance(message.content, str):
-                response = message.content
-            else:
-                try:
-                    response = json.loads(message.content)
-                except json.JSONDecodeError:
-                    response = message.content  # leave as str representation
-            parts = [
-                Part(
-                    function_response=FunctionResponse(
-                        name=message.name,
-                        response=(
-                            {"output": response}
-                            if not isinstance(response, dict)
-                            else response
-                        ),
-                    )
-                )
-            ]
+            parts = [_convert_tool_message_to_part(message)]
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
