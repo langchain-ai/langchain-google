@@ -354,11 +354,7 @@ def _parse_chat_history(
 
     system_instruction: Optional[Content] = None
     messages_without_tool_messages = [
-        message
-        for message in input_messages
-        if isinstance(
-            message, (SystemMessage, AIMessage, HumanMessage, FunctionMessage)
-        )
+        message for message in input_messages if not isinstance(message, ToolMessage)
     ]
     tool_messages = [
         message for message in input_messages if isinstance(message, ToolMessage)
