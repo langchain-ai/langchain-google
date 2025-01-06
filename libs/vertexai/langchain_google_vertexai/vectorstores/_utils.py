@@ -1,7 +1,7 @@
 import json
 import uuid
 import warnings
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from google.cloud.aiplatform import MatchingEngineIndex
 from google.cloud.aiplatform.compat.types import (  # type: ignore[attr-defined, unused-ignore]
@@ -65,7 +65,8 @@ def batch_update_index(
 def to_data_points(
     ids: List[str],
     embeddings: List[List[float]],
-    metadatas: Union[List[Dict[str, Any]], None],
+    sparse_embeddings: Optional[List[Dict[str, Union[List[int], List[float]]]]] = None,
+    metadatas: Union[List[Dict[str, Any]], None] = None,
 ) -> List["meidx_types.IndexDataPoint"]:
     """Converts triplets id, embedding, metadata into IndexDataPoints instances.
 
@@ -81,10 +82,15 @@ def to_data_points(
     if metadatas is None:
         metadatas = [{}] * len(ids)
 
+    if sparse_embeddings is None:
+        sparse_embeddings = [{"values": [], "dimensions": []}] * len(ids)
+
     data_points = []
     ignored_fields = set()
 
-    for id_, embedding, metadata in zip(ids, embeddings, metadatas):
+    for id_, embedding, sparse_embedding, metadata in zip(
+        ids, embeddings, sparse_embeddings, metadatas
+    ):
         restricts = []
         numeric_restricts = []
 
@@ -122,6 +128,7 @@ def to_data_points(
         data_point = meidx_types.IndexDatapoint(
             datapoint_id=id_,
             feature_vector=embedding,
+            sparse_embedding=sparse_embedding,
             restricts=restricts,
             numeric_restricts=numeric_restricts,
         )
