@@ -299,9 +299,7 @@ def test_vector_store_hybrid_search(
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize(
-    "vector_store_class", ["datastore_vector_store"]
-)
+@pytest.mark.parametrize("vector_store_class", ["datastore_vector_store"])
 def test_add_texts_with_embeddings(
     vector_store_class: str,
     request: pytest.FixtureRequest,
