@@ -329,6 +329,7 @@ def test_add_texts_with_embeddings(
 
 
 @pytest.mark.extended
+@pytest.mark.skip("rebuild the index with restricts")
 @pytest.mark.parametrize(
     "vector_store_class",
     [
