@@ -517,8 +517,8 @@ def test_astream_without_eventloop() -> None:
 
 def test_output_matches_prompt_keys() -> None:
     """
-    Validate that when response_mime_type="application/json" is specified, 
-    the output is a valid JSON format and contains the expected structure 
+    Validate that when response_mime_type="application/json" is specified,
+    the output is a valid JSON format and contains the expected structure
     based on the prompt.
     """
 
@@ -554,8 +554,9 @@ def test_output_matches_prompt_keys() -> None:
         pytest.fail(f"Response is not valid JSON: {e}")
 
     list_key = prompt_key_names["list_key"]
-    assert list_key in response_data, \
-        f"Expected key '{list_key}' is missing in the response."
+    assert (
+        list_key in response_data
+    ), f"Expected key '{list_key}' is missing in the response."
     grocery_items = response_data[list_key]
     assert isinstance(grocery_items, list), f"'{list_key}' should be a list."
 
@@ -569,6 +570,7 @@ def test_output_matches_prompt_keys() -> None:
 
     print("Response matches the key names specified in the prompt.")
 
+
 def test_validate_response_mime_type_and_schema() -> None:
     """
     Test that `response_mime_type` and `response_schema` are validated correctly.
@@ -576,14 +578,14 @@ def test_validate_response_mime_type_and_schema() -> None:
     and invalid ones raise appropriate errors.
     """
 
-    valid_model = ChatGoogleGenerativeAI(
+    llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-pro",
         response_mime_type="application/json",
         response_schema={"type": "list", "items": {"type": "object"}},  # Example schema
     )
 
     try:
-        valid_model.validate_environment()
+        llm.invoke("Hello")
     except ValueError as e:
         pytest.fail(f"Validation failed unexpectedly with valid parameters: {e}")
 
@@ -592,13 +594,13 @@ def test_validate_response_mime_type_and_schema() -> None:
             model="gemini-1.5-pro",
             response_mime_type="invalid/type",
             response_schema={"type": "list", "items": {"type": "object"}},
-        ).validate_environment()
+        ).invoke("Hello")
 
     try:
         ChatGoogleGenerativeAI(
             model="gemini-1.5-pro",
             response_mime_type="application/json",
-        ).validate_environment()
+        ).invoke("Hello")
     except ValueError as e:
         pytest.fail(
             f"Validation failed unexpectedly with a valid MIME type and no schema: {e}"
