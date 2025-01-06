@@ -1,5 +1,6 @@
 """Integration tests for Anthropic cache control functionality."""
 import os
+from typing import Dict, List, Union
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -123,7 +124,7 @@ def test_anthropic_chat_template_cache() -> None:
         location=location,
     )
 
-    content: list[dict[str, str | dict[str, str]] | str] = [
+    content: List[Union[Dict[str, Union[str, Dict[str, str]]], str]] = [
         {
             "text": "You are a helpful assistant. Be concise and clear.",
             "type": "text",
