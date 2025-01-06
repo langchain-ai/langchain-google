@@ -68,13 +68,9 @@ def _get_cache_control(message: BaseMessage) -> Optional[Dict[str, Any]]:
     )
 
 
-def _format_text_content(
-    text: str, cache_control: Optional[Dict[str, Any]] = None
-) -> Dict[str, Union[str, Dict[str, Any]]]:
-    """Format text content with optional cache control."""
+def _format_text_content(text: str) -> Dict[str, Union[str, Dict[str, Any]]]:
+    """Format text content."""
     content: Dict[str, Union[str, Dict[str, Any]]] = {"type": "text", "text": text}
-    if cache_control:
-        content["cache_control"] = cache_control
     return content
 
 
@@ -92,9 +88,10 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMess
     if isinstance(message.content, str):
         if not message.content.strip():
             return None
-        content.append(
-            _format_text_content(message.content, _get_cache_control(message))
-        )
+        message_dict = _format_text_content(message.content)
+        if cache_control := _get_cache_control(message):
+            message_dict["cache_control"] = cache_control
+        content.append(message_dict)
     elif isinstance(message.content, list):
         for block in message.content:
             if isinstance(block, str):
