@@ -415,7 +415,7 @@ def test_format_messages_anthropic_with_mixed_messages():
                     "role": "user",
                     "content": [
                         {
-                            "type": "image_url",
+                            "type": "image",
                             "source": {
                                 "type": "base64",
                                 "media_type": "image/png",

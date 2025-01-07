@@ -123,8 +123,8 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMess
 
                 if block["type"] == "image_url":
                     # convert format
-                    new_block["source"] = _format_image(block["image_url"]["url"])
-                    content.append(new_block)
+                    source = _format_image(block["image_url"]["url"])
+                    content.append({"type": "image", "source": source})
                     continue
 
                 if block["type"] == "tool_use":
