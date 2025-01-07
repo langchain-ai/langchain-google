@@ -160,7 +160,7 @@ from langchain_google_vertexai.model_garden import _format_messages_anthropic
                     "role": "user",
                     "content": [
                         {
-                            "type": "image_url",
+                            "type": "image",
                             "source": {
                                 "type": "base64",
                                 "media_type": "image/png",
