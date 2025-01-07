@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-community"
-version = "2.0.3"
+version = "2.0.4"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 readme = "README.md"
