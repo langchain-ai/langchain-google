@@ -9,6 +9,40 @@ This module contains the LangChain integrations for Google Cloud generative mode
 pip install -U langchain-google-vertexai
 ```
 
+## Supported Models (MaaS: Model-as-a-Service)
+
+1. Llama 
+2. Mistral
+
+Integration on Google Cloud Vertex AI Model-as-a-Service.
+
+For more information, see:
+    https://cloud.google.com/blog/products/ai-machine-learning/llama-3-1-on-vertex-ai
+
+#### Setup
+
+You need to enable a corresponding MaaS model (Google Cloud UI console ->
+Vertex AI -> Model Garden -> search for a model you need and click enable)
+
+You must have the langchain-google-vertexai Python package installed
+.. code-block:: bash
+
+    pip install -U langchain-google-vertexai
+
+And either:
+    - Have credentials configured for your environment
+        (gcloud, workload identity, etc...)
+    - Store the path to a service account JSON file as the
+        GOOGLE_APPLICATION_CREDENTIALS environment variable
+
+This codebase uses the google.auth library which first looks for the application
+credentials variable mentioned above, and then looks for system-level auth.
+
+For more information, see:
+https://cloud.google.com/docs/authentication/application-default-credentials#GAC
+and 
+https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth.
+
 ## Chat Models
 
 `ChatVertexAI` class exposes models such as `gemini-pro` and `chat-bison`.
@@ -102,6 +136,17 @@ llm = VertexAI(model_name="code-bison", max_output_tokens=1000, temperature=0.3)
 question = "Write a python function that checks if a string is a valid email address"
 
 output = llm(question)
+
+## Vector Stores
+
+#### Vector Search Vector Store GCS
+
+VertexAI VectorStore that handles the search and indexing using Vector Search 
+and stores the documents in Google Cloud Storage.
+
+#### Vector Search Vector Store Datastore
+
+VectorSearch with DatasTore document storage.
 ```
 """
 
