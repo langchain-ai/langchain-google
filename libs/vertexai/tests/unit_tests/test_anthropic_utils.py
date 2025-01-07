@@ -1,3 +1,5 @@
+"""Unit tests for _anthropic_utils.py."""
+
 import pytest
 from langchain_core.messages import (
     AIMessage,
@@ -7,7 +9,260 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
 
-from langchain_google_vertexai.model_garden import _format_messages_anthropic
+from langchain_google_vertexai._anthropic_utils import (
+    _format_message_anthropic,
+    _format_messages_anthropic,
+)
+
+
+def test_format_message_anthropic_with_cache_control_in_kwargs():
+    """Test formatting a message with cache control in additional_kwargs."""
+    message = HumanMessage(
+        content="Hello", additional_kwargs={"cache_control": {"type": "semantic"}}
+    )
+    result = _format_message_anthropic(message)
+    assert result == {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Hello", "cache_control": {"type": "semantic"}}
+        ],
+    }
+
+
+def test_format_message_anthropic_with_cache_control_in_block():
+    """Test formatting a message with cache control in content block."""
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": "Hello", "cache_control": {"type": "semantic"}}
+        ]
+    )
+    result = _format_message_anthropic(message)
+    assert result == {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Hello", "cache_control": {"type": "semantic"}}
+        ],
+    }
+
+
+def test_format_message_anthropic_with_mixed_blocks():
+    """Test formatting a message with mixed blocks, some with cache control."""
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": "Hello", "cache_control": {"type": "semantic"}},
+            {"type": "text", "text": "World"},
+            "Plain text",
+        ]
+    )
+    result = _format_message_anthropic(message)
+    assert result == {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Hello", "cache_control": {"type": "semantic"}},
+            {"type": "text", "text": "World"},
+            {"type": "text", "text": "Plain text"},
+        ],
+    }
+
+
+def test_format_messages_anthropic_with_system_cache_control():
+    """Test formatting messages with system message having cache control."""
+    messages = [
+        SystemMessage(
+            content="System message",
+            additional_kwargs={"cache_control": {"type": "ephemeral"}},
+        ),
+        HumanMessage(content="Hello"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(messages)
+
+    assert system_messages == [
+        {
+            "type": "text",
+            "text": "System message",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    assert formatted_messages == [
+        {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+    ]
+
+
+def test_format_message_anthropic_system():
+    """Test formatting a system message."""
+    message = SystemMessage(
+        content="System message",
+        additional_kwargs={"cache_control": {"type": "ephemeral"}},
+    )
+    result = _format_message_anthropic(message)
+    assert result == [
+        {
+            "type": "text",
+            "text": "System message",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+
+def test_format_message_anthropic_system_list():
+    """Test formatting a system message with list content."""
+    message = SystemMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "System rule 1",
+                "cache_control": {"type": "ephemeral"},
+            },
+            {"type": "text", "text": "System rule 2"},
+        ]
+    )
+    result = _format_message_anthropic(message)
+    assert result == [
+        {
+            "type": "text",
+            "text": "System rule 1",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {"type": "text", "text": "System rule 2"},
+    ]
+
+
+def test_format_messages_anthropic_with_system_string():
+    """Test formatting messages with system message as string."""
+    messages = [
+        SystemMessage(content="System message"),
+        HumanMessage(content="Hello"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(messages)
+
+    assert system_messages == [{"type": "text", "text": "System message"}]
+
+    assert formatted_messages == [
+        {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+    ]
+
+
+def test_format_messages_anthropic_with_system_list():
+    """Test formatting messages with system message as a list."""
+    messages = [
+        SystemMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "System rule 1",
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {"type": "text", "text": "System rule 2"},
+            ]
+        ),
+        HumanMessage(content="Hello"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(messages)
+
+    assert system_messages == [
+        {
+            "type": "text",
+            "text": "System rule 1",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {"type": "text", "text": "System rule 2"},
+    ]
+
+    assert formatted_messages == [
+        {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+    ]
+
+
+def test_format_messages_anthropic_with_system_mixed_list():
+    """Test formatting messages with system message as a mixed list."""
+    messages = [
+        SystemMessage(
+            content=[
+                "Plain system rule",
+                {
+                    "type": "text",
+                    "text": "Formatted system rule",
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ]
+        ),
+        HumanMessage(content="Hello"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(messages)
+
+    assert system_messages == [
+        {"type": "text", "text": "Plain system rule"},
+        {
+            "type": "text",
+            "text": "Formatted system rule",
+            "cache_control": {"type": "ephemeral"},
+        },
+    ]
+
+    assert formatted_messages == [
+        {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+    ]
+
+
+def test_format_messages_anthropic_with_mixed_messages():
+    """Test formatting a conversation with various message types and cache controls."""
+    messages = [
+        SystemMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "System message",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        ),
+        HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "Human message",
+                    "cache_control": {"type": "semantic"},
+                }
+            ]
+        ),
+        AIMessage(
+            content="AI response",
+            additional_kwargs={"cache_control": {"type": "semantic"}},
+        ),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(messages)
+
+    assert system_messages == [
+        {
+            "type": "text",
+            "text": "System message",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    assert formatted_messages == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Human message",
+                    "cache_control": {"type": "semantic"},
+                }
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "AI response",
+                    "cache_control": {"type": "semantic"},
+                }
+            ],
+        },
+    ]
 
 
 @pytest.mark.parametrize(
@@ -113,7 +368,7 @@ from langchain_google_vertexai.model_garden import _format_messages_anthropic
                     content="Mike age is 30",
                 ),
             ],
-            "test1",
+            [{"type": "text", "text": "test1"}],
             [
                 {
                     "role": "assistant",
@@ -160,7 +415,7 @@ from langchain_google_vertexai.model_garden import _format_messages_anthropic
                     "role": "user",
                     "content": [
                         {
-                            "type": "image_url",
+                            "type": "image",
                             "source": {
                                 "type": "base64",
                                 "media_type": "image/png",
@@ -473,6 +728,7 @@ from langchain_google_vertexai.model_garden import _format_messages_anthropic
 def test_format_messages_anthropic(
     source_history, expected_sm, expected_history
 ) -> None:
+    """Test the original format_messages_anthropic functionality."""
     sm, result_history = _format_messages_anthropic(source_history)
 
     for result, expected in zip(result_history, expected_history):
