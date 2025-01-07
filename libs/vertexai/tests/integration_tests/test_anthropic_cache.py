@@ -10,6 +10,7 @@ from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
 
 @pytest.mark.extended
+@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_system_cache() -> None:
     """Test chat with system message having cache control."""
     project = os.environ["PROJECT_ID"]
@@ -35,6 +36,7 @@ def test_anthropic_system_cache() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_mixed_cache() -> None:
     """Test chat with different cache control types."""
     project = os.environ["PROJECT_ID"]
@@ -72,6 +74,7 @@ def test_anthropic_mixed_cache() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_conversation_cache() -> None:
     """Test chat conversation with cache control."""
     project = os.environ["PROJECT_ID"]
@@ -115,6 +118,7 @@ def test_anthropic_conversation_cache() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_chat_template_cache() -> None:
     """Test chat template with structured content and cache control."""
     project = os.environ["PROJECT_ID"]
