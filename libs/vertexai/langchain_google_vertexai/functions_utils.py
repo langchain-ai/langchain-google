@@ -283,6 +283,8 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 gapic_tool.google_search_retrieval = rt.google_search_retrieval
             if "function_declarations" in rt:
                 gapic_tool.function_declarations.extend(rt.function_declarations)
+            if "google_search" in rt:
+                gapic_tool.google_search = rt.google_search
         elif isinstance(tool, dict):
             # not _ToolDictLike
             if not any(

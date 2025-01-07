@@ -652,12 +652,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """Google Cloud Vertex AI chat model integration.
 
     Setup:
-        You must have the langchain-google-vertexai Python package installed
-        .. code-block:: bash
-
-            pip install -U langchain-google-vertexai
-
-        And either:
+        You must either:
             - Have credentials configured for your environment (gcloud, workload identity, etc...)
             - Store the path to a service account JSON file as the GOOGLE_APPLICATION_CREDENTIALS environment variable
 
@@ -802,6 +797,16 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
               'id': 'c43374ea-bde5-49ca-8487-5b83ebeea1e6'}]
 
         See ``ChatVertexAI.bind_tools()`` method for more.
+
+    Use Search with Gemini 2:
+        .. code-block:: python
+
+            import google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+            llm = ChatVertexAI(model="gemini-2.0-flash-exp")
+            resp = llm.invoke(
+                "When is the next total solar eclipse in US?",
+                tools=[VertexTool(google_search={})],
+            )
 
     Structured output:
         .. code-block:: python
