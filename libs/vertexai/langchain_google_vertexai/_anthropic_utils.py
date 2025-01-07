@@ -59,14 +59,39 @@ def _format_image(image_url: str) -> Dict:
     }
 
 
-def _format_message_anthropic(message: Union[HumanMessage, AIMessage]):
-    role = _message_type_lookups[message.type]
+def _get_cache_control(message: BaseMessage) -> Optional[Dict[str, Any]]:
+    """Extract cache control from message's additional_kwargs or content block."""
+    return (
+        message.additional_kwargs.get("cache_control")
+        if isinstance(message.additional_kwargs, dict)
+        else None
+    )
+
+
+def _format_text_content(text: str) -> Dict[str, Union[str, Dict[str, Any]]]:
+    """Format text content."""
+    content: Dict[str, Union[str, Dict[str, Any]]] = {"type": "text", "text": text}
+    return content
+
+
+def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMessage]):
+    """Format a message for Anthropic API.
+
+    Args:
+        message: The message to format. Can be HumanMessage, AIMessage, or SystemMessage.
+
+    Returns:
+        A dictionary with the formatted message, or None if the message is empty.
+    """  # noqa: E501
     content: List[Dict[str, Any]] = []
 
     if isinstance(message.content, str):
         if not message.content.strip():
             return None
-        content.append({"type": "text", "text": message.content})
+        message_dict = _format_text_content(message.content)
+        if cache_control := _get_cache_control(message):
+            message_dict["cache_control"] = cache_control
+        content.append(message_dict)
     elif isinstance(message.content, list):
         for block in message.content:
             if isinstance(block, str):
@@ -75,9 +100,8 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage]):
                 # https://github.com/anthropics/anthropic-sdk-python/issues/461
                 if not block.strip():
                     continue
-                content.append({"type": "text", "text": block})
-
-            if isinstance(block, dict):
+                content.append(_format_text_content(block))
+            elif isinstance(block, dict):
                 if "type" not in block:
                     raise ValueError("Dict content block must have a type key")
 
@@ -113,25 +137,26 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage]):
                         if not is_unique:
                             continue
 
-                # all other block types
                 content.append(block)
     else:
         raise ValueError("Message should be a str, list of str or list of dicts")
 
-    # adding all tool calls
     if isinstance(message, AIMessage) and message.tool_calls:
         for tc in message.tool_calls:
             tu = cast(Dict[str, Any], _lc_tool_call_to_anthropic_tool_use_block(tc))
             content.append(tu)
 
-    return {"role": role, "content": content}
+    if message.type == "system":
+        return content
+    else:
+        return {"role": _message_type_lookups[message.type], "content": content}
 
 
 def _format_messages_anthropic(
     messages: List[BaseMessage],
-) -> Tuple[Optional[str], List[Dict]]:
+) -> Tuple[Optional[Dict[str, Any]], List[Dict]]:
     """Formats messages for anthropic."""
-    system_message: Optional[str] = None
+    system_messages: Optional[Dict[str, Any]] = None
     formatted_messages: List[Dict] = []
 
     merged_messages = _merge_messages(messages)
@@ -139,12 +164,9 @@ def _format_messages_anthropic(
         if message.type == "system":
             if i != 0:
                 raise ValueError("System message must be at beginning of message list.")
-            if not isinstance(message.content, str):
-                raise ValueError(
-                    "System message must be a string, "
-                    f"instead was: {type(message.content)}"
-                )
-            system_message = message.content
+            fm = _format_message_anthropic(message)
+            if fm:
+                system_messages = fm
             continue
 
         fm = _format_message_anthropic(message)
@@ -152,7 +174,7 @@ def _format_messages_anthropic(
             continue
         formatted_messages.append(fm)
 
-    return system_message, formatted_messages
+    return system_messages, formatted_messages
 
 
 class AnthropicTool(TypedDict):
