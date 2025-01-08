@@ -299,6 +299,7 @@ def test_safety_settings_gemini() -> None:
     assert len(out2.content) > 0
 
 
+@pytest.mark.xfail(reason="on the model's side")
 def test_chat_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
@@ -332,7 +333,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     request = HumanMessage(
         content=(
             "Please tell the primary color of following birds: "
-            "sparrow, hawk, crow by using searchm"
+            "sparrow, hawk, crow by using search tool."
         )
     )
     response = llm_with_search_force.invoke([request])
