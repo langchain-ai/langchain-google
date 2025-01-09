@@ -1201,3 +1201,27 @@ def test_logprobs() -> None:
     llm3 = ChatVertexAI(model="gemini-1.5-flash", logprobs=False)
     msg3 = llm3.invoke("howdy")
     assert msg3.response_metadata.get("logprobs_result") is None
+
+
+def test_location_init() -> None:
+
+    import vertexai  # type: ignore
+
+    # If I don't initialize vertexai before, defaults to us-central-1
+    llm =  ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    assert llm.location == "us-central1"
+
+    # If I init vertexai with other region the model is in that region
+    vertexai.init(location="europe-west1")
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    assert llm.location == "europe-west1"
+
+    # If I specify the location, it follows that location
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2, location = "europe-west2")
+    assert llm.location == "europe-west2"
+
+    # It reverts to the defautl
+    vertexai.init(location="us-central1")
+    llm =  ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    assert llm.location == "us-central1"
+
