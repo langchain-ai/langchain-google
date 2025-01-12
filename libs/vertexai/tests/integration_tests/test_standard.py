@@ -5,6 +5,7 @@ from typing import Type
 import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_core.tools import BaseTool
 from langchain_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_google_vertexai import ChatVertexAI
@@ -54,8 +55,10 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         }
 
     @pytest.mark.xfail(reason="Gemini 1.0 doesn't support tool_choice='any'")
-    def test_structured_few_shot_examples(self, model: BaseChatModel) -> None:
-        super().test_structured_few_shot_examples(model)
+    def test_structured_few_shot_examples(
+        self, model: BaseChatModel, my_adder_tool: BaseTool
+    ) -> None:
+        super().test_structured_few_shot_examples(model, my_adder_tool)
 
 
 class TestGemini_15_AIStandard(ChatModelIntegrationTests):
