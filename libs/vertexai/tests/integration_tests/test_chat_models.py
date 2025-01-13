@@ -773,7 +773,7 @@ def test_prediction_client_transport():
     assert model.prediction_client.transport.kind == "rest"
     assert model.async_prediction_client.transport.kind == "rest"
 
-    vertexai.init(api_transport="grpc") # Reset global config to "grpc"
+    vertexai.init(api_transport="grpc")  # Reset global config to "grpc"
 
 
 @pytest.mark.extended
