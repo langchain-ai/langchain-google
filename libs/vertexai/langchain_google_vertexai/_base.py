@@ -105,9 +105,9 @@ class _VertexAIBase(BaseModel):
     def validate_params_base(cls, values: dict) -> Any:
         if "model" in values and "model_name" not in values:
             values["model_name"] = values.pop("model")
-        if values.get("api_transport") is None:
+        if "api_transport" not in values:
             values["api_transport"] = initializer.global_config._api_transport
-        if values.get("location") is None:
+        if "location" not in values:
             values["location"] = initializer.global_config.location
         if values.get("api_endpoint"):
             api_endpoint = values["api_endpoint"]
