@@ -8,7 +8,6 @@ from typing import List, Literal, Optional, cast
 
 import pytest
 import requests
-import vertexai  # type: ignore
 from google.cloud import storage
 from google.cloud.aiplatform_v1beta1.types import Blob, Content, Part
 from google.oauth2 import service_account
@@ -759,6 +758,8 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
 
 @pytest.mark.extended
 def test_prediction_client_transport():
+    import vertexai
+
     model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
 
     assert model.prediction_client.transport.kind == "grpc"
@@ -1207,7 +1208,7 @@ def test_logprobs() -> None:
 
 
 def test_location_init() -> None:
-    import vertexai  # type: ignore
+    import vertexai
 
     # If I don't initialize vertexai before, defaults to us-central-1
     llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
