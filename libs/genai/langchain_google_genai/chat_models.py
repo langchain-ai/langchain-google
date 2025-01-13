@@ -301,6 +301,49 @@ def _convert_to_parts(
     return parts
 
 
+def _convert_tool_message_to_part(message: ToolMessage | FunctionMessage) -> Part:
+    """Converts a tool or function message to a google part."""
+    name = message.name
+    response: Any
+    if not isinstance(message.content, str):
+        response = message.content
+    else:
+        try:
+            response = json.loads(message.content)
+        except json.JSONDecodeError:
+            response = message.content  # leave as str representation
+    part = Part(
+        function_response=FunctionResponse(
+            name=name,
+            response=(
+                {"output": response} if not isinstance(response, dict) else response
+            ),
+        )
+    )
+    return part
+
+
+def _get_ai_message_tool_messages_parts(
+    tool_messages: Sequence[ToolMessage], ai_message: AIMessage
+) -> list[Part]:
+    """
+    Finds relevant tool messages for the AI message and converts them to a single
+    list of Parts.
+    """
+    # We are interested only in the tool messages that are part of the AI message
+    tool_calls_ids = [tool_call["id"] for tool_call in ai_message.tool_calls]
+    parts = []
+    for i, message in enumerate(tool_messages):
+        if not tool_calls_ids:
+            break
+        if message.tool_call_id in tool_calls_ids:
+            # remove the id from the list, so that we do not iterate over it again
+            tool_calls_ids.remove(message.tool_call_id)
+            part = _convert_tool_message_to_part(message)
+            parts.append(part)
+    return parts
+
+
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
@@ -310,14 +353,20 @@ def _parse_chat_history(
         warnings.warn("Convert_system_message_to_human will be deprecated!")
 
     system_instruction: Optional[Content] = None
-    for i, message in enumerate(input_messages):
+    messages_without_tool_messages = [
+        message for message in input_messages if not isinstance(message, ToolMessage)
+    ]
+    tool_messages = [
+        message for message in input_messages if isinstance(message, ToolMessage)
+    ]
+    for i, message in enumerate(messages_without_tool_messages):
         if i == 0 and isinstance(message, SystemMessage):
             system_instruction = Content(parts=_convert_to_parts(message.content))
             continue
         elif isinstance(message, AIMessage):
             role = "model"
             if message.tool_calls:
-                parts = []
+                ai_message_parts = []
                 for tool_call in message.tool_calls:
                     function_call = FunctionCall(
                         {
@@ -325,7 +374,13 @@ def _parse_chat_history(
                             "args": tool_call["args"],
                         }
                     )
-                    parts.append(Part(function_call=function_call))
+                    ai_message_parts.append(Part(function_call=function_call))
+                tool_messages_parts = _get_ai_message_tool_messages_parts(
+                    tool_messages=tool_messages, ai_message=message
+                )
+                messages.append(Content(role=role, parts=ai_message_parts))
+                messages.append(Content(role="user", parts=tool_messages_parts))
+                continue
             elif raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
                     {
@@ -344,60 +399,7 @@ def _parse_chat_history(
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
-            response: Any
-            if not isinstance(message.content, str):
-                response = message.content
-            else:
-                try:
-                    response = json.loads(message.content)
-                except json.JSONDecodeError:
-                    response = message.content  # leave as str representation
-            parts = [
-                Part(
-                    function_response=FunctionResponse(
-                        name=message.name,
-                        response=(
-                            {"output": response}
-                            if not isinstance(response, dict)
-                            else response
-                        ),
-                    )
-                )
-            ]
-        elif isinstance(message, ToolMessage):
-            role = "user"
-            prev_message: Optional[BaseMessage] = (
-                input_messages[i - 1] if i > 0 else None
-            )
-            if (
-                prev_message
-                and isinstance(prev_message, AIMessage)
-                and prev_message.tool_calls
-            ):
-                # message.name can be null for ToolMessage
-                name: str = prev_message.tool_calls[0]["name"]
-            else:
-                name = message.name  # type: ignore
-            tool_response: Any
-            if not isinstance(message.content, str):
-                tool_response = message.content
-            else:
-                try:
-                    tool_response = json.loads(message.content)
-                except json.JSONDecodeError:
-                    tool_response = message.content  # leave as str representation
-            parts = [
-                Part(
-                    function_response=FunctionResponse(
-                        name=name,
-                        response=(
-                            {"output": tool_response}
-                            if not isinstance(tool_response, dict)
-                            else tool_response
-                        ),
-                    )
-                )
-            ]
+            parts = [_convert_tool_message_to_part(message)]
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
@@ -419,6 +421,9 @@ def _parse_response_candidate(
     for part in response_candidate.content.parts:
         try:
             text: Optional[str] = part.text
+            # Remove erroneous newline character if present
+            if text is not None:
+                text = text.rstrip("\n")
         except AttributeError:
             text = None
 
@@ -1374,7 +1379,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @property
     def _supports_tool_choice(self) -> bool:
-        return "gemini-1.5-pro" in self.model or "gemini-1.5-flash" in self.model
+        return (
+            "gemini-1.5-pro" in self.model
+            or "gemini-1.5-flash" in self.model
+            or "gemini-2" in self.model
+        )
 
 
 def _get_tool_name(

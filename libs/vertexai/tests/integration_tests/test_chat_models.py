@@ -1214,6 +1214,7 @@ def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) ->
         assert isinstance(response, AIMessage)
 
 
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
 @pytest.mark.release
 def test_logprobs() -> None:
     llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)

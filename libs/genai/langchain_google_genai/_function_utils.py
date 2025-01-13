@@ -315,10 +315,26 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
         if properties_item.get("type_") == glm.Type.ARRAY and v.get("items"):
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
 
-        if properties_item.get("type_") == glm.Type.OBJECT and v.get("properties"):
-            properties_item["properties"] = _get_properties_from_schema_any(
-                v.get("properties")
-            )
+        if properties_item.get("type_") == glm.Type.OBJECT:
+            if (
+                v.get("anyOf")
+                and isinstance(v["anyOf"], list)
+                and isinstance(v["anyOf"][0], dict)
+            ):
+                v = v["anyOf"][0]
+            v_properties = v.get("properties")
+            if v_properties:
+                properties_item["properties"] = _get_properties_from_schema_any(
+                    v_properties
+                )
+                if isinstance(v_properties, dict):
+                    properties_item["required"] = [
+                        k for k, v in v_properties.items() if "default" not in v
+                    ]
+            else:
+                # Providing dummy type for object without properties
+                properties_item["type_"] = glm.Type.STRING
+
         if k == "title" and "description" not in properties_item:
             properties_item["description"] = k + " is " + str(v)
 
@@ -342,8 +358,6 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
         items["type_"] = _get_type_from_schema(schema)
         if items["type_"] == glm.Type.OBJECT and "properties" in schema:
             items["properties"] = _get_properties_from_schema_any(schema["properties"])
-        if "title" in schema:
-            items["title"] = schema
         if "title" in schema or "description" in schema:
             items["description"] = (
                 schema.get("description") or schema.get("title") or ""

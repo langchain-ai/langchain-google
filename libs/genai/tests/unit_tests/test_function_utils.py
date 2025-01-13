@@ -1,4 +1,4 @@
-from typing import Any, Generator, Optional, Union
+from typing import Any, Generator, List, Optional, Union
 from unittest.mock import MagicMock, patch
 
 import google.ai.generativelanguage as glm
@@ -15,6 +15,222 @@ from langchain_google_genai._function_utils import (
     convert_to_genai_function_declarations,
     tool_to_dict,
 )
+
+
+def test_tool_with_anyof_nullable_param() -> None:
+    """
+    Example test that checks a string parameter marked as Optional,
+    verifying it's recognized as a 'string' & 'nullable'.
+    """
+
+    @tool(parse_docstring=True)
+    def possibly_none(
+        a: Optional[str] = None,
+    ) -> str:
+        """
+        A test function whose argument can be a string or None.
+
+        Args:
+          a: Possibly none.
+        """
+        return "value"
+
+    # Convert to OpenAI, then to GenAI, then to dict
+    oai_tool = convert_to_openai_tool(possibly_none)
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(
+        function_declarations,
+        list,
+    ), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    a_property = properties.get("a")
+    assert isinstance(a_property, dict), "Expected a dict."
+
+    assert a_property.get("type_") == glm.Type.STRING, "Expected 'a' to be STRING."
+    assert a_property.get("nullable") is True, "Expected 'a' to be marked as nullable."
+
+
+def test_tool_with_array_anyof_nullable_param() -> None:
+    """
+    Checks an array parameter marked as Optional, verifying it's recognized
+    as an 'array' & 'nullable', and that the items are correctly typed.
+    """
+
+    @tool(parse_docstring=True)
+    def possibly_none_list(
+        items: Optional[List[str]] = None,
+    ) -> str:
+        """
+        A test function whose argument can be a list of strings or None.
+
+        Args:
+          items: Possibly a list of strings or None.
+        """
+        return "value"
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(possibly_none_list)
+
+    # Manually assign the 'items' type in the parameters
+    oai_tool["function"]["parameters"]["properties"]["items"]["items"] = {
+        "type": "string"
+    }
+
+    # Convert to GenAI, then to dict
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    items_property = properties.get("items")
+    assert isinstance(items_property, dict), "Expected a dict."
+
+    # Assertions
+    assert (
+        items_property.get("type_") == glm.Type.ARRAY
+    ), "Expected 'items' to be ARRAY."
+    assert items_property.get("nullable"), "Expected 'items' to be marked as nullable."
+    # Check that the array items are recognized as strings
+
+    items = items_property.get("items")
+    assert isinstance(items, dict), "Expected 'items' to be a dict."
+
+    assert items.get("type_") == glm.Type.STRING, "Expected array items to be STRING."
+
+
+def test_tool_with_nested_object_anyof_nullable_param() -> None:
+    """
+    Checks an object parameter (dict) marked as Optional, verifying it's recognized
+    as an 'object' but defaults to string if there are no real properties,
+    and that it is 'nullable'.
+    """
+
+    @tool(parse_docstring=True)
+    def possibly_none_dict(
+        data: Optional[dict] = None,
+    ) -> str:
+        """
+        A test function whose argument can be an object (dict) or None.
+
+        Args:
+          data: Possibly a dict or None.
+        """
+        return "value"
+
+    # Convert to OpenAI, then to GenAI, then to dict
+    oai_tool = convert_to_openai_tool(possibly_none_dict)
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    data_property = properties.get("data")
+    assert isinstance(data_property, dict), "Expected a dict."
+
+    assert data_property.get("type_") in [
+        glm.Type.OBJECT,
+        glm.Type.STRING,
+    ], "Expected 'data' to be recognized as an OBJECT or fallback to STRING."
+    assert (
+        data_property.get("nullable") is True
+    ), "Expected 'data' to be marked as nullable."
+
+
+def test_tool_with_enum_anyof_nullable_param() -> None:
+    """
+    Checks a parameter with an enum, marked as Optional, verifying it's recognized
+    as 'string' & 'nullable', and that the 'enum' field is captured.
+    """
+
+    @tool(parse_docstring=True)
+    def possibly_none_enum(
+        status: Optional[str] = None,
+    ) -> str:
+        """
+        A test function whose argument can be an enum string or None.
+
+        Args:
+          status: Possibly one of ("active", "inactive", "pending") or None.
+        """
+        return "value"
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(possibly_none_enum)
+
+    # Manually override the 'enum' for the 'status' property in the parameters
+    oai_tool["function"]["parameters"]["properties"]["status"]["enum"] = [
+        "active",
+        "inactive",
+        "pending",
+    ]
+
+    # Convert to GenAI, then to dict
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    status_property = properties.get("status")
+    assert isinstance(status_property, dict), "Expected a dict."
+
+    # Assertions
+    assert (
+        status_property.get("type_") == glm.Type.STRING
+    ), "Expected 'status' to be STRING."
+    assert (
+        status_property.get("nullable") is True
+    ), "Expected 'status' to be marked as nullable."
+    assert status_property.get("enum") == [
+        "active",
+        "inactive",
+        "pending",
+    ], "Expected 'status' to have enum values."
 
 
 def test_format_tool_to_genai_function() -> None:

@@ -11,7 +11,7 @@ variables:
 """
 
 import os
-from typing import List
+from typing import Dict, List, Union
 from uuid import uuid4
 
 import pytest
@@ -268,6 +268,68 @@ def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
 
 
 @pytest.mark.extended
+@pytest.mark.parametrize(
+    "vector_store_class", ["vector_store", "datastore_vector_store"]
+)
+def test_vector_store_hybrid_search(
+    vector_store_class: str,
+    request: pytest.FixtureRequest,
+    embeddings: VertexAIEmbeddings,
+):
+    vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
+
+    query = "What are your favourite animals?"
+    embedding = embeddings.embed_query(query)
+    sparse_embedding: Dict[str, Union[List[int], List[float]]] = {
+        "values": [0.5, 0.7],
+        "dimensions": [2, 4],
+    }
+
+    docs_with_scores = vector_store.similarity_search_by_vector_with_score(
+        embedding=embedding, sparse_embedding=sparse_embedding, k=1
+    )
+    assert len(docs_with_scores) == 1
+    for doc, scores in docs_with_scores:
+        assert isinstance(doc, Document)
+        assert isinstance(scores, dict)
+        assert "dense_score" in scores
+        assert "sparse_score" in scores
+        assert isinstance(scores["dense_score"], float)
+        assert isinstance(scores["sparse_score"], float)
+
+
+@pytest.mark.extended
+@pytest.mark.parametrize("vector_store_class", ["datastore_vector_store"])
+def test_add_texts_with_embeddings(
+    vector_store_class: str,
+    request: pytest.FixtureRequest,
+    embeddings: VertexAIEmbeddings,
+):
+    vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
+
+    texts = ["my favourite animal is the elephant", "my favourite animal is the lion"]
+    ids = ["idx1", "idx2"]
+    embs = embeddings.embed_documents(texts)
+    ids1 = vector_store.add_texts_with_embeddings(
+        texts=texts, embeddings=embs, ids=ids, is_complete_overwrite=True
+    )
+    assert len(ids1) == 2
+
+    sparse_embeddings: List[Dict[str, Union[List[int], List[float]]]] = [
+        {"values": [0.5, 0.7], "dimensions": [2, 4]}
+    ] * 2
+    ids2 = vector_store.add_texts_with_embeddings(
+        texts=texts,
+        embeddings=embs,
+        sparse_embeddings=sparse_embeddings,
+        ids=ids,
+        is_complete_overwrite=True,
+    )
+    assert ids == ids1 == ids2
+
+
+@pytest.mark.extended
+@pytest.mark.skip("rebuild the index with restricts")
 @pytest.mark.parametrize(
     "vector_store_class",
     [
