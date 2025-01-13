@@ -8,6 +8,7 @@ from typing import List, Literal, Optional, cast
 
 import pytest
 import requests
+import vertexai  # type: ignore
 from google.cloud import storage
 from google.cloud.aiplatform_v1beta1.types import Blob, Content, Part
 from google.oauth2 import service_account
@@ -771,6 +772,8 @@ def test_prediction_client_transport():
 
     assert model.prediction_client.transport.kind == "rest"
     assert model.async_prediction_client.transport.kind == "rest"
+
+    vertexai.init(api_transport="grpc") # Reset global config to "grpc"
 
 
 @pytest.mark.extended
