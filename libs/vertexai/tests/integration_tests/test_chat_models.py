@@ -1214,7 +1214,7 @@ def test_location_init() -> None:
     llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
     assert llm.location == "us-central1"
 
-    # If I init vertexai with other region the model is in that region
+    # If I init vertexai with other region the model is in that particular region
     vertexai.init(location="europe-west1")
     llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
     assert llm.location == "europe-west1"
