@@ -25,6 +25,7 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
             "model_name": "gemini-2.0-flash-exp",
             "rate_limiter": rate_limiter,
             "temperature": 0,
+            "api_transport": None,
         }
 
     @property
@@ -52,6 +53,7 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
             "model_name": "gemini-1.0-pro-001",
             "rate_limiter": rate_limiter,
             "temperature": 0,
+            "api_transport": None,
         }
 
     @pytest.mark.xfail(reason="Gemini 1.0 doesn't support tool_choice='any'")
@@ -72,6 +74,7 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
             "model_name": "gemini-1.5-pro-001",
             "rate_limiter": rate_limiter,
             "temperature": 0,
+            "api_transport": None,
         }
 
     @property
