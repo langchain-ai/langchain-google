@@ -2,7 +2,7 @@
 
 This module contains the LangChain integrations for Vertex AI service - Google foundational models, third-party foundational modela available on Vertex Model Garden and.
 
-**Supported integrations models**
+**Supported integrations**
 
 1. Google's founational models: Gemini family, Codey, embeddings - `ChatVertexAI`, `VertexAI`, `VertexAIEmbeddings`.
 2. Other Google's foundational models: Imagen - `VertexAIImageCaptioning`, `VertexAIImageCaptioningChat`, `VertexAIImageEditorChat`, `VertexAIImageGeneratorChat`, `VertexAIVisualQnAChat`.
