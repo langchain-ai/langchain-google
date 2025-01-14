@@ -333,7 +333,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     request = HumanMessage(
         content=(
             "Please tell the primary color of following birds: "
-            "sparrow, hawk, crow by using searchm"
+            "sparrow, hawk, crow by using search tool."
         )
     )
     response = llm_with_search_force.invoke([request])
@@ -342,19 +342,22 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     assert len(response.tool_calls) > 0
     tool_call = response.tool_calls[0]
     assert tool_call["name"] == "search"
+    tool_messages = []
+    for tool_call in response.tool_calls:
+        tool_response = search.run(tool_call["args"])
+        tool_message = ToolMessage(
+            name="search",
+            content=json.dumps(tool_response),
+            tool_call_id=tool_call["id"],
+        )
+        tool_messages.append(tool_message)
+    assert len(tool_messages) > 0
+    assert len(response.tool_calls) == len(tool_messages)
 
-    tool_response = search("sparrow")
-    tool_message = ToolMessage(
-        name="search",
-        content=json.dumps(tool_response),
-        tool_call_id="0",
-    )
-
-    result = llm_with_search.invoke([request, response, tool_message])
+    result = llm_with_search.invoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
     assert "brown" in result.content
-    assert len(result.tool_calls) > 0
 
 
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
