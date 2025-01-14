@@ -16,8 +16,8 @@ from langchain_google_community.vertex_rank import VertexAIRank
 class CustomRankingRetriever(BaseRetriever):
     """Retriever that directly uses a mock retriever and a ranking API."""
 
-    base_retriever: BaseRetriever = Field(default=None)
-    ranker: VertexAIRank = Field(default=None)
+    base_retriever: BaseRetriever = Field(default=None)  # type: ignore
+    ranker: VertexAIRank = Field(default=None)  # type: ignore
 
     def __init__(self, base_retriever: BaseRetriever, ranker: VertexAIRank):
         super().__init__()  # Call to the superclass's constructor
