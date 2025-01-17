@@ -118,7 +118,7 @@ class _VertexAIBase(BaseModel):
         if values.get("client_cert_source"):
             client_options.client_cert_source = values["client_cert_source"]
         values["client_options"] = client_options
-        additional_headers = values.get("additional_headers", {})
+        additional_headers = values.get("additional_headers") or {}
         values["default_metadata"] = tuple(additional_headers.items())
         return values
 
