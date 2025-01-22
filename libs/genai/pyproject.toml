@@ -28,12 +28,10 @@ syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
 numpy = "^1.26.2"
-langchain-tests = "0.3.1"
+langchain-tests = "0.3.9"
 
 [tool.codespell]
 ignore-words-list = "rouge"
-
-
 
 
 [tool.poetry.group.codespell]
@@ -43,15 +41,11 @@ optional = true
 codespell = "^2.2.0"
 
 
-
-
 [tool.poetry.group.test_integration]
 optional = true
 
 [tool.poetry.group.test_integration.dependencies]
 pytest = "^7.3.0"
-
-
 
 
 [tool.poetry.group.lint]
@@ -61,16 +55,12 @@ optional = true
 ruff = "^0.1.5"
 
 
-
-
 [tool.poetry.group.typing.dependencies]
 mypy = "^1.10"
 types-requests = "^2.28.11.5"
 types-google-cloud-ndb = "^2.2.0.1"
 types-protobuf = "^4.24.0.20240302"
 numpy = "^1.26.2"
-
-
 
 
 [tool.poetry.group.dev]
