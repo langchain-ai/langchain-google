@@ -31,7 +31,7 @@ numpy = "^1.26.2"
 langchain-tests = "0.3.1"
 
 [tool.codespell]
-ignore-words-list = "rouge"
+ignore-words-list = "rouge,brunch"
 
 
 
