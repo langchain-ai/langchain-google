@@ -118,7 +118,7 @@ class _VertexAIBase(BaseModel):
         if values.get("client_cert_source"):
             client_options.client_cert_source = values["client_cert_source"]
         values["client_options"] = client_options
-        additional_headers = values.get("additional_headers", {})
+        additional_headers = values.get("additional_headers") or {}
         values["default_metadata"] = tuple(additional_headers.items())
         return values
 
@@ -177,7 +177,7 @@ class _VertexAIBase(BaseModel):
 
 class _VertexAICommon(_VertexAIBase):
     client_preview: Any = Field(default=None, exclude=True)  #: :meta private:
-    model_name: str = Field(default=None, alias="model")
+    model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
     temperature: Optional[float] = None
     "Sampling temperature, it controls the degree of randomness in token selection."
