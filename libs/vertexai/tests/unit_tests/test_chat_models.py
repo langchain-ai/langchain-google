@@ -29,6 +29,7 @@ from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
 from pydantic import BaseModel
+from vertexai.generative_models import SafetySetting as VertexSafetySetting
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     InputOutputTextPair,
@@ -945,7 +946,7 @@ def test_safety_settings_gemini() -> None:
 
 def test_safety_settings_gemini_init() -> None:
     expected_safety_setting = [
-        SafetySetting(
+        VertexSafetySetting(
             category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
             threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
             method=SafetySetting.HarmBlockMethod.SEVERITY,
