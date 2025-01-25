@@ -63,7 +63,7 @@ DEFAULT_CREDS_TOKEN_FILE = "token.json"
 DEFAULT_CLIENT_SECRETS_FILE = "credentials.json"
 
 
-def get_google_calendar_credentials(
+def get_google_credentials(
     token_file: Optional[str] = None,
     client_secrets_file: Optional[str] = None,
     scopes: Optional[List[str]] = None,
@@ -103,7 +103,7 @@ def build_resource_service(
     service_version: str = "v3",
 ) -> Resource:
     """Build a Google Calendar service."""
-    credentials = credentials or get_google_calendar_credentials()
+    credentials = credentials or get_google_credentials()
     builder = import_googleapiclient_resource_builder()
     return builder(service_name, service_version, credentials=credentials)
 
