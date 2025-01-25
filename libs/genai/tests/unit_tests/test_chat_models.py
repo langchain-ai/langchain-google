@@ -28,6 +28,7 @@ from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
+    _convert_tool_message_to_part,
     _parse_chat_history,
     _parse_response_candidate,
 )
@@ -622,3 +623,23 @@ def test_serialize() -> None:
     llm.client = None
     llm_loaded.client = None
     assert llm == llm_loaded
+
+
+@pytest.mark.parametrize(
+    "tool_message",
+    [
+        ToolMessage(name="tool_name", content="test_content", tool_call_id="1"),
+        # Legacy agent does not set `name`
+        ToolMessage(
+            additional_kwargs={"name": "tool_name"},
+            content="test_content",
+            tool_call_id="1",
+        ),
+    ],
+)
+def test__convert_tool_message_to_part__sets_tool_name(
+    tool_message: ToolMessage,
+) -> None:
+    part = _convert_tool_message_to_part(tool_message)
+    assert part.function_response.name == "tool_name"
+    assert part.function_response.response == {"output": "test_content"}
