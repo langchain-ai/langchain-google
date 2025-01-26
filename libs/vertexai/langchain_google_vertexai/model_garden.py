@@ -139,8 +139,6 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
-    model_name: Optional[str] = Field(default=None, alias="model")  # type: ignore[assignment]
-    "Underlying model name."
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
     access_token: Optional[str] = None
     stream_usage: bool = True  # Whether to include usage metadata in streaming output
