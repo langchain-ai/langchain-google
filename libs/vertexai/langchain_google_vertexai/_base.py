@@ -182,6 +182,7 @@ class _VertexAICommon(_VertexAIBase):
     temperature: Optional[float] = None
     "Sampling temperature, it controls the degree of randomness in token selection."
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
+    max_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     "Token limit determines the maximum amount of text output from one prompt."
     top_p: Optional[float] = None
     "Tokens are selected from most probable to least until the sum of their "
