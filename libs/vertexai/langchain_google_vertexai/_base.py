@@ -226,7 +226,7 @@ class _VertexAICommon(_VertexAIBase):
         return "vertexai"
 
     @property
-    def max_tokens(self) -> int:
+    def max_tokens(self) -> int | None:
         return self.max_output_tokens
 
     @property
