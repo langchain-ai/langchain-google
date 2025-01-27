@@ -248,8 +248,6 @@ def _format_to_gapic_function_declaration(
     tool: _FunctionDeclarationLike,
 ) -> gapic.FunctionDeclaration:
     "Format tool into the Vertex function declaration."
-    print("_format_to_gapic_function_declaration")
-    print(tool)
     if isinstance(tool, BaseTool):
         return _format_base_tool_to_function_declaration(tool)
     elif isinstance(tool, type) and issubclass(tool, BaseModel):
