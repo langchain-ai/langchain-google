@@ -9,6 +9,7 @@ from vertexai.language_models import TextEmbeddingModel  # type: ignore
 from vertexai.vision_models import MultiModalEmbeddingModel  # type: ignore
 
 from langchain_google_vertexai.embeddings import (
+    EmbeddingTaskTypes,
     GoogleEmbeddingModelType,
     VertexAIEmbeddings,
 )
@@ -58,6 +59,7 @@ def test_langchain_google_vertexai_embedding_documents(
     assert model.model_name == model.client._model_id
     assert model.model_name == model_name
 
+
 @pytest.mark.release
 @pytest.mark.parametrize(
     "embeddings_task_type",
@@ -68,7 +70,9 @@ def test_langchain_google_vertexai_embedding_documents(
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_documents_with_task_type(
-    embeddings_task_type: str, model_name: str, embeddings_dim: int
+    embeddings_task_type: EmbeddingTaskTypes,
+    model_name: str,
+    embeddings_dim: int,
 ) -> None:
     documents = ["foo bar"] * 8
     model = VertexAIEmbeddings(model_name)
@@ -91,6 +95,7 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
     output = model.embed_query(document)
     assert len(output) == embeddings_dim
 
+
 @pytest.mark.release
 @pytest.mark.parametrize(
     "embeddings_task_type",
@@ -101,7 +106,9 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_query_with_task_type(
-    embeddings_task_type: str, model_name: str, embeddings_dim: int
+    embeddings_task_type: EmbeddingTaskTypes,
+    model_name: str,
+    embeddings_dim: int,
 ) -> None:
     document = "foo bar"
     model = VertexAIEmbeddings(model_name)
