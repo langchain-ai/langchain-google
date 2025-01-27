@@ -75,6 +75,7 @@ class GoogleEmbeddingModelVersion(str, Enum):
     EMBEDDINGS_NOV_2023 = auto()
     EMBEDDINGS_DEC_2023 = auto()
     EMBEDDINGS_MAY_2024 = auto()
+    EMBEDDINGS_NOV_2024 = auto()
 
     @classmethod
     def _missing_(cls, value: Any) -> "GoogleEmbeddingModelVersion":
@@ -94,6 +95,8 @@ class GoogleEmbeddingModelVersion(str, Enum):
             or "text-multilingual-embedding-preview-0409" in value.lower()
         ):
             return GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024
+        if "text-embedding-005" in value.lower():
+            return GoogleEmbeddingModelVersion.EMBEDDINGS_NOV_2024
 
         return GoogleEmbeddingModelVersion.EMBEDDINGS_JUNE_2023
 
