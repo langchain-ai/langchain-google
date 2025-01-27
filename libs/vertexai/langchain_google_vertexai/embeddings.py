@@ -385,6 +385,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "CLUSTERING",
                 "QUESTION_ANSWERING",
                 "FACT_VERIFICATION",
+                "CODE_RETRIEVAL_QUERY",
             ]
         ] = None,
         dimensions: Optional[int] = None,
@@ -406,6 +407,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                                           for Semantic Textual Similarity (STS).
                     CLASSIFICATION - Embeddings will be used for classification.
                     CLUSTERING - Embeddings will be used for clustering.
+                    CODE_RETRIEVAL_QUERY - Embeddings will be used for code retrieval for Java and Python
                     The following are only supported on preview models:
                     QUESTION_ANSWERING
                     FACT_VERIFICATION
@@ -458,6 +460,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "CLUSTERING",
             "QUESTION_ANSWERING",
             "FACT_VERIFICATION",
+            "CODE_RETRIEVAL_QUERY",
         ] = "RETRIEVAL_DOCUMENT",
     ) -> List[List[float]]:
         """Embed a list of documents.
@@ -484,6 +487,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "CLUSTERING",
             "QUESTION_ANSWERING",
             "FACT_VERIFICATION",
+            "CODE_RETRIEVAL_QUERY",
         ] = "RETRIEVAL_QUERY",
     ) -> List[float]:
         """Embed a text.
