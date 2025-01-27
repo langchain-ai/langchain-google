@@ -18,6 +18,12 @@ _EMBEDDING_MODELS = [
     ("multimodalembedding@001", 1408),
 ]
 
+_EMBEDDING_TASK_TYPES = [
+    "RETRIEVAL_QUERY",
+    "RETRIEVAL_DOCUMENT",
+    "CODE_RETRIEVAL_QUERY",
+]
+
 
 @pytest.mark.release
 def test_initialization() -> None:
@@ -52,6 +58,27 @@ def test_langchain_google_vertexai_embedding_documents(
     assert model.model_name == model.client._model_id
     assert model.model_name == model_name
 
+@pytest.mark.release
+@pytest.mark.parametrize(
+    "embeddings_task_type",
+    _EMBEDDING_TASK_TYPES,
+)
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    _EMBEDDING_MODELS,
+)
+def test_langchain_google_vertexai_embedding_documents_with_task_type(
+    embeddings_task_type: str, model_name: str, embeddings_dim: int
+) -> None:
+    documents = ["foo bar"] * 8
+    model = VertexAIEmbeddings(model_name)
+    output = model.embed_documents(documents, embeddings_task_type=embeddings_task_type)
+    assert len(output) == 8
+    for embedding in output:
+        assert len(embedding) == embeddings_dim
+    assert model.model_name == model.client._model_id
+    assert model.model_name == model_name
+
 
 @pytest.mark.release
 @pytest.mark.parametrize(
@@ -62,6 +89,23 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
     document = "foo bar"
     model = VertexAIEmbeddings(model_name)
     output = model.embed_query(document)
+    assert len(output) == embeddings_dim
+
+@pytest.mark.release
+@pytest.mark.parametrize(
+    "embeddings_task_type",
+    _EMBEDDING_TASK_TYPES,
+)
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    _EMBEDDING_MODELS,
+)
+def test_langchain_google_vertexai_embedding_query_with_task_type(
+    embeddings_task_type: str, model_name: str, embeddings_dim: int
+) -> None:
+    document = "foo bar"
+    model = VertexAIEmbeddings(model_name)
+    output = model.embed_query(document, embeddings_task_type=embeddings_task_type)
     assert len(output) == embeddings_dim
 
 

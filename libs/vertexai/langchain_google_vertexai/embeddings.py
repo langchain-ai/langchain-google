@@ -447,7 +447,18 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return embeddings
 
     def embed_documents(
-        self, texts: List[str], batch_size: int = 0
+        self,
+        texts: List[str],
+        batch_size: int = 0,
+        embeddings_task_type: Literal[
+            "RETRIEVAL_QUERY",
+            "RETRIEVAL_DOCUMENT",
+            "SEMANTIC_SIMILARITY",
+            "CLASSIFICATION",
+            "CLUSTERING",
+            "QUESTION_ANSWERING",
+            "FACT_VERIFICATION",
+        ] = "RETRIEVAL_DOCUMENT",
     ) -> List[List[float]]:
         """Embed a list of documents.
 
@@ -460,9 +471,21 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
-        return self.embed(texts, batch_size, "RETRIEVAL_DOCUMENT")
+        return self.embed(texts, batch_size, embeddings_task_type)
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(
+        self,
+        text: str,
+        embeddings_task_type: Literal[
+            "RETRIEVAL_QUERY",
+            "RETRIEVAL_DOCUMENT",
+            "SEMANTIC_SIMILARITY",
+            "CLASSIFICATION",
+            "CLUSTERING",
+            "QUESTION_ANSWERING",
+            "FACT_VERIFICATION",
+        ] = "RETRIEVAL_QUERY",
+    ) -> List[float]:
         """Embed a text.
 
         Args:
@@ -471,7 +494,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             Embedding for the text.
         """
-        return self.embed([text], 1, "RETRIEVAL_QUERY")[0]
+        return self.embed([text], 1, embeddings_task_type)[0]
 
     @deprecated(
         since="2.0.1", removal="3.0.0", alternative="VertexAIEmbeddings.embed_images()"
