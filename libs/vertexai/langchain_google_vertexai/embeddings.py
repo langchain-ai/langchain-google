@@ -457,6 +457,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self,
         texts: List[str],
         batch_size: int = 0,
+        *,
         embeddings_task_type: EmbeddingTaskTypes = "RETRIEVAL_DOCUMENT",
     ) -> List[List[float]]:
         """Embed a list of documents.
@@ -475,6 +476,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     def embed_query(
         self,
         text: str,
+        *,
         embeddings_task_type: EmbeddingTaskTypes = "RETRIEVAL_QUERY",
     ) -> List[float]:
         """Embed a text.
