@@ -9,7 +9,6 @@ from vertexai.language_models import TextEmbeddingModel  # type: ignore
 from vertexai.vision_models import MultiModalEmbeddingModel  # type: ignore
 
 from langchain_google_vertexai.embeddings import (
-    EmbeddingTaskTypes,
     GoogleEmbeddingModelType,
     VertexAIEmbeddings,
 )
@@ -17,11 +16,6 @@ from langchain_google_vertexai.embeddings import (
 _EMBEDDING_MODELS = [
     ("text-embedding-004", 768),
     ("multimodalembedding@001", 1408),
-]
-
-_EMBEDDING_TASK_TYPES = [
-    "RETRIEVAL_QUERY",
-    "RETRIEVAL_DOCUMENT",
 ]
 
 
@@ -61,21 +55,16 @@ def test_langchain_google_vertexai_embedding_documents(
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "embeddings_task_type",
-    _EMBEDDING_TASK_TYPES,
-)
-@pytest.mark.parametrize(
     "model_name, embeddings_dim",
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_documents_with_task_type(
-    embeddings_task_type: EmbeddingTaskTypes,
     model_name: str,
     embeddings_dim: int,
 ) -> None:
     documents = ["foo bar"] * 8
     model = VertexAIEmbeddings(model_name)
-    output = model.embed_documents(documents, embeddings_task_type=embeddings_task_type)
+    output = model.embed_documents(documents)
     assert len(output) == 8
     for embedding in output:
         assert len(embedding) == embeddings_dim
@@ -97,21 +86,16 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "embeddings_task_type",
-    _EMBEDDING_TASK_TYPES,
-)
-@pytest.mark.parametrize(
     "model_name, embeddings_dim",
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_query_with_task_type(
-    embeddings_task_type: EmbeddingTaskTypes,
     model_name: str,
     embeddings_dim: int,
 ) -> None:
     document = "foo bar"
     model = VertexAIEmbeddings(model_name)
-    output = model.embed_query(document, embeddings_task_type=embeddings_task_type)
+    output = model.embed_query(document)
     assert len(output) == embeddings_dim
 
 
