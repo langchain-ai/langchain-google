@@ -6,7 +6,10 @@ from pydantic import model_validator
 from typing_extensions import Self
 
 from langchain_google_vertexai import VertexAIEmbeddings
-from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
+from langchain_google_vertexai.embeddings import (
+    EmbeddingTaskTypes,
+    GoogleEmbeddingModelType,
+)
 
 
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
@@ -35,7 +38,7 @@ def test_embed_documents_with_question_answering_task(mock_embed) -> None:
     texts = [f"text {i}" for i in range(5)]
 
     embedding_dimension = 768
-    embeddings_task_type = "QUESTION_ANSWERING"
+    embeddings_task_type: EmbeddingTaskTypes = "QUESTION_ANSWERING"
 
     mock_embed.return_value = [[0.001] * embedding_dimension for _ in texts]
 
@@ -57,7 +60,7 @@ def test_embed_query_with_question_answering_task(mock_embed) -> None:
     text = "text 0"
 
     embedding_dimension = 768
-    embeddings_task_type = "QUESTION_ANSWERING"
+    embeddings_task_type: EmbeddingTaskTypes = "QUESTION_ANSWERING"
 
     mock_embed.return_value = [[0.001] * embedding_dimension]
 
