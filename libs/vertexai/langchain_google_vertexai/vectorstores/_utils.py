@@ -170,6 +170,15 @@ def data_points_to_batch_update_records(
             ],
         }
 
+        if (
+            hasattr(data_point, "sparse_embedding")
+            and data_point.sparse_embedding is not None
+        ):
+            record["sparse_embedding"] = {
+                "values": [value for value in data_point.sparse_embedding.values],
+                "dimensions": [dim for dim in data_point.sparse_embedding.dimensions],
+            }
+
         records.append(record)
 
     return records
