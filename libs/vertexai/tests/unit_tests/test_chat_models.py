@@ -119,10 +119,13 @@ def test_tuned_model_name() -> None:
         model_name="gemini-pro",
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
+        max_tokens=500,
     )
     assert llm.model_name == "gemini-pro"
     assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
     assert llm.full_model_name == "projects/123/locations/europe-west4/endpoints/456"
+    assert llm.max_output_tokens == 500
+    assert llm.max_tokens == 500
 
 
 def test_parse_examples_correct() -> None:

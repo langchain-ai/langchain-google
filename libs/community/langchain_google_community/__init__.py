@@ -6,6 +6,16 @@ from langchain_google_community.bq_storage_vectorstores.bigquery import (
 from langchain_google_community.bq_storage_vectorstores.featurestore import (
     VertexFSVectorStore,
 )
+from langchain_google_community.calendar.toolkit import (
+    CalendarCreateEvent,
+    CalendarDeleteEvent,
+    CalendarMoveEvent,
+    CalendarSearchEvents,
+    CalendarToolkit,
+    CalendarUpdateEvent,
+    GetCalendarsInfo,
+    GetCurrentDatetime,
+)
 from langchain_google_community.docai import DocAIParser, DocAIParsingResults
 from langchain_google_community.documentai_warehouse import DocumentAIWarehouseRetriever
 from langchain_google_community.drive import GoogleDriveLoader
@@ -44,6 +54,14 @@ __all__ = [
     "BigQueryLoader",
     "BigQueryVectorStore",
     "BigQueryVectorSearch",
+    "CalendarCreateEvent",
+    "CalendarDeleteEvent",
+    "CalendarMoveEvent",
+    "CalendarSearchEvents",
+    "CalendarUpdateEvent",
+    "GetCalendarsInfo",
+    "GetCurrentDatetime",
+    "CalendarToolkit",
     "CloudVisionLoader",
     "CloudVisionParser",
     "DocAIParser",

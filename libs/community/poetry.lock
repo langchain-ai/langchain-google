@@ -4042,6 +4042,7 @@ propcache = ">=0.2.0"
 
 [extras]
 bigquery = ["google-cloud-bigquery"]
+calendar = ["google-api-python-client", "google-auth", "google-auth-oauthlib"]
 docai = ["gapic-google-longrunning", "google-cloud-contentwarehouse", "google-cloud-documentai", "google-cloud-documentai-toolbox"]
 drive = ["google-auth-httplib2", "google-auth-oauthlib"]
 featurestore = ["db-dtypes", "google-cloud-aiplatform", "google-cloud-bigquery-storage", "pandas", "pandas", "pyarrow", "pydantic"]
@@ -4057,4 +4058,4 @@ vision = ["google-cloud-vision"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "2164d80ebaf39791c029f1fb94e8848f74a6685485e6da02d81c0d93e6e63db9"
+content-hash = "8c0bf69abf5e4426b032ef13b0468177b7c421a828e998f4952938bd8063961d"

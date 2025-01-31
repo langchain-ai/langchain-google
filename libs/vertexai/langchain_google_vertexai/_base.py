@@ -226,6 +226,10 @@ class _VertexAICommon(_VertexAIBase):
         return "vertexai"
 
     @property
+    def max_tokens(self) -> int | None:
+        return self.max_output_tokens
+
+    @property
     def _identifying_params(self) -> Dict[str, Any]:
         """Gets the identifying parameters."""
         return {**{"model_name": self.model_name}, **self._default_params}
