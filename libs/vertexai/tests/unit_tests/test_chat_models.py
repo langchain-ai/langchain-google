@@ -37,6 +37,7 @@ from vertexai.language_models import (  # type: ignore
     InputOutputTextPair,
 )
 
+from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _parse_chat_history,
@@ -238,7 +239,8 @@ def test_parse_history_gemini() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
-    system_instructions, history = _parse_chat_history_gemini(messages)
+    image_bytes_loader = ImageBytesLoader() 
+    system_instructions, history = _parse_chat_history_gemini(messages, image_bytes_loader)
     assert len(history) == 3
     assert history[0].role == "user"
     assert history[0].parts[0].text == text_question1
@@ -256,8 +258,9 @@ def test_parse_history_gemini_converted_message() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
+    image_bytes_loader = ImageBytesLoader()
     _, history = _parse_chat_history_gemini(
-        messages, convert_system_message_to_human=True
+        messages, image_bytes_loader, convert_system_message_to_human=True
     )
     assert len(history) == 3
     assert history[0].role == "user"
@@ -323,7 +326,8 @@ def test_parse_history_gemini_function() -> None:
         message6,
         message7,
     ]
-    system_instructions, history = _parse_chat_history_gemini(messages)
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(messages, image_bytes_loader)
     assert len(history) == 6
     assert system_instructions and system_instructions.parts[0].text == system_input
     assert history[0].role == "user"
@@ -529,7 +533,8 @@ def test_parse_history_gemini_function() -> None:
 def test_parse_history_gemini_multi(
     source_history, expected_sm, expected_history
 ) -> None:
-    sm, result_history = _parse_chat_history_gemini(history=source_history)
+    image_bytes_loader = ImageBytesLoader()
+    sm, result_history = _parse_chat_history_gemini(history=source_history, imageBytesLoader=image_bytes_loader)
 
     for result, expected in zip(result_history, expected_history):
         assert result == expected
@@ -1000,7 +1005,8 @@ def test_multiple_fc() -> None:
             content='{"condition": "rainy", "temp_c": 25.2}',
         ),
     ]
-    _, history = _parse_chat_history_gemini(raw_history)
+    image_bytes_loader = ImageBytesLoader()
+    _, history = _parse_chat_history_gemini(raw_history, image_bytes_loader)
     expected = [
         Content(
             parts=[Part(text=prompt)],
