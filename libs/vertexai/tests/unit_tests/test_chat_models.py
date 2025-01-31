@@ -239,8 +239,10 @@ def test_parse_history_gemini() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
-    image_bytes_loader = ImageBytesLoader() 
-    system_instructions, history = _parse_chat_history_gemini(messages, image_bytes_loader)
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader
+    )
     assert len(history) == 3
     assert history[0].role == "user"
     assert history[0].parts[0].text == text_question1
@@ -327,7 +329,9 @@ def test_parse_history_gemini_function() -> None:
         message7,
     ]
     image_bytes_loader = ImageBytesLoader()
-    system_instructions, history = _parse_chat_history_gemini(messages, image_bytes_loader)
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader
+    )
     assert len(history) == 6
     assert system_instructions and system_instructions.parts[0].text == system_input
     assert history[0].role == "user"
@@ -534,7 +538,9 @@ def test_parse_history_gemini_multi(
     source_history, expected_sm, expected_history
 ) -> None:
     image_bytes_loader = ImageBytesLoader()
-    sm, result_history = _parse_chat_history_gemini(history=source_history, imageBytesLoader=image_bytes_loader)
+    sm, result_history = _parse_chat_history_gemini(
+        history=source_history, imageBytesLoader=image_bytes_loader
+    )
 
     for result, expected in zip(result_history, expected_history):
         assert result == expected

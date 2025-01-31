@@ -485,15 +485,13 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -1111,7 +1109,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @cached_property
     def _image_bytes_loader_client(project: Optional[str] = None):
         return ImageBytesLoader(project=project)
-    
+
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
@@ -1329,7 +1327,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         logprobs: Optional[Union[int, bool]] = None,
         **kwargs,
     ) -> GenerateContentRequest:
-        system_instruction, contents = _parse_chat_history_gemini(messages, self._image_bytes_loader_client)
+        system_instruction, contents = _parse_chat_history_gemini(
+            messages, self._image_bytes_loader_client
+        )
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         if tool_config:
             tool_config = self._tool_config_gemini(tool_config=tool_config)
@@ -1450,7 +1450,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Get the number of tokens present in the text."""
         if self._is_gemini_model:
             # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
-            _, contents = _parse_chat_history_gemini([HumanMessage(content=text)], self._image_bytes_loader_client)
+            _, contents = _parse_chat_history_gemini(
+                [HumanMessage(content=text)], self._image_bytes_loader_client
+            )
             response = self.prediction_client.count_tokens(
                 {
                     "endpoint": self.full_model_name,
