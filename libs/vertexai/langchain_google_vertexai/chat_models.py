@@ -1075,6 +1075,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         models. Must be a string containing the cache name (A sequence of numbers)
     """
 
+    project: Optional[str] = None
+    """ Optional. Google Cloud Project ID for ImageBytesLoader.
+    """
+
     logprobs: Union[bool, int] = False
     """Whether to return logprobs as part of AIMessage.response_metadata.
     
@@ -1107,8 +1111,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         return ["langchain", "chat_models", "vertexai"]
 
     @cached_property
-    def _image_bytes_loader_client(project: Optional[str] = None):
-        return ImageBytesLoader(project=project)
+    def _image_bytes_loader_client(self):
+        return ImageBytesLoader(project=self.project)
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
