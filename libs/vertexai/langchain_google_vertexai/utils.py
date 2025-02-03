@@ -56,7 +56,8 @@ def create_context_cache(
         raise ValueError(error_msg)
 
     system_instruction, contents = _parse_chat_history_gemini(
-        messages, ImageBytesLoader(project=model.project))
+        messages, ImageBytesLoader(project=model.project)
+    )
 
     if tool_config:
         tool_config = _format_tool_config(tool_config)
