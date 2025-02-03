@@ -45,6 +45,18 @@ _MAX_BATCH_SIZE = 250
 _MIN_BATCH_SIZE = 5
 
 
+EmbeddingTaskTypes = Literal[
+    "RETRIEVAL_QUERY",
+    "RETRIEVAL_DOCUMENT",
+    "SEMANTIC_SIMILARITY",
+    "CLASSIFICATION",
+    "CLUSTERING",
+    "QUESTION_ANSWERING",
+    "FACT_VERIFICATION",
+    "CODE_RETRIEVAL_QUERY",
+]
+
+
 class GoogleEmbeddingModelType(str, Enum):
     TEXT = auto()
     MULTIMODAL = auto()
@@ -63,6 +75,7 @@ class GoogleEmbeddingModelVersion(str, Enum):
     EMBEDDINGS_NOV_2023 = auto()
     EMBEDDINGS_DEC_2023 = auto()
     EMBEDDINGS_MAY_2024 = auto()
+    EMBEDDINGS_NOV_2024 = auto()
 
     @classmethod
     def _missing_(cls, value: Any) -> "GoogleEmbeddingModelVersion":
@@ -82,6 +95,8 @@ class GoogleEmbeddingModelVersion(str, Enum):
             or "text-multilingual-embedding-preview-0409" in value.lower()
         ):
             return GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024
+        if "text-embedding-005" in value.lower():
+            return GoogleEmbeddingModelVersion.EMBEDDINGS_NOV_2024
 
         return GoogleEmbeddingModelVersion.EMBEDDINGS_JUNE_2023
 
@@ -376,17 +391,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self,
         texts: List[str],
         batch_size: int = 0,
-        embeddings_task_type: Optional[
-            Literal[
-                "RETRIEVAL_QUERY",
-                "RETRIEVAL_DOCUMENT",
-                "SEMANTIC_SIMILARITY",
-                "CLASSIFICATION",
-                "CLUSTERING",
-                "QUESTION_ANSWERING",
-                "FACT_VERIFICATION",
-            ]
-        ] = None,
+        embeddings_task_type: Optional[EmbeddingTaskTypes] = None,
         dimensions: Optional[int] = None,
     ) -> List[List[float]]:
         """Embed a list of strings.
@@ -406,6 +411,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                                           for Semantic Textual Similarity (STS).
                     CLASSIFICATION - Embeddings will be used for classification.
                     CLUSTERING - Embeddings will be used for clustering.
+                    CODE_RETRIEVAL_QUERY - Embeddings will be used for
+                                           code retrieval for Java and Python.
                     The following are only supported on preview models:
                     QUESTION_ANSWERING
                     FACT_VERIFICATION
@@ -447,7 +454,11 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         return embeddings
 
     def embed_documents(
-        self, texts: List[str], batch_size: int = 0
+        self,
+        texts: List[str],
+        batch_size: int = 0,
+        *,
+        embeddings_task_type: EmbeddingTaskTypes = "RETRIEVAL_DOCUMENT",
     ) -> List[List[float]]:
         """Embed a list of documents.
 
@@ -460,9 +471,14 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
-        return self.embed(texts, batch_size, "RETRIEVAL_DOCUMENT")
+        return self.embed(texts, batch_size, embeddings_task_type)
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(
+        self,
+        text: str,
+        *,
+        embeddings_task_type: EmbeddingTaskTypes = "RETRIEVAL_QUERY",
+    ) -> List[float]:
         """Embed a text.
 
         Args:
@@ -471,7 +487,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         Returns:
             Embedding for the text.
         """
-        return self.embed([text], 1, "RETRIEVAL_QUERY")[0]
+        return self.embed([text], 1, embeddings_task_type)[0]
 
     @deprecated(
         since="2.0.1", removal="3.0.0", alternative="VertexAIEmbeddings.embed_images()"
