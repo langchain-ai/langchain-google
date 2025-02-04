@@ -84,11 +84,6 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     # Convert to OpenAI tool
     oai_tool = convert_to_openai_tool(possibly_none_list)
 
-    # Manually assign the 'items' type in the parameters
-    oai_tool["function"]["parameters"]["properties"]["items"]["items"] = {
-        "type": "string"
-    }
-
     # Convert to GenAI, then to dict
     genai_tool = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tool)

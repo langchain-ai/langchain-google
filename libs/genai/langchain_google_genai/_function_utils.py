@@ -301,9 +301,17 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
         if v.get("type") or v.get("anyOf") or v.get("type_"):
-            properties_item["type_"] = _get_type_from_schema(v)
+            item_type_ = _get_type_from_schema(v)
+            properties_item["type_"] = item_type_
             if _is_nullable_schema(v):
                 properties_item["nullable"] = True
+
+            # Replace `v` with chosen definition for array / object json types
+            any_of_types = v.get("anyOf")
+            if any_of_types and item_type_ in [glm.Type.ARRAY, glm.Type.OBJECT]:
+                json_type_ = "array" if item_type_ == glm.Type.ARRAY else "object"
+                # Use Index -1 for consistency with `_get_nullable_type_from_schema`
+                v = [val for val in any_of_types if val.get("type") == json_type_][-1]
 
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
