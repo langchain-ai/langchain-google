@@ -1077,10 +1077,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         models. Must be a string containing the cache name (A sequence of numbers)
     """
 
-    project: Optional[str] = None
-    """ Optional. Google Cloud Project ID for ImageBytesLoader.
-    """
-
     logprobs: Union[bool, int] = False
     """Whether to return logprobs as part of AIMessage.response_metadata.
     
