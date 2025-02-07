@@ -55,11 +55,12 @@ async def test_async_retry_on_errors():
     """Test that the retry decorator works with async functions."""
     mock_llm = MagicMock()
     mock_llm.max_retries = 2
-    mock_function = AsyncMock(side_effect=[create_api_error(), "success"])
-
+    mock_function = AsyncMock()
+    mock_function.side_effect = [create_api_error(), "success"]
+    
     decorator = _create_retry_decorator(mock_llm)
     wrapped_func = decorator(mock_function)
-
+    
     result = await wrapped_func()
     assert result == "success"
     assert mock_function.call_count == 2
@@ -70,11 +71,12 @@ async def test_async_max_retries_exceeded():
     """Test that the async retry decorator fails after max retries."""
     mock_llm = MagicMock()
     mock_llm.max_retries = 2
-    mock_function = AsyncMock(side_effect=[create_api_error(), create_api_error()])
-
+    mock_function = AsyncMock()
+    mock_function.side_effect = [create_api_error(), create_api_error()]
+    
     decorator = _create_retry_decorator(mock_llm)
     wrapped_func = decorator(mock_function)
-
+    
     with pytest.raises(APIError):
         await wrapped_func()
     assert mock_function.call_count == 2
