@@ -2,6 +2,7 @@
 
 from __future__ import annotations  # noqa
 import ast
+from functools import cached_property
 import json
 import logging
 from dataclasses import dataclass, field
@@ -198,7 +199,7 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
 
 def _parse_chat_history_gemini(
     history: List[BaseMessage],
-    project: Optional[str] = None,
+    imageBytesLoader: ImageBytesLoader,
     convert_system_message_to_human: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
@@ -218,7 +219,7 @@ def _parse_chat_history_gemini(
                 return None
         if part["type"] == "image_url":
             path = part["image_url"]["url"]
-            return ImageBytesLoader(project=project).load_gapic_part(path)
+            return imageBytesLoader.load_gapic_part(path)
 
         # Handle media type like LangChain.js
         # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
@@ -1107,6 +1108,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
 
+    @cached_property
+    def _image_bytes_loader_client(self):
+        return ImageBytesLoader(project=self.project)
+
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
@@ -1324,7 +1329,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         logprobs: Optional[Union[int, bool]] = None,
         **kwargs,
     ) -> GenerateContentRequest:
-        system_instruction, contents = _parse_chat_history_gemini(messages)
+        system_instruction, contents = _parse_chat_history_gemini(
+            messages, self._image_bytes_loader_client
+        )
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         if tool_config:
             tool_config = self._tool_config_gemini(tool_config=tool_config)
@@ -1445,7 +1452,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """Get the number of tokens present in the text."""
         if self._is_gemini_model:
             # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
-            _, contents = _parse_chat_history_gemini([HumanMessage(content=text)])
+            _, contents = _parse_chat_history_gemini(
+                [HumanMessage(content=text)], self._image_bytes_loader_client
+            )
             response = self.prediction_client.count_tokens(
                 {
                     "endpoint": self.full_model_name,

@@ -39,6 +39,7 @@ from langchain_google_vertexai import (
     HarmCategory,
     create_context_cache,
 )
+from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
@@ -341,7 +342,10 @@ def test_parse_history_gemini_multimodal_FC():
         Part(text=instruction),
     ]
     expected = [Content(role="user", parts=parts)]
-    _, response = _parse_chat_history_gemini(history=history)
+    imageBytesLoader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history, imageBytesLoader=imageBytesLoader
+    )
     assert expected == response
 
 
