@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from anthropic import APIError
@@ -55,15 +55,25 @@ async def test_async_retry_on_errors():
     """Test that the retry decorator works with async functions."""
     mock_llm = MagicMock()
     mock_llm.max_retries = 2
-    mock_function = AsyncMock()
-    mock_function.side_effect = [create_api_error(), "success"]
-    
+
+    class AsyncMock:
+        def __init__(self):
+            self.call_count = 0
+
+        async def __call__(self):
+            self.call_count += 1
+            if self.call_count == 1:
+                raise create_api_error()
+            return "success"
+
+    mock_async = AsyncMock()
+
     decorator = _create_retry_decorator(mock_llm)
-    wrapped_func = decorator(mock_function)
-    
+    wrapped_func = decorator(mock_async)
+
     result = await wrapped_func()
     assert result == "success"
-    assert mock_function.call_count == 2
+    assert mock_async.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -71,12 +81,20 @@ async def test_async_max_retries_exceeded():
     """Test that the async retry decorator fails after max retries."""
     mock_llm = MagicMock()
     mock_llm.max_retries = 2
-    mock_function = AsyncMock()
-    mock_function.side_effect = [create_api_error(), create_api_error()]
-    
+
+    class AsyncMock:
+        def __init__(self):
+            self.call_count = 0
+
+        async def __call__(self):
+            self.call_count += 1
+            raise create_api_error()
+
+    mock_async = AsyncMock()
+
     decorator = _create_retry_decorator(mock_llm)
-    wrapped_func = decorator(mock_function)
-    
+    wrapped_func = decorator(mock_async)
+
     with pytest.raises(APIError):
         await wrapped_func()
-    assert mock_function.call_count == 2
+    assert mock_async.call_count == 2
