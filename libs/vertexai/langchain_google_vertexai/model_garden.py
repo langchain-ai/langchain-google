@@ -60,6 +60,7 @@ from langchain_google_vertexai._anthropic_utils import (
     convert_to_anthropic_tool,
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
+from langchain_google_vertexai.utils import create_base_retry_decorator
 
 
 class CacheUsageMetadata(UsageMetadata):
@@ -67,6 +68,31 @@ class CacheUsageMetadata(UsageMetadata):
     """The number of input tokens used to create the cache entry."""
     cache_read_input_tokens: Optional[int]
     """The number of input tokens read from the cache."""
+
+
+def _create_retry_decorator(
+    llm: ChatAnthropicVertex,
+    *,
+    run_manager: Optional[
+        Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
+    ] = None,
+) -> Callable[[Any], Any]:
+    """Creates a retry decorator for Anthropic Vertex LLMs with proper tracing."""
+    from anthropic import (  # type: ignore[unused-ignore, import-not-found]
+        APIError,
+        APITimeoutError,
+        RateLimitError,
+    )
+
+    errors = [
+        APIError,
+        APITimeoutError,
+        RateLimitError,
+    ]
+
+    return create_base_retry_decorator(
+        error_types=errors, max_retries=llm.max_retries, run_manager=run_manager
+    )
 
 
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
@@ -143,6 +169,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     access_token: Optional[str] = None
     stream_usage: bool = True  # Whether to include usage metadata in streaming output
     credentials: Optional[Credentials] = None
+    max_retries: int = Field(
+        default=3, description="Number of retries for error handling."
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -164,17 +193,18 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         project_id: str = self.project
 
+        # Always disable Anthropic's retries, we handle it using the retry decorator
         self.client = AnthropicVertex(
             project_id=project_id,
             region=self.location,
-            max_retries=self.max_retries,
+            max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
         )
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
             region=self.location,
-            max_retries=self.max_retries,
+            max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
         )
@@ -250,13 +280,20 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        """Run the LLM on the given prompt and input."""
         params = self._format_params(messages=messages, stop=stop, **kwargs)
         if self.streaming:
             stream_iter = self._stream(
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
             return generate_from_stream(stream_iter)
-        data = self.client.messages.create(**params)
+        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+
+        @retry_decorator
+        def _completion_with_retry_inner(**params: Any) -> Any:
+            return self.client.messages.create(**params)
+
+        data = _completion_with_retry_inner(**params)
         return self._format_output(data, **kwargs)
 
     async def _agenerate(
@@ -266,13 +303,20 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        """Run the LLM on the given prompt and input."""
         params = self._format_params(messages=messages, stop=stop, **kwargs)
         if self.streaming:
             stream_iter = self._astream(
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
             return await agenerate_from_stream(stream_iter)
-        data = await self.async_client.messages.create(**params)
+        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+
+        @retry_decorator
+        async def _acompletion_with_retry_inner(**params: Any) -> Any:
+            return await self.async_client.messages.create(**params)
+
+        data = await _acompletion_with_retry_inner(**params)
         return self._format_output(data, **kwargs)
 
     @property
@@ -292,7 +336,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if stream_usage is None:
             stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        stream = self.client.messages.create(**params, stream=True)
+        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+
+        @retry_decorator
+        def _stream_with_retry(**params: Any) -> Any:
+            return self.client.messages.create(**params, stream=True)
+
+        stream = _stream_with_retry(**params)
         coerce_content_to_string = not _tools_in_params(params)
         for event in stream:
             msg = _make_message_chunk_from_anthropic_event(
@@ -318,7 +368,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if stream_usage is None:
             stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        stream = await self.async_client.messages.create(**params, stream=True)
+        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+
+        @retry_decorator
+        async def _astream_with_retry(**params: Any) -> Any:
+            return await self.async_client.messages.create(**params, stream=True)
+
+        stream = await _astream_with_retry(**params)
         coerce_content_to_string = not _tools_in_params(params)
         async for event in stream:
             msg = _make_message_chunk_from_anthropic_event(
