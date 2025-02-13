@@ -105,8 +105,10 @@ class _VertexAIBase(BaseModel):
     def validate_params_base(cls, values: dict) -> Any:
         if "model" in values and "model_name" not in values:
             values["model_name"] = values.pop("model")
-        if values.get("api_transport") is None:
+        if "api_transport" not in values:
             values["api_transport"] = initializer.global_config._api_transport
+        if "location" not in values:
+            values["location"] = initializer.global_config.location
         if values.get("api_endpoint"):
             api_endpoint = values["api_endpoint"]
         else:
@@ -116,7 +118,7 @@ class _VertexAIBase(BaseModel):
         if values.get("client_cert_source"):
             client_options.client_cert_source = values["client_cert_source"]
         values["client_options"] = client_options
-        additional_headers = values.get("additional_headers", {})
+        additional_headers = values.get("additional_headers") or {}
         values["default_metadata"] = tuple(additional_headers.items())
         return values
 
@@ -175,7 +177,7 @@ class _VertexAIBase(BaseModel):
 
 class _VertexAICommon(_VertexAIBase):
     client_preview: Any = Field(default=None, exclude=True)  #: :meta private:
-    model_name: str = Field(default=None, alias="model")
+    model_name: Optional[str] = Field(default=None, alias="model")
     "Underlying model name."
     temperature: Optional[float] = None
     "Sampling temperature, it controls the degree of randomness in token selection."
@@ -222,6 +224,10 @@ class _VertexAICommon(_VertexAIBase):
     @property
     def _llm_type(self) -> str:
         return "vertexai"
+
+    @property
+    def max_tokens(self) -> int | None:
+        return self.max_output_tokens
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:

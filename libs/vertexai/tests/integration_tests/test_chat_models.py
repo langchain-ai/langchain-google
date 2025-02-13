@@ -8,6 +8,7 @@ from typing import List, Literal, Optional, cast
 
 import pytest
 import requests
+import vertexai  # type: ignore[import-untyped, unused-ignore]
 from google.cloud import storage
 from google.cloud.aiplatform_v1beta1.types import Blob, Content, Part
 from google.oauth2 import service_account
@@ -38,6 +39,7 @@ from langchain_google_vertexai import (
     HarmCategory,
     create_context_cache,
 )
+from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
@@ -340,7 +342,10 @@ def test_parse_history_gemini_multimodal_FC():
         Part(text=instruction),
     ]
     expected = [Content(role="user", parts=parts)]
-    _, response = _parse_chat_history_gemini(history=history)
+    imageBytesLoader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history, imageBytesLoader=imageBytesLoader
+    )
     assert expected == response
 
 
@@ -772,6 +777,8 @@ def test_prediction_client_transport():
     assert model.prediction_client.transport.kind == "rest"
     assert model.async_prediction_client.transport.kind == "rest"
 
+    vertexai.init(api_transport="grpc")  # Reset global config to "grpc"
+
 
 @pytest.mark.extended
 def test_structured_output_schema_json():
@@ -1201,3 +1208,23 @@ def test_logprobs() -> None:
     llm3 = ChatVertexAI(model="gemini-1.5-flash", logprobs=False)
     msg3 = llm3.invoke("howdy")
     assert msg3.response_metadata.get("logprobs_result") is None
+
+
+def test_location_init() -> None:
+    # If I don't initialize vertexai before, defaults to us-central-1
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    assert llm.location == "us-central1"
+
+    # If I init vertexai with other region the model is in that particular region
+    vertexai.init(location="europe-west1")
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    assert llm.location == "europe-west1"
+
+    # If I specify the location, it follows that location
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2, location="europe-west2")
+    assert llm.location == "europe-west2"
+
+    # It reverts to the default
+    vertexai.init(location="us-central1")
+    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    assert llm.location == "us-central1"
