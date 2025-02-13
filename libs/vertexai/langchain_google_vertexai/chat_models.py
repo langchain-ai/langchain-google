@@ -1089,7 +1089,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     
     .. versionadded: 2.0.6
     """
-
     labels: Optional[Dict[str, str]] = None
     """ Optional tag llm calls with metadata to help in tracebility and biling.
     """
