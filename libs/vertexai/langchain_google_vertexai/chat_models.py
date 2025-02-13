@@ -7,6 +7,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from operator import itemgetter
+import re
 import uuid
 from typing import (
     Any,
@@ -148,6 +149,7 @@ _allowed_params = [
     "response_logprobs",
     "logprobs",
 ]
+_allowed_params = [*_allowed_params, "labels"]
 _allowed_params_prediction_service = ["request", "timeout", "metadata"]
 
 
@@ -1088,6 +1090,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     .. versionadded: 2.0.6
     """
 
+    labels: Optional[Dict[str, str]] = None
+    """ Optional tag llm calls with metadata to help in tracebility and biling.
+    """
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -1107,6 +1113,16 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
+    
+    @model_validator(mode="after")
+    def validate_labels(self) -> Self:
+        if self.labels:
+            for key, value in self.labels.items():
+                if not re.match(r"^[a-z][a-z0-9-_]{0,62}$", key):
+                    raise ValueError(f"Invalid label key: {key}")
+                if value and len(value) > 63:
+                    raise ValueError(f"Label value too long: {value}")
+        return self
 
     @cached_property
     def _image_bytes_loader_client(self):
@@ -1373,6 +1389,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             safety_settings=safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
+            labels=self.labels,
         )
 
     def _request_from_cached_content(
