@@ -50,7 +50,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         embedding_field: Name of the column storing text embeddings (default:
             "embedding").
         temp_dataset_name: Name of the BigQuery dataset to be used to upload temporary
-            BQ tables. If None, will default to "{dataset_name}_temp". 
+            BQ tables. If None, will default to "{dataset_name}_temp".
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
