@@ -6,6 +6,7 @@ import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_core.tools import BaseTool
 from langchain_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -27,12 +28,14 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
         }
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    async def test_structured_output_async(self, model: BaseChatModel) -> None:
-        await super().test_structured_output_async(model)
+    async def test_structured_output_async(
+        self, model: BaseChatModel, schema_type: str
+    ) -> None:
+        await super().test_structured_output_async(model, schema_type)
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output(self, model: BaseChatModel) -> None:
-        super().test_structured_output(model)
+    def test_structured_output(self, model: BaseChatModel, schema_type: str) -> None:
+        super().test_structured_output(model, schema_type)
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
@@ -56,20 +59,24 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         }
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    async def test_structured_output_async(self, model: BaseChatModel) -> None:
-        await super().test_structured_output_async(model)
+    async def test_structured_output_async(
+        self, model: BaseChatModel, schema_type: str
+    ) -> None:
+        await super().test_structured_output_async(model, schema_type)
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output(self, model: BaseChatModel) -> None:
-        super().test_structured_output(model)
+    def test_structured_output(self, model: BaseChatModel, schema_type: str) -> None:
+        super().test_structured_output(model, schema_type)
 
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
         super().test_structured_output_pydantic_2_v1(model)
 
     @pytest.mark.xfail(reason="Not yet supported")
-    def test_tool_message_histories_list_content(self, model: BaseChatModel) -> None:
-        super().test_tool_message_histories_list_content(model)
+    def test_tool_message_histories_list_content(
+        self, model: BaseChatModel, my_adder_tool: BaseTool
+    ) -> None:
+        super().test_tool_message_histories_list_content(model, my_adder_tool)
 
     @property
     def supported_usage_metadata_details(
