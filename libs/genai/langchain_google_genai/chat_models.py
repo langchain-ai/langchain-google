@@ -303,7 +303,8 @@ def _convert_to_parts(
 
 def _convert_tool_message_to_part(message: ToolMessage | FunctionMessage) -> Part:
     """Converts a tool or function message to a google part."""
-    name = message.name
+    # Legacy agent stores tool name in message.additional_kwargs instead of message.name
+    name = message.name or message.additional_kwargs.get("name")
     response: Any
     if not isinstance(message.content, str):
         response = message.content

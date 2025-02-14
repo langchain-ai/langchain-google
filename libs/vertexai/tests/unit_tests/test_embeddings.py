@@ -1,12 +1,15 @@
 from typing import Any, Dict
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import model_validator
 from typing_extensions import Self
 
 from langchain_google_vertexai import VertexAIEmbeddings
-from langchain_google_vertexai.embeddings import GoogleEmbeddingModelType
+from langchain_google_vertexai.embeddings import (
+    EmbeddingTaskTypes,
+    GoogleEmbeddingModelType,
+)
 
 
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
@@ -27,6 +30,49 @@ def test_langchain_google_vertexai_no_dups_dynamic_batch_size() -> None:
     # The second time it should return the batches unchanged
     _, batches = mock_embeddings._prepare_and_validate_batches(texts=texts)
     assert len(batches) == 2
+
+
+@patch.object(VertexAIEmbeddings, "embed")
+def test_embed_documents_with_question_answering_task(mock_embed) -> None:
+    mock_embeddings = MockVertexAIEmbeddings("text-embedding-005")
+    texts = [f"text {i}" for i in range(5)]
+
+    embedding_dimension = 768
+    embeddings_task_type: EmbeddingTaskTypes = "QUESTION_ANSWERING"
+
+    mock_embed.return_value = [[0.001] * embedding_dimension for _ in texts]
+
+    embeddings = mock_embeddings.embed_documents(
+        texts=texts, embeddings_task_type=embeddings_task_type
+    )
+
+    assert isinstance(embeddings, list)
+    assert len(embeddings) == len(texts)
+    assert len(embeddings[0]) == embedding_dimension
+
+    # Verify embed() was called correctly
+    mock_embed.assert_called_once_with(texts, 0, embeddings_task_type)
+
+
+@patch.object(VertexAIEmbeddings, "embed")
+def test_embed_query_with_question_answering_task(mock_embed) -> None:
+    mock_embeddings = MockVertexAIEmbeddings("text-embedding-005")
+    text = "text 0"
+
+    embedding_dimension = 768
+    embeddings_task_type: EmbeddingTaskTypes = "QUESTION_ANSWERING"
+
+    mock_embed.return_value = [[0.001] * embedding_dimension]
+
+    embedding = mock_embeddings.embed_query(
+        text=text, embeddings_task_type=embeddings_task_type
+    )
+
+    assert isinstance(embedding, list)
+    assert len(embedding) == embedding_dimension
+
+    # Verify embed() was called correctly
+    mock_embed.assert_called_once_with([text], 1, embeddings_task_type)
 
 
 class MockVertexAIEmbeddings(VertexAIEmbeddings):
