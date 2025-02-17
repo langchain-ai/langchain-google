@@ -1112,16 +1112,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
-    
-    @model_validator(mode="after")
-    def validate_labels(self) -> Self:
-        if self.labels:
-            for key, value in self.labels.items():
-                if not re.match(r"^[a-z][a-z0-9-_]{0,62}$", key):
-                    raise ValueError(f"Invalid label key: {key}")
-                if value and len(value) > 63:
-                    raise ValueError(f"Label value too long: {value}")
-        return self
 
     @cached_property
     def _image_bytes_loader_client(self):
