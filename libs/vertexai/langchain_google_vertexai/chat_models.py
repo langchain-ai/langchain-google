@@ -1086,7 +1086,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     If int, return logprobs for top ``logprobs`` candidates.
     
     **NOTE**: As of 10.28.24 this is only supported for gemini-1.5-flash models.
-    
     .. versionadded: 2.0.6
     """
     labels: Optional[Dict[str, str]] = None
