@@ -10,69 +10,118 @@ import uuid
 from dataclasses import dataclass, field
 from functools import cached_property
 from operator import itemgetter
-from typing import (Any, AsyncIterator, Callable, Dict, Iterator, List,
-                    Literal, Optional, Sequence, Tuple, Type, TypedDict, Union,
-                    cast, overload)
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TypedDict,
+    Union,
+    cast,
+    overload,
+)
 
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform import telemetry
-from google.cloud.aiplatform_v1beta1.types import (Blob, Candidate, Content,
-                                                   FileData, FunctionCall,
-                                                   FunctionResponse,
-                                                   GenerateContentRequest,
-                                                   GenerationConfig,
-                                                   HarmCategory, Part,
-                                                   SafetySetting)
+from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
+    Candidate,
+    Content,
+    FileData,
+    FunctionCall,
+    FunctionResponse,
+    GenerateContentRequest,
+    GenerationConfig,
+    HarmCategory,
+    Part,
+    SafetySetting,
+)
 from google.cloud.aiplatform_v1beta1.types import Tool as GapicTool
 from google.cloud.aiplatform_v1beta1.types import ToolConfig as GapicToolConfig
 from google.cloud.aiplatform_v1beta1.types import VideoMetadata
-from langchain_core.callbacks import (AsyncCallbackManagerForLLMRun,
-                                      CallbackManagerForLLMRun)
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForLLMRun,
+    CallbackManagerForLLMRun,
+)
 from langchain_core.language_models import LanguageModelInput
-from langchain_core.language_models.chat_models import (BaseChatModel,
-                                                        LangSmithParams,
-                                                        agenerate_from_stream,
-                                                        generate_from_stream)
-from langchain_core.messages import (AIMessage, AIMessageChunk, BaseMessage,
-                                     FunctionMessage, HumanMessage,
-                                     SystemMessage, ToolCall, ToolMessage)
+from langchain_core.language_models.chat_models import (
+    BaseChatModel,
+    LangSmithParams,
+    agenerate_from_stream,
+    generate_from_stream,
+)
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    FunctionMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+)
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import invalid_tool_call
 from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.messages.tool import tool_call_chunk
-from langchain_core.output_parsers import (JsonOutputParser,
-                                           PydanticOutputParser)
+from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
-    JsonOutputKeyToolsParser, PydanticToolsParser, parse_tool_calls)
-from langchain_core.outputs import (ChatGeneration, ChatGenerationChunk,
-                                    ChatResult)
+    JsonOutputKeyToolsParser,
+    PydanticToolsParser,
+    parse_tool_calls,
+)
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_google_vertexai._base import GoogleModelFamily, _VertexAICommon
 from langchain_google_vertexai._image_utils import ImageBytesLoader
-from langchain_google_vertexai._utils import (_format_model_name,
-                                              create_retry_decorator,
-                                              get_generation_info,
-                                              is_gemini_model,
-                                              replace_defs_in_schema)
+from langchain_google_vertexai._utils import (
+    _format_model_name,
+    create_retry_decorator,
+    get_generation_info,
+    is_gemini_model,
+    replace_defs_in_schema,
+)
 from langchain_google_vertexai.functions_utils import (
-    _format_to_gapic_tool, _format_tool_config, _tool_choice_to_tool_config,
-    _ToolChoiceType, _ToolConfigDict, _ToolsType, _ToolType)
+    _format_to_gapic_tool,
+    _format_tool_config,
+    _tool_choice_to_tool_config,
+    _ToolChoiceType,
+    _ToolConfigDict,
+    _ToolsType,
+    _ToolType,
+)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 from vertexai.generative_models import Tool as VertexTool  # type: ignore
 from vertexai.generative_models._generative_models import (  # type: ignore
-    GenerationConfigType, GenerationResponse, SafetySettingsType, ToolConfig,
-    _convert_schema_dict_to_gapic)
-from vertexai.language_models import ChatModel  # type: ignore
-from vertexai.language_models import (ChatMessage, ChatSession, CodeChatModel,
-                                      CodeChatSession, InputOutputTextPair)
-from vertexai.preview.language_models import \
-    ChatModel as PreviewChatModel  # type: ignore
-from vertexai.preview.language_models import \
-    CodeChatModel as PreviewCodeChatModel
+    GenerationConfigType,
+    GenerationResponse,
+    SafetySettingsType,
+    ToolConfig,
+    _convert_schema_dict_to_gapic,
+)
+from vertexai.language_models import (
+    ChatMessage,
+    ChatModel,  # type: ignore
+    ChatSession,
+    CodeChatModel,
+    CodeChatSession,
+    InputOutputTextPair,
+)
+from vertexai.preview.language_models import (
+    ChatModel as PreviewChatModel,
+)  # type: ignore
+from vertexai.preview.language_models import CodeChatModel as PreviewCodeChatModel
 
 logger = logging.getLogger(__name__)
 
