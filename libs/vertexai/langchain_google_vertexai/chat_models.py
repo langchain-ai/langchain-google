@@ -1,136 +1,78 @@
 """Wrapper around Google VertexAI chat-based models."""
 
 from __future__ import annotations  # noqa
+
 import ast
-from functools import cached_property
 import json
 import logging
-from dataclasses import dataclass, field
-from operator import itemgetter
 import re
 import uuid
-from typing import (
-    Any,
-    AsyncIterator,
-    Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Type,
-    Union,
-    cast,
-    Literal,
-    Tuple,
-    TypedDict,
-    overload,
-)
+from dataclasses import dataclass, field
+from functools import cached_property
+from operator import itemgetter
+from typing import (Any, AsyncIterator, Callable, Dict, Iterator, List,
+                    Literal, Optional, Sequence, Tuple, Type, TypedDict, Union,
+                    cast, overload)
 
 import proto  # type: ignore[import-untyped]
 from google.cloud.aiplatform import telemetry
-
-from langchain_core.callbacks import (
-    AsyncCallbackManagerForLLMRun,
-    CallbackManagerForLLMRun,
-)
+from google.cloud.aiplatform_v1beta1.types import (Blob, Candidate, Content,
+                                                   FileData, FunctionCall,
+                                                   FunctionResponse,
+                                                   GenerateContentRequest,
+                                                   GenerationConfig,
+                                                   HarmCategory, Part,
+                                                   SafetySetting)
+from google.cloud.aiplatform_v1beta1.types import Tool as GapicTool
+from google.cloud.aiplatform_v1beta1.types import ToolConfig as GapicToolConfig
+from google.cloud.aiplatform_v1beta1.types import VideoMetadata
+from langchain_core.callbacks import (AsyncCallbackManagerForLLMRun,
+                                      CallbackManagerForLLMRun)
 from langchain_core.language_models import LanguageModelInput
-from langchain_core.language_models.chat_models import (
-    BaseChatModel,
-    LangSmithParams,
-    generate_from_stream,
-    agenerate_from_stream,
-)
-from langchain_core.messages import (
-    AIMessage,
-    AIMessageChunk,
-    BaseMessage,
-    FunctionMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolCall,
-    ToolMessage,
-)
+from langchain_core.language_models.chat_models import (BaseChatModel,
+                                                        LangSmithParams,
+                                                        agenerate_from_stream,
+                                                        generate_from_stream)
+from langchain_core.messages import (AIMessage, AIMessageChunk, BaseMessage,
+                                     FunctionMessage, HumanMessage,
+                                     SystemMessage, ToolCall, ToolMessage)
 from langchain_core.messages.ai import UsageMetadata
-from langchain_core.messages.tool import (
-    tool_call_chunk,
-    tool_call as create_tool_call,
-    invalid_tool_call,
-)
+from langchain_core.messages.tool import invalid_tool_call
+from langchain_core.messages.tool import tool_call as create_tool_call
+from langchain_core.messages.tool import tool_call_chunk
+from langchain_core.output_parsers import (JsonOutputParser,
+                                           PydanticOutputParser)
 from langchain_core.output_parsers.base import OutputParserLike
-from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.openai_tools import (
-    JsonOutputKeyToolsParser,
-    PydanticToolsParser,
-)
-from langchain_core.output_parsers.openai_tools import parse_tool_calls
-from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from pydantic import BaseModel, Field, model_validator
+    JsonOutputKeyToolsParser, PydanticToolsParser, parse_tool_calls)
+from langchain_core.outputs import (ChatGeneration, ChatGenerationChunk,
+                                    ChatResult)
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import is_basemodel_subclass
-from vertexai.generative_models import (  # type: ignore
-    Tool as VertexTool,
-)
-from vertexai.generative_models._generative_models import (  # type: ignore
-    ToolConfig,
-    SafetySettingsType,
-    GenerationConfigType,
-    GenerationResponse,
-    _convert_schema_dict_to_gapic,
-)
-from vertexai.language_models import (  # type: ignore
-    ChatMessage,
-    ChatModel,
-    ChatSession,
-    CodeChatModel,
-    CodeChatSession,
-    InputOutputTextPair,
-)
-from vertexai.preview.language_models import (  # type: ignore
-    ChatModel as PreviewChatModel,
-)
-from vertexai.preview.language_models import (
-    CodeChatModel as PreviewCodeChatModel,
-)
-
-from google.cloud.aiplatform_v1beta1.types import (
-    Blob,
-    Candidate,
-    Part,
-    HarmCategory,
-    Content,
-    FileData,
-    FunctionCall,
-    FunctionResponse,
-    GenerateContentRequest,
-    GenerationConfig,
-    SafetySetting,
-    Tool as GapicTool,
-    ToolConfig as GapicToolConfig,
-    VideoMetadata,
-)
-from langchain_google_vertexai._base import _VertexAICommon, GoogleModelFamily
+from langchain_google_vertexai._base import GoogleModelFamily, _VertexAICommon
 from langchain_google_vertexai._image_utils import ImageBytesLoader
-from langchain_google_vertexai._utils import (
-    create_retry_decorator,
-    get_generation_info,
-    _format_model_name,
-    is_gemini_model,
-    replace_defs_in_schema,
-)
+from langchain_google_vertexai._utils import (_format_model_name,
+                                              create_retry_decorator,
+                                              get_generation_info,
+                                              is_gemini_model,
+                                              replace_defs_in_schema)
 from langchain_google_vertexai.functions_utils import (
-    _format_tool_config,
-    _ToolConfigDict,
-    _tool_choice_to_tool_config,
-    _ToolChoiceType,
-    _ToolsType,
-    _format_to_gapic_tool,
-    _ToolType,
-)
-from pydantic import ConfigDict
+    _format_to_gapic_tool, _format_tool_config, _tool_choice_to_tool_config,
+    _ToolChoiceType, _ToolConfigDict, _ToolsType, _ToolType)
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
-
+from vertexai.generative_models import Tool as VertexTool  # type: ignore
+from vertexai.generative_models._generative_models import (  # type: ignore
+    GenerationConfigType, GenerationResponse, SafetySettingsType, ToolConfig,
+    _convert_schema_dict_to_gapic)
+from vertexai.language_models import ChatModel  # type: ignore
+from vertexai.language_models import (ChatMessage, ChatSession, CodeChatModel,
+                                      CodeChatSession, InputOutputTextPair)
+from vertexai.preview.language_models import \
+    ChatModel as PreviewChatModel  # type: ignore
+from vertexai.preview.language_models import \
+    CodeChatModel as PreviewCodeChatModel
 
 logger = logging.getLogger(__name__)
 
@@ -487,15 +429,13 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -1111,7 +1051,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
-    
+
     @model_validator(mode="after")
     def validate_labels(self) -> Self:
         if self.labels:
@@ -1993,10 +1933,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
             generation_info.pop("is_blocked", None)
-        return ChatGenerationChunk(
-            message=message,
-            generation_info=generation_info,
-        ), total_lc_usage
+        return (
+            ChatGenerationChunk(
+                message=message,
+                generation_info=generation_info,
+            ),
+            total_lc_usage,
+        )
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
