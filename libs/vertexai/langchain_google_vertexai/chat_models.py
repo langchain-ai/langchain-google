@@ -1112,6 +1112,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
+    
 
     @cached_property
     def _image_bytes_loader_client(self):
