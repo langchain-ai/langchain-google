@@ -16,6 +16,9 @@ from vertexai.generative_models import (  # type: ignore[import-untyped]
     GenerativeModel,
     Image,
 )
+from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
+    _convert_schema_dict_to_gapic,
+)
 from vertexai.language_models import (  # type: ignore[import-untyped]
     CodeGenerationModel,
     TextGenerationModel,
@@ -115,6 +118,21 @@ class VertexAI(_VertexAICommon, BaseLLM):
     model_name will be used to determine the model family
     """
 
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only
+        supported in Gemini 1.5 and later models. Supported mimetype:
+            * "text/plain": (default) Text output.
+            * "application/json": JSON response in the candidates.
+            * "text/x.enum": Enum in plain text.
+       The model also needs to be prompted to output the appropriate response
+       type, otherwise the behavior is undefined. This is a preview feature.
+    """
+
+    response_schema: Optional[Dict[str, Any]] = None
+    """ Optional. Enforce an schema to the output.
+        The format of the dictionary should follow Open API schema.
+    """
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -190,6 +208,27 @@ class VertexAI(_VertexAICommon, BaseLLM):
         if self.streaming and self.n > 1:
             raise ValueError("Only one candidate can be generated with streaming!")
         return self
+
+    @property
+    def _default_params(self) -> Dict[str, Any]:
+        updated_params = super()._default_params
+
+        if self.response_mime_type is not None:
+            updated_params["response_mime_type"] = self.response_mime_type
+
+        if self.response_schema is not None:
+            allowed_mime_types = ("application/json", "text/x.enum")
+            if self.response_mime_type not in allowed_mime_types:
+                error_message = (
+                    "`response_schema` is only supported when "
+                    f"`response_mime_type` is set to one of {allowed_mime_types}"
+                )
+                raise ValueError(error_message)
+
+            gapic_response_schema = _convert_schema_dict_to_gapic(self.response_schema)
+            updated_params["response_schema"] = gapic_response_schema
+
+        return updated_params
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
