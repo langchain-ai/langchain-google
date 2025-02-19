@@ -80,15 +80,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
         Returns:
             List of ids from adding the texts into the vectorstore.
@@ -210,15 +205,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: The number of top results to return for each query.
             batch_size: The size of batches to process embeddings.
@@ -263,15 +253,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
 
         Returns:
@@ -474,18 +459,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         queries: A list of text queries to search with.  If provided, each
             query represents a query text.
         filter: (Optional) A dictionary or a string specifying filter criteria.
-            - If a dictionary is provided, it should map column names to their
-            corresponding values. The method will generate SQL expressions based
-            on the data types defined in `self.table_schema`:
-                - For columns of type "INTEGER" or "FLOAT", the value is used
-                directly.
-                - For other data types, the value is enclosed in single quotes.
-            Example:
-                {
-                    "str_property": "foo",
-                    "int_property": 123
-                }
-            - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
         k: The number of top results to return per query. Defaults to 5.
         with_scores: If True, returns the relevance scores of the results along with
             the documents
@@ -558,15 +538,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
@@ -599,15 +574,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
@@ -629,15 +599,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
@@ -658,15 +623,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
@@ -690,15 +650,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
