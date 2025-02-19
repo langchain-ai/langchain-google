@@ -41,6 +41,10 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
         super().test_structured_output_pydantic_2_v1(model)
 
+    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
+    def test_structured_output_optional_param(self, model: BaseChatModel) -> None:
+        super().test_structured_output_optional_param(model)
+
     @pytest.mark.xfail(reason="investigate")
     def test_bind_runnables_as_tools(self, model: BaseChatModel) -> None:
         super().test_bind_runnables_as_tools(model)
@@ -71,6 +75,10 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
         super().test_structured_output_pydantic_2_v1(model)
+
+    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
+    def test_structured_output_optional_param(self, model: BaseChatModel) -> None:
+        super().test_structured_output_optional_param(model)
 
     @pytest.mark.xfail(reason="Not yet supported")
     def test_tool_message_histories_list_content(
