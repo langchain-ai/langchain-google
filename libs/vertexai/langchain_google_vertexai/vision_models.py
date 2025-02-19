@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import Any, Dict, List, Optional, Union
 
 from google.cloud.aiplatform import telemetry
@@ -50,6 +51,10 @@ class _BaseImageTextModel(BaseModel):
             )
         return self.cached_client
 
+    @cached_property
+    def _image_bytes_loader_client(self):
+        return ImageBytesLoader(project=self.project)
+
     def _get_image_from_message_part(self, message_part: str | Dict) -> Image | None:
         """Given a message part obtain a image if the part represents it.
 
@@ -63,7 +68,7 @@ class _BaseImageTextModel(BaseModel):
         image_str = get_image_str_from_content_part(message_part)
 
         if isinstance(image_str, str):
-            loader = ImageBytesLoader(project=self.project)
+            loader = self._image_bytes_loader_client
             image_bytes = loader.load_bytes(image_str)
             return Image(image_bytes=image_bytes)
         else:
@@ -170,7 +175,7 @@ class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
         Returns:
             List of generations
         """
-        image_loader = ImageBytesLoader(project=self.project)
+        image_loader = self._image_bytes_loader_client
         image_bytes = image_loader.load_bytes(prompt)
         image = Image(image_bytes=image_bytes)
         caption_list = self._get_captions(image=image, **kwargs)
@@ -358,6 +363,10 @@ class _BaseVertexAIImageGenerator(BaseModel):
             "seed": self.seed,
         }
 
+    @cached_property
+    def _image_bytes_loader_client(self):
+        return ImageBytesLoader(project=self.project)
+
     def _prepare_params(self, **kwargs: Any) -> Dict[str, Any]:
         params = self._default_params
         mapping = {"number_of_results": "number_of_images"}
@@ -398,7 +407,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
             List of b64 encoded strings.
         """
         with telemetry.tool_context_manager(self._user_agent):
-            image_loader = ImageBytesLoader(project=self.project)
+            image_loader = self._image_bytes_loader_client
             image_bytes = image_loader.load_bytes(image_str)
             image = Image(image_bytes=image_bytes)
             generation_result = self.client.edit_image(
