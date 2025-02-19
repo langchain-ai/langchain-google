@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 from threading import Lock, Thread
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from google.api_core.exceptions import ClientError
 from langchain_core.documents import Document
@@ -538,6 +538,175 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             k=k,
             num_queries=len(embeddings),
             with_embeddings=False,
+        )
+
+    def similarity_search_by_vectors(
+        self,
+        embeddings: List[List[float]],
+        filter: Optional[Union[Dict[str, Any], str]] = None,
+        k: int = 5,
+        with_scores: bool = False,
+        with_embeddings: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Core similarity search function. Handles a list of embedding vectors,
+            optionally returning scores and embeddings.
+
+        Args:
+            embeddings: A list of embedding vectors, where each vector is a list of
+                floats.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+            with_scores: (Optional) If True, include similarity scores in the result
+                for each matched document. Defaults to False.
+            with_embeddings: (Optional) If True, include the matched document's
+                embedding vector in the result. Defaults to False.
+        Returns:
+            A list of `k` documents for each embedding in `embeddings`
+        """
+        return super().similarity_search_by_vectors(
+            embeddings=embeddings,
+            filter=filter,
+            k=k,
+            with_scores=with_scores,
+            with_embeddings=with_embeddings,
+            **kwargs,
+        )
+
+    def similarity_search_by_vector(
+        self,
+        embedding: List[float],
+        k: int = 5,
+        **kwargs: Any,
+    ) -> List[Document]:
+        """Return docs most similar to embedding vector.
+
+        Args:
+            embedding: Embedding to look up documents similar to.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+        Returns:
+            Return docs most similar to embedding vector.
+        """
+        return super().similarity_search_by_vector(embedding=embedding, k=k, **kwargs)
+
+    def similarity_search_by_vector_with_score(
+        self,
+        embedding: List[float],
+        filter: Optional[Union[Dict[str, Any], str]] = None,
+        k: int = 5,
+    ) -> List[Tuple[Document, float]]:
+        """Return docs most similar to embedding vector with scores.
+
+        Args:
+            embedding: Embedding to look up documents similar to.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+        Returns:
+            Return docs most similar to embedding vector.
+        """
+        return super().similarity_search_by_vector_with_score(
+            embedding=embedding, filter=filter, k=k
+        )
+
+    def similarity_search(
+        self, query: str, k: int = 5, **kwargs: Any
+    ) -> List[Document]:
+        """Search for top `k` docs most similar to input query.
+
+        Args:
+            query: search query to search documents with.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+        Returns:
+            Return docs most similar to input query.
+        """
+        return super().similarity_search(query=query, k=k, **kwargs)
+
+    def similarity_search_with_score(
+        self,
+        query: str,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
+        k: int = 5,
+        **kwargs: Any,
+    ) -> List[Tuple[Document, float]]:
+        """Search for top `k` docs most similar to input query, returns both docs and
+            scores.
+
+        Args:
+            query: search query to search documents with.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+        Returns:
+            Return docs most similar to input query along with scores.
+        """
+        return super().similarity_search_with_score(
+            query=query, filter=filter, k=k, **kwargs
         )
 
     @classmethod
