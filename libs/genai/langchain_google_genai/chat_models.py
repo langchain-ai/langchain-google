@@ -361,8 +361,14 @@ def _parse_chat_history(
         message for message in input_messages if isinstance(message, ToolMessage)
     ]
     for i, message in enumerate(messages_without_tool_messages):
-        if i == 0 and isinstance(message, SystemMessage):
-            system_instruction = Content(parts=_convert_to_parts(message.content))
+        if isinstance(message, SystemMessage):
+            system_parts = _convert_to_parts(message.content)
+            if i == 0:
+                system_instruction = Content(parts=system_parts)
+            elif system_instruction is not None:
+                system_instruction.parts.extend(system_parts)
+            else:
+                pass
             continue
         elif isinstance(message, AIMessage):
             role = "model"
