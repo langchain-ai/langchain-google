@@ -452,13 +452,14 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         expire_hours_temp_table: int = 12,
     ) -> List[List[List[Any]]]:
         """Multi-purpose batch search function. Accepts either embeddings or queries
-            but not both. Optionally returns similarity scores and/or matched embeddings
+        but not both. Optionally returns similarity scores and/or matched embeddings
+
         Args:
-        embeddings: A list of embeddings to search with. If provided, each
-            embedding represents a query vector.
-        queries: A list of text queries to search with.  If provided, each
-            query represents a query text.
-        filter: (Optional) A dictionary or a string specifying filter criteria.
+            embeddings: A list of embeddings to search with. If provided, each
+                embedding represents a query vector.
+            queries: A list of text queries to search with.  If provided, each
+                query represents a query text.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
                 on the data types defined in `self.table_schema`. The value is enclosed
@@ -466,10 +467,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 which case the value is used directly. E.g., `{"str_property": "foo",
                 "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
-        k: The number of top results to return per query. Defaults to 5.
-        with_scores: If True, returns the relevance scores of the results along with
-            the documents
-        with_embeddings: If True, returns the embeddings of the results along with
+            k: The number of top results to return per query. Defaults to 5.
+            with_scores: If True, returns the relevance scores of the results along with
+                the documents
+            with_embeddings: If True, returns the embeddings of the results along with
             the documents
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
@@ -530,7 +531,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         **kwargs: Any,
     ) -> Any:
         """Core similarity search function. Handles a list of embedding vectors,
-            optionally returning scores and embeddings.
+        optionally returning scores and embeddings.
 
         Args:
             embeddings: A list of embedding vectors, where each vector is a list of
@@ -643,7 +644,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Search for top `k` docs most similar to input query, returns both docs and
-            scores.
+        scores.
 
         Args:
             query: search query to search documents with.
@@ -688,12 +689,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         return vs_obj
 
     def to_vertex_fs_vector_store(self, **kwargs: Any) -> Any:
-        """
-        Creates and returns a VertexFSVectorStore instance based on configuration.
+        """Creates and returns a VertexFSVectorStore instance based on configuration.
 
         This method merges the base BigQuery vector store configuration with provided
-            keyword arguments,
-        then uses the combined parameters to instantiate a VertexFSVectorStore.
+        keyword arguments, then uses the combined parameters to instantiate a 
+        VertexFSVectorStore.
 
         Args:
             **kwargs: Additional keyword arguments to override or extend the base
