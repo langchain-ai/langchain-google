@@ -301,10 +301,12 @@ def _convert_to_parts(
     return parts
 
 
-def _convert_tool_message_to_part(message: ToolMessage | FunctionMessage) -> Part:
+def _convert_tool_message_to_part(
+    message: ToolMessage | FunctionMessage, name: Optional[str] = None
+) -> Part:
     """Converts a tool or function message to a google part."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
-    name = message.name or message.additional_kwargs.get("name")
+    name = message.name or name or message.additional_kwargs.get("name")
     response: Any
     if not isinstance(message.content, str):
         response = message.content
@@ -332,16 +334,17 @@ def _get_ai_message_tool_messages_parts(
     list of Parts.
     """
     # We are interested only in the tool messages that are part of the AI message
-    tool_calls_ids = [tool_call["id"] for tool_call in ai_message.tool_calls]
+    tool_calls_ids = {tool_call["id"]: tool_call for tool_call in ai_message.tool_calls}
     parts = []
     for i, message in enumerate(tool_messages):
         if not tool_calls_ids:
             break
         if message.tool_call_id in tool_calls_ids:
-            # remove the id from the list, so that we do not iterate over it again
-            tool_calls_ids.remove(message.tool_call_id)
-            part = _convert_tool_message_to_part(message)
+            tool_call = tool_calls_ids[message.tool_call_id]
+            part = _convert_tool_message_to_part(message, name=tool_call.get("name"))
             parts.append(part)
+            # remove the id from the dict, so that we do not iterate over it again
+            tool_calls_ids.pop(message.tool_call_id)
     return parts
 
 
