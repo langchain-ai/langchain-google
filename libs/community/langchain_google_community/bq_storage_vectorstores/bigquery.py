@@ -77,11 +77,19 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         Args:
             ids: List of ids of documents to retrieve from the vectorstore.
-            filter: Filter on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
+                    - For other data types, the value is enclosed in single quotes.
+                Example:
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
@@ -465,9 +473,19 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             embedding represents a query vector.
         queries: A list of text queries to search with.  If provided, each
             query represents a query text.
-        filter: A dictionary of filters to apply to the search. The keys
-            of the dictionary should be field names, and the values should be the
-                values to filter on. (e.g., {"category": "news"})
+        filter: (Optional) A dictionary or a string specifying filter criteria.
+            - If a dictionary is provided, it should map column names to their
+            corresponding values. The method will generate SQL expressions based
+            on the data types defined in `self.table_schema`:
+                - For columns of type "INTEGER" or "FLOAT", the value is used
+                directly.
+                - For other data types, the value is enclosed in single quotes.
+            Example:
+                {
+                    "str_property": "foo",
+                    "int_property": 123
+                }
+            - If a string is provided, it is assumed to be a valid SQL WHERE clause.
         k: The number of top results to return per query. Defaults to 5.
         with_scores: If True, returns the relevance scores of the results along with
             the documents
