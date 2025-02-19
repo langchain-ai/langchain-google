@@ -27,6 +27,12 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
             "rate_limiter": rate_limiter_2_0,
         }
 
+    @pytest.mark.xfail(
+        reason="Likely a bug in genai: prompt_token_count inconsistent in final chunk."
+    )
+    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
+        super().test_usage_metadata_streaming(model)
+
     @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
     async def test_structured_output_async(
         self, model: BaseChatModel, schema_type: str
