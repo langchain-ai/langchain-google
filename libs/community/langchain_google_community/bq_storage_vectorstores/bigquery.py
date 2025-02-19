@@ -201,18 +201,16 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 query embedding.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding
-                values. The method will generate SQL expressions based on the data
-                types defined
-                in `self.table_schema`:
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
                     - For columns of type "INTEGER" or "FLOAT", the value is used
                     directly.
                     - For other data types, the value is enclosed in single quotes.
                 Example:
-                        {
-                            "str_property": "foo",
-                            "int_property": 123
-                        }
+                    {
+                        "str_property": "foo",
+                        "int_property": 123
+                    }
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: The number of top results to return for each query.
             batch_size: The size of batches to process embeddings.
@@ -255,12 +253,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         Args:
             filter: (Optional) A dictionary or a string specifying filter criteria.
-                - If a dictionary is provided, it should map column names to
-                their corresponding
-                values. The method will generate SQL expressions based on the
-                data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is
-                    used directly.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`:
+                    - For columns of type "INTEGER" or "FLOAT", the value is used
+                    directly.
                     - For other data types, the value is enclosed in single quotes.
                 Example:
                     {
