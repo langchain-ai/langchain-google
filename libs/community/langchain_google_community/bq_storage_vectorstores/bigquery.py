@@ -553,14 +553,23 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Returns:
             A list of `k` documents for each embedding in `embeddings`
         """
-        return super().similarity_search_by_vectors(
-            embeddings=embeddings,
-            filter=filter,
-            k=k,
-            with_scores=with_scores,
-            with_embeddings=with_embeddings,
-            **kwargs,
+        results = self._similarity_search_by_vectors_with_scores_and_embeddings(
+            embeddings=embeddings, k=k, filter=filter, **kwargs
         )
+
+        # Process results based on options
+        for i, query_results in enumerate(results):
+            if not with_scores and not with_embeddings:
+                # return only docs
+                results[i] = [x[0] for x in query_results]
+            elif not with_embeddings:
+                # return only docs and score
+                results[i] = [[x[0], x[1]] for x in query_results]
+            elif not with_scores:
+                # return only docs and embeddings
+                results[i] = [[x[0], x[2]] for x in query_results]
+
+        return results  # type: ignore[return-value]
 
     def similarity_search_by_vector(
         self,
@@ -585,7 +594,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Returns:
             Return docs most similar to embedding vector.
         """
-        return super().similarity_search_by_vector(embedding=embedding, k=k, **kwargs)
+        return self.similarity_search_by_vectors(embeddings=[embedding], k=k, **kwargs)[
+            0
+        ]
 
     def similarity_search_by_vector_with_score(
         self,
@@ -610,9 +621,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Returns:
             Return docs most similar to embedding vector.
         """
-        return super().similarity_search_by_vector_with_score(
-            embedding=embedding, filter=filter, k=k
-        )
+        return self.similarity_search_by_vectors(
+            embeddings=[embedding], filter=filter, k=k, with_scores=True
+        )[0]
 
     def similarity_search(
         self, query: str, k: int = 5, **kwargs: Any
@@ -634,7 +645,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Returns:
             Return docs most similar to input query.
         """
-        return super().similarity_search(query=query, k=k, **kwargs)
+        embedding = self.embedding.embed_query(query)
+        return self.similarity_search_by_vectors(embeddings=[embedding], k=k, **kwargs)[
+            0
+        ]
 
     def similarity_search_with_score(
         self,
@@ -661,8 +675,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         Returns:
             Return docs most similar to input query along with scores.
         """
-        return super().similarity_search_with_score(
-            query=query, filter=filter, k=k, **kwargs
+        embedding = self.embedding.embed_query(query)
+        return self.similarity_search_by_vector_with_score(
+            embedding=embedding, filter=filter, k=k
         )
 
     @classmethod
