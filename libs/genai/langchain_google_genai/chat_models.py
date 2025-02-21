@@ -48,8 +48,6 @@ from google.ai.generativelanguage_v1beta.types import (
 from google.ai.generativelanguage_v1beta.types import (
     Tool as GoogleTool,
 )
-from google.generativeai.caching import CachedContent  # type: ignore[import]
-from google.generativeai.types import caching_types, content_types
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -1306,90 +1304,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         else:
             pass
         return self.bind(tools=formatted_tools, **kwargs)
-
-    def create_cached_content(
-        self,
-        contents: Union[List[BaseMessage], content_types.ContentsType],
-        *,
-        display_name: str | None = None,
-        tools: Union[_ToolDict, GoogleTool, None] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
-        ttl: Optional[caching_types.TTLTypes] = None,
-        expire_time: Optional[caching_types.ExpireTimeTypes] = None,
-    ) -> str:
-        """
-
-        Args:
-            display_name: The user-generated meaningful display name
-                of the cached content. `display_name` must be no
-                more than 128 unicode characters.
-            contents: Contents to cache.
-            tools: A list of `Tools` the model may use to generate response.
-            tool_choice: Which tool to require the model to call.
-            ttl: TTL for cached resource (in seconds). Defaults to 1 hour.
-                 `ttl` and `expire_time` are exclusive arguments.
-            expire_time: Expiration time for cached resource.
-                `ttl` and `expire_time` are exclusive arguments.
-        """
-        system: Optional[content_types.ContentType] = None
-        genai_contents: list = []
-        if all(isinstance(c, BaseMessage) for c in contents):  # type: ignore[union-attr]
-            system, genai_contents = _parse_chat_history(
-                contents,  # type: ignore[arg-type]
-                convert_system_message_to_human=self.convert_system_message_to_human,
-            )
-        elif any(isinstance(c, BaseMessage) for c in contents):  # type: ignore[union-attr]
-            raise ValueError(
-                f"'contents' must either be a list of "
-                f"langchain_core.messages.BaseMessage or a list "
-                f"google.generativeai.types.content_types.ContentType, but not a mix "
-                f"of the two. Received {contents}"
-            )
-        else:
-            for content in contents:  # type: ignore[union-attr]
-                if hasattr(content, "role") and content.role == "system":  # type: ignore[union-attr]
-                    if system is not None:
-                        warnings.warn(
-                            "Received multiple pieces of content with role 'system'. "
-                            "Should only be one set of system instructions. Ignoring "
-                            "all but the first 'system' content."
-                        )
-                    else:
-                        system = content
-                elif isinstance(content, dict) and content.get("role") == "system":
-                    if system is not None:
-                        warnings.warn(
-                            "Received multiple pieces of content with role 'system'. "
-                            "Should only be one set of system instructions. Ignoring "
-                            "all but the first 'system' content."
-                        )
-                    else:
-                        system = content
-                else:
-                    genai_contents.append(content)
-        if tools:
-            genai_tools = [convert_to_genai_function_declarations(tools)]  # type: ignore[arg-type]
-        else:
-            genai_tools = None
-        if tool_choice and genai_tools:
-            all_names = [f.name for t in genai_tools for f in t.function_declarations]
-            tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
-            genai_tool_config = ToolConfig(
-                function_calling_config=tool_config["function_calling_config"]
-            )
-        else:
-            genai_tool_config = None
-        cached_content = CachedContent.create(
-            model=self.model,
-            system_instruction=system,
-            contents=genai_contents,
-            display_name=display_name,
-            tools=genai_tools,
-            tool_config=genai_tool_config,
-            ttl=ttl,
-            expire_time=expire_time,
-        )
-        return cached_content.name
 
     @property
     def _supports_tool_choice(self) -> bool:
