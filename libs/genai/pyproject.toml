@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-genai"
-version = "2.0.9"
+version = "2.0.10"
 description = "An integration package connecting Google's genai package and LangChain"
 authors = []
 readme = "README.md"
@@ -12,7 +12,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = "^0.3.35"
+langchain-core = "^0.3.37"
 google-generativeai = "^0.8.0"
 google-ai-generativelanguage = "^0.6.9"
 pydantic = ">=2,<3"
