@@ -235,13 +235,16 @@ def _format_base_tool_to_function_declaration(
             ),
         )
 
-    if issubclass(tool.args_schema, BaseModel):
+    if isinstance(tool.args_schema, dict):
+        schema = tool.args_schema
+    elif issubclass(tool.args_schema, BaseModel):
         schema = tool.args_schema.model_json_schema()
     elif issubclass(tool.args_schema, BaseModelV1):
         schema = tool.args_schema.schema()
     else:
         raise NotImplementedError(
-            f"args_schema must be a Pydantic BaseModel, got {tool.args_schema}."
+            "args_schema must be a Pydantic BaseModel or JSON schema, "
+            f"got {tool.args_schema}."
         )
     parameters = _dict_to_gapic_schema(schema)
 
