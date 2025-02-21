@@ -22,7 +22,6 @@ from typing import (
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
 import proto  # type: ignore[import]
-from google.generativeai.types.content_types import ToolDict  # type: ignore[import]
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -87,7 +86,7 @@ _FunctionDeclarationLikeList = Sequence[_FunctionDeclarationLike]
 # OpenAI like dict is not be accepted. {{'type': 'function', 'function': {'name': ...}
 _ToolsType = Union[
     gapic.Tool,
-    ToolDict,
+    _ToolDict,
     _ToolDictLike,
     _FunctionDeclarationLikeList,
     _FunctionDeclarationLike,

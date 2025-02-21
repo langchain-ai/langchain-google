@@ -14,6 +14,7 @@ license = "MIT"
 python = ">=3.9,<4.0"
 langchain-core = "^0.3.35"
 google-generativeai = "^0.8.0"
+google-ai-generativelanguage = "^0.6.9"
 pydantic = ">=2,<3"
 filetype = "^1.2.0"
 

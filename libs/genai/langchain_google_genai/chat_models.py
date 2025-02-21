@@ -35,6 +35,7 @@ from google.ai.generativelanguage_v1beta.types import (
     Content,
     FileData,
     FunctionCall,
+    FunctionDeclaration,
     FunctionResponse,
     GenerateContentRequest,
     GenerateContentResponse,
@@ -44,11 +45,12 @@ from google.ai.generativelanguage_v1beta.types import (
     ToolConfig,
     VideoMetadata,
 )
+from google.ai.generativelanguage_v1beta.types import (
+    Tool as GoogleTool,
+)
 from google.generativeai.caching import CachedContent  # type: ignore[import]
-from google.generativeai.types import Tool as GoogleTool  # type: ignore[import]
 from google.generativeai.types import caching_types, content_types
 from google.generativeai.types.content_types import (  # type: ignore[import]
-    FunctionDeclarationType,
     ToolDict,
 )
 from langchain_core.callbacks.manager import (
@@ -97,6 +99,7 @@ from typing_extensions import Self
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
+    _BaseGoogleGenerativeAI,
     get_client_info,
 )
 from langchain_google_genai._function_utils import (
@@ -108,11 +111,17 @@ from langchain_google_genai._function_utils import (
     tool_to_dict,
 )
 from langchain_google_genai._image_utils import ImageBytesLoader
-from langchain_google_genai.llms import _BaseGoogleGenerativeAI
 
 from . import _genai_extension as genaix
 
 logger = logging.getLogger(__name__)
+
+
+_FunctionDeclarationType = Union[
+    FunctionDeclaration,
+    dict[str, Any],
+    Callable[..., Any],
+]
 
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
@@ -939,7 +948,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         *,
         tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[FunctionDeclarationType]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
@@ -973,7 +982,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         *,
         tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[FunctionDeclarationType]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
@@ -1022,7 +1031,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         *,
         tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[FunctionDeclarationType]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
@@ -1084,7 +1093,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         *,
         tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[FunctionDeclarationType]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
@@ -1159,7 +1168,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         *,
         stop: Optional[List[str]] = None,
         tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[FunctionDeclarationType]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
