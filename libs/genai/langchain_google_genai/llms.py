@@ -38,12 +38,12 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         """Validates params and passes them to google-generativeai package."""
 
         self.client = ChatGoogleGenerativeAI(
-            google_api_key=self.google_api_key,
+            api_key=self.google_api_key,
             credentials=self.credentials,
             temperature=self.temperature,
             top_p=self.top_p,
             top_k=self.top_k,
-            max_output_tokens=self.max_output_tokens,
+            max_tokens=self.max_output_tokens,
             timeout=self.timeout,
             model=self.model,
             client_options=self.client_options,

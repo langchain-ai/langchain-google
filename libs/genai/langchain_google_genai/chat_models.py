@@ -50,9 +50,6 @@ from google.ai.generativelanguage_v1beta.types import (
 )
 from google.generativeai.caching import CachedContent  # type: ignore[import]
 from google.generativeai.types import caching_types, content_types
-from google.generativeai.types.content_types import (  # type: ignore[import]
-    ToolDict,
-)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -78,7 +75,7 @@ from langchain_core.output_parsers.openai_tools import (
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import Runnable, RunnablePassthrough
-from langchain_core.utils import secret_from_env
+from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import (
     BaseModel,
@@ -106,6 +103,7 @@ from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _ToolConfigDict,
+    _ToolDict,
     convert_to_genai_function_declarations,
     is_basemodel_subclass_safe,
     tool_to_dict,
@@ -795,11 +793,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
-    google_api_key: Optional[SecretStr] = Field(
-        alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
-    )
-    """Google AI API key.
-    If not specified will be read from env var ``GOOGLE_API_KEY``."""
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
     )  #: :meta private:
@@ -947,7 +940,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         *,
-        tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
@@ -981,7 +974,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         *,
-        tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
@@ -1030,7 +1023,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         *,
-        tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
@@ -1092,7 +1085,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         *,
-        tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
@@ -1167,7 +1160,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         messages: List[BaseMessage],
         *,
         stop: Optional[List[str]] = None,
-        tools: Optional[Sequence[Union[ToolDict, GoogleTool]]] = None,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
@@ -1260,8 +1253,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         else:
             parser = JsonOutputToolsParser()
-        tool_choice = _get_tool_name(schema) if self._supports_tool_choice else None
-        llm = self.bind_tools([schema], tool_choice=tool_choice)
+        tool_choice = _get_tool_name(schema) if self._supports_tool_choice else None  # type: ignore[arg-type]
+        llm = self.bind_tools([schema], tool_choice=tool_choice)  # type: ignore[list-item]
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -1275,7 +1268,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[ToolDict, GoogleTool]],
+        tools: Sequence[
+            dict[str, Any] | type | Callable[..., Any] | BaseTool | GoogleTool
+        ],
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
@@ -1317,7 +1312,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         contents: Union[List[BaseMessage], content_types.ContentsType],
         *,
         display_name: str | None = None,
-        tools: Union[ToolDict, GoogleTool, None] = None,
+        tools: Union[_ToolDict, GoogleTool, None] = None,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         ttl: Optional[caching_types.TTLTypes] = None,
         expire_time: Optional[caching_types.ExpireTimeTypes] = None,
@@ -1338,12 +1333,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         system: Optional[content_types.ContentType] = None
         genai_contents: list = []
-        if all(isinstance(c, BaseMessage) for c in contents):
+        if all(isinstance(c, BaseMessage) for c in contents):  # type: ignore[union-attr]
             system, genai_contents = _parse_chat_history(
-                contents,
+                contents,  # type: ignore[arg-type]
                 convert_system_message_to_human=self.convert_system_message_to_human,
             )
-        elif any(isinstance(c, BaseMessage) for c in contents):
+        elif any(isinstance(c, BaseMessage) for c in contents):  # type: ignore[union-attr]
             raise ValueError(
                 f"'contents' must either be a list of "
                 f"langchain_core.messages.BaseMessage or a list "
@@ -1351,8 +1346,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 f"of the two. Received {contents}"
             )
         else:
-            for content in contents:
-                if hasattr(content, "role") and content.role == "system":
+            for content in contents:  # type: ignore[union-attr]
+                if hasattr(content, "role") and content.role == "system":  # type: ignore[union-attr]
                     if system is not None:
                         warnings.warn(
                             "Received multiple pieces of content with role 'system'. "
@@ -1373,7 +1368,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 else:
                     genai_contents.append(content)
         if tools:
-            genai_tools = [convert_to_genai_function_declarations(tools)]
+            genai_tools = [convert_to_genai_function_declarations(tools)]  # type: ignore[arg-type]
         else:
             genai_tools = None
         if tool_choice and genai_tools:
@@ -1406,7 +1401,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
 
 def _get_tool_name(
-    tool: Union[ToolDict, GoogleTool],
+    tool: Union[_ToolDict, GoogleTool],
 ) -> str:
     genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
     return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]

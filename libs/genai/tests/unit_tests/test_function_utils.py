@@ -36,7 +36,7 @@ def test_tool_with_anyof_nullable_param() -> None:
         return "value"
 
     # Convert to OpenAI, then to GenAI, then to dict
-    oai_tool = convert_to_openai_tool(possibly_none)
+    oai_tool: dict[str, Any] = convert_to_openai_tool(possibly_none)
     genai_tool = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tool)
     assert isinstance(genai_tool_dict, dict), "Expected a dict."

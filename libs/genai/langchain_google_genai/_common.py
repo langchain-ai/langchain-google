@@ -28,6 +28,8 @@ Supported examples:
     google_api_key: Optional[SecretStr] = Field(
         alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
     )
+    """Google AI API key.
+    If not specified will be read from env var ``GOOGLE_API_KEY``."""
     credentials: Any = None
     "The default custom credentials (google.auth.credentials.Credentials) to use "
     "when making API calls. If not provided, credentials will be ascertained from "

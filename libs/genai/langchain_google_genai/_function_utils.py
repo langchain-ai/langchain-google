@@ -7,7 +7,6 @@ import logging
 from typing import (
     Any,
     Callable,
-    Collection,
     Dict,
     List,
     Literal,
@@ -58,38 +57,21 @@ _ALLOWED_SCHEMA_FIELDS.extend(
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
 
-class _ToolDictLike(TypedDict):
-    function_declarations: _FunctionDeclarationLikeList
-
-
-class _FunctionDeclarationDict(TypedDict):
-    name: str
-    description: str
-    parameters: Dict[str, Collection[str]]
-
-
-class _ToolDict(TypedDict):
-    function_declarations: Sequence[_FunctionDeclarationDict]
-
-
 # Info: This is a FunctionDeclaration(=fc).
 _FunctionDeclarationLike = Union[
     BaseTool, Type[BaseModel], gapic.FunctionDeclaration, Callable, Dict[str, Any]
 ]
 
-# Info: This mean one tool.
-_FunctionDeclarationLikeList = Sequence[_FunctionDeclarationLike]
+
+class _ToolDict(TypedDict):
+    function_declarations: Sequence[_FunctionDeclarationLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
 # The dict should be gapic.Tool like. {"function_declarations": [ { "name": ...}.
 # OpenAI like dict is not be accepted. {{'type': 'function', 'function': {'name': ...}
 _ToolsType = Union[
-    gapic.Tool,
-    _ToolDict,
-    _ToolDictLike,
-    _FunctionDeclarationLikeList,
-    _FunctionDeclarationLike,
+    gapic.Tool, _ToolDict, _FunctionDeclarationLike, Sequence[_FunctionDeclarationLike]
 ]
 
 
@@ -151,12 +133,12 @@ def convert_to_genai_function_declarations(
     gapic_tool = gapic.Tool()
     for tool in tools:
         if isinstance(tool, gapic.Tool):
-            gapic_tool.function_declarations.extend(tool.function_declarations)
+            gapic_tool.function_declarations.extend(tool.function_declarations)  # type: ignore[union-attr]
         elif isinstance(tool, dict) and "function_declarations" not in tool:
             fd = _format_to_gapic_function_declaration(tool)
             gapic_tool.function_declarations.append(fd)
         elif isinstance(tool, dict):
-            function_declarations = cast(_ToolDictLike, tool)["function_declarations"]
+            function_declarations = cast(_ToolDict, tool)["function_declarations"]
             if not isinstance(function_declarations, collections.abc.Sequence):
                 raise ValueError(
                     "function_declarations should be a list"
@@ -169,7 +151,7 @@ def convert_to_genai_function_declarations(
                 ]
                 gapic_tool.function_declarations.extend(fds)
         else:
-            fd = _format_to_gapic_function_declaration(tool)
+            fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
             gapic_tool.function_declarations.append(fd)
     return gapic_tool
 
@@ -234,10 +216,10 @@ def _format_base_tool_to_function_declaration(
             ),
         )
 
-    if issubclass(tool.args_schema, BaseModel):
-        schema = tool.args_schema.model_json_schema()
-    elif issubclass(tool.args_schema, BaseModelV1):
-        schema = tool.args_schema.schema()
+    if issubclass(tool.args_schema, BaseModel):  # type: ignore[arg-type]
+        schema = tool.args_schema.model_json_schema()  # type: ignore[union-attr]
+    elif issubclass(tool.args_schema, BaseModelV1):  # type: ignore[arg-type]
+        schema = tool.args_schema.schema()  # type: ignore[union-attr]
     else:
         raise NotImplementedError(
             f"args_schema must be a Pydantic BaseModel, got {tool.args_schema}."
