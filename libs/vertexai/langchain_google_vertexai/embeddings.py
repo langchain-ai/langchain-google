@@ -5,6 +5,7 @@ import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor, wait
 from enum import Enum, auto
+from functools import cached_property
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 from google.api_core.exceptions import (
@@ -193,6 +194,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         self.instance["get_embeddings_with_retry"] = retry_decorator(
             self.client.get_embeddings
         )
+
+    @cached_property
+    def _image_bytes_loader_client(self):
+        return ImageBytesLoader(project=self.project)
 
     @property
     def model_type(self) -> str:
@@ -517,7 +522,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
 
-        image_loader = ImageBytesLoader()
+        image_loader = self._image_bytes_loader_client
         bytes_image = image_loader.load_bytes(image_path)
         image = Image(bytes_image)
         result: MultiModalEmbeddingResponse = self.instance[
@@ -544,7 +549,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
             raise NotImplementedError("Only supported for multimodal models")
 
-        image_loader = ImageBytesLoader()
+        image_loader = self._image_bytes_loader_client
 
         embeddings = []
         for image_path in uris:
