@@ -299,7 +299,6 @@ def test_safety_settings_gemini() -> None:
     assert len(out2.content) > 0
 
 
-@pytest.mark.xfail(reason="on the model's side")
 def test_chat_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
@@ -391,7 +390,6 @@ def _check_tool_call_args(tool_call_args: dict) -> None:
     }
 
 
-@pytest.mark.extended
 def test_chat_vertexai_gemini_function_calling() -> None:
     class MyModel(BaseModel):
         name: str
