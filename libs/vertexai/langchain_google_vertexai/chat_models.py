@@ -1464,7 +1464,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
             return response.total_tokens
         else:
-            return super().get_num_tokens(text=text)
+            return self.client_preview.start_chat().count_tokens(text)
 
     def _tools_gemini(
         self,
@@ -1974,6 +1974,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
+                usage_metadata={k: v for k, v in usage_metadata.items() if v},
             )
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged

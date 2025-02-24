@@ -30,12 +30,6 @@ from vertexai.generative_models._generative_models import (  # type: ignore
 from vertexai.language_models import (  # type: ignore[import-untyped]
     TextGenerationModel,
 )
-from vertexai.preview.language_models import (  # type: ignore
-    ChatModel as PreviewChatModel,
-)
-from vertexai.preview.language_models import (
-    CodeChatModel as PreviewCodeChatModel,
-)
 
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
@@ -294,26 +288,6 @@ class _VertexAICommon(_VertexAIBase):
         if stream or self.streaming:
             params.pop("candidate_count")
         return params
-
-    def get_num_tokens(self, text: str) -> int:
-        """Get the number of tokens present in the text.
-
-        Useful for checking if an input will fit in a model's context window.
-
-        Args:
-            text: The string input to tokenize.
-
-        Returns:
-            The integer number of tokens in the text.
-        """
-        is_palm_chat_model = isinstance(
-            self.client_preview, PreviewChatModel
-        ) or isinstance(self.client_preview, PreviewCodeChatModel)
-        if is_palm_chat_model:
-            result = self.client_preview.start_chat().count_tokens(text)
-        else:
-            result = self.client_preview.count_tokens([text])
-        return result.total_tokens
 
 
 class _BaseVertexAIModelGarden(_VertexAIBase):
