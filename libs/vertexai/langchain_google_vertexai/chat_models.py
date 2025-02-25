@@ -1833,13 +1833,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # that takes care of this if necessary.
                 schema_json = schema.model_json_schema()
                 schema_json = replace_defs_in_schema(schema_json)
-                self.response_schema = schema_json
                 parser = PydanticOutputParser(pydantic_object=schema)
+                schema = schema_json
             else:
                 parser = JsonOutputParser()
-                self.response_schema = schema
-            self.response_mime_type = "application/json"
-            llm: Runnable = self
+            llm = self.bind(
+                response_mime_type="application/json", response_schema=schema
+            )
 
         else:
             tool_name = _get_tool_name(schema)
