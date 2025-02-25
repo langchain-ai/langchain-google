@@ -16,6 +16,7 @@ from typing import (
     Union,
 )
 
+import httpx
 from google.auth.credentials import Credentials
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -172,6 +173,10 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     max_retries: int = Field(
         default=3, description="Number of retries for error handling."
     )
+    timeout: Optional[Union[float, httpx.Timeout]] = Field(
+        default=None,
+        description="Timeout for API requests.",
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -200,6 +205,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
+            timeout=self.timeout,
         )
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
@@ -207,6 +213,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
+            timeout=self.timeout,
         )
         return self
 
