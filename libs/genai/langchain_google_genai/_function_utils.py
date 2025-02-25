@@ -184,9 +184,7 @@ def _format_to_gapic_function_declaration(
         ):
             function = cast(dict, tool)
         else:
-            if (
-                "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
-            ):
+            if "parameters" in tool and tool["parameters"].get("properties"):  # type: ignore[index]
                 function = convert_to_openai_tool(cast(dict, tool))["function"]
             else:
                 function = cast(dict, tool)
@@ -356,8 +354,8 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
             )
         if _is_nullable_schema(schema):
             items["nullable"] = True
-        if 'required' in schema:
-            items['required'] = schema['required']
+        if "required" in schema:
+            items["required"] = schema["required"]
     else:
         # str
         items["type_"] = _get_type_from_schema({"type": schema})
