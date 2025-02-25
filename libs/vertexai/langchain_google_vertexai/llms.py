@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Iterator, List, Optional
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -143,6 +143,15 @@ class VertexAI(_VertexAICommon, BaseLLM):
             )
         return LLMResult(generations=generations)
 
+    @staticmethod
+    def _lc_usage_to_metadata(lc_usage: Dict[str, Any]) -> Dict[str, Any]:
+        mapping = {
+            "input_tokens": "prompt_token_count",
+            "output_tokens": "candidates_token_count",
+            "total_tokens": "total_token_count",
+        }
+        return {mapping[k]: v for k, v in lc_usage.items() if v and k in mapping}
+
     def _stream(
         self,
         prompt: str,
@@ -157,9 +166,10 @@ class VertexAI(_VertexAICommon, BaseLLM):
             **kwargs,
         ):
             if stream_chunk.message.usage_metadata:
+                lc_usage = stream_chunk.message.usage_metadata
                 usage_metadata = {
-                    **stream_chunk.generation_info.get("usage_metadata", {}),
-                    **stream_chunk.message.usage_metadata,
+                    **lc_usage,
+                    **self._lc_usage_to_metadata(lc_usage=lc_usage),
                 }
             else:
                 usage_metadata = {}

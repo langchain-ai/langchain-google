@@ -1974,7 +1974,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
-                usage_metadata={k: v for k, v in usage_metadata.items() if v},
+                usage_metadata={},
             )
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
