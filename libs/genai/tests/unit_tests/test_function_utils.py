@@ -510,6 +510,83 @@ def test_tool_to_dict_pydantic() -> None:
     assert gapic_tool == convert_to_genai_function_declarations([tool_dict])
 
 
+def test_tool_to_dict_pydantic_nested() -> None:
+    class MyModel(BaseModel):
+        name: str
+        age: int
+
+    class Models(BaseModel):
+        models: list[MyModel]
+
+    gapic_tool = convert_to_genai_function_declarations([Models])
+    tool_dict = tool_to_dict(gapic_tool)
+    assert tool_dict == {
+        "function_declarations": [
+            {
+                "description": "",
+                "name": "Models",
+                "parameters": {
+                    "description": "",
+                    "enum": [],
+                    "format_": "",
+                    "max_items": "0",
+                    "min_items": "0",
+                    "nullable": False,
+                    "properties": {
+                        "models": {
+                            "description": "",
+                            "enum": [],
+                            "format_": "",
+                            "items": {
+                                "description": "MyModel",
+                                "enum": [],
+                                "format_": "",
+                                "max_items": "0",
+                                "min_items": "0",
+                                "nullable": False,
+                                "properties": {
+                                    "age": {
+                                        "description": "",
+                                        "enum": [],
+                                        "format_": "",
+                                        "max_items": "0",
+                                        "min_items": "0",
+                                        "nullable": False,
+                                        "properties": {},
+                                        "required": [],
+                                        "type_": 3,
+                                    },
+                                    "name": {
+                                        "description": "",
+                                        "enum": [],
+                                        "format_": "",
+                                        "max_items": "0",
+                                        "min_items": "0",
+                                        "nullable": False,
+                                        "properties": {},
+                                        "required": [],
+                                        "type_": 1,
+                                    },
+                                },
+                                "required": ["name", "age"],
+                                "type_": 6,
+                            },
+                            "max_items": "0",
+                            "min_items": "0",
+                            "nullable": False,
+                            "properties": {},
+                            "required": [],
+                            "type_": 5,
+                        }
+                    },
+                    "required": ["models"],
+                    "type_": 6,
+                },
+            }
+        ]
+    }
+
+
 def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> None:
     class MyModel(BaseModel):
         name: str

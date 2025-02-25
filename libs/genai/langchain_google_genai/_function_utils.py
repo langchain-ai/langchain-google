@@ -356,6 +356,8 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
             )
         if _is_nullable_schema(schema):
             items["nullable"] = True
+        if "required" in schema:
+            items["required"] = schema["required"]
     else:
         # str
         items["type_"] = _get_type_from_schema({"type": schema})
