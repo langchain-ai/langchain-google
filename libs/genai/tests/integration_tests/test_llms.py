@@ -47,7 +47,7 @@ def test_google_generativeai_generate(model_name: str) -> None:
 
 
 async def test_google_generativeai_agenerate() -> None:
-    llm = GoogleGenerativeAI(temperature=0, model="gemini-pro")
+    llm = GoogleGenerativeAI(temperature=0, model="models/gemini-2.0-flash-001")
     output = await llm.agenerate(["Please say foo:"])
     assert isinstance(output, LLMResult)
 
