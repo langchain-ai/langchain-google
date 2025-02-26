@@ -1112,6 +1112,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
+
     @model_validator(mode="after")
     def validate_labels(self) -> Self:
         if self.labels:
@@ -1387,7 +1388,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             safety_settings=safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
-	    labels=self.labels,
+            labels=self.labels,
         )
 
     def _request_from_cached_content(
