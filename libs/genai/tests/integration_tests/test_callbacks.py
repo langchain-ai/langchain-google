@@ -23,7 +23,7 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
 def test_streaming_callback() -> None:
     prompt_template = "Tell me details about the Company {name} with 2 bullet point?"
     cb = StreamingLLMCallbackHandler()
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", callbacks=[cb])
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001", callbacks=[cb])
     llm_chain = PromptTemplate.from_template(prompt_template) | llm
     for t in llm_chain.stream({"name": "Google"}):
         pass
