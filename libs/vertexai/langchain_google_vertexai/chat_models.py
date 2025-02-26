@@ -297,7 +297,7 @@ def _parse_chat_history_gemini(
                 )
                 continue
             if system_instruction is not None:
-                system_instruction.parts.extend(system_parts)  # type: ignore[unreachable]
+                system_instruction.parts.extend(system_parts)
             else:
                 system_instruction = Content(role="system", parts=system_parts)
             system_parts = None

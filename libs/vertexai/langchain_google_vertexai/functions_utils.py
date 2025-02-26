@@ -184,7 +184,7 @@ def _format_base_tool_to_function_declaration(
         schema = tool.args_schema.model_json_schema()
         pydantic_version = "v2"
     else:
-        schema = tool.args_schema.schema()
+        schema = tool.args_schema.schema()  # type: ignore[attr-defined]
         pydantic_version = "v1"
 
     parameters = _dict_to_gapic_schema(schema, pydantic_version=pydantic_version)
