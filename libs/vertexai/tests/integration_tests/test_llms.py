@@ -46,7 +46,7 @@ def test_vertex_generate_multiple_candidates() -> None:
     assert len(output.generations[0]) == 2
 
 
-@pytest.mark.release
+@pytest.mark.extended
 async def test_vertex_agenerate() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0)
     output = await llm.agenerate(["Please say foo:"])
@@ -63,7 +63,7 @@ def test_stream() -> None:
         assert isinstance(token, str)
 
 
-@pytest.mark.release
+@pytest.mark.extended
 async def test_vertex_consistency() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0)
     output = llm.generate(["Please say foo:"])
@@ -73,7 +73,7 @@ async def test_vertex_consistency() -> None:
     assert output.generations[0][0].text == async_output.generations[0][0].text
 
 
-@pytest.mark.release
+@pytest.mark.extended
 async def test_astream() -> None:
     llm = VertexAI(temperature=0, model_name=_DEFAULT_MODEL_NAME)
     async for token in llm.astream("I'm Pickle Rick"):
