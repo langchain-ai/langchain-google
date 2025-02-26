@@ -22,7 +22,6 @@ from langchain_google_genai import (
     HarmBlockThreshold,
     HarmCategory,
 )
-from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
 
 _MODEL = "models/gemini-1.5-flash-001"  # TODO: Use nano when it's available.
 _VISION_MODEL = "models/gemini-2.0-flash-001"
