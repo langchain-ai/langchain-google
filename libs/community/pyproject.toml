@@ -46,7 +46,7 @@ pydantic = { version = "^2.7.4", optional = true }
 
 [tool.poetry.extras]
 bigquery = ["google-cloud-bigquery"]
-calendar = ["google-api-python-client", "google-auth", "google-auth-oauthlib"]
+calendar = ["google-auth", "google-auth-oauthlib"]
 docai = [
   "google-cloud-documentai",
   "google-cloud-contentwarehouse",
