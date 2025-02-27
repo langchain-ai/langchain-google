@@ -147,13 +147,13 @@ class _VertexAIBase(BaseModel):
                 credentials=self.credentials,
             )
 
-            if self.api_transport is not None:
-                async_client_kwargs["transport"] = self.api_transport
+            # async clients don't support "rest" transport
+            # https://github.com/googleapis/gapic-generator-python/issues/1962
+            async_client_kwargs["transport"] = "grpc_asyncio"
 
             self.async_client = v1beta1PredictionServiceAsyncClient(
                 **async_client_kwargs
             )
-
         return self.async_client
 
     @property
@@ -269,7 +269,9 @@ class _VertexAICommon(_VertexAIBase):
             project=values.get("project"),
             location=values.get("location"),
             credentials=values.get("credentials"),
-            api_transport=values.get("api_transport"),
+            # if both project and api_transport are empty, vertexai.init() sets
+            # the default transport to "rest"
+            api_transport=values.get("api_transport", "grpc"),
             api_endpoint=values.get("api_endpoint"),
             request_metadata=values.get("default_metadata"),
         )
