@@ -15,6 +15,7 @@ from typing import Dict, List, Union
 from uuid import uuid4
 
 import pytest
+import vertexai  # type: ignore[import-untyped]
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,
@@ -233,6 +234,7 @@ def test_document_storage(
 def test_public_endpoint_vector_searcher(
     embeddings: VertexAIEmbeddings, sdk_manager: VectorSearchSDKManager
 ):
+    vertexai.init(api_transport="grpc")
     index = sdk_manager.get_index(os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"])
     endpoint = sdk_manager.get_endpoint(os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"])
 
@@ -252,6 +254,7 @@ def test_public_endpoint_vector_searcher(
     "vector_store_class", ["vector_store", "datastore_vector_store"]
 )
 def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
+    vertexai.init(api_transport="grpc")
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
     query = "What are your favourite animals?"
@@ -276,6 +279,7 @@ def test_vector_store_hybrid_search(
     request: pytest.FixtureRequest,
     embeddings: VertexAIEmbeddings,
 ):
+    vertexai.init(api_transport="grpc")
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
     query = "What are your favourite animals?"
