@@ -1,7 +1,13 @@
 from typing import Any, Dict
-from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
+from google.cloud.aiplatform_v1beta1.types import (
+    Candidate,
+    Content,
+    GenerateContentResponse,
+    GenerationConfig,
+    Part,
+)
 from pydantic import model_validator
 from typing_extensions import Self
 
@@ -26,7 +32,10 @@ def test_tuned_model_name() -> None:
     )
     assert llm.model_name == "gemini-pro"
     assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
-    assert llm.client._model_name == "projects/123/locations/europe-west4/endpoints/456"
+    assert (
+        llm.client.full_model_name
+        == "projects/123/locations/europe-west4/endpoints/456"
+    )
 
 
 def test_vertexai_args_passed() -> None:
@@ -40,43 +49,40 @@ def test_vertexai_args_passed() -> None:
     }
 
     # Mock the library to ensure the args are passed correctly
-    with patch("langchain_google_vertexai.llms.GenerativeModel") as model:
-        with patch("langchain_google_vertexai.llms.get_generation_info") as gen_info:
-            gen_info.return_value = {}
-            mock_response = MagicMock()
-            candidate = MagicMock()
-            candidate.text = response_text
-            mock_response.candidates = [candidate]
-            model_instance = MagicMock()
-            model_instance.generate_content.return_value = mock_response
-            model.return_value = model_instance
-
-            llm = VertexAI(model_name="gemini-pro", **prompt_params)
-            response = llm.invoke("Hello")
-            assert response == response_text
-            model_instance.generate_content.assert_called_once
-
-            assert model_instance.generate_content.call_args.args[0] == [user_prompt]
-            TestCase().assertCountEqual(
-                model_instance.generate_content.call_args.kwargs,
-                {
-                    "stream": False,
-                    "safety_settings": None,
-                    "generation_config": {
-                        "max_output_tokens": 1,
-                        "temperature": 0,
-                        "top_k": 10,
-                        "top_p": 0.5,
-                        "stop_sequences": None,
-                    },
-                },
-            )
-            assert (
-                model_instance.generate_content.call_args.kwargs["generation_config"][
-                    "temperature"
+    with patch(
+        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        mock_generate_content = MagicMock(
+            return_value=GenerateContentResponse(
+                candidates=[
+                    Candidate(content=Content(parts=[Part(text=response_text)]))
                 ]
-                == 0
             )
+        )
+        mock_prediction_service.return_value.generate_content = mock_generate_content
+
+        llm = VertexAI(model_name="gemini-pro", **prompt_params)
+        response = llm.invoke(user_prompt, temperature=0.5)
+        assert response == response_text
+        mock_generate_content.assert_called_once()
+
+        assert (
+            mock_generate_content.call_args.kwargs["request"].contents[0].role == "user"
+        )
+        assert (
+            mock_generate_content.call_args.kwargs["request"].contents[0].parts[0].text
+            == "Hello"
+        )
+        expected = GenerationConfig(
+            candidate_count=1, temperature=0.5, top_p=0.5, top_k=10, max_output_tokens=1
+        )
+        assert (
+            mock_generate_content.call_args.kwargs["request"].generation_config
+            == expected
+        )
+        assert mock_generate_content.call_args.kwargs["request"].tools == []
+        assert not mock_generate_content.call_args.kwargs["request"].tool_config
+        assert not mock_generate_content.call_args.kwargs["request"].safety_settings
 
 
 def test_extract_response() -> None:
@@ -118,6 +124,8 @@ def test_tracing_params() -> None:
         "ls_provider": "google_vertexai",
         "ls_model_type": "llm",
         "ls_model_name": "gemini-pro",
+        "ls_max_tokens": 128,
+        "ls_temperature": 0.0,
     }
 
     llm = VertexAI(model_name="gemini-pro", temperature=0.1, max_output_tokens=10)

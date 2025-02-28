@@ -1,6 +1,6 @@
 import pytest
 
-_DEFAULT_MODEL_NAME = "gemini-1.0-pro-001"
+_DEFAULT_MODEL_NAME = "gemini-2.0-flash-001"
 
 
 @pytest.fixture

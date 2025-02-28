@@ -364,7 +364,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         **kwargs: Any,
     ) -> Any:
         """Core similarity search function. Handles a list of embedding vectors,
-            optionally returning scores and embeddings.
+        optionally returning scores and embeddings.
 
         Args:
             embeddings: A list of embedding vectors, where each vector is a list of
@@ -468,7 +468,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Search for top `k` docs most similar to input query, returns both docs and
-            scores.
+        scores.
 
         Args:
             query: search query to search documents with.

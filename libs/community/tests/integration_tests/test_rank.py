@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import Any, List
 from unittest.mock import create_autospec
 
 import pytest
@@ -39,7 +39,11 @@ class CustomRankingRetriever(BaseRetriever):
 
 class MockVectorStoreRetriever(VectorStoreRetriever):
     def _get_relevant_documents(
-        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+        self,
+        query: str,
+        *,
+        run_manager: CallbackManagerForRetrieverRun,
+        **kwargs: Any,
     ) -> List[Document]:
         return [
             Document(

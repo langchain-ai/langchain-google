@@ -299,7 +299,7 @@ def _parse_chat_history_gemini(
                 )
                 continue
             if system_instruction is not None:
-                system_instruction.parts.extend(system_parts)  # type: ignore[unreachable]
+                system_instruction.parts.extend(system_parts)
             else:
                 system_instruction = Content(role="system", parts=system_parts)
             system_parts = None
@@ -1195,26 +1195,32 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def _is_gemini_advanced(self) -> bool:
         return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
 
-    @property
-    def _default_params(self) -> Dict[str, Any]:
-        updated_params = super()._default_params
+    def _prepare_params(
+        self,
+        stop: Optional[List[str]] = None,
+        stream: bool = False,
+        **kwargs: Any,
+    ) -> dict:
+        params = super()._prepare_params(stop=stop, stream=stream, **kwargs)
 
-        if self.response_mime_type is not None:
-            updated_params["response_mime_type"] = self.response_mime_type
+        response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
+        if response_mime_type is not None:
+            params["response_mime_type"] = response_mime_type
 
-        if self.response_schema is not None:
+        response_schema = kwargs.get("response_schema", self.response_schema)
+        if response_schema is not None:
             allowed_mime_types = ("application/json", "text/x.enum")
-            if self.response_mime_type not in allowed_mime_types:
+            if response_mime_type not in allowed_mime_types:
                 error_message = (
                     "`response_schema` is only supported when "
                     f"`response_mime_type` is set to one of {allowed_mime_types}"
                 )
                 raise ValueError(error_message)
 
-            gapic_response_schema = _convert_schema_dict_to_gapic(self.response_schema)
-            updated_params["response_schema"] = gapic_response_schema
+            gapic_response_schema = _convert_schema_dict_to_gapic(response_schema)
+            params["response_schema"] = gapic_response_schema
 
-        return updated_params
+        return params
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
@@ -1480,7 +1486,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
             return response.total_tokens
         else:
-            return super().get_num_tokens(text=text)
+            return self.client_preview.start_chat().count_tokens(text)
 
     def _tools_gemini(
         self,
@@ -1849,13 +1855,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # that takes care of this if necessary.
                 schema_json = schema.model_json_schema()
                 schema_json = replace_defs_in_schema(schema_json)
-                self.response_schema = schema_json
                 parser = PydanticOutputParser(pydantic_object=schema)
+                schema = schema_json
             else:
                 parser = JsonOutputParser()
-                self.response_schema = schema
-            self.response_mime_type = "application/json"
-            llm: Runnable = self
+            llm = self.bind(
+                response_mime_type="application/json", response_schema=schema
+            )
 
         else:
             tool_name = _get_tool_name(schema)
@@ -1990,6 +1996,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
+                usage_metadata={},
             )
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
