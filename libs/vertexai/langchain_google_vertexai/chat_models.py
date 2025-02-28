@@ -148,8 +148,8 @@ _allowed_params = [
     "seed",
     "response_logprobs",
     "logprobs",
+    "labels",
 ]
-_allowed_params = [*_allowed_params, "labels"]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
 
