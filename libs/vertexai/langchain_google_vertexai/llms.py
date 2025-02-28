@@ -25,6 +25,19 @@ class VertexAI(_VertexAICommon, BaseLLM):
     """The name of a tuned model. If tuned_model_name is passed
     model_name will be used to determine the model family
     """
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only
+        supported in Gemini 1.5 and later models. Supported mimetype:
+            * "text/plain": (default) Text output.
+            * "application/json": JSON response in the candidates.
+            * "text/x.enum": Enum in plain text.
+       The model also needs to be prompted to output the appropriate response
+       type, otherwise the behavior is undefined. This is a preview feature.
+    """
+    response_schema: Optional[Dict[str, Any]] = None
+    """ Optional. Enforce an schema to the output.
+        The format of the dictionary should follow Open API schema.
+    """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
@@ -70,6 +83,8 @@ class VertexAI(_VertexAICommon, BaseLLM):
             safety_settings=self.safety_settings,
             n=self.n,
             seed=self.seed,
+            response_schema=self.response_schema,
+            response_mime_type=self.response_mime_type,
         )
         return self
 

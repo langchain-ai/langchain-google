@@ -3,12 +3,16 @@
 Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 """
+import json
 
 import pytest
 from langchain_core.outputs import LLMResult
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
 from langchain_google_vertexai.llms import VertexAI
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
+
+rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
 
 
 @pytest.mark.release
@@ -85,3 +89,32 @@ def test_vertex_call_count_tokens() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
+
+
+@pytest.mark.extended
+def test_structured_output_schema_json():
+    model = VertexAI(
+        rate_limiter=rate_limiter,
+        model_name="gemini-1.5-pro-001",
+        response_mime_type="application/json",
+        response_schema={
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "recipe_name": {
+                        "type": "string",
+                    },
+                },
+                "required": ["recipe_name"],
+            },
+        },
+    )
+
+    response = model.invoke("List a few popular cookie recipes")
+
+    assert isinstance(response, str)
+    parsed_response = json.loads(response)
+    assert isinstance(parsed_response, list)
+    assert len(parsed_response) > 0
+    assert "recipe_name" in parsed_response[0]
