@@ -150,7 +150,7 @@ _allowed_params = [
     "logprobs",
 ]
 _allowed_params = [*_allowed_params, "labels"]
-_allowed_params_prediction_service = ["request", "timeout", "metadata"]
+_allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
 
 @dataclass
