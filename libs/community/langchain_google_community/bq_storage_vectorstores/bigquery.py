@@ -562,6 +562,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 for each matched document. Defaults to False.
             with_embeddings: (Optional) If True, include the matched document's
                 embedding vector in the result. Defaults to False.
+            options: (Optional) A dictionary representing additional options for 
+                VECTOR_SEARCH.
         Returns:
             A list of `k` documents for each embedding in `embeddings`
         """
@@ -603,6 +605,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for 
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to embedding vector.
         """
@@ -615,6 +619,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         embedding: List[float],
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
+        **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to embedding vector with scores.
 
@@ -630,11 +635,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for 
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to embedding vector.
         """
         return self.similarity_search_by_vectors(
-            embeddings=[embedding], filter=filter, k=k, with_scores=True
+            embeddings=[embedding], filter=filter, k=k, with_scores=True, **kwargs
         )[0]
 
     def similarity_search(
@@ -654,6 +661,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for 
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to input query.
         """
@@ -684,12 +693,14 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for 
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to input query along with scores.
         """
         embedding = self.embedding.embed_query(query)
         return self.similarity_search_by_vector_with_score(
-            embedding=embedding, filter=filter, k=k
+            embedding=embedding, filter=filter, k=k, **kwargs
         )
 
     @classmethod
