@@ -115,7 +115,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         filter: Optional[Dict[str, Any]] = None,
         k: int = 5,
         batch_size: Union[int, None] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[List[List[Any]]]:
         ...
 
