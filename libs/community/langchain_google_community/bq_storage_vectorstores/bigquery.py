@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timedelta
 from threading import Lock, Thread
@@ -192,6 +193,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
         batch_size: Union[int, None] = 100,
+        **kwargs: Any,
     ) -> List[List[List[Any]]]:
         """Performs a similarity search using vector embeddings
 
@@ -212,6 +214,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: The number of top results to return for each query.
             batch_size: The size of batches to process embeddings.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
 
         Returns:
             A list of lists of lists. Each inner list represents the results for a
@@ -228,7 +232,12 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             end = start + batch_size  # type: ignore[operator]
             embs_batch = embeddings[start:end]
             search_results.extend(
-                self._search_embeddings(embeddings=embs_batch, filter=filter, k=k)
+                self._search_embeddings(
+                    embeddings=embs_batch,
+                    filter=filter,
+                    k=k,
+                    options=kwargs.get("options", None),
+                )
             )
 
         return self._create_langchain_documents(
@@ -289,6 +298,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         k: int = 5,
         table_to_query: Any = None,
         fields_to_exclude: Optional[List[str]] = None,
+        options: Optional[dict[str, Any]] = None,
     ) -> str:
         # Get where filter
         where_filter_expr = self._create_filters(filter)
@@ -332,7 +342,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             "{self.embedding_field}",
             (SELECT row_num, {self.embedding_field} FROM embeddings),
             distance_type => "{self.distance_type}",
-            top_k => {k}
+            top_k => {k},
+            options => '{json.dumps(options if options else {})}'
         )
         """
         # Wrap the Inner Query with an Outer SELECT to eliminate "base." column prefix
@@ -350,11 +361,15 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         embeddings: List[List[float]],
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
+        options: Optional[dict[str, Any]] = None,
     ) -> list:
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
         full_query = self._create_search_query(
-            filter=filter, k=k, num_embeddings=len(embeddings)
+            filter=filter,
+            k=k,
+            num_embeddings=len(embeddings),
+            options=options,
         )
 
         job_config = bigquery.QueryJobConfig(
@@ -450,6 +465,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
         expire_hours_temp_table: int = 12,
+        options: Optional[dict[str, Any]] = None,
     ) -> List[List[List[Any]]]:
         """Multi-purpose batch search function. Accepts either embeddings or queries
         but not both. Optionally returns similarity scores and/or matched embeddings
@@ -471,7 +487,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             with_scores: If True, returns the relevance scores of the results along with
                 the documents
             with_embeddings: If True, returns the embeddings of the results along with
-            the documents
+                the documents
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
@@ -501,6 +519,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             num_embeddings=len(embeddings),
             table_to_query=table_ref,
             fields_to_exclude=[self.embedding_field],
+            options=options,
         )
 
         job_config = bigquery.QueryJobConfig(
@@ -550,6 +569,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 for each matched document. Defaults to False.
             with_embeddings: (Optional) If True, include the matched document's
                 embedding vector in the result. Defaults to False.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
         Returns:
             A list of `k` documents for each embedding in `embeddings`
         """
@@ -591,6 +612,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to embedding vector.
         """
@@ -603,6 +626,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         embedding: List[float],
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
+        **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Return docs most similar to embedding vector with scores.
 
@@ -618,11 +642,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to embedding vector.
         """
         return self.similarity_search_by_vectors(
-            embeddings=[embedding], filter=filter, k=k, with_scores=True
+            embeddings=[embedding], filter=filter, k=k, with_scores=True, **kwargs
         )[0]
 
     def similarity_search(
@@ -642,6 +668,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to input query.
         """
@@ -672,12 +700,14 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
         Returns:
             Return docs most similar to input query along with scores.
         """
         embedding = self.embedding.embed_query(query)
         return self.similarity_search_by_vector_with_score(
-            embedding=embedding, filter=filter, k=k
+            embedding=embedding, filter=filter, k=k, **kwargs
         )
 
     @classmethod
