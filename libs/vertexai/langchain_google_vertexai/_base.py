@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from concurrent.futures import Executor
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
 
 import vertexai  # type: ignore[import-untyped]
 from google.api_core.client_options import ClientOptions
@@ -13,6 +13,12 @@ from google.cloud.aiplatform.gapic import (
     PredictionServiceClient,
 )
 from google.cloud.aiplatform.models import Prediction
+from google.cloud.aiplatform_v1.services.prediction_service import (
+    PredictionServiceAsyncClient as v1PredictionServiceAsyncClient,
+)
+from google.cloud.aiplatform_v1.services.prediction_service import (
+    PredictionServiceClient as v1PredictionServiceClient,
+)
 from google.cloud.aiplatform_v1beta1.services.prediction_service import (
     PredictionServiceAsyncClient as v1beta1PredictionServiceAsyncClient,
 )
@@ -23,7 +29,7 @@ from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing_extensions import Self
+from typing_extensions import Literal, Self
 from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
 )
@@ -87,6 +93,11 @@ class _VertexAIBase(BaseModel):
     "The default custom credentials (google.auth.credentials.Credentials) to use "
     "when making API calls. If not provided, credentials will be ascertained from "
     "the environment."
+    endpoint_version: Literal["v1", "v1beta1"] = "v1beta1"
+    """Whether to use v1 or v1beta1 endpoint.
+    
+    v1 is more performant, but v1beta1 might have some new features.
+    """
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -126,19 +137,27 @@ class _VertexAIBase(BaseModel):
         return self
 
     @property
-    def prediction_client(self) -> v1beta1PredictionServiceClient:
+    def prediction_client(
+        self,
+    ) -> Union[v1beta1PredictionServiceClient, v1PredictionServiceClient]:
         """Returns PredictionServiceClient."""
         if self.client is None:
-            self.client = v1beta1PredictionServiceClient(
-                credentials=self.credentials,
-                client_options=self.client_options,
-                client_info=get_client_info(module=self._user_agent),
-                transport=self.api_transport,
-            )
+            client_kwargs: dict[str, Any] = {
+                "credentials": self.credentials,
+                "client_options": self.client_options,
+                "client_info": get_client_info(module=self._user_agent),
+                "transport": self.api_transport,
+            }
+            if self.endpoint_version == "v1":
+                self.client = v1PredictionServiceClient(**client_kwargs)
+            else:
+                self.client = v1beta1PredictionServiceClient(**client_kwargs)
         return self.client
 
     @property
-    def async_prediction_client(self) -> v1beta1PredictionServiceAsyncClient:
+    def async_prediction_client(
+        self,
+    ) -> Union[v1PredictionServiceAsyncClient, v1beta1PredictionServiceAsyncClient]:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
             async_client_kwargs: dict[str, Any] = dict(
@@ -151,9 +170,14 @@ class _VertexAIBase(BaseModel):
             # https://github.com/googleapis/gapic-generator-python/issues/1962
             async_client_kwargs["transport"] = "grpc_asyncio"
 
-            self.async_client = v1beta1PredictionServiceAsyncClient(
-                **async_client_kwargs
-            )
+            if self.endpoint_version == "v1":
+                self.async_client = v1PredictionServiceAsyncClient(
+                    **async_client_kwargs
+                )
+            else:
+                self.async_client = v1beta1PredictionServiceAsyncClient(
+                    **async_client_kwargs
+                )
         return self.async_client
 
     @property

@@ -10,6 +10,7 @@
     'kwargs': dict({
       'default_metadata': list([
       ]),
+      'endpoint_version': 'v1beta1',
       'location': 'us-central1',
       'max_output_tokens': 100,
       'max_retries': 2,
