@@ -203,6 +203,7 @@ def _parse_chat_history_gemini(
     history: List[BaseMessage],
     imageBytesLoader: ImageBytesLoader,
     convert_system_message_to_human: Optional[bool] = False,
+    perform_literal_eval_on_string_raw_content: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
@@ -258,7 +259,7 @@ def _parse_chat_history_gemini(
         # native type (such as list or dict) so that results can be properly
         # appended to the prompt, otherwise they will all be parsed as Text
         # rather than `inline_data`.
-        if isinstance(raw_content, str):
+        if perform_literal_eval_on_string_raw_content and isinstance(raw_content, str):
             try:
                 raw_content = ast.literal_eval(raw_content)
             except SyntaxError:
@@ -1093,6 +1094,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """ Optional tag llm calls with metadata to help in tracebility and biling.
     """
 
+    perform_literal_eval_on_string_raw_content: bool = True
+    """Whether to perform literal eval on string raw content.
+    """
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
         if model_name:
@@ -1351,7 +1356,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         **kwargs,
     ) -> GenerateContentRequest:
         system_instruction, contents = _parse_chat_history_gemini(
-            messages, self._image_bytes_loader_client
+            messages,
+            self._image_bytes_loader_client,
+            perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
         )
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         if tool_config:
@@ -1475,7 +1482,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if self._is_gemini_model:
             # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
             _, contents = _parse_chat_history_gemini(
-                [HumanMessage(content=text)], self._image_bytes_loader_client
+                [HumanMessage(content=text)],
+                self._image_bytes_loader_client,
+                perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
             )
             response = self.prediction_client.count_tokens(
                 {

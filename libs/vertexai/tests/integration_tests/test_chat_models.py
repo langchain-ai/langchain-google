@@ -344,7 +344,9 @@ def test_parse_history_gemini_multimodal_FC():
     expected = [Content(role="user", parts=parts)]
     imageBytesLoader = ImageBytesLoader()
     _, response = _parse_chat_history_gemini(
-        history=history, imageBytesLoader=imageBytesLoader
+        history=history,
+        imageBytesLoader=imageBytesLoader,
+        perform_literal_eval_on_string_raw_content=True,
     )
     assert expected == response
 
