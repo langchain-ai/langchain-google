@@ -6,6 +6,12 @@ from unittest.mock import Mock, patch
 import google.cloud.aiplatform_v1beta1.types as gapic
 import pytest
 import vertexai.generative_models as vertexai  # type: ignore
+from google.cloud.aiplatform_v1beta1.types import (
+    FunctionCallingConfig as GapicFunctionCallingConfig,
+)
+from google.cloud.aiplatform_v1beta1.types import (
+    ToolConfig as GapicToolConfig,
+)
 from langchain_core.tools import BaseTool, tool
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel, Field
@@ -26,10 +32,8 @@ from langchain_google_vertexai.functions_utils import (
     _format_to_gapic_tool,
     _format_tool_config,
     _format_vertex_to_function_declaration,
-    _FunctionCallingConfigDict,
     _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
-    _ToolConfigDict,
 )
 
 
@@ -503,8 +507,8 @@ def test_format_tool_config():
 
 @pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
 def test__tool_choice_to_tool_config(choice: Any) -> None:
-    expected = _ToolConfigDict(
-        function_calling_config=_FunctionCallingConfigDict(
+    expected = GapicToolConfig(
+        function_calling_config=GapicFunctionCallingConfig(
             mode=gapic.FunctionCallingConfig.Mode.ANY,
             allowed_function_names=["foo"],
         ),

@@ -80,9 +80,7 @@ def test_reflection() -> None:
         def normalized_score(self) -> float:
             return self.score / 10.0
 
-    llm = ChatVertexAI(
-        model_name="gemini-1.5-pro-preview-0409",
-    )
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
 
     prompt = ChatPromptTemplate.from_messages(
         [

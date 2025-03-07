@@ -93,7 +93,16 @@ from vertexai.preview.language_models import (  # type: ignore
 from vertexai.preview.language_models import (
     CodeChatModel as PreviewCodeChatModel,
 )
-
+from google.cloud.aiplatform_v1.types import (
+    Content as v1Content,
+    FunctionCallingConfig as v1FunctionCallingConfig,
+    GenerateContentRequest as v1GenerateContentRequest,
+    GenerationConfig as v1GenerationConfig,
+    Part as v1Part,
+    SafetySetting as v1SafetySetting,
+    Tool as v1Tool,
+    ToolConfig as v1ToolConfig,
+)
 from google.cloud.aiplatform_v1beta1.types import (
     Blob,
     Candidate,
@@ -1289,7 +1298,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         *,
         logprobs: int | bool = False,
         **kwargs: Any,
-    ) -> GenerationConfig:
+    ) -> Union[GenerationConfig, v1GenerationConfig]:
         """Prepares GenerationConfig part of the request.
 
         https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#generationconfig
@@ -1301,6 +1310,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             kwargs["logprobs"] = logprobs
         else:
             pass
+
+        if self.endpoint_version == "v1":
+            return v1GenerationConfig(
+                **self._prepare_params(
+                    stop=stop,
+                    stream=stream,
+                    **{k: v for k, v in kwargs.items() if k in _allowed_params},
+                )
+            )
 
         return GenerationConfig(
             **self._prepare_params(
@@ -1354,7 +1372,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         tool_choice: Optional[_ToolChoiceType] = None,
         logprobs: Optional[Union[int, bool]] = None,
         **kwargs,
-    ) -> GenerateContentRequest:
+    ) -> Union[v1GenerateContentRequest, GenerateContentRequest]:
         system_instruction, contents = _parse_chat_history_gemini(
             messages,
             self._image_bytes_loader_client,
@@ -1379,18 +1397,82 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             stream=stream, stop=stop, logprobs=logprobs, **kwargs
         )
 
+        def _content_to_v1(contents: list[Content]) -> list[v1Content]:
+            v1_contens = []
+            for content in contents:
+                v1_parts = []
+                for part in content.parts:
+                    raw_part = proto.Message.to_dict(part)
+                    _ = raw_part.pop("thought")
+                    v1_parts.append(v1Part(**raw_part))
+                v1_contens.append(v1Content(role=content.role, parts=v1_parts))
+            return v1_contens
+
+        v1_system_instruction, v1_tools, v1_tool_config, v1_safety_settings = (
+            None,
+            None,
+            None,
+            None,
+        )
+        if self.endpoint_version == "v1":
+            v1_system_instruction = (
+                _content_to_v1([system_instruction])[0] if system_instruction else None
+            )
+            if formatted_tools:
+                v1_tools = [v1Tool(**proto.Message.to_dict(t)) for t in formatted_tools]
+
+            if tool_config:
+                v1_tool_config = v1ToolConfig(
+                    function_calling_config=v1FunctionCallingConfig(
+                        **proto.Message.to_dict(tool_config.function_calling_config)
+                    )
+                )
+
+            if safety_settings:
+                v1_safety_settings = [
+                    v1SafetySetting(
+                        category=s.category, method=s.method, threshold=s.threshold
+                    )
+                    for s in safety_settings
+                ]
+
         if (self.cached_content is not None) or (cached_content is not None):
             selected_cached_content = self.cached_content or cached_content
 
-            return self._request_from_cached_content(
+            full_cache_name = self._request_from_cached_content(
                 cached_content=selected_cached_content,  # type: ignore
-                contents=contents,
                 system_instruction=system_instruction,
                 tools=formatted_tools,
                 tool_config=tool_config,
+            )
+
+            if self.endpoint_version == "v1":
+                return GenerateContentRequest(
+                    contents=_content_to_v1(contents),
+                    model=self.full_model_name,
+                    safety_settings=v1_safety_settings,
+                    generation_config=generation_config,
+                    cached_content=full_cache_name,
+                )
+
+            return GenerateContentRequest(
+                contents=contents,
+                model=self.full_model_name,
                 safety_settings=safety_settings,
                 generation_config=generation_config,
+                cached_content=full_cache_name,
+            )
+
+        if self.endpoint_version == "v1":
+            return v1GenerateContentRequest(
+                contents=_content_to_v1(contents),
+                system_instruction=v1_system_instruction,
+                tools=v1_tools,
+                tool_config=v1_tool_config,
+                safety_settings=v1_safety_settings,
+                generation_config=generation_config,
                 model=self.full_model_name,
+                labels=self.labels,
             )
 
         return GenerateContentRequest(
@@ -1410,11 +1492,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         system_instruction: Optional[Content],
         tools: Optional[Sequence[GapicTool]],
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
-        contents: list[Content],
-        safety_settings: Optional[Sequence[SafetySetting]],
-        generation_config: GenerationConfig,
-        model: Optional[str],
-    ) -> GenerateContentRequest:
+    ) -> str:
         not_allowed_parameters = [
             ("system_instructions", system_instruction),
             ("tools", tools),
@@ -1428,17 +1506,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 logger.warning(message)
 
-        full_cache_name = (
+        return (
             f"projects/{self.project}/locations/{self.location}/"
             f"cachedContents/{cached_content}"
-        )
-
-        return GenerateContentRequest(
-            contents=contents,
-            model=model,
-            safety_settings=safety_settings,
-            generation_config=generation_config,
-            cached_content=full_cache_name,
         )
 
     def _generate_gemini(
@@ -1486,7 +1556,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 self._image_bytes_loader_client,
                 perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
             )
-            response = self.prediction_client.count_tokens(
+            response = self.prediction_client.count_tokens(  # type: ignore[union-attr]
                 {
                     "endpoint": self.full_model_name,
                     "model": self.full_model_name,

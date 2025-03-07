@@ -44,6 +44,7 @@ from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 model_names_to_test = [_DEFAULT_MODEL_NAME]
+endpoint_versions = ["v1", "v1beta1"]
 
 rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
 
@@ -60,16 +61,26 @@ def _check_usage_metadata(message: AIMessage) -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
-def test_initialization(model_name: Optional[str]) -> None:
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+def test_initialization(model_name: Optional[str], endpoint_version: str) -> None:
     """Test chat model initialization."""
-    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
+    model = ChatVertexAI(
+        model_name=model_name,
+        rate_limiter=rate_limiter,
+        endpoint_version=endpoint_version,
+    )
     assert model._llm_type == "vertexai"
 
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
-def test_vertexai_single_call(model_name: Optional[str]) -> None:
-    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+def test_vertexai_single_call(model_name: Optional[str], endpoint_version: str) -> None:
+    model = ChatVertexAI(
+        model_name=model_name,
+        rate_limiter=rate_limiter,
+        endpoint_version=endpoint_version,
+    )
     message = HumanMessage(content="Hello")
     response = model([message])
     assert isinstance(response, AIMessage)
@@ -482,7 +493,8 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 
 
 @pytest.mark.extended
-def test_chat_vertexai_gemini_function_calling() -> None:
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -496,6 +508,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         model_name=_DEFAULT_MODEL_NAME,
         safety_settings=safety,
         rate_limiter=rate_limiter,
+        endpoint_version=endpoint_version,
     ).bind_tools([MyModel])
     response = model.invoke([message])
     _check_tool_calls(response, "MyModel")
