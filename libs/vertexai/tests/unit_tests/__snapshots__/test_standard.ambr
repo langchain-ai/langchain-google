@@ -17,6 +17,7 @@
       'model_family': '2',
       'model_name': 'gemini-1.5-pro-001',
       'n': 1,
+      'perform_literal_eval_on_string_raw_content': True,
       'project': 'test-proj',
       'request_parallelism': 5,
       'stop': list([
