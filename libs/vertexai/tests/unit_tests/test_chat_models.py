@@ -19,6 +19,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 )
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -1069,9 +1070,9 @@ def test_parse_chat_history_gemini_with_literal_eval() -> None:
     instruction = "Describe the attached media in 5 words."
     text_message = {"type": "text", "text": instruction}
     message = str([text_message])
-    history = [HumanMessage(content=message)]
+    history: list[BaseMessage] = [HumanMessage(content=message)]
     image_bytes_loader = ImageBytesLoader()
-    _, history = _parse_chat_history_gemini(
+    _, response = _parse_chat_history_gemini(
         history=history,
         imageBytesLoader=image_bytes_loader,
         perform_literal_eval_on_string_raw_content=True,
@@ -1080,16 +1081,16 @@ def test_parse_chat_history_gemini_with_literal_eval() -> None:
         Part(text=instruction),
     ]
     expected = [Content(role="user", parts=parts)]
-    assert history == expected
+    assert expected == response
 
 
 def test_parse_chat_history_gemini_without_literal_eval() -> None:
     instruction = "Describe the attached media in 5 words."
     text_message = {"type": "text", "text": instruction}
     message = str([text_message])
-    history = [HumanMessage(content=message)]
+    history: list[BaseMessage] = [HumanMessage(content=message)]
     image_bytes_loader = ImageBytesLoader()
-    _, history = _parse_chat_history_gemini(
+    _, response = _parse_chat_history_gemini(
         history=history,
         imageBytesLoader=image_bytes_loader,
         perform_literal_eval_on_string_raw_content=False,
@@ -1098,7 +1099,7 @@ def test_parse_chat_history_gemini_without_literal_eval() -> None:
         Part(text=message),
     ]
     expected = [Content(role="user", parts=parts)]
-    assert history == expected
+    assert expected == response
 
 
 def test_init_client_with_custom_api() -> None:
