@@ -44,6 +44,7 @@ from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 
 model_names_to_test = [_DEFAULT_MODEL_NAME]
+endpoint_versions = ["v1", "v1beta1"]
 
 rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
 
@@ -60,16 +61,26 @@ def _check_usage_metadata(message: AIMessage) -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
-def test_initialization(model_name: Optional[str]) -> None:
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+def test_initialization(model_name: Optional[str], endpoint_version: str) -> None:
     """Test chat model initialization."""
-    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
+    model = ChatVertexAI(
+        model_name=model_name,
+        rate_limiter=rate_limiter,
+        endpoint_version=endpoint_version,
+    )
     assert model._llm_type == "vertexai"
 
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
-def test_vertexai_single_call(model_name: Optional[str]) -> None:
-    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+def test_vertexai_single_call(model_name: Optional[str], endpoint_version: str) -> None:
+    model = ChatVertexAI(
+        model_name=model_name,
+        rate_limiter=rate_limiter,
+        endpoint_version=endpoint_version,
+    )
     message = HumanMessage(content="Hello")
     response = model([message])
     assert isinstance(response, AIMessage)
@@ -344,7 +355,9 @@ def test_parse_history_gemini_multimodal_FC():
     expected = [Content(role="user", parts=parts)]
     imageBytesLoader = ImageBytesLoader()
     _, response = _parse_chat_history_gemini(
-        history=history, imageBytesLoader=imageBytesLoader
+        history=history,
+        imageBytesLoader=imageBytesLoader,
+        perform_literal_eval_on_string_raw_content=True,
     )
     assert expected == response
 
@@ -480,7 +493,8 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 
 
 @pytest.mark.extended
-def test_chat_vertexai_gemini_function_calling() -> None:
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -494,6 +508,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         model_name=_DEFAULT_MODEL_NAME,
         safety_settings=safety,
         rate_limiter=rate_limiter,
+        endpoint_version=endpoint_version,
     ).bind_tools([MyModel])
     response = model.invoke([message])
     _check_tool_calls(response, "MyModel")
@@ -762,20 +777,19 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.first
 def test_prediction_client_transport():
     model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
 
     assert model.prediction_client.transport.kind == "grpc"
-
-    # Not implemented for async_grpc
-    # assert model.async_prediction_client.transport.kind == "async_grpc"
+    assert model.async_prediction_client.transport.kind == "grpc_asyncio"
 
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter, api_transport="rest"
     )
 
     assert model.prediction_client.transport.kind == "rest"
-    assert model.async_prediction_client.transport.kind == "rest"
+    assert model.async_prediction_client.transport.kind == "grpc_asyncio"
 
     vertexai.init(api_transport="grpc")  # Reset global config to "grpc"
 
@@ -1117,6 +1131,32 @@ def test_init_from_credentials_obj() -> None:
     )
     llm = ChatVertexAI(model="gemini-1.5-flash", credentials=credentials)
     llm.invoke("how are you")
+
+
+@pytest.mark.xfail(reason="can't add labels to the gemini content")
+@pytest.mark.release
+def test_label_metadata() -> None:
+    llm = ChatVertexAI(
+        model="gemini-1.5-flash",
+        labels={
+            "task": "labels_using_declaration",
+            "environment": "testing",
+        },
+    )
+    llm.invoke("hey! how are you")
+
+
+@pytest.mark.xfail(reason="can't add labels to the gemini content using invoke method")
+@pytest.mark.release
+def test_label_metadata_invoke_method() -> None:
+    llm = ChatVertexAI(model="gemini-1.5-flash")
+    llm.invoke(
+        "hello! invoke method",
+        labels={
+            "task": "labels_using_invoke",
+            "environment": "testing",
+        },
+    )
 
 
 @pytest.mark.release

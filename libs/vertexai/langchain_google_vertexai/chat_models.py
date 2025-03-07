@@ -5,6 +5,7 @@ import ast
 from functools import cached_property
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from operator import itemgetter
 import uuid
@@ -92,7 +93,16 @@ from vertexai.preview.language_models import (  # type: ignore
 from vertexai.preview.language_models import (
     CodeChatModel as PreviewCodeChatModel,
 )
-
+from google.cloud.aiplatform_v1.types import (
+    Content as v1Content,
+    FunctionCallingConfig as v1FunctionCallingConfig,
+    GenerateContentRequest as v1GenerateContentRequest,
+    GenerationConfig as v1GenerationConfig,
+    Part as v1Part,
+    SafetySetting as v1SafetySetting,
+    Tool as v1Tool,
+    ToolConfig as v1ToolConfig,
+)
 from google.cloud.aiplatform_v1beta1.types import (
     Blob,
     Candidate,
@@ -147,8 +157,9 @@ _allowed_params = [
     "seed",
     "response_logprobs",
     "logprobs",
+    "labels",
 ]
-_allowed_params_prediction_service = ["request", "timeout", "metadata"]
+_allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
 
 @dataclass
@@ -201,6 +212,7 @@ def _parse_chat_history_gemini(
     history: List[BaseMessage],
     imageBytesLoader: ImageBytesLoader,
     convert_system_message_to_human: Optional[bool] = False,
+    perform_literal_eval_on_string_raw_content: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
@@ -256,7 +268,7 @@ def _parse_chat_history_gemini(
         # native type (such as list or dict) so that results can be properly
         # appended to the prompt, otherwise they will all be parsed as Text
         # rather than `inline_data`.
-        if isinstance(raw_content, str):
+        if perform_literal_eval_on_string_raw_content and isinstance(raw_content, str):
             try:
                 raw_content = ast.literal_eval(raw_content)
             except SyntaxError:
@@ -297,7 +309,7 @@ def _parse_chat_history_gemini(
                 )
                 continue
             if system_instruction is not None:
-                system_instruction.parts.extend(system_parts)  # type: ignore[unreachable]
+                system_instruction.parts.extend(system_parts)
             else:
                 system_instruction = Content(role="system", parts=system_parts)
             system_parts = None
@@ -1087,6 +1099,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     
     .. versionadded: 2.0.6
     """
+    labels: Optional[Dict[str, str]] = None
+    """ Optional tag llm calls with metadata to help in tracebility and biling.
+    """
+
+    perform_literal_eval_on_string_raw_content: bool = True
+    """Whether to perform literal eval on string raw content.
+    """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg."""
@@ -1107,6 +1126,16 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
+
+    @model_validator(mode="after")
+    def validate_labels(self) -> Self:
+        if self.labels:
+            for key, value in self.labels.items():
+                if not re.match(r"^[a-z][a-z0-9-_]{0,62}$", key):
+                    raise ValueError(f"Invalid label key: {key}")
+                if value and len(value) > 63:
+                    raise ValueError(f"Label value too long: {value}")
+        return self
 
     @cached_property
     def _image_bytes_loader_client(self):
@@ -1153,7 +1182,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if not is_gemini_model(self.model_family):
             logger.warning(
                 "Non-Gemini models are deprecated. "
-                "They will be remoced starting from Dec-01-2024. "
+                "They will be removed starting Dec-01-2024. "
             )
             values = {
                 "project": self.project,
@@ -1180,26 +1209,32 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def _is_gemini_advanced(self) -> bool:
         return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
 
-    @property
-    def _default_params(self) -> Dict[str, Any]:
-        updated_params = super()._default_params
+    def _prepare_params(
+        self,
+        stop: Optional[List[str]] = None,
+        stream: bool = False,
+        **kwargs: Any,
+    ) -> dict:
+        params = super()._prepare_params(stop=stop, stream=stream, **kwargs)
 
-        if self.response_mime_type is not None:
-            updated_params["response_mime_type"] = self.response_mime_type
+        response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
+        if response_mime_type is not None:
+            params["response_mime_type"] = response_mime_type
 
-        if self.response_schema is not None:
+        response_schema = kwargs.get("response_schema", self.response_schema)
+        if response_schema is not None:
             allowed_mime_types = ("application/json", "text/x.enum")
-            if self.response_mime_type not in allowed_mime_types:
+            if response_mime_type not in allowed_mime_types:
                 error_message = (
                     "`response_schema` is only supported when "
                     f"`response_mime_type` is set to one of {allowed_mime_types}"
                 )
                 raise ValueError(error_message)
 
-            gapic_response_schema = _convert_schema_dict_to_gapic(self.response_schema)
-            updated_params["response_schema"] = gapic_response_schema
+            gapic_response_schema = _convert_schema_dict_to_gapic(response_schema)
+            params["response_schema"] = gapic_response_schema
 
-        return updated_params
+        return params
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
@@ -1263,7 +1298,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         *,
         logprobs: int | bool = False,
         **kwargs: Any,
-    ) -> GenerationConfig:
+    ) -> Union[GenerationConfig, v1GenerationConfig]:
         """Prepares GenerationConfig part of the request.
 
         https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#generationconfig
@@ -1275,6 +1310,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             kwargs["logprobs"] = logprobs
         else:
             pass
+
+        if self.endpoint_version == "v1":
+            return v1GenerationConfig(
+                **self._prepare_params(
+                    stop=stop,
+                    stream=stream,
+                    **{k: v for k, v in kwargs.items() if k in _allowed_params},
+                )
+            )
 
         return GenerationConfig(
             **self._prepare_params(
@@ -1328,9 +1372,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         tool_choice: Optional[_ToolChoiceType] = None,
         logprobs: Optional[Union[int, bool]] = None,
         **kwargs,
-    ) -> GenerateContentRequest:
+    ) -> Union[v1GenerateContentRequest, GenerateContentRequest]:
         system_instruction, contents = _parse_chat_history_gemini(
-            messages, self._image_bytes_loader_client
+            messages,
+            self._image_bytes_loader_client,
+            perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
         )
         formatted_tools = self._tools_gemini(tools=tools, functions=functions)
         if tool_config:
@@ -1351,18 +1397,82 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             stream=stream, stop=stop, logprobs=logprobs, **kwargs
         )
 
+        def _content_to_v1(contents: list[Content]) -> list[v1Content]:
+            v1_contens = []
+            for content in contents:
+                v1_parts = []
+                for part in content.parts:
+                    raw_part = proto.Message.to_dict(part)
+                    _ = raw_part.pop("thought")
+                    v1_parts.append(v1Part(**raw_part))
+                v1_contens.append(v1Content(role=content.role, parts=v1_parts))
+            return v1_contens
+
+        v1_system_instruction, v1_tools, v1_tool_config, v1_safety_settings = (
+            None,
+            None,
+            None,
+            None,
+        )
+        if self.endpoint_version == "v1":
+            v1_system_instruction = (
+                _content_to_v1([system_instruction])[0] if system_instruction else None
+            )
+            if formatted_tools:
+                v1_tools = [v1Tool(**proto.Message.to_dict(t)) for t in formatted_tools]
+
+            if tool_config:
+                v1_tool_config = v1ToolConfig(
+                    function_calling_config=v1FunctionCallingConfig(
+                        **proto.Message.to_dict(tool_config.function_calling_config)
+                    )
+                )
+
+            if safety_settings:
+                v1_safety_settings = [
+                    v1SafetySetting(
+                        category=s.category, method=s.method, threshold=s.threshold
+                    )
+                    for s in safety_settings
+                ]
+
         if (self.cached_content is not None) or (cached_content is not None):
             selected_cached_content = self.cached_content or cached_content
 
-            return self._request_from_cached_content(
+            full_cache_name = self._request_from_cached_content(
                 cached_content=selected_cached_content,  # type: ignore
-                contents=contents,
                 system_instruction=system_instruction,
                 tools=formatted_tools,
                 tool_config=tool_config,
+            )
+
+            if self.endpoint_version == "v1":
+                return GenerateContentRequest(
+                    contents=_content_to_v1(contents),
+                    model=self.full_model_name,
+                    safety_settings=v1_safety_settings,
+                    generation_config=generation_config,
+                    cached_content=full_cache_name,
+                )
+
+            return GenerateContentRequest(
+                contents=contents,
+                model=self.full_model_name,
                 safety_settings=safety_settings,
                 generation_config=generation_config,
+                cached_content=full_cache_name,
+            )
+
+        if self.endpoint_version == "v1":
+            return v1GenerateContentRequest(
+                contents=_content_to_v1(contents),
+                system_instruction=v1_system_instruction,
+                tools=v1_tools,
+                tool_config=v1_tool_config,
+                safety_settings=v1_safety_settings,
+                generation_config=generation_config,
                 model=self.full_model_name,
+                labels=self.labels,
             )
 
         return GenerateContentRequest(
@@ -1373,6 +1483,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             safety_settings=safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
+            labels=self.labels,
         )
 
     def _request_from_cached_content(
@@ -1381,11 +1492,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         system_instruction: Optional[Content],
         tools: Optional[Sequence[GapicTool]],
         tool_config: Optional[Union[_ToolConfigDict, ToolConfig]],
-        contents: list[Content],
-        safety_settings: Optional[Sequence[SafetySetting]],
-        generation_config: GenerationConfig,
-        model: Optional[str],
-    ) -> GenerateContentRequest:
+    ) -> str:
         not_allowed_parameters = [
             ("system_instructions", system_instruction),
             ("tools", tools),
@@ -1399,17 +1506,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 logger.warning(message)
 
-        full_cache_name = (
+        return (
             f"projects/{self.project}/locations/{self.location}/"
             f"cachedContents/{cached_content}"
-        )
-
-        return GenerateContentRequest(
-            contents=contents,
-            model=model,
-            safety_settings=safety_settings,
-            generation_config=generation_config,
-            cached_content=full_cache_name,
         )
 
     def _generate_gemini(
@@ -1453,9 +1552,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if self._is_gemini_model:
             # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
             _, contents = _parse_chat_history_gemini(
-                [HumanMessage(content=text)], self._image_bytes_loader_client
+                [HumanMessage(content=text)],
+                self._image_bytes_loader_client,
+                perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
             )
-            response = self.prediction_client.count_tokens(
+            response = self.prediction_client.count_tokens(  # type: ignore[union-attr]
                 {
                     "endpoint": self.full_model_name,
                     "model": self.full_model_name,
@@ -1464,7 +1565,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
             return response.total_tokens
         else:
-            return super().get_num_tokens(text=text)
+            return self.client_preview.start_chat().count_tokens(text)
 
     def _tools_gemini(
         self,
@@ -1833,13 +1934,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # that takes care of this if necessary.
                 schema_json = schema.model_json_schema()
                 schema_json = replace_defs_in_schema(schema_json)
-                self.response_schema = schema_json
                 parser = PydanticOutputParser(pydantic_object=schema)
+                schema = schema_json
             else:
                 parser = JsonOutputParser()
-                self.response_schema = schema
-            self.response_mime_type = "application/json"
-            llm: Runnable = self
+            llm = self.bind(
+                response_mime_type="application/json", response_schema=schema
+            )
 
         else:
             tool_name = _get_tool_name(schema)
@@ -1974,6 +2075,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = get_generation_info(
                 top_candidate,
                 is_gemini=True,
+                usage_metadata={},
             )
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
