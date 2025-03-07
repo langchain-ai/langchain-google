@@ -115,6 +115,33 @@ def test_init_client(model: str, location: str) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "model,location",
+    [
+        (
+            "gemini-1.0-pro-001",
+            "moon-dark1",
+        ),
+    ],
+)
+def test_model_name_presence_in_chat_results(model: str, location: str) -> None:
+    config = {"model": model, "location": location}
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+    with patch(
+        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        response = llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        assert len(response.generations) != 0
+        assert isinstance(response.generations[0].message, AIMessage)
+        assert response.generations[0].message.model_name == "gemini-1.0-pro-001"
+
+
 def test_tuned_model_name() -> None:
     llm = ChatVertexAI(
         model_name="gemini-pro",
