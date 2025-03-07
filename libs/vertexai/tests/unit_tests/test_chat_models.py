@@ -19,6 +19,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 )
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -1090,6 +1091,42 @@ def test_multiple_fc() -> None:
         ),
     ]
     assert history == expected
+
+
+def test_parse_chat_history_gemini_with_literal_eval() -> None:
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([text_message])
+    history: list[BaseMessage] = [HumanMessage(content=message)]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+        perform_literal_eval_on_string_raw_content=True,
+    )
+    parts = [
+        Part(text=instruction),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    assert expected == response
+
+
+def test_parse_chat_history_gemini_without_literal_eval() -> None:
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([text_message])
+    history: list[BaseMessage] = [HumanMessage(content=message)]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+        perform_literal_eval_on_string_raw_content=False,
+    )
+    parts = [
+        Part(text=message),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    assert expected == response
 
 
 def test_init_client_with_custom_api() -> None:

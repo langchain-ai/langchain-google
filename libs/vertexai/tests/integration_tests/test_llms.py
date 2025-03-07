@@ -3,22 +3,23 @@
 Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 """
+import json
 
 import pytest
 from langchain_core.outputs import LLMResult
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
 from langchain_google_vertexai.llms import VertexAI
 from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
+
+rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
 
 
 @pytest.mark.release
 def test_vertex_initialization() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
     assert llm._llm_type == "vertexai"
-    try:
-        assert llm.model_name == llm.client._model_id
-    except AttributeError:
-        assert llm.model_name == llm.client._model_name.split("/")[-1]
+    assert _DEFAULT_MODEL_NAME in llm.client.full_model_name
 
 
 @pytest.mark.release
@@ -47,19 +48,6 @@ def test_vertex_generate_multiple_candidates() -> None:
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     assert len(output.generations[0]) == 2
-
-
-@pytest.mark.release
-@pytest.mark.xfail(reason="VertexAI doesn't always respect number of candidates")
-def test_vertex_generate_code() -> None:
-    llm = VertexAI(temperature=0.3, n=2, model_name="code-bison@001")
-    output = llm.generate(["generate a python method that says foo:"])
-    assert isinstance(output, LLMResult)
-    assert len(output.generations) == 1
-    assert len(output.generations[0]) == 2
-    usage_metadata = output.generations[0][0].generation_info["usage_metadata"]  # type: ignore
-    assert int(usage_metadata["prompt_token_count"]) == 8
-    assert int(usage_metadata["candidates_token_count"]) > 1
 
 
 @pytest.mark.release
@@ -101,3 +89,32 @@ def test_vertex_call_count_tokens() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
+
+
+@pytest.mark.extended
+def test_structured_output_schema_json():
+    model = VertexAI(
+        rate_limiter=rate_limiter,
+        model_name="gemini-1.5-pro-001",
+        response_mime_type="application/json",
+        response_schema={
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "recipe_name": {
+                        "type": "string",
+                    },
+                },
+                "required": ["recipe_name"],
+            },
+        },
+    )
+
+    response = model.invoke("List a few popular cookie recipes")
+
+    assert isinstance(response, str)
+    parsed_response = json.loads(response)
+    assert isinstance(parsed_response, list)
+    assert len(parsed_response) > 0
+    assert "recipe_name" in parsed_response[0]
