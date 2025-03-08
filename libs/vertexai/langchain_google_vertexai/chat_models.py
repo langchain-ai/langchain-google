@@ -2024,13 +2024,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 candidate, is_gemini=True, usage_metadata=usage, logprobs=logprobs
             )
             message = _parse_response_candidate(candidate)
-            message.model_name = self.model_name
+            message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
             generations.append(ChatGeneration(message=message, generation_info=info))
         if not response.candidates:
             message = AIMessage(content="")
-            message.model_name = self.model_name
+            message.response_metadata["model_name"] = self.model_name
             if usage:
                 generation_info = {"usage_metadata": usage}
                 message.usage_metadata = lc_usage

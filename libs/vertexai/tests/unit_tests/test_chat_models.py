@@ -140,7 +140,10 @@ def test_model_name_presence_in_chat_results(model: str, location: str) -> None:
         mock_prediction_service.assert_called_once()
         assert len(response.generations) != 0
         assert isinstance(response.generations[0].message, AIMessage)
-        assert response.generations[0].message.model_name == "gemini-1.0-pro-001"
+        assert (
+            response.generations[0].message.response_metadata["model_name"]
+            == "gemini-1.0-pro-001"
+        )
 
 
 def test_tuned_model_name() -> None:
