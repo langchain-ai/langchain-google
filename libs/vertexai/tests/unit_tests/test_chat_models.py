@@ -136,12 +136,12 @@ def test_model_name_presence_in_chat_results(model: str, location: str) -> None:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
 
-        response = llm._generate_gemini(messages=[])
+        llm_response = llm._generate_gemini(messages=[])
         mock_prediction_service.assert_called_once()
-        assert len(response.generations) != 0
-        assert isinstance(response.generations[0].message, AIMessage)
+        assert len(llm_response.generations) != 0
+        assert isinstance(llm_response.generations[0].message, AIMessage)
         assert (
-            response.generations[0].message.response_metadata["model_name"]
+            llm_response.generations[0].message.response_metadata["model_name"]
             == "gemini-1.0-pro-001"
         )
 
