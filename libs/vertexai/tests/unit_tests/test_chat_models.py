@@ -1132,10 +1132,33 @@ def test_parse_chat_history_gemini_without_literal_eval() -> None:
     assert expected == response
 
 
-def test_init_client_with_custom_api() -> None:
+def test_init_client_with_custom_api_endpoint() -> None:
     config = {
         "model": "gemini-1.5-pro",
         "api_endpoint": "https://example.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+    with patch(
+        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        transport = mock_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://example.com"
+        assert transport == "rest"
+
+
+def test_init_client_with_custom_base_url() -> None:
+    config = {
+        "model": "gemini-1.5-pro",
+        "base_url": "https://example.com",
         "api_transport": "rest",
     }
     llm = ChatVertexAI(
