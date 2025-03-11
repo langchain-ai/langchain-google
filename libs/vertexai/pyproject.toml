@@ -12,7 +12,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = ">=0.3.31,<0.4"
+langchain-core = ">=0.3.43,<0.4"
 google-cloud-aiplatform = "^1.81.0"
 google-cloud-storage = "^2.18.0"
 # optional dependencies
@@ -44,7 +44,7 @@ numpy = [
 ]
 google-api-python-client = "^2.117.0"
 langchain = "^0.3.7"
-langchain-tests = "0.3.9"
+langchain-tests = "0.3.14"
 anthropic = { extras = ["vertexai"], version = ">=0.35.0,<1" }
 
 
