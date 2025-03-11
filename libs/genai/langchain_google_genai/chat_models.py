@@ -67,7 +67,7 @@ from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
-    JsonOutputToolsParser,
+    JsonOutputKeyToolsParser,
     PydanticToolsParser,
     parse_tool_calls,
 )
@@ -1245,13 +1245,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
+        tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
         if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
         else:
-            parser = JsonOutputToolsParser()
-        tool_choice = _get_tool_name(schema) if self._supports_tool_choice else None  # type: ignore[arg-type]
+            parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
+        tool_choice = tool_name if self._supports_tool_choice else None
         llm = self.bind_tools([schema], tool_choice=tool_choice)  # type: ignore[list-item]
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
