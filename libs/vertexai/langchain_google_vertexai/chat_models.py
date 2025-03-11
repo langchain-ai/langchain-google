@@ -1961,7 +1961,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 [schema],
                 tool_choice=tool_choice,
                 ls_structured_output_format={
-                    "kwargs": {"method": method},
+                    "kwargs": {"method": "function_calling"},
                     "schema": schema,
                 },
             )
