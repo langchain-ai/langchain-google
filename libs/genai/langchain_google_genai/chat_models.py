@@ -1253,7 +1253,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         else:
             parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
         tool_choice = tool_name if self._supports_tool_choice else None
-        llm = self.bind_tools([schema], tool_choice=tool_choice)  # type: ignore[list-item]
+        try:
+            llm = self.bind_tools(
+                [schema],
+                tool_choice=tool_choice,
+                ls_structured_output_format={
+                    "kwargs": {"method": "function_calling"},
+                    "schema": convert_to_openai_tool(schema),
+                },
+            )
+        except Exception:
+            llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -1316,7 +1326,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
 
 def _get_tool_name(
-    tool: Union[_ToolDict, GoogleTool],
+    tool: Union[_ToolDict, GoogleTool, Dict],
 ) -> str:
-    genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
-    return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
+    try:
+        genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
+        return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
+    except ValueError:  # TypedDict
+        return convert_to_openai_tool(tool)["function"]["name"]
