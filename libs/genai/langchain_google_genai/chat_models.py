@@ -89,7 +89,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-from typing_extensions import Self
+from typing_extensions import Self, is_typeddict
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
@@ -1331,5 +1331,8 @@ def _get_tool_name(
     try:
         genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
         return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
-    except ValueError:  # TypedDict
-        return convert_to_openai_tool(tool)["function"]["name"]
+    except ValueError as e:  # other TypedDict
+        if is_typeddict(tool):
+            return convert_to_openai_tool(cast(Dict, tool))["function"]["name"]
+        else:
+            raise e
