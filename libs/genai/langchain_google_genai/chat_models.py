@@ -1177,6 +1177,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
 
+        messages = [message for message in messages if message.content]
+
         system_instruction, history = _parse_chat_history(
             messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
