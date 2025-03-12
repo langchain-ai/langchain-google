@@ -39,6 +39,10 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
     def supports_audio_inputs(self) -> bool:
         return True
 
+    @property
+    def supports_json_mode(self) -> bool:
+        return True
+
 
 class TestGemini_15_AIStandard(ChatModelIntegrationTests):
     @property
@@ -64,4 +68,8 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
 
     @property
     def supports_audio_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_json_mode(self) -> bool:
         return True

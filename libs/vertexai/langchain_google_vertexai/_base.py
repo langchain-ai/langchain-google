@@ -114,8 +114,8 @@ class _VertexAIBase(BaseModel):
             values["api_transport"] = initializer.global_config._api_transport
         if "location" not in values:
             values["location"] = initializer.global_config.location
-        if values.get("api_endpoint"):
-            api_endpoint = values["api_endpoint"]
+        if values.get("api_endpoint") or values.get("base_url"):
+            api_endpoint = values.get("api_endpoint", values.get("base_url"))
         else:
             location = values.get("location", cls.model_fields["location"].default)
             api_endpoint = f"{location}-{constants.PREDICTION_API_BASE_PATH}"

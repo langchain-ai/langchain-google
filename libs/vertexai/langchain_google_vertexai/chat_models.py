@@ -1939,7 +1939,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             else:
                 parser = JsonOutputParser()
             llm = self.bind(
-                response_mime_type="application/json", response_schema=schema
+                response_mime_type="application/json",
+                response_schema=schema,
+                ls_structured_output_format={
+                    "kwargs": {"method": method},
+                    "schema": schema,
+                },
             )
 
         else:
@@ -1952,7 +1957,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
             tool_choice = tool_name if self._is_gemini_advanced else None
 
-            llm = self.bind_tools([schema], tool_choice=tool_choice)
+            try:
+                llm = self.bind_tools(
+                    [schema],
+                    tool_choice=tool_choice,
+                    ls_structured_output_format={
+                        "kwargs": {"method": "function_calling"},
+                        "schema": convert_to_openai_tool(schema),
+                    },
+                )
+            except Exception:
+                llm = self.bind_tools([schema], tool_choice=tool_choice)
 
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(

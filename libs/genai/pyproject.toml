@@ -12,7 +12,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = "^0.3.37"
+langchain-core = "^0.3.43"
 google-ai-generativelanguage = "^0.6.16"
 pydantic = ">=2,<3"
 filetype = "^1.2.0"
@@ -28,7 +28,7 @@ syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
 numpy = "^1.26.2"
-langchain-tests = "0.3.12"
+langchain-tests = "0.3.14"
 
 [tool.codespell]
 ignore-words-list = "rouge"
