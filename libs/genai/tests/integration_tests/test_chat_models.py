@@ -457,15 +457,7 @@ def test_chat_google_genai_function_calling_with_structured_output(
         }
     )
     response = model.invoke([message])
-    expected = [
-        {
-            "type": "MyModel",
-            "args": {
-                "name": "Erick",
-                "age": 27,
-            },
-        }
-    ]
+    expected = {"name": "Erick", "age": 27}
     assert response == expected
 
 

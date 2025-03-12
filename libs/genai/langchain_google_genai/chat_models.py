@@ -67,7 +67,7 @@ from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
-    JsonOutputToolsParser,
+    JsonOutputKeyToolsParser,
     PydanticToolsParser,
     parse_tool_calls,
 )
@@ -89,7 +89,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-from typing_extensions import Self
+from typing_extensions import Self, is_typeddict
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
@@ -1245,14 +1245,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
+        tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
         if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
             parser: OutputParserLike = PydanticToolsParser(
                 tools=[schema], first_tool_only=True
             )
         else:
-            parser = JsonOutputToolsParser()
-        tool_choice = _get_tool_name(schema) if self._supports_tool_choice else None  # type: ignore[arg-type]
-        llm = self.bind_tools([schema], tool_choice=tool_choice)  # type: ignore[list-item]
+            parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
+        tool_choice = tool_name if self._supports_tool_choice else None
+        try:
+            llm = self.bind_tools(
+                [schema],
+                tool_choice=tool_choice,
+                ls_structured_output_format={
+                    "kwargs": {"method": "function_calling"},
+                    "schema": convert_to_openai_tool(schema),
+                },
+            )
+        except Exception:
+            llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -1315,7 +1326,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
 
 def _get_tool_name(
-    tool: Union[_ToolDict, GoogleTool],
+    tool: Union[_ToolDict, GoogleTool, Dict],
 ) -> str:
-    genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
-    return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
+    try:
+        genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
+        return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
+    except ValueError as e:  # other TypedDict
+        if is_typeddict(tool):
+            return convert_to_openai_tool(cast(Dict, tool))["function"]["name"]
+        else:
+            raise e

@@ -31,24 +31,6 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
         super().test_usage_metadata_streaming(model)
 
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    async def test_structured_output_async(
-        self, model: BaseChatModel, schema_type: str
-    ) -> None:
-        await super().test_structured_output_async(model, schema_type)
-
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output(self, model: BaseChatModel, schema_type: str) -> None:
-        super().test_structured_output(model, schema_type)
-
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
-        super().test_structured_output_pydantic_2_v1(model)
-
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output_optional_param(self, model: BaseChatModel) -> None:
-        super().test_structured_output_optional_param(model)
-
     @pytest.mark.xfail(reason="investigate")
     def test_bind_runnables_as_tools(self, model: BaseChatModel) -> None:
         super().test_bind_runnables_as_tools(model)
@@ -69,24 +51,6 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
             "model": "models/gemini-1.5-pro-001",
             "rate_limiter": rate_limiter,
         }
-
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    async def test_structured_output_async(
-        self, model: BaseChatModel, schema_type: str
-    ) -> None:
-        await super().test_structured_output_async(model, schema_type)
-
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output(self, model: BaseChatModel, schema_type: str) -> None:
-        super().test_structured_output(model, schema_type)
-
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output_pydantic_2_v1(self, model: BaseChatModel) -> None:
-        super().test_structured_output_pydantic_2_v1(model)
-
-    @pytest.mark.xfail(reason="with_structured_output with JSON schema not supported.")
-    def test_structured_output_optional_param(self, model: BaseChatModel) -> None:
-        super().test_structured_output_optional_param(model)
 
     @pytest.mark.xfail(reason="Not yet supported")
     def test_tool_message_histories_list_content(
