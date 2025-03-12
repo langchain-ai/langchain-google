@@ -1261,6 +1261,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tools=[schema], first_tool_only=True
             )
         else:
+            warnings.warn(
+                "ChatGoogleGenerativeAI.with_structured_output in json_mode has "
+                "changed  recently without a backwards compatibility! More context: "
+                "https://github.com/langchain-ai/langchain-google/pull/772"
+            )
             parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
         tool_choice = tool_name if self._supports_tool_choice else None
         try:
