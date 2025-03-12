@@ -1266,8 +1266,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         else:
             global WARNED_STRUCTURED_OUTPUT_JSON_MODE
             warnings.warn(
-                "ChatGoogleGenerativeAI.with_structured_output in json_mode has "
-                "changed  recently without a backwards compatibility! More context: "
+                "ChatGoogleGenerativeAI.with_structured_output with dict schema has "
+                "changed recently to align with behavior of other LangChain chat "
+                "models. More context: "
                 "https://github.com/langchain-ai/langchain-google/pull/772"
             )
             WARNED_STRUCTURED_OUTPUT_JSON_MODE = True
