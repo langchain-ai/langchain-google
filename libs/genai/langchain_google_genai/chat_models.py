@@ -1177,6 +1177,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
 
+        filtered_messages = []
+        for message in messages:
+            if isinstance(message, HumanMessage) and not message.content:
+                warnings.warn(
+                    "HumanMessage with empty content was removed to prevent API error"
+                )
+            else:
+                filtered_messages.append(message)
+        messages = filtered_messages
+
         system_instruction, history = _parse_chat_history(
             messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
