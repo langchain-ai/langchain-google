@@ -189,6 +189,7 @@ def test_retry_decorator_for_invalid_argument():
     try:
         retry_for_invalid_argument_error()
     except InvalidArgument:
-        print("Silently handling exception raised")
+        # Silently handling the raised exception
+        pass
 
     assert invalid_argument_retries == 1
