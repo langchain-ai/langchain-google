@@ -1,12 +1,7 @@
 from typing import Any, List
 
 import pytest
-
-from google.api_core.exceptions import (
-    GoogleAPICallError,
-    InvalidArgument,
-    ClientError,
-)
+from google.api_core.exceptions import ClientError, GoogleAPICallError, InvalidArgument
 
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
