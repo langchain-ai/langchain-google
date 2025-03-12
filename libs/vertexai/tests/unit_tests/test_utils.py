@@ -2,11 +2,18 @@ from typing import Any, List
 
 import pytest
 
+from google.api_core.exceptions import (
+    GoogleAPICallError,
+    InvalidArgument,
+    ClientError,
+)
+
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
     _get_def_key_from_schema_path,
     replace_defs_in_schema,
 )
+from langchain_google_vertexai.utils import create_base_retry_decorator
 
 
 @pytest.mark.parametrize(
@@ -126,3 +133,62 @@ def test_schema_recursive_error_self_reference():
     }
     with pytest.raises(RecursionError):
         _ = replace_defs_in_schema(schema)
+
+
+def test_retry_decorator_for_google_api_call_error_and_subclass():
+    global google_api_call_error_retries
+    global client_error_retries
+    google_api_call_error_retries = 0
+    client_error_retries = 0
+    max_retries = 3
+
+    retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
+
+    @retry_decorator
+    def retry_for_google_api_call_error():
+        global google_api_call_error_retries
+        google_api_call_error_retries += 1
+        if google_api_call_error_retries == max_retries:
+            # This method executes successfully in the last retry
+            return True
+
+        raise GoogleAPICallError("")
+
+    @retry_decorator
+    def retry_for_subclass_of_google_api_call_error():
+        global client_error_retries
+        client_error_retries += 1
+        if client_error_retries == max_retries:
+            # This method executes successfully in the last retry
+            return True
+
+        raise ClientError("")
+
+    google_api_call_error_retried = retry_for_google_api_call_error()
+    client_error_retried = retry_for_subclass_of_google_api_call_error()
+
+    assert google_api_call_error_retried
+    assert client_error_retried
+    assert google_api_call_error_retries == 3
+    assert client_error_retries == 3
+
+
+def test_retry_decorator_for_invalid_argument():
+    global invalid_argument_retries
+    invalid_argument_retries = 0
+    max_retries = 3
+
+    retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
+
+    @retry_decorator
+    def retry_for_invalid_argument_error():
+        global invalid_argument_retries
+        invalid_argument_retries += 1
+        raise InvalidArgument("")
+
+    try:
+        retry_for_invalid_argument_error()
+    except InvalidArgument:
+        print("Silently handling exception raised")
+
+    assert invalid_argument_retries == 1
