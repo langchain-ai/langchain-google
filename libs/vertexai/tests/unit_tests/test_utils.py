@@ -139,7 +139,7 @@ def test_retry_decorator_for_google_api_call_error_and_subclass():
 
     @retry_decorator
     def retry_for_google_api_call_error():
-        google_api_call_error_retries.append('retried')
+        google_api_call_error_retries.append("retried")
         if len(google_api_call_error_retries) == max_retries:
             # This method executes successfully in the last retry
             return True
@@ -148,7 +148,7 @@ def test_retry_decorator_for_google_api_call_error_and_subclass():
 
     @retry_decorator
     def retry_for_subclass_of_google_api_call_error():
-        client_error_retries.append('retried')
+        client_error_retries.append("retried")
         if len(client_error_retries) == max_retries:
             # This method executes successfully in the last retry
             return True
@@ -172,7 +172,7 @@ def test_retry_decorator_for_invalid_argument():
 
     @retry_decorator
     def retry_for_invalid_argument_error():
-        invalid_argument_retries.append('retried')
+        invalid_argument_retries.append("retried")
         raise InvalidArgument("")
 
     try:
