@@ -171,11 +171,11 @@ def create_base_retry_decorator(
                 retry_instance: retry_base = retry_if_exception_type(error)
         else:
             if error is GoogleAPICallError:
-                retry_instance = retry_instance | (
+                retry_instance = (retry_instance) | (
                     get_google_api_call_error_retry_instance()
                 )
             else:
-                retry_instance = retry_instance | retry_if_exception_type(error)
+                retry_instance = (retry_instance) | (retry_if_exception_type(error))
 
     return retry(
         reraise=True,
