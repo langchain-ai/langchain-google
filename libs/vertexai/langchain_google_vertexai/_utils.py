@@ -15,7 +15,6 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models.llms import create_base_retry_decorator
 from vertexai.generative_models import (  # type: ignore[import-untyped]
     Candidate,
     Image,
@@ -24,6 +23,8 @@ from vertexai.language_models import (  # type: ignore[import-untyped]
     TextGenerationResponse,
 )
 
+from langchain_google_vertexai._retry import create_base_retry_decorator
+
 
 def create_retry_decorator(
     *,
@@ -31,8 +32,22 @@ def create_retry_decorator(
     run_manager: Optional[
         Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
     ] = None,
+    wait_exponential_kwargs: Optional[dict[str, float]] = None,
 ) -> Callable[[Any], Any]:
-    """Creates a retry decorator for Vertex / Palm LLMs."""
+    """Creates a retry decorator for Vertex / Palm LLMs.
+
+    Args:
+        max_retries: Number of retries. Default is 1.
+        run_manager: Callback manager for the run. Default is None.
+        wait_exponential_kwargs: Optional dictionary with parameters:
+            - multiplier: Initial wait time multiplier (default: 1.0)
+            - min: Minimum wait time in seconds (default: 4.0)
+            - max: Maximum wait time in seconds (default: 10.0)
+            - exp_base: Exponent base to use (default: 2.0)
+
+    Returns:
+        A retry decorator.
+    """
 
     errors = [
         google.api_core.exceptions.ResourceExhausted,
@@ -42,7 +57,10 @@ def create_retry_decorator(
         google.api_core.exceptions.GoogleAPIError,
     ]
     decorator = create_base_retry_decorator(
-        error_types=errors, max_retries=max_retries, run_manager=run_manager
+        error_types=errors,
+        max_retries=max_retries,
+        run_manager=run_manager,
+        wait_exponential_kwargs=wait_exponential_kwargs,
     )
     return decorator
 

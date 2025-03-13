@@ -24,11 +24,13 @@ def create_api_error():
 
 def test_retry_on_errors():
     """Test that the retry decorator works with sync functions."""
-    mock_llm = MagicMock()
-    mock_llm.max_retries = 2
+    max_retries = 2
+    wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
     mock_function = MagicMock(side_effect=[create_api_error(), "success"])
 
-    decorator = _create_retry_decorator(mock_llm)
+    decorator = _create_retry_decorator(
+        max_retries=max_retries, wait_exponential_kwargs=wait_exponential_kwargs
+    )
     wrapped_func = decorator(mock_function)
 
     result = wrapped_func()
@@ -38,11 +40,13 @@ def test_retry_on_errors():
 
 def test_max_retries_exceeded():
     """Test that the retry decorator fails after max retries."""
-    mock_llm = MagicMock()
-    mock_llm.max_retries = 2
+    max_retries = 2
+    wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
     mock_function = MagicMock(side_effect=[create_api_error(), create_api_error()])
 
-    decorator = _create_retry_decorator(mock_llm)
+    decorator = _create_retry_decorator(
+        max_retries=max_retries, wait_exponential_kwargs=wait_exponential_kwargs
+    )
     wrapped_func = decorator(mock_function)
 
     with pytest.raises(APIError):
@@ -53,8 +57,8 @@ def test_max_retries_exceeded():
 @pytest.mark.asyncio
 async def test_async_retry_on_errors():
     """Test that the retry decorator works with async functions."""
-    mock_llm = MagicMock()
-    mock_llm.max_retries = 2
+    max_retries = 2
+    wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
 
     class AsyncMock:
         def __init__(self):
@@ -68,7 +72,9 @@ async def test_async_retry_on_errors():
 
     mock_async = AsyncMock()
 
-    decorator = _create_retry_decorator(mock_llm)
+    decorator = _create_retry_decorator(
+        max_retries=max_retries, wait_exponential_kwargs=wait_exponential_kwargs
+    )
     wrapped_func = decorator(mock_async)
 
     result = await wrapped_func()
@@ -79,8 +85,8 @@ async def test_async_retry_on_errors():
 @pytest.mark.asyncio
 async def test_async_max_retries_exceeded():
     """Test that the async retry decorator fails after max retries."""
-    mock_llm = MagicMock()
-    mock_llm.max_retries = 2
+    max_retries = 2
+    wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
 
     class AsyncMock:
         def __init__(self):
@@ -92,7 +98,9 @@ async def test_async_max_retries_exceeded():
 
     mock_async = AsyncMock()
 
-    decorator = _create_retry_decorator(mock_llm)
+    decorator = _create_retry_decorator(
+        max_retries=max_retries, wait_exponential_kwargs=wait_exponential_kwargs
+    )
     wrapped_func = decorator(mock_async)
 
     with pytest.raises(APIError):
