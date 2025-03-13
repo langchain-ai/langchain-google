@@ -154,22 +154,28 @@ def create_base_retry_decorator(
     # Wait 2^x * 1 second between each retry starting with
     # 4 seconds, then up to 10 seconds, then 10 seconds afterwards
 
-    google_api_call_error_retry_instance = retry_if_exception_type(
-        GoogleAPICallError
-    ) & retry_if_not_exception_type(InvalidArgument)
-    retry_instance: retry_base = (
-        google_api_call_error_retry_instance
-        if error_types[0] is GoogleAPICallError
-        else retry_if_exception_type(error_types[0])
-    )
+    def get_google_api_call_error_retry_instance():
+        # Not retrying for InvalidArgument.
+        # Retry for other error types having base class as GoogleAPICallError.
+        return retry_if_exception_type(
+            GoogleAPICallError
+        ) & retry_if_not_exception_type(InvalidArgument)
 
-    for error in error_types[1:]:
-        if error is GoogleAPICallError:
-            # Not retrying for InvalidArgument.
-            # Retry for other error types having base class as GoogleAPICallError.
-            retry_instance = retry_instance | google_api_call_error_retry_instance
+    retry_instance: retry_base
+
+    for index, error in enumerate(error_types):
+        if index == 0:
+            if error is GoogleAPICallError:
+                retry_instance: retry_base = get_google_api_call_error_retry_instance()
+            else:
+                retry_instance: retry_base = retry_if_exception_type(error)
         else:
-            retry_instance = retry_instance | retry_if_exception_type(error)
+            if error is GoogleAPICallError:
+                retry_instance = (
+                    retry_instance | get_google_api_call_error_retry_instance()
+                )
+            else:
+                retry_instance = retry_instance | retry_if_exception_type(error)
 
     return retry(
         reraise=True,
