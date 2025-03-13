@@ -131,19 +131,16 @@ def test_schema_recursive_error_self_reference():
 
 
 def test_retry_decorator_for_google_api_call_error_and_subclass():
-    global google_api_call_error_retries
-    global client_error_retries
-    google_api_call_error_retries = 0
-    client_error_retries = 0
+    google_api_call_error_retries = []
+    client_error_retries = []
     max_retries = 3
 
     retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
 
     @retry_decorator
     def retry_for_google_api_call_error():
-        global google_api_call_error_retries
-        google_api_call_error_retries += 1
-        if google_api_call_error_retries == max_retries:
+        google_api_call_error_retries.append('retried')
+        if len(google_api_call_error_retries) == max_retries:
             # This method executes successfully in the last retry
             return True
 
@@ -151,9 +148,8 @@ def test_retry_decorator_for_google_api_call_error_and_subclass():
 
     @retry_decorator
     def retry_for_subclass_of_google_api_call_error():
-        global client_error_retries
-        client_error_retries += 1
-        if client_error_retries == max_retries:
+        client_error_retries.append('retried')
+        if len(client_error_retries) == max_retries:
             # This method executes successfully in the last retry
             return True
 
@@ -164,21 +160,19 @@ def test_retry_decorator_for_google_api_call_error_and_subclass():
 
     assert google_api_call_error_retried
     assert client_error_retried
-    assert google_api_call_error_retries == 3
-    assert client_error_retries == 3
+    assert len(google_api_call_error_retries) == max_retries
+    assert len(client_error_retries) == max_retries
 
 
 def test_retry_decorator_for_invalid_argument():
-    global invalid_argument_retries
-    invalid_argument_retries = 0
+    invalid_argument_retries = []
     max_retries = 3
 
     retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
 
     @retry_decorator
     def retry_for_invalid_argument_error():
-        global invalid_argument_retries
-        invalid_argument_retries += 1
+        invalid_argument_retries.append('retried')
         raise InvalidArgument("")
 
     try:
@@ -187,4 +181,4 @@ def test_retry_decorator_for_invalid_argument():
         # Silently handling the raised exception
         pass
 
-    assert invalid_argument_retries == 1
+    assert len(invalid_argument_retries) == 1
