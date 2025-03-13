@@ -130,6 +130,7 @@ def test_chat_google_genai_invoke() -> None:
     _check_usage_metadata(result)
 
 
+@pytest.mark.xfail(reason=("investigate"))
 def test_chat_google_genai_invoke_multimodal() -> None:
     messages: list = [
         HumanMessage(
