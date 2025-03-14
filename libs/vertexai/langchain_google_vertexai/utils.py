@@ -3,6 +3,10 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Callable, List, Optional, Union
 
+from google.api_core.exceptions import (
+    GoogleAPICallError,
+    InvalidArgument,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -14,6 +18,7 @@ from tenacity import (
     retry,
     retry_base,
     retry_if_exception_type,
+    retry_if_not_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
@@ -148,9 +153,30 @@ def create_base_retry_decorator(
     max_seconds = 10
     # Wait 2^x * 1 second between each retry starting with
     # 4 seconds, then up to 10 seconds, then 10 seconds afterwards
-    retry_instance: retry_base = retry_if_exception_type(error_types[0])
-    for error in error_types[1:]:
-        retry_instance = retry_instance | retry_if_exception_type(error)
+
+    def get_google_api_call_error_retry_instance():
+        # Not retrying for InvalidArgument.
+        # Retry for other error types having base class as GoogleAPICallError.
+        return retry_if_exception_type(
+            GoogleAPICallError
+        ) & retry_if_not_exception_type(InvalidArgument)
+
+    retry_instance: retry_base
+
+    for index, error in enumerate(error_types):
+        if index == 0:
+            if error is GoogleAPICallError:
+                retry_instance = get_google_api_call_error_retry_instance()
+            else:
+                retry_instance = retry_if_exception_type(error)
+        else:
+            if error is GoogleAPICallError:
+                retry_instance = (retry_instance) | (
+                    get_google_api_call_error_retry_instance()
+                )
+            else:
+                retry_instance = (retry_instance) | (retry_if_exception_type(error))
+
     return retry(
         reraise=True,
         stop=stop_after_attempt(max_retries),
