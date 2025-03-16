@@ -646,7 +646,7 @@ def test__convert_tool_message_to_part__sets_tool_name(
     assert part.function_response.response == {"output": "test_content"}
 
 
-def test_temperature_range() -> None:
+def test_temperature_range_pydantic_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]"""
 
     with pytest.raises(ValidationError):
@@ -669,7 +669,7 @@ def test_temperature_range() -> None:
     }
 
 
-def test_temperature_range_value_error() -> None:
+def test_temperature_range_model_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]"""
 
     with pytest.raises(ValueError):
