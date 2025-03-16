@@ -667,3 +667,13 @@ def test_temperature_range() -> None:
         "ls_model_type": "chat",
         "ls_temperature": 1.5,
     }
+
+
+def test_temperature_range_value_error() -> None:
+    """Test that temperature is in the range [0.0, 2.0]"""
+
+    with pytest.raises(ValueError):
+        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.5)
+
+    with pytest.raises(ValueError):
+        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.5)
