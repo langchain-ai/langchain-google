@@ -24,6 +24,7 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
 from pydantic import SecretStr
+from pydantic_core._pydantic_core import ValidationError
 from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
@@ -643,3 +644,26 @@ def test__convert_tool_message_to_part__sets_tool_name(
     part = _convert_tool_message_to_part(tool_message)
     assert part.function_response.name == "tool_name"
     assert part.function_response.response == {"output": "test_content"}
+
+
+def test_temperature_range() -> None:
+    """Test that temperature is in the range [0.0, 2.0]"""
+
+    with pytest.raises(ValidationError):
+        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.1)
+
+    with pytest.raises(ValidationError):
+        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.1)
+
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash",
+        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        temperature=1.5,
+    )
+    ls_params = llm._get_ls_params()
+    assert ls_params == {
+        "ls_provider": "google_genai",
+        "ls_model_name": "models/gemini-2.0-flash",
+        "ls_model_type": "chat",
+        "ls_temperature": 1.5,
+    }
