@@ -1,6 +1,7 @@
 """Test chat model integration."""
 
 import asyncio
+import base64
 import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Union
@@ -389,6 +390,60 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
             AIMessage(
                 content=["Mike age is 30", "Arthur age is 30"],
                 additional_kwargs={},
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "inline_data": {
+                                "mime_type": "image/bmp",
+                                "data": base64.b64decode(
+                                    "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                                ),
+                            }
+                        }
+                    ]
+                }
+            },
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "image/bmp;base64,Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                        },
+                    }
+                ]
+            ),
+        ),
+        (
+            {
+                "content": {
+                    "parts": [
+                        {"text": "This is a 1x1 BMP."},
+                        {
+                            "inline_data": {
+                                "mime_type": "image/bmp",
+                                "data": base64.b64decode(
+                                    "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                                ),
+                            }
+                        },
+                    ]
+                }
+            },
+            AIMessage(
+                content=[
+                    "This is a 1x1 BMP.",
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "image/bmp;base64,Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                        },
+                    },
+                ]
             ),
         ),
         (
