@@ -105,9 +105,9 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     assert isinstance(items_property, dict), "Expected a dict."
 
     # Assertions
-    assert (
-        items_property.get("type_") == glm.Type.ARRAY
-    ), "Expected 'items' to be ARRAY."
+    assert items_property.get("type_") == glm.Type.ARRAY, (
+        "Expected 'items' to be ARRAY."
+    )
     assert items_property.get("nullable"), "Expected 'items' to be marked as nullable."
     # Check that the array items are recognized as strings
 
@@ -161,9 +161,9 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
         glm.Type.OBJECT,
         glm.Type.STRING,
     ], "Expected 'data' to be recognized as an OBJECT or fallback to STRING."
-    assert (
-        data_property.get("nullable") is True
-    ), "Expected 'data' to be marked as nullable."
+    assert data_property.get("nullable") is True, (
+        "Expected 'data' to be marked as nullable."
+    )
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
@@ -215,12 +215,12 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     assert isinstance(status_property, dict), "Expected a dict."
 
     # Assertions
-    assert (
-        status_property.get("type_") == glm.Type.STRING
-    ), "Expected 'status' to be STRING."
-    assert (
-        status_property.get("nullable") is True
-    ), "Expected 'status' to be marked as nullable."
+    assert status_property.get("type_") == glm.Type.STRING, (
+        "Expected 'status' to be STRING."
+    )
+    assert status_property.get("nullable") is True, (
+        "Expected 'status' to be marked as nullable."
+    )
     assert status_property.get("enum") == [
         "active",
         "inactive",

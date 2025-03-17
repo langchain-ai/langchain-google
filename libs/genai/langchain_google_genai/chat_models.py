@@ -454,14 +454,17 @@ def _parse_response_candidate(
                 content.append(text)
             elif text:
                 raise Exception("Unexpected content type")
-            
+
         if part.inline_data.mime_type.startswith("image/"):
             import base64
+
             base64_data = base64.b64encode(part.inline_data.data).decode("utf-8")
 
             message = {
-                "type" : "image_url",
-                "image_url": {"url": f"{part.inline_data.mime_type};base64,{base64_data}"}
+                "type": "image_url",
+                "image_url": {
+                    "url": f"{part.inline_data.mime_type};base64,{base64_data}"
+                },
             }
 
             if not content:
