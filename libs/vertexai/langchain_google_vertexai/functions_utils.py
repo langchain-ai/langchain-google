@@ -451,6 +451,14 @@ def _tool_choice_to_tool_config(
             allowed_function_names = tool_choice["function_calling_config"].get(
                 "allowed_function_names"
             )
+        elif (
+            "type" in tool_choice
+            and tool_choice["type"] == "function"
+            and "function" in tool_choice
+            and "name" in tool_choice["function"]
+        ):
+            mode = gapic.FunctionCallingConfig.Mode.ANY
+            allowed_function_names = [tool_choice["function"]["name"]]
         else:
             raise ValueError(
                 f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
