@@ -121,6 +121,26 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMess
                         content.append(new_block)
                     continue
 
+                if block["type"] == "thinking":
+                    content.append(
+                        {
+                            k: v
+                            for k, v in block.items()
+                            if k in ("type", "thinking", "cache_control", "signature")
+                        }
+                    )
+                    continue
+
+                if block["type"] == "redacted_thinking":
+                    content.append(
+                        {
+                            k: v
+                            for k, v in block.items()
+                            if k in ("type", "cache_control", "data")
+                        }
+                    )
+                    continue
+
                 if block["type"] == "image_url":
                     # convert format
                     source = _format_image(block["image_url"]["url"])

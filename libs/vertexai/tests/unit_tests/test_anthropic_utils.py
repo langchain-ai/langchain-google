@@ -128,6 +128,42 @@ def test_format_message_anthropic_system_list():
     ]
 
 
+def test_format_message_anthropic_with_chain_of_thoughts():
+    """Test formatting a system message with chain of thoughts."""
+    message = SystemMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "final output of the model",
+            },
+            {
+                "type": "thinking",
+                "thinking": "thoughts of the model...",
+                "signature": "thinking-signature",
+                "additional_keys": "additional_values",
+            },
+            {
+                "type": "redacted_thinking",
+                "data": "redacted-thoughts-data",
+                "additional_keys": "additional_values",
+            },
+        ]
+    )
+    result = _format_message_anthropic(message)
+    assert result == [
+        {
+            "type": "text",
+            "text": "final output of the model",
+        },
+        {
+            "type": "thinking",
+            "thinking": "thoughts of the model...",
+            "signature": "thinking-signature",
+        },
+        {"type": "redacted_thinking", "data": "redacted-thoughts-data"},
+    ]
+
+
 def test_format_messages_anthropic_with_system_string():
     """Test formatting messages with system message as string."""
     messages = [

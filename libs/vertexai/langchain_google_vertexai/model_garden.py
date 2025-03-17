@@ -96,29 +96,6 @@ def _create_retry_decorator(
     )
 
 
-def _extract_thoughts(content: Any) -> list[str]:
-    thoughts = []
-    for block in content:
-        if block["type"] == "thinking":
-            thoughts.append(
-                {
-                    k: v
-                    for k, v in block.items()
-                    if k in ("type", "thinking", "cache_control", "signature")
-                }
-            )
-        elif block["type"] == "redacted_thinking":
-            thoughts.append(
-                {
-                    k: v
-                    for k, v in block.items()
-                    if k in ("type", "cache_control", "data")
-                }
-            )
-
-    return thoughts
-
-
 class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     """Large language models served from Vertex AI Model Garden."""
 
@@ -282,17 +259,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         }
         if len(content) == 1 and content[0]["type"] == "text":
             msg = AIMessage(content=content[0]["text"])
-        elif any(
-            block["type"] in ("tool_use", "thinking", "redacted_thinking")
-            for block in content
-        ):
+        elif any(block["type"] == "tool_use" for block in content):
             tool_calls = _extract_tool_calls(content)
-            thoughts = _extract_thoughts(content)
-            content_with_thoughts = content + thoughts
             msg = AIMessage(
-                content=content_with_thoughts,
+                content=content,
                 tool_calls=tool_calls,
-                thinking=thoughts,
             )
         else:
             msg = AIMessage(content=content)
