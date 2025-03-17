@@ -47,6 +47,9 @@ from google.ai.generativelanguage_v1beta.types import (
 )
 from google.ai.generativelanguage_v1beta.types import (
     Tool as GoogleTool,
+    CodeExecution
+    
+    
 )
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -808,6 +811,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
     ``cachedContents/{cachedContent}``.
     """
+    code_execution: bool = False
+    """Whether to enable code execution capabilities.
+    
+    Only supported on models: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, and gemini-2.0-pro.
+    When enabled, the model can execute code to solve problems.
+    """
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -820,6 +829,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "chat-google-generative-ai"
+    
+    @property
+    def _supported_code_execution(self)->bool:
+        return(
+            "gemini-1.5-pro" in self.model
+            or "gemini-1.5-flash" in self.model
+            or "gemini-2" in self.model
+        )
+
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -1171,11 +1189,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
+              
         formatted_tools = None
         if tools:
             formatted_tools = [convert_to_genai_function_declarations(tools)]
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
+        elif self.code_execution:
+            if not self._supported_code_execution:
+                raise ValueError(
+                    f"Code execution is only supported on Gemini 1.5 Pro, Gemini 1.5 Flash, "
+                    f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. Current model: {self.model}"
+                )
+            formatted_tools = [GoogleTool(code_execution=CodeExecution())]
+
 
         filtered_messages = []
         for message in messages:
