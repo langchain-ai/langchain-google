@@ -806,7 +806,7 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
         coerce_content_to_string=False,
     )
 
-    assert thinking_chunk == AIMessage(
+    assert thinking_chunk == AIMessageChunk(
         content=[
             {
                 "index": 1,
@@ -815,7 +815,7 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
             }
         ]
     )
-    assert signature_chunk == AIMessage(
+    assert signature_chunk == AIMessageChunk(
         content=[
             {
                 "index": 1,
