@@ -1,11 +1,11 @@
 from importlib import metadata
-from typing import Any, Dict, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
 from pydantic import BaseModel, Field, SecretStr
 
-from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory
+from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality
 
 
 class GoogleGenerativeAIError(Exception):
@@ -71,6 +71,9 @@ Supported examples:
         description=(
             "A key-value dictionary representing additional headers for the model call"
         ),
+    )
+    response_modalities: Optional[List[Modality]] = Field(
+        default=None, description=("A list of modalities of the response")
     )
 
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
