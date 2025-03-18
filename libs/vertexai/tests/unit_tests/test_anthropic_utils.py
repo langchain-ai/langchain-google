@@ -806,15 +806,23 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
         coerce_content_to_string=False,
     )
 
-    assert thinking_chunk.content[0] == {
-        "index": 1,
-        "type": "thinking",
-        "thinking": "thoughts of the model...",
-    }
-    assert signature_chunk.content[0] == {
-        "index": 1,
-        "type": "thinking",
-        "signature": "thoughts-signature",
-    }
+    assert thinking_chunk == AIMessage(
+        content=[
+            {
+                "index": 1,
+                "type": "thinking",
+                "thinking": "thoughts of the model...",
+            }
+        ]
+    )
+    assert signature_chunk == AIMessage(
+        content=[
+            {
+                "index": 1,
+                "type": "thinking",
+                "signature": "thoughts-signature",
+            }
+        ]
+    )
     assert isinstance(thinking_chunk, AIMessageChunk)
     assert isinstance(signature_chunk, AIMessageChunk)
