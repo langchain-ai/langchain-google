@@ -1,8 +1,14 @@
 """Unit tests for _anthropic_utils.py."""
 
 import pytest
+from anthropic.types import (
+    RawContentBlockDeltaEvent,
+    SignatureDelta,
+    ThinkingDelta,
+)
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     HumanMessage,
     SystemMessage,
     ToolMessage,
@@ -12,6 +18,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_google_vertexai._anthropic_utils import (
     _format_message_anthropic,
     _format_messages_anthropic,
+    _make_message_chunk_from_anthropic_event,
 )
 
 
@@ -770,3 +777,44 @@ def test_format_messages_anthropic(
     for result, expected in zip(result_history, expected_history):
         assert result == expected
     assert sm == expected_sm
+
+
+def test_make_thinking_message_chunk_from_anthropic_event() -> None:
+    """Test the conversion of Anthropic event into AIMessageChunk."""
+    thinking_chunk = _make_message_chunk_from_anthropic_event(
+        event=RawContentBlockDeltaEvent(
+            type="content_block_delta",
+            index=1,
+            delta=ThinkingDelta(
+                thinking="thoughts of the model...",
+                type="thinking_delta",
+            ),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+    signature_chunk = _make_message_chunk_from_anthropic_event(
+        event=RawContentBlockDeltaEvent(
+            type="content_block_delta",
+            index=1,
+            delta=SignatureDelta(
+                signature="thoughts-signature",
+                type="signature_delta",
+            ),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+
+    assert thinking_chunk.content[0] == {
+        "index": 1,
+        "type": "thinking",
+        "thinking": "thoughts of the model...",
+    }
+    assert signature_chunk.content[0] == {
+        "index": 1,
+        "type": "thinking",
+        "signature": "thoughts-signature",
+    }
+    assert isinstance(thinking_chunk, AIMessageChunk)
+    assert isinstance(signature_chunk, AIMessageChunk)
