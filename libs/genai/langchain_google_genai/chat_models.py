@@ -106,7 +106,7 @@ from langchain_google_genai._function_utils import (
     is_basemodel_subclass_safe,
     tool_to_dict,
 )
-from langchain_google_genai._image_utils import ImageBytesLoader
+from langchain_google_genai._image_utils import ImageBytesLoader, image_bytes_to_b64_string
 
 from . import _genai_extension as genaix
 
@@ -456,14 +456,13 @@ def _parse_response_candidate(
                 raise Exception("Unexpected content type")
 
         if part.inline_data.mime_type.startswith("image/"):
-            import base64
-
-            base64_data = base64.b64encode(part.inline_data.data).decode("utf-8")
-
+            image_format = part.inline_data.mime_type[6:]
             message = {
                 "type": "image_url",
                 "image_url": {
-                    "url": f"{part.inline_data.mime_type};base64,{base64_data}"
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format = image_format
+                    )
                 },
             }
 

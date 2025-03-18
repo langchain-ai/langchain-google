@@ -412,7 +412,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": "image/bmp;base64,"
+                            "url": "data:image/bmp;base64,"
                             + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     }
@@ -441,7 +441,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": "image/bmp;base64,"
+                            "url": "data:image/bmp;base64,"
                             + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     },
