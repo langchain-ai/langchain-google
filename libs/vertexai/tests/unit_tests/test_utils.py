@@ -3,12 +3,12 @@ from typing import Any, List
 import pytest
 from google.api_core.exceptions import ClientError, GoogleAPICallError, InvalidArgument
 
+from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
     _get_def_key_from_schema_path,
     replace_defs_in_schema,
 )
-from langchain_google_vertexai.utils import create_base_retry_decorator
 
 
 @pytest.mark.parametrize(
