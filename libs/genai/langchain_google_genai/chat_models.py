@@ -433,7 +433,7 @@ def _parse_chat_history(
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
-    content: Union[None, str, List[str]] = None
+    content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs = {}
     tool_calls = []
     invalid_tool_calls = []
