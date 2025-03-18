@@ -831,8 +831,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        if self.temperature is not None and not 0 <= self.temperature <= 1:
-            raise ValueError("temperature must be in the range [0.0, 1.0]")
+        if self.temperature is not None and not 0 <= self.temperature <= 2.0:
+            raise ValueError("temperature must be in the range [0.0, 2.0]")
 
         if self.top_p is not None and not 0 <= self.top_p <= 1:
             raise ValueError("top_p must be in the range [0.0, 1.0]")
