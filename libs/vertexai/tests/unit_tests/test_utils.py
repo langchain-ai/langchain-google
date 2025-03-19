@@ -1,7 +1,9 @@
 from typing import Any, List
 
 import pytest
+from google.api_core.exceptions import ClientError, GoogleAPICallError, InvalidArgument
 
+from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
     _get_def_key_from_schema_path,
@@ -126,3 +128,57 @@ def test_schema_recursive_error_self_reference():
     }
     with pytest.raises(RecursionError):
         _ = replace_defs_in_schema(schema)
+
+
+def test_retry_decorator_for_google_api_call_error_and_subclass():
+    google_api_call_error_retries = []
+    client_error_retries = []
+    max_retries = 3
+
+    retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
+
+    @retry_decorator
+    def retry_for_google_api_call_error():
+        google_api_call_error_retries.append("retried")
+        if len(google_api_call_error_retries) == max_retries:
+            # This method executes successfully in the last retry
+            return True
+
+        raise GoogleAPICallError("")
+
+    @retry_decorator
+    def retry_for_subclass_of_google_api_call_error():
+        client_error_retries.append("retried")
+        if len(client_error_retries) == max_retries:
+            # This method executes successfully in the last retry
+            return True
+
+        raise ClientError("")
+
+    google_api_call_error_retried = retry_for_google_api_call_error()
+    client_error_retried = retry_for_subclass_of_google_api_call_error()
+
+    assert google_api_call_error_retried
+    assert client_error_retried
+    assert len(google_api_call_error_retries) == max_retries
+    assert len(client_error_retries) == max_retries
+
+
+def test_retry_decorator_for_invalid_argument():
+    invalid_argument_retries = []
+    max_retries = 3
+
+    retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
+
+    @retry_decorator
+    def retry_for_invalid_argument_error():
+        invalid_argument_retries.append("retried")
+        raise InvalidArgument("")
+
+    try:
+        retry_for_invalid_argument_error()
+    except InvalidArgument:
+        # Silently handling the raised exception
+        pass
+
+    assert len(invalid_argument_retries) == 1

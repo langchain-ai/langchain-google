@@ -109,9 +109,15 @@ from langchain_google_genai._function_utils import (
     is_basemodel_subclass_safe,
     tool_to_dict,
 )
-from langchain_google_genai._image_utils import ImageBytesLoader
+from langchain_google_genai._image_utils import (
+    ImageBytesLoader,
+    image_bytes_to_b64_string,
+)
 
 from . import _genai_extension as genaix
+
+WARNED_STRUCTURED_OUTPUT_JSON_MODE = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -430,7 +436,7 @@ def _parse_chat_history(
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
-    content: Union[None, str, List[str]] = None
+    content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs = {}
     tool_calls = []
     invalid_tool_calls = []
@@ -453,6 +459,26 @@ def _parse_response_candidate(
             elif isinstance(content, list) and text:
                 content.append(text)
             elif text:
+                raise Exception("Unexpected content type")
+
+        if part.inline_data.mime_type.startswith("image/"):
+            image_format = part.inline_data.mime_type[6:]
+            message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format=image_format
+                    )
+                },
+            }
+
+            if not content:
+                content = [message]
+            elif isinstance(content, str) and message:
+                content = [content, message]
+            elif isinstance(content, list) and message:
+                content.append(message)
+            elif message:
                 raise Exception("Unexpected content type")
 
         if part.function_call:
@@ -841,8 +867,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
-        if self.temperature is not None and not 0 <= self.temperature <= 1:
-            raise ValueError("temperature must be in the range [0.0, 1.0]")
+        if self.temperature is not None and not 0 <= self.temperature <= 2.0:
+            raise ValueError("temperature must be in the range [0.0, 2.0]")
 
         if self.top_p is not None and not 0 <= self.top_p <= 1:
             raise ValueError("top_p must be in the range [0.0, 1.0]")
@@ -1321,6 +1347,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tools=[schema], first_tool_only=True
             )
         else:
+            global WARNED_STRUCTURED_OUTPUT_JSON_MODE
+            warnings.warn(
+                "ChatGoogleGenerativeAI.with_structured_output with dict schema has "
+                "changed recently to align with behavior of other LangChain chat "
+                "models. More context: "
+                "https://github.com/langchain-ai/langchain-google/pull/772"
+            )
+            WARNED_STRUCTURED_OUTPUT_JSON_MODE = True
             parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
         tool_choice = tool_name if self._supports_tool_choice else None
         try:

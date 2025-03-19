@@ -1,22 +1,7 @@
-import asyncio
-import logging
 from datetime import datetime, timedelta
-from typing import Any, Callable, List, Optional, Union
+from typing import List, Optional
 
-from langchain_core.callbacks.manager import (
-    AsyncCallbackManagerForLLMRun,
-    CallbackManagerForLLMRun,
-)
 from langchain_core.messages import BaseMessage
-from tenacity import (
-    RetryCallState,
-    before_sleep_log,
-    retry,
-    retry_base,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 from vertexai.preview import caching  # type: ignore
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
@@ -91,70 +76,3 @@ def create_context_cache(
     )
 
     return cached_content.name
-
-
-def create_base_retry_decorator(
-    error_types: list[type[BaseException]],
-    max_retries: int = 1,
-    run_manager: Optional[
-        Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
-    ] = None,
-) -> Callable[[Any], Any]:
-    """Create a retry decorator for a given LLM and provided a list of error types.
-
-    Args:
-        error_types: List of error types to retry on.
-        max_retries: Number of retries. Default is 1.
-        run_manager: Callback manager for the run. Default is None.
-
-    Returns:
-        A retry decorator.
-    """
-    logger = logging.getLogger(__name__)
-    _logging = before_sleep_log(logger, logging.WARNING)
-
-    def _before_sleep(retry_state: RetryCallState) -> None:
-        _logging(retry_state)
-        if run_manager:
-            retry_d: dict[str, Any] = {
-                "slept": retry_state.idle_for,
-                "attempt": retry_state.attempt_number,
-            }
-            if retry_state.outcome is None:
-                retry_d["outcome"] = "N/A"
-            elif retry_state.outcome.failed:
-                retry_d["outcome"] = "failed"
-                exception = retry_state.outcome.exception()
-                retry_d["exception"] = str(exception)
-                retry_d["exception_type"] = exception.__class__.__name__
-            else:
-                retry_d["outcome"] = "success"
-                retry_d["result"] = str(retry_state.outcome.result())
-            if isinstance(run_manager, AsyncCallbackManagerForLLMRun):
-                coro = run_manager.on_retry(retry_state)
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.create_task(coro)
-                    else:
-                        asyncio.run(coro)
-                except Exception as e:
-                    logger.error(f"Error in on_retry: {e}")
-            else:
-                run_manager.metadata.update({"retry_state": retry_d})
-                run_manager.on_retry(retry_state)
-
-    min_seconds = 4
-    max_seconds = 10
-    # Wait 2^x * 1 second between each retry starting with
-    # 4 seconds, then up to 10 seconds, then 10 seconds afterwards
-    retry_instance: retry_base = retry_if_exception_type(error_types[0])
-    for error in error_types[1:]:
-        retry_instance = retry_instance | retry_if_exception_type(error)
-    return retry(
-        reraise=True,
-        stop=stop_after_attempt(max_retries),
-        wait=wait_exponential(multiplier=1, min=min_seconds, max=max_seconds),
-        retry=retry_instance,
-        before_sleep=_before_sleep,
-    )

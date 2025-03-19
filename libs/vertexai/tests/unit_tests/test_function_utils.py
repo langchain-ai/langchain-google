@@ -505,7 +505,10 @@ def test_format_tool_config():
     )
 
 
-@pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
+@pytest.mark.parametrize(
+    "choice",
+    (True, "foo", ["foo"], "any", {"type": "function", "function": {"name": "foo"}}),
+)
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = GapicToolConfig(
         function_calling_config=GapicFunctionCallingConfig(
