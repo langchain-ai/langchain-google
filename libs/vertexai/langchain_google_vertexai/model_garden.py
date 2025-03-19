@@ -61,7 +61,7 @@ from langchain_google_vertexai._anthropic_utils import (
     convert_to_anthropic_tool,
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
-from langchain_google_vertexai.utils import create_base_retry_decorator
+from langchain_google_vertexai._retry import create_base_retry_decorator
 
 
 class CacheUsageMetadata(UsageMetadata):
@@ -72,11 +72,12 @@ class CacheUsageMetadata(UsageMetadata):
 
 
 def _create_retry_decorator(
-    llm: ChatAnthropicVertex,
     *,
+    max_retries: int = 3,
     run_manager: Optional[
         Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
     ] = None,
+    wait_exponential_kwargs: Optional[dict[str, float]] = None,
 ) -> Callable[[Any], Any]:
     """Creates a retry decorator for Anthropic Vertex LLMs with proper tracing."""
     from anthropic import (  # type: ignore[unused-ignore, import-not-found]
@@ -92,7 +93,10 @@ def _create_retry_decorator(
     ]
 
     return create_base_retry_decorator(
-        error_types=errors, max_retries=llm.max_retries, run_manager=run_manager
+        error_types=errors,
+        max_retries=max_retries,
+        run_manager=run_manager,
+        wait_exponential_kwargs=wait_exponential_kwargs,
     )
 
 
@@ -172,6 +176,14 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     credentials: Optional[Credentials] = None
     max_retries: int = Field(
         default=3, description="Number of retries for error handling."
+    )
+    wait_exponential_kwargs: Optional[dict[str, float]] = Field(
+        default=None,
+        description="Optional dictionary with parameters for wait_exponential: "
+        "- multiplier: Initial wait time multiplier (default: 1.0) "
+        "- min: Minimum wait time in seconds (default: 4.0) "
+        "- max: Maximum wait time in seconds (default: 10.0) "
+        "- exp_base: Exponent base to use (default: 2.0) ",
     )
     timeout: Optional[Union[float, httpx.Timeout]] = Field(
         default=None,
@@ -294,7 +306,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
             return generate_from_stream(stream_iter)
-        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+        retry_decorator = _create_retry_decorator(
+            max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
+        )
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
@@ -317,7 +333,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
             return await agenerate_from_stream(stream_iter)
-        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+        retry_decorator = _create_retry_decorator(
+            max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
+        )
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
@@ -343,7 +363,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if stream_usage is None:
             stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+        retry_decorator = _create_retry_decorator(
+            max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
+        )
 
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
@@ -375,7 +399,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if stream_usage is None:
             stream_usage = self.stream_usage
         params = self._format_params(messages=messages, stop=stop, **kwargs)
-        retry_decorator = _create_retry_decorator(self, run_manager=run_manager)
+        retry_decorator = _create_retry_decorator(
+            max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
+        )
 
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:

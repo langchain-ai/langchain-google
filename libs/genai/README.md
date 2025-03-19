@@ -56,6 +56,24 @@ The value of `image_url` can be any of the following:
 - An accessible gcs file (e.g., "gcs://path/to/file.png")
 - A base64 encoded image (e.g., `data:image/png;base64,abcd124`)
 
+#### Multimodal outputs
+
+Gemini 2.0 Flash Experimental model supports text output with inline images
+
+```
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-exp-image-generation")
+# example
+response = llm.invoke(
+    "Generate an image of a cat and say meow",
+    generation_config=dict(response_modalities=["TEXT", "IMAGE"]),
+)
+
+# Base64 encoded binary data of the image
+image_base64 = response.content[0].get("image_url").get("url").split(",")[-1]
+meow_str = response.content[1]
+```
 
 
 ## Embeddings
