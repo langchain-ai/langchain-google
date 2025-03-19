@@ -75,7 +75,7 @@ from langchain_core.output_parsers.openai_tools import (
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableConfig
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import (
@@ -811,12 +811,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
     ``cachedContents/{cachedContent}``.
     """
-    code_execution: bool = False
-    """Whether to enable code execution capabilities.
-    
-    Only supported on models: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, and gemini-2.0-pro.
-    When enabled, the model can execute code to solve problems.
-    """
+
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -831,7 +826,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return "chat-google-generative-ai"
     
     @property
-    def _supported_code_execution(self)->bool:
+    def _supports_code_execution(self)->bool:
         return(
             "gemini-1.5-pro" in self.model
             or "gemini-1.5-flash" in self.model
@@ -911,6 +906,47 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "n": self.n,
             "safety_settings": self.safety_settings,
         }
+    
+    def invoke(
+            self,
+            input: LanguageModelInput,
+            config: Optional[RunnableConfig]=None,
+            *,
+            code_execution:Optional[bool]=None,
+            stop:Optional[list[str]]=None,
+            **kwargs:Any,
+    )-> BaseMessage:
+        """ Enable code execution capabilities.
+        Only supported on models: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, and gemini-2.0-pro.
+        When enabled, the model can execute code to solve problems."""
+
+        """Override invoke to add code_execution parameter."""
+
+        if code_execution is not None:
+            if not self._supports_code_execution:
+                raise ValueError(
+                    f"Code execution is only supported on Gemini 1.5 Pro, Gemini 1.5 Flash, "
+                    f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. Current model: {self.model}"
+                )
+            if "tools" not in kwargs:
+                code_execution_tool = GoogleTool(code_execution=CodeExecution())
+                kwargs["tools"]=[code_execution_tool]
+
+            else:
+                raise ValueError(
+                    f"Tools are already defined, Thus code_execution tool can't be defined"
+                )
+            
+
+        return super().invoke(
+            input,
+            config,
+            stop=stop,
+            **kwargs
+        )
+
+
+        
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
@@ -1191,17 +1227,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
               
         formatted_tools = None
-        if tools:
+        code_execution_tool = GoogleTool(code_execution=CodeExecution())
+        if tools == [code_execution_tool]:
+            formatted_tools=tools
+        elif tools:
             formatted_tools = [convert_to_genai_function_declarations(tools)]
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
-        elif self.code_execution:
-            if not self._supported_code_execution:
-                raise ValueError(
-                    f"Code execution is only supported on Gemini 1.5 Pro, Gemini 1.5 Flash, "
-                    f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. Current model: {self.model}"
-                )
-            formatted_tools = [GoogleTool(code_execution=CodeExecution())]
+
 
 
         filtered_messages = []
