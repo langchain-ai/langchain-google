@@ -152,31 +152,12 @@ def test_chat_google_genai_invoke_with_image() -> None:
     _check_usage_metadata(result)
 
 
-def test_chat_google_genai_invoke_with_image() -> None:
-    """Test invoke tokens with image from ChatGoogleGenerativeAI."""
-    llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
-
-    result = llm.invoke(
-        "Generate an image of a cat and say meow",
-        config=dict(tags=["meow"]),
-        generation_config=dict(
-            top_k=2, top_p=1, temperature=0.7, response_modalities=["TEXT", "IMAGE"]
-        ),
-    )
-    assert isinstance(result, AIMessage)
-    assert isinstance(result.content, list)
-    assert isinstance(result.content[0], dict)
-    assert result.content[0].get("type") == "image_url"
-    assert isinstance(result.content[1], str)
-    assert not result.content[1].startswith(" ")
-    _check_usage_metadata(result)
-
-
 def test_chat_google_genai_invoke_with_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
     modalities."""
     llm = ChatGoogleGenerativeAI(
-        model=_IMAGE_OUTPUT_MODEL, response_modalities=[Modality.TEXT, Modality.IMAGE]
+        model=_IMAGE_OUTPUT_MODEL,
+        response_modalities=[Modality.TEXT, Modality.IMAGE],  # type: ignore[list-item]
     )
 
     result = llm.invoke(
@@ -213,9 +194,9 @@ def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> No
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
     modalities specifed in both modal init and invoke generation_config."""
     llm = ChatGoogleGenerativeAI(
-        model=_IMAGE_OUTPUT_MODEL, response_modalities=[Modality.TEXT]
+        model=_IMAGE_OUTPUT_MODEL,
+        response_modalities=[Modality.TEXT],  # type: ignore[list-item]
     )
-
     result = llm.invoke(
         "Generate an image of a cat and say meow",
         config=dict(tags=["meow"]),
