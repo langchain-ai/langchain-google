@@ -121,6 +121,26 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMess
                         content.append(new_block)
                     continue
 
+                if block["type"] == "thinking":
+                    content.append(
+                        {
+                            k: v
+                            for k, v in block.items()
+                            if k in ("type", "thinking", "cache_control", "signature")
+                        }
+                    )
+                    continue
+
+                if block["type"] == "redacted_thinking":
+                    content.append(
+                        {
+                            k: v
+                            for k, v in block.items()
+                            if k in ("type", "cache_control", "data")
+                        }
+                    )
+                    continue
+
                 if block["type"] == "image_url":
                     # convert format
                     source = _format_image(block["image_url"]["url"])
@@ -308,6 +328,20 @@ def _make_message_chunk_from_anthropic_event(
                 content_block["index"] = event.index
                 content_block["type"] = "text"
                 message_chunk = AIMessageChunk(content=[content_block])
+        elif event.delta.type == "thinking_delta":
+            content_block = event.delta.model_dump()
+            if "text" in content_block and content_block["text"] is None:
+                content_block.pop("text")
+            content_block["index"] = event.index
+            content_block["type"] = "thinking"
+            message_chunk = AIMessageChunk(content=[content_block])
+        elif event.delta.type == "signature_delta":
+            content_block = event.delta.model_dump()
+            if "text" in content_block and content_block["text"] is None:
+                content_block.pop("text")
+            content_block["index"] = event.index
+            content_block["type"] = "thinking"
+            message_chunk = AIMessageChunk(content=[content_block])
         elif event.delta.type == "input_json_delta":
             content_block = event.delta.model_dump()
             content_block["index"] = event.index
