@@ -20,6 +20,7 @@ from typing import (
 
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
+import google.genai.types as genai  # type: ignore
 import proto  # type: ignore[import]
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
@@ -61,18 +62,22 @@ _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 _FunctionDeclarationLike = Union[
     BaseTool, Type[BaseModel], gapic.FunctionDeclaration, Callable, Dict[str, Any]
 ]
+_GoogleSearchRetrievalLike = Union[
+    gapic.GoogleSearchRetrieval,
+    Dict[str, Any],
+]
 
 
 class _ToolDict(TypedDict):
     function_declarations: Sequence[_FunctionDeclarationLike]
+    google_search_retrieval: Optional[_GoogleSearchRetrievalLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
 # The dict should be gapic.Tool like. {"function_declarations": [ { "name": ...}.
 # OpenAI like dict is not be accepted. {{'type': 'function', 'function': {'name': ...}
-_ToolsType = Union[
-    gapic.Tool, _ToolDict, _FunctionDeclarationLike, Sequence[_FunctionDeclarationLike]
-]
+_ToolType = Union[gapic.Tool, genai.Tool, _ToolDict, _FunctionDeclarationLike]
+_ToolsType = Sequence[_ToolType]
 
 
 def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -122,7 +127,7 @@ def _format_dict_to_function_declaration(
 
 # Info: gapic.Tool means function_declarations and proto.Message.
 def convert_to_genai_function_declarations(
-    tools: Sequence[_ToolsType],
+    tools: _ToolsType,
 ) -> gapic.Tool:
     if not isinstance(tools, collections.abc.Sequence):
         logger.warning(
@@ -132,24 +137,54 @@ def convert_to_genai_function_declarations(
         tools = [tools]
     gapic_tool = gapic.Tool()
     for tool in tools:
-        if isinstance(tool, gapic.Tool):
-            gapic_tool.function_declarations.extend(tool.function_declarations)  # type: ignore[union-attr]
-        elif isinstance(tool, dict) and "function_declarations" not in tool:
-            fd = _format_to_gapic_function_declaration(tool)
-            gapic_tool.function_declarations.append(fd)
+        if any(f in gapic_tool for f in ["google_search_retrieval"]):
+            raise ValueError(
+                "Providing multiple google_search_retrieval"
+                " or mixing with function_declarations is not supported"
+            )
+        if isinstance(tool, (gapic.Tool, genai.Tool)):
+            rt: gapic.Tool = (
+                tool if isinstance(tool, gapic.Tool) else tool._raw_tool  # type: ignore
+            )
+            if "google_search_retrieval" in rt:
+                gapic_tool.google_search_retrieval = rt.google_search_retrieval
+            if "function_declarations" in rt:
+                gapic_tool.function_declarations.extend(rt.function_declarations)
+            if "google_search" in rt:
+                gapic_tool.google_search = rt.google_search
         elif isinstance(tool, dict):
-            function_declarations = cast(_ToolDict, tool)["function_declarations"]
-            if not isinstance(function_declarations, collections.abc.Sequence):
-                raise ValueError(
-                    "function_declarations should be a list"
-                    f"got '{type(function_declarations)}'"
-                )
-            if function_declarations:
-                fds = [
-                    _format_to_gapic_function_declaration(fd)
-                    for fd in function_declarations
+            # not _ToolDictLike
+            if not any(
+                f in tool
+                for f in [
+                    "function_declarations",
+                    "google_search_retrieval",
                 ]
-                gapic_tool.function_declarations.extend(fds)
+            ):
+                fd = _format_to_gapic_function_declaration(tool)
+                gapic_tool.function_declarations.append(fd)
+                continue
+            # _ToolDictLike
+            tool = cast(_ToolDict, tool)
+            if "function_declarations" in tool:
+                function_declarations = tool["function_declarations"]
+                if not isinstance(
+                    tool["function_declarations"], collections.abc.Sequence
+                ):
+                    raise ValueError(
+                        "function_declarations should be a list"
+                        f"got '{type(function_declarations)}'"
+                    )
+                if function_declarations:
+                    fds = [
+                        _format_to_gapic_function_declaration(fd)
+                        for fd in function_declarations
+                    ]
+                    gapic_tool.function_declarations.extend(fds)
+            if "google_search_retrieval" in tool:
+                gapic_tool.google_search_retrieval = gapic.GoogleSearchRetrieval(
+                    tool["google_search_retrieval"]
+                )
         else:
             fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
             gapic_tool.function_declarations.append(fd)

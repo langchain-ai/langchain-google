@@ -1,15 +1,19 @@
-from typing import Any, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from unittest.mock import MagicMock, patch
 
 import google.ai.generativelanguage as glm
 import pytest
 from langchain_core.documents import Document
-from langchain_core.tools import InjectedToolArg, tool
+from langchain_core.tools import BaseTool, InjectedToolArg, tool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 from typing_extensions import Annotated
 
 from langchain_google_genai._function_utils import (
+    _convert_pydantic_to_genai_function,
+    _format_base_tool_to_function_declaration,
+    _format_dict_to_function_declaration,
+    _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
     _ToolConfigDict,
     convert_to_genai_function_declarations,
@@ -228,6 +232,100 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     ], "Expected 'status' to have enum values."
 
 
+# reusable test inputs
+def search(question: str) -> str:
+    """Search tool"""
+    return question
+
+
+search_tool = tool(search)
+search_exp = glm.FunctionDeclaration(
+    name="search",
+    description="Search tool",
+    parameters=glm.Schema(
+        type=glm.Type.OBJECT,
+        description="Search tool",
+        properties={"question": glm.Schema(type=glm.Type.STRING)},
+        required=["question"],
+    ),
+)
+
+
+class SearchBaseTool(BaseTool):
+    def _run(self) -> None:
+        pass
+
+
+search_base_tool = SearchBaseTool(name="search", description="Search tool")
+search_base_tool_exp = glm.FunctionDeclaration(
+    name=search_base_tool.name,
+    description=search_base_tool.description,
+    parameters=glm.Schema(
+        type=glm.Type.OBJECT,
+        properties={
+            "__arg1": glm.Schema(type=glm.Type.STRING),
+        },
+        required=["__arg1"],
+    ),
+)
+
+
+class SearchModel(BaseModel):
+    """Search model"""
+
+    question: str
+
+
+search_model_schema = SearchModel.model_json_schema()
+search_model_dict = {
+    "name": search_model_schema["title"],
+    "description": search_model_schema["description"],
+    "parameters": search_model_schema,
+}
+search_model_exp = glm.FunctionDeclaration(
+    name="SearchModel",
+    description="Search model",
+    parameters=glm.Schema(
+        type=glm.Type.OBJECT,
+        description="Search model",
+        properties={
+            "question": glm.Schema(type=glm.Type.STRING),
+        },
+        required=["question"],
+    ),
+)
+
+search_model_exp_pyd = glm.FunctionDeclaration(
+    name="SearchModel",
+    description="Search model",
+    parameters=glm.Schema(
+        type=glm.Type.OBJECT,
+        properties={
+            "question": glm.Schema(type=glm.Type.STRING),
+        },
+        required=["question"],
+    ),
+)
+
+mock_dict = MagicMock(name="mock_dicts", wraps=_format_dict_to_function_declaration)
+mock_base_tool = MagicMock(
+    name="mock_base_tool", wraps=_format_base_tool_to_function_declaration
+)
+mock_pydantic = MagicMock(
+    name="mock_pydantic", wraps=_convert_pydantic_to_genai_function
+)
+
+SRC_EXP_MOCKS_DESC: List[
+    Tuple[_FunctionDeclarationLike, glm.FunctionDeclaration, List[MagicMock], str]
+] = [
+    (search, search_exp, [mock_base_tool], "plain function"),
+    (search_tool, search_exp, [mock_base_tool], "LC tool"),
+    (search_base_tool, search_base_tool_exp, [mock_base_tool], "LC base tool"),
+    (SearchModel, search_model_exp_pyd, [mock_pydantic], "Pydantic model"),
+    (search_model_dict, search_model_exp, [mock_dict], "dict"),
+]
+
+
 def test_format_tool_to_genai_function() -> None:
     @tool
     def get_datetime() -> str:
@@ -268,6 +366,37 @@ def test_format_tool_to_genai_function() -> None:
     assert function_declaration.name == "do_something_optional"
     assert function_declaration.parameters
     assert len(function_declaration.parameters.required) == 1
+
+    src = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
+    fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
+    expected = glm.Tool(function_declarations=fds)
+    result = convert_to_genai_function_declarations(src)
+    assert result == expected
+
+    src_2 = glm.Tool(google_search_retrieval={})
+    result = convert_to_genai_function_declarations([src_2])
+    assert result == src_2
+
+    src_3: Dict[str, Any] = {"google_search_retrieval": {}}
+    result = convert_to_genai_function_declarations([src_3])
+    assert result == src_2
+
+    src_4 = glm.Tool(google_search={})
+    result = convert_to_genai_function_declarations([src_4])
+    assert result == src_4
+
+    with pytest.raises(ValueError) as exc_info1:
+        _ = convert_to_genai_function_declarations(["fake_tool"])
+    assert str(exc_info1.value).startswith("Unsupported tool")
+
+    with pytest.raises(Exception) as exc_info:
+        _ = convert_to_genai_function_declarations(
+            [
+                glm.Tool(google_search_retrieval={}),
+                glm.Tool(google_search_retrieval={}),
+            ]
+        )
+    assert str(exc_info.value).startswith("Providing multiple google_search_retrieval")
 
 
 def test_tool_with_annotated_optional_args() -> None:
