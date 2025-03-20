@@ -1238,3 +1238,71 @@ def test_anthropic_format_output() -> None:
         "cache_creation_input_tokens": 1,
         "cache_read_input_tokens": 1,
     }
+
+
+def test_anthropic_format_output_with_chain_of_thoughts() -> None:
+    """Test format output handles chain of thoughts correctly."""
+
+    @dataclass
+    class Usage:
+        input_tokens: int
+        output_tokens: int
+        cache_creation_input_tokens: Optional[int]
+        cache_read_input_tokens: Optional[int]
+
+    @dataclass
+    class Message:
+        def model_dump(self):
+            return {
+                "content": [
+                    {
+                        "type": "thinking",
+                        "thinking": "Thoughts of the model...",
+                        "signature": "thought-signatire",
+                    },
+                    {
+                        "type": "redacted_thinking",
+                        "data": "redacted-thoughts-data",
+                    },
+                    {
+                        "type": "text",
+                        "text": "Final output the model",
+                    },
+                ],
+                "model": "baz",
+                "role": "assistant",
+                "usage": Usage(
+                    input_tokens=2,
+                    output_tokens=1,
+                    cache_creation_input_tokens=1,
+                    cache_read_input_tokens=1,
+                ),
+                "type": "message",
+            }
+
+        usage: Usage
+
+    test_msg = Message(
+        usage=Usage(
+            input_tokens=2,
+            output_tokens=1,
+            cache_creation_input_tokens=1,
+            cache_read_input_tokens=1,
+        )
+    )
+
+    model = ChatAnthropicVertex(project="test-project", location="test-location")
+    result = model._format_output(test_msg)
+
+    message = result.generations[0].message
+    print(message)
+    assert isinstance(message, AIMessage)
+    assert len(message.content) == 3
+    assert message.content == test_msg.model_dump()["content"]
+    assert message.usage_metadata == {
+        "input_tokens": 2,
+        "output_tokens": 1,
+        "total_tokens": 3,
+        "cache_creation_input_tokens": 1,
+        "cache_read_input_tokens": 1,
+    }
