@@ -192,7 +192,7 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> No
 
 def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
-    modalities specifed in both modal init and invoke generation_config."""
+    modalities specified in both modal init and invoke generation_config."""
     llm = ChatGoogleGenerativeAI(
         model=_IMAGE_OUTPUT_MODEL,
         response_modalities=[Modality.TEXT],  # type: ignore[list-item]
