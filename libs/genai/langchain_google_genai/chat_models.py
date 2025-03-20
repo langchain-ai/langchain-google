@@ -460,6 +460,40 @@ def _parse_response_candidate(
                 content.append(text)
             elif text:
                 raise Exception("Unexpected content type")
+        
+        if hasattr(part, "executable_code") and part.executable_code is not None:
+            if part.executable_code.code and part.executable_code.language:
+                code_message = {
+                    "type": "executable_code",
+                    "executable_code": part.executable_code.code,
+                    "language": part.executable_code.language,
+                    }
+                if not content:
+                    content = [code_message]
+                elif isinstance(content, str):
+                    content = [content, code_message]
+                elif isinstance(content, list):
+                    content.append(code_message)
+                else:
+                    raise Exception("Unexpected content type")
+        
+        if hasattr(part, "code_execution_result") and part.code_execution_result is not None:
+            if part.code_execution_result.output:
+                execution_result = {
+                    "type": "code_execution_result",
+                    "code_execution_result": part.code_execution_result.output,
+                    
+                }
+            
+                if not content:
+                    content = [execution_result]
+                elif isinstance(content, str):
+                    content = [content, execution_result]
+                elif isinstance(content, list):
+                    content.append(execution_result)
+                else:
+                    raise Exception("Unexpected content type")
+            
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
@@ -524,6 +558,14 @@ def _parse_response_candidate(
                     )
     if content is None:
         content = ""
+    if any(isinstance(item, dict) and "executable_code" in item for item in content):
+        warnings.warn('''
+        ⚠️ Warning: This output contains dynamic elements that may change each time you run the code. 
+        'executable_code' includes Python code which will be present in every response, 
+        'execution_result' contains computed values that may not be present for certain queries such as "generate a sigmoid function graph using matplotlib"
+        'image_url' represents dynamically generated visuals (e.g., charts, plots), it may not be present for certain queries such as "generate 10 random data points for weight and height"
+        Therefore , always ensure to validate the output before using it in production.
+''')
 
     if streaming:
         return AIMessageChunk(
