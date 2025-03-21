@@ -32,6 +32,7 @@ from google.ai.generativelanguage_v1beta import (
 from google.ai.generativelanguage_v1beta.types import (
     Blob,
     Candidate,
+    CodeExecution,
     Content,
     FileData,
     FunctionCall,
@@ -45,12 +46,7 @@ from google.ai.generativelanguage_v1beta.types import (
     ToolConfig,
     VideoMetadata,
 )
-from google.ai.generativelanguage_v1beta.types import (
-    Tool as GoogleTool,
-    CodeExecution
-    
-    
-)
+from google.ai.generativelanguage_v1beta.types import Tool as GoogleTool
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -75,7 +71,7 @@ from langchain_core.output_parsers.openai_tools import (
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import (
@@ -460,14 +456,14 @@ def _parse_response_candidate(
                 content.append(text)
             elif text:
                 raise Exception("Unexpected content type")
-        
+
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_message = {
                     "type": "executable_code",
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
-                    }
+                }
                 if not content:
                     content = [code_message]
                 elif isinstance(content, str):
@@ -476,15 +472,17 @@ def _parse_response_candidate(
                     content.append(code_message)
                 else:
                     raise Exception("Unexpected content type")
-        
-        if hasattr(part, "code_execution_result") and part.code_execution_result is not None:
+
+        if (
+            hasattr(part, "code_execution_result")
+            and part.code_execution_result is not None
+        ):
             if part.code_execution_result.output:
                 execution_result = {
                     "type": "code_execution_result",
                     "code_execution_result": part.code_execution_result.output,
-                    
                 }
-            
+
                 if not content:
                     content = [execution_result]
                 elif isinstance(content, str):
@@ -493,7 +491,6 @@ def _parse_response_candidate(
                     content.append(execution_result)
                 else:
                     raise Exception("Unexpected content type")
-            
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
@@ -559,13 +556,15 @@ def _parse_response_candidate(
     if content is None:
         content = ""
     if any(isinstance(item, dict) and "executable_code" in item for item in content):
-        warnings.warn('''
-        ⚠️ Warning: This output contains dynamic elements that may change each time you run the code. 
-        'executable_code' includes Python code which will be present in every response, 
-        'execution_result' contains computed values that may not be present for certain queries such as "generate a sigmoid function graph using matplotlib"
-        'image_url' represents dynamically generated visuals (e.g., charts, plots), it may not be present for certain queries such as "generate 10 random data points for weight and height"
-        Therefore , always ensure to validate the output before using it in production.
-''')
+        warnings.warn(
+            """
+        ⚠️ Warning: Output may vary each run.  
+        - 'executable_code': Always present.  
+        - 'execution_result' & 'image_url': May be absent for some queries.  
+
+        Validate before using in production.
+"""
+        )
 
     if streaming:
         return AIMessageChunk(
@@ -880,7 +879,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ``cachedContents/{cachedContent}``.
     """
 
-
     model_config = ConfigDict(
         populate_by_name=True,
     )
@@ -892,15 +890,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "chat-google-generative-ai"
-    
+
     @property
-    def _supports_code_execution(self)->bool:
-        return(
+    def _supports_code_execution(self) -> bool:
+        return (
             "gemini-1.5-pro" in self.model
             or "gemini-1.5-flash" in self.model
             or "gemini-2" in self.model
         )
-
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -974,47 +971,42 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "n": self.n,
             "safety_settings": self.safety_settings,
         }
-    
+
     def invoke(
-            self,
-            input: LanguageModelInput,
-            config: Optional[RunnableConfig]=None,
-            *,
-            code_execution:Optional[bool]=None,
-            stop:Optional[list[str]]=None,
-            **kwargs:Any,
-    )-> BaseMessage:
-        """ Enable code execution capabilities.
-        Only supported on models: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, and gemini-2.0-pro.
-        When enabled, the model can execute code to solve problems."""
+        self,
+        input: LanguageModelInput,
+        config: Optional[RunnableConfig] = None,
+        *,
+        code_execution: Optional[bool] = None,
+        stop: Optional[list[str]] = None,
+        **kwargs: Any,
+    ) -> BaseMessage:
+        """
+        Enable code execution. Supported on: gemini-1.5-pro, gemini-1.5-flash,
+        gemini-2.0-flash, and gemini-2.0-pro. When enabled, the model can execute
+        code to solve problems.
+        """
 
         """Override invoke to add code_execution parameter."""
 
         if code_execution is not None:
             if not self._supports_code_execution:
                 raise ValueError(
-                    f"Code execution is only supported on Gemini 1.5 Pro, Gemini 1.5 Flash, "
-                    f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. Current model: {self.model}"
+                    f"Code execution is only supported on Gemini 1.5 Pro, \
+                    Gemini 1.5 Flash, "
+                    f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. \
+                    Current model: {self.model}"
                 )
             if "tools" not in kwargs:
                 code_execution_tool = GoogleTool(code_execution=CodeExecution())
-                kwargs["tools"]=[code_execution_tool]
+                kwargs["tools"] = [code_execution_tool]
 
             else:
                 raise ValueError(
-                    f"Tools are already defined, Thus code_execution tool can't be defined"
+                    "Tools are already defined." "code_execution tool can't be defined"
                 )
-            
 
-        return super().invoke(
-            input,
-            config,
-            stop=stop,
-            **kwargs
-        )
-
-
-        
+        return super().invoke(input, config, stop=stop, **kwargs)
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
@@ -1293,17 +1285,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
-              
+
         formatted_tools = None
         code_execution_tool = GoogleTool(code_execution=CodeExecution())
         if tools == [code_execution_tool]:
-            formatted_tools=tools
+            formatted_tools = tools
         elif tools:
             formatted_tools = [convert_to_genai_function_declarations(tools)]
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
-
-
 
         filtered_messages = []
         for message in messages:
@@ -1326,9 +1316,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     f"be specified if 'tools' is specified."
                 )
                 raise ValueError(msg)
-            all_names = [
-                f.name for t in formatted_tools for f in t.function_declarations
-            ]
+            all_names: List[str] = []
+            for t in formatted_tools:
+                if hasattr(t, "function_declarations"):
+                    t_with_declarations = cast(Any, t)
+                    all_names.extend(
+                        f.name for f in t_with_declarations.function_declarations
+                    )
+                elif isinstance(t, GoogleTool) and hasattr(t, "code_execution"):
+                    continue
+                else:
+                    raise TypeError(
+                        f"Tool {t} doesn't have function_declarations attribute"
+                    )
+
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
 
         formatted_tool_config = None

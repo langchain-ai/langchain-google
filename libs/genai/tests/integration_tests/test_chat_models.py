@@ -506,3 +506,25 @@ def test_astream_without_eventloop() -> None:
     result = asyncio.run(model_astream("How can you help me?"))
     assert len(result) > 0
     assert isinstance(result[0], AIMessageChunk)
+
+
+def test_code_execution() -> None:
+    """Test that code execution works for a simple Python script."""
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+    response = llm.invoke(
+        """Write a Python function to calculate the factorial of a number
+        and run it for the number 5""",
+        code_execution=True,
+    )
+
+    assert any(
+        isinstance(part, dict) and part.get("type") == "executable_code"
+        for part in response.content
+        if isinstance(part, dict)
+    )
+
+    assert any(
+        isinstance(part, dict) and part.get("type") == "code_execution_result"
+        for part in response.content
+        if isinstance(part, dict)
+    )
