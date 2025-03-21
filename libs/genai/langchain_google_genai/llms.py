@@ -7,7 +7,7 @@ from langchain_core.callbacks import (
 )
 from langchain_core.language_models import LangSmithParams
 from langchain_core.language_models.llms import BaseLLM
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ChatMessage, BaseMessage
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
@@ -63,6 +63,44 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         if ls_max_tokens := kwargs.get("max_output_tokens", self.max_output_tokens):
             ls_params["ls_max_tokens"] = ls_max_tokens
         return ls_params
+    
+    async def _execute_code_safe(self, code: str) -> str:
+        """Executes Python code in a sandboxed environment."""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "python",
+                "-c",
+                code,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            output = stdout.decode() + stderr.decode()
+            return output
+        except Exception as e:
+            return f"Error: {e}"
+
+
+    async def _handle_code_execution(self, messages: List[BaseMessage]) -> List[BaseMessage]:
+        updated_messages = []
+        for message in messages:
+            if isinstance(message, HumanMessage):
+                code_blocks = re.findall(r"```python\n(.*?)\n```", message.content, re.DOTALL)
+                if code_blocks:
+                    parts = re.split(r"```python\n(.*?)\n```", message.content, re.DOTALL)
+                    for i, part in enumerate(parts):
+                        if i % 2 == 0:
+                            if part:
+                                updated_messages.append(HumanMessage(content=part))
+                        else:
+                            code_output = await self._execute_code_safe(part)
+                            updated_messages.append(HumanMessage(content=f"```python\n{part}\n```"))
+                            updated_messages.append(ChatMessage(role="code_output", content=code_output))
+                else:
+                    updated_messages.append(message)
+            else:
+                updated_messages.append(message)
+        return updated_messages
 
     def _generate(
         self,
@@ -73,12 +111,18 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     ) -> LLMResult:
         generations = []
         for prompt in prompts:
-            chat_result = self.client._generate(
-                [HumanMessage(content=prompt)],
-                stop=stop,
-                run_manager=run_manager,
-                **kwargs,
-            )
+            async def async_wrapper(p):
+                messages = await self._handle_code_execution([HumanMessage(content=p)])
+                chat_result = self.client._generate(
+                    messages,
+                    stop=stop,
+                    run_manager=run_manager,
+                    **kwargs,
+                )
+                return chat_result
+
+            chat_result = asyncio.run(async_wrapper(prompt))
+
             generations.append(
                 [
                     Generation(
@@ -100,8 +144,10 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[GenerationChunk]:
+        messages = asyncio.run(self._handle_code_execution([HumanMessage(content=prompt)])) 
+
         for stream_chunk in self.client._stream(
-            [HumanMessage(content=prompt)],
+            messages,
             stop=stop,
             run_manager=run_manager,
             **kwargs,

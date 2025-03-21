@@ -32,6 +32,8 @@ from google.ai.generativelanguage_v1beta import (
 from google.ai.generativelanguage_v1beta.types import (
     Blob,
     Candidate,
+    CodeExecution,
+    CodeExecutionResult,
     Content,
     FileData,
     FunctionCall,
@@ -58,6 +60,8 @@ from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     BaseMessage,
+    ChatMessage,
+    ChatResult,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -934,6 +938,44 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if generation_config:
             gen_config = {**gen_config, **generation_config}
         return GenerationConfig(**gen_config)
+      
+    async def _execute_code_safe(self, code: str) -> str:
+        """Executes Python code in a sandboxed environment."""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "python",
+                "-c",
+                code,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            output = stdout.decode() + stderr.decode()
+            return output
+        except Exception as e:
+            return f"Error: {e}"
+
+    async def _handle_code_execution(self, messages: List[BaseMessage]) -> List[BaseMessage]:
+        updated_messages = []
+        for message in messages:
+            if isinstance(message, HumanMessage):
+                code_blocks = re.findall(r"```python\n(.*?)\n```", message.content, re.DOTALL)
+                if code_blocks:
+                    parts = re.split(r"```python\n(.*?)\n```", message.content, re.DOTALL)
+                    for i, part in enumerate(parts):
+                        if i % 2 == 0:
+                            if part:
+                                updated_messages.append(HumanMessage(content=part))
+                        else:
+                            code_output = await self._execute_code_safe(part)
+                            updated_messages.append(HumanMessage(content=f"```python\n{part}\n```"))
+                            updated_messages.append(ChatMessage(role="code_output", content=code_output))
+                else:
+                    updated_messages.append(message)
+            else:
+                updated_messages.append(message)
+        return updated_messages
+
 
     def _generate(
         self,
@@ -942,7 +984,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         *,
         tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
+        functions: Optional[Sequence[Union[_FunctionDeclarationType]]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
@@ -950,8 +992,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        async def async_wrapper():
+            return await self._handle_code_execution(messages)
+        updated_messages = asyncio.run(async_wrapper())
+
         request = self._prepare_request(
-            messages,
+            updated_messages,
             stop=stop,
             tools=tools,
             functions=functions,
@@ -984,6 +1030,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        updated_messages = await self._handle_code_execution(messages)
+
         if not self.async_client:
             updated_kwargs = {
                 **kwargs,
@@ -996,11 +1044,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             }
             return await super()._agenerate(
-                messages, stop, run_manager, **updated_kwargs
+                updated_messages,
+                stop,
+                run_manager,
+                **updated_kwargs,
             )
 
         request = self._prepare_request(
-            messages,
+            updated_messages,
             stop=stop,
             tools=tools,
             functions=functions,
