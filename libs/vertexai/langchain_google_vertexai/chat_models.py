@@ -138,6 +138,7 @@ from langchain_google_vertexai.functions_utils import (
     _ToolType,
 )
 from pydantic import ConfigDict
+from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
 
 
@@ -1844,7 +1845,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def with_structured_output(
         self,
-        schema: Union[Dict, Type[BaseModel]],
+        schema: Union[Dict, Type[BaseModel], Type],
         *,
         include_raw: bool = False,
         method: Optional[Literal["json_mode"]] = None,
@@ -1962,7 +1963,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # nested models because the generated schema contains $refs that the
                 # gemini api doesn't support. We can implement a postprocessing function
                 # that takes care of this if necessary.
-                schema_json = schema.model_json_schema()
+                if issubclass(schema, BaseModelV1):
+                    schema_json = schema.schema()
+                else:
+                    schema_json = schema.model_json_schema()
                 schema_json = replace_defs_in_schema(schema_json)
                 parser = PydanticOutputParser(pydantic_object=schema)
                 schema = schema_json
