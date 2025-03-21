@@ -610,11 +610,14 @@ def _completion_with_retry(
     *,
     max_retries: int,
     run_manager: Optional[CallbackManagerForLLMRun] = None,
+    wait_exponential_kwargs: Optional[dict[str, float]] = None,
     **kwargs: Any,
 ) -> Any:
     """Use tenacity to retry the completion call."""
     retry_decorator = create_retry_decorator(
-        max_retries=max_retries, run_manager=run_manager
+        max_retries=max_retries,
+        run_manager=run_manager,
+        wait_exponential_kwargs=wait_exponential_kwargs,
     )
 
     @retry_decorator
@@ -636,12 +639,15 @@ async def _acompletion_with_retry(
     generation_method: Callable,
     *,
     max_retries: int,
-    run_manager: Optional[CallbackManagerForLLMRun] = None,
+    run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+    wait_exponential_kwargs: Optional[dict[str, float]] = None,
     **kwargs: Any,
 ) -> Any:
     """Use tenacity to retry the completion call."""
     retry_decorator = create_retry_decorator(
-        max_retries=max_retries, run_manager=run_manager
+        max_retries=max_retries,
+        run_manager=run_manager,
+        wait_exponential_kwargs=wait_exponential_kwargs,
     )
 
     @retry_decorator
@@ -694,6 +700,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Key init args — client params:
         max_retries: int
             Max number of retries.
+        wait_exponential_kwargs: Optional[dict[str, float]]
+            Optional dictionary with parameters for wait_exponential:
+            - multiplier: Initial wait time multiplier (default: 1.0)
+            - min: Minimum wait time in seconds (default: 4.0)
+            - max: Maximum wait time in seconds (default: 10.0)
+            - exp_base: Exponent base to use (default: 2.0)
         credentials: Optional[google.auth.credentials.Credentials]
             The default custom credentials to use when making API calls. If not
             provided, credentials will be ascertained from the environment.
@@ -1105,6 +1117,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     perform_literal_eval_on_string_raw_content: bool = True
     """Whether to perform literal eval on string raw content.
+    """
+
+    wait_exponential_kwargs: Optional[dict[str, float]] = None
+    """Optional dictionary with parameters for wait_exponential:
+        - multiplier: Initial wait time multiplier (default: 1.0)
+        - min: Minimum wait time in seconds (default: 4.0)
+        - max: Maximum wait time in seconds (default: 10.0)
+        - exp_base: Exponent base to use (default: 2.0)
     """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
@@ -1522,6 +1542,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         response = _completion_with_retry(
             self.prediction_client.generate_content,
             max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
             **kwargs,
@@ -1538,6 +1560,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         response = await _acompletion_with_retry(
             self.async_prediction_client.generate_content,
             max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=self._prepare_request_gemini(
                 messages=messages, stop=stop, **kwargs
             ),
@@ -1739,6 +1763,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         response_iter = _completion_with_retry(
             self.prediction_client.stream_generate_content,
             max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             is_gemini=True,
             metadata=self.default_metadata,
@@ -1800,8 +1826,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         response_iter = _acompletion_with_retry(
             self.async_prediction_client.stream_generate_content,
             max_retries=self.max_retries,
+            run_manager=run_manager,
+            wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             is_gemini=True,
+            metadata=self.default_metadata,
             **kwargs,
         )
         total_lc_usage = None
