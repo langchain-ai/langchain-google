@@ -970,6 +970,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "top_k": self.top_k,
             "n": self.n,
             "safety_settings": self.safety_settings,
+            "response_modalities": self.response_modalities,
         }
 
     def invoke(
@@ -1039,6 +1040,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "max_output_tokens": self.max_output_tokens,
                 "top_k": self.top_k,
                 "top_p": self.top_p,
+                "response_modalities": self.response_modalities,
             }.items()
             if v is not None
         }

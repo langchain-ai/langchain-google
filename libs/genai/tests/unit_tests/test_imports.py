@@ -11,6 +11,7 @@ EXPECTED_ALL = [
     "GoogleVectorStore",
     "HarmBlockThreshold",
     "HarmCategory",
+    "Modality",
     "DoesNotExistsException",
 ]
 
