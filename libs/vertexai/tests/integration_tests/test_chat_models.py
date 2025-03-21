@@ -31,6 +31,7 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableSerializable
 from langchain_core.tools import tool
 from pydantic import BaseModel
+from typing_extensions import TypedDict
 
 from langchain_google_vertexai import (
     ChatVertexAI,
@@ -841,6 +842,30 @@ def test_structured_output_schema_json():
     )
     with pytest.raises(ValueError, match="response_mime_type"):
         response = model.invoke("List a few popular cookie recipes")
+
+
+@pytest.mark.release
+def test_json_mode_typeddict() -> None:
+    class MyModel(TypedDict):
+        name: str
+        age: int
+
+    llm = ChatVertexAI(
+        model_name="gemini-2.0-flash-exp",
+        rate_limiter=rate_limiter,
+    )
+    model = llm.with_structured_output(MyModel, method="json_mode")
+    message = HumanMessage(content="My name is Erick and I am 28 years old")
+
+    response = model.invoke([message])
+    assert isinstance(response, dict)
+    assert response == {"name": "Erick", "age": 28}
+
+    # Test stream
+    for chunk in model.stream([message]):
+        assert isinstance(chunk, dict)
+        assert all(key in ["name", "age"] for key in chunk.keys())
+    assert chunk == {"name": "Erick", "age": 28}
 
 
 @pytest.mark.extended
