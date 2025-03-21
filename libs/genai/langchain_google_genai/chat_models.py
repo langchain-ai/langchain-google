@@ -736,6 +736,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
               'args': {'location': 'New York City, NY'},
               'id': '634582de-5186-4e4b-968b-f192f0a93678'}]
 
+    Use Search with Gemini 2:
+        .. code-block:: python
+
+            from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
+            resp = llm.invoke(
+                "When is the next total solar eclipse in US?",
+                tools=[GenAITool(google_search={})],
+            )
+
     Structured output:
         .. code-block:: python
 
