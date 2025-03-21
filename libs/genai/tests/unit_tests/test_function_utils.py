@@ -386,7 +386,7 @@ def test_format_tool_to_genai_function() -> None:
     assert result == src_4
 
     with pytest.raises(ValueError) as exc_info1:
-        _ = convert_to_genai_function_declarations(["fake_tool"])
+        _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore
     assert str(exc_info1.value).startswith("Unsupported tool")
 
     with pytest.raises(Exception) as exc_info:

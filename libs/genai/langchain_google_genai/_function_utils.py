@@ -20,7 +20,6 @@ from typing import (
 
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
-import google.genai.types as genai  # type: ignore
 import proto  # type: ignore[import]
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
@@ -76,7 +75,7 @@ class _ToolDict(TypedDict):
 # Info: This means one tool=Sequence of FunctionDeclaration
 # The dict should be gapic.Tool like. {"function_declarations": [ { "name": ...}.
 # OpenAI like dict is not be accepted. {{'type': 'function', 'function': {'name': ...}
-_ToolType = Union[gapic.Tool, genai.Tool, _ToolDict, _FunctionDeclarationLike]
+_ToolType = Union[gapic.Tool, _ToolDict, _FunctionDeclarationLike]
 _ToolsType = Sequence[_ToolType]
 
 
@@ -142,7 +141,7 @@ def convert_to_genai_function_declarations(
                 "Providing multiple google_search_retrieval"
                 " or mixing with function_declarations is not supported"
             )
-        if isinstance(tool, (gapic.Tool, genai.Tool)):
+        if isinstance(tool, (gapic.Tool)):
             rt: gapic.Tool = (
                 tool if isinstance(tool, gapic.Tool) else tool._raw_tool  # type: ignore
             )
@@ -161,7 +160,7 @@ def convert_to_genai_function_declarations(
                     "google_search_retrieval",
                 ]
             ):
-                fd = _format_to_gapic_function_declaration(tool)
+                fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
                 gapic_tool.function_declarations.append(fd)
                 continue
             # _ToolDictLike
