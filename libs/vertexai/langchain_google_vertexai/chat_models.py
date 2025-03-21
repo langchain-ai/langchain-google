@@ -1950,6 +1950,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         """  # noqa: E501
 
+        _ = kwargs.pop("strict", None)
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
 
