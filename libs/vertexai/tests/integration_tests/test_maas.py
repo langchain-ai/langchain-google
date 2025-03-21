@@ -102,7 +102,7 @@ async def test_tools(model_name: str) -> None:
     tool_calls = response.tool_calls
     assert len(tool_calls) > 0
 
-    tool_response = search("sparrow")
+    tool_response = search.invoke("sparrow")
     tool_messages: List[BaseMessage] = []
 
     for tool_call in tool_calls:
