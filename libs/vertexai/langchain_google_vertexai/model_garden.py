@@ -193,6 +193,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     model_config = ConfigDict(
         populate_by_name=True,
     )
+    model_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
@@ -231,13 +232,14 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     @property
     def _default_params(self):
-        return {
+        d = {
             "model": self.model_name,
             "max_tokens": self.max_output_tokens,
             "temperature": self.temperature,
             "top_k": self.top_k,
             "top_p": self.top_p,
         }
+        return {**d, **self.model_kwargs}
 
     def _format_params(
         self,
