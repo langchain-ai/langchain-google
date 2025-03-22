@@ -968,6 +968,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "top_k": self.top_k,
             "n": self.n,
             "safety_settings": self.safety_settings,
+            "response_modalities": self.response_modalities,
         }
     
     def invoke(
@@ -1036,6 +1037,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "max_output_tokens": self.max_output_tokens,
                 "top_k": self.top_k,
                 "top_p": self.top_p,
+                "response_modalities": self.response_modalities,
             }.items()
             if v is not None
         }
@@ -1364,6 +1366,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         include_raw: bool = False,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
+        _ = kwargs.pop("method", None)
+        _ = kwargs.pop("strict", None)
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
         tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
