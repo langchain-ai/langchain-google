@@ -454,42 +454,40 @@ def _parse_response_candidate(
                 content = [content, text]
             elif isinstance(content, list) and text:
                 content.append(text)
-            else:
+            elif text:
                 raise Exception("Unexpected content type")
 
         if hasattr(part, "executable_code") and part.executable_code:
-            code_execution_data = {
-                "type": "executable_code",
-                "executable_code": part.executable_code.code,
-                "language": part.executable_code.language,
-            }
-            if not content:
-                content = [code_execution_data]
-            elif isinstance(content, str):
-                content = [content, code_execution_data]
-            elif isinstance(content, list):
-                content.append(code_execution_data)
-            else:
-                raise Exception("Unexpected content type")
-
-        if hasattr(part, "code_execution_result") and part.code_execution_result:
-            if part.code_execution_result.output:
-                code_execution_result_data = {
-                    "type": "code_execution_result",
-                    "code_execution_result": part.code_execution_result.output,
+            executable_code = part.executable_code
+            if executable_code.code and executable_code.language:
+                code_execution_data = {
+                    "type": "executable_code",
+                    "executable_code": executable_code.code,
+                    "language": executable_code.language,
                 }
-                if not content:
-                    content = [code_execution_result_data]
-                elif isinstance(content, str):
-                    content = [content, code_execution_result_data]
-                elif isinstance(content, list):
-                    content.append(code_execution_result_data)
-                else:
-                    raise Exception("Unexpected content type")
+                content = self._update_content(content, code_execution_data)
+
+        if hasattr(part, "code_execution_result") and part.code_execution_result and part.code_execution_result.output:
+            code_execution_result_data = {
+                "type": "code_execution_result",
+                "code_execution_result": part.code_execution_result.output,
+            }
+            content = self._update_content(content, code_execution_result_data)
+
+        def _update_content(self, current_content, new_item):
+            if not current_content:
+                return [new_item]
+            elif isinstance(current_content, str):
+                return [current_content, new_item]
+            elif isinstance(current_content, list):
+                current_content.append(new_item)
+                return current_content
+            else:
+                raise ValueError("Unexpected content type")
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
-            image_data = {
+            message = {
                 "type": "image_url",
                 "image_url": {
                     "url": image_bytes_to_b64_string(
@@ -499,12 +497,12 @@ def _parse_response_candidate(
             }
 
             if not content:
-                content = [image_data]
-            elif isinstance(content, str):
-                content = [content, image_data]
-            elif isinstance(content, list):
-                content.append(image_data)
-            else:
+                content = [message]
+            elif isinstance(content, str) and message:
+                content = [content, message]
+            elif isinstance(content, list) and message:
+                content.append(message)
+            elif message:
                 raise Exception("Unexpected content type")
 
         if part.function_call:
@@ -562,10 +560,17 @@ def _parse_response_candidate(
     if streaming:
         return AIMessageChunk(
             content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
-            additional_kwargs=additionalrecycleView
+            additional_kwargs=additional_kwargs,
+            tool_call_chunks=tool_call_chunks,
         )
-     
-
+ 
+    return AIMessage(
+        content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+        additional_kwargs=additional_kwargs,
+        tool_calls=tool_calls,
+        invalid_tool_calls=invalid_tool_calls,
+    )
+    
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
