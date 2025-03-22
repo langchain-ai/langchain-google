@@ -33,7 +33,6 @@ from google.ai.generativelanguage_v1beta.types import (
     Blob,
     Candidate,
     CodeExecution,
-    CodeExecutionResult,
     Content,
     FileData,
     FunctionCall,
@@ -44,6 +43,7 @@ from google.ai.generativelanguage_v1beta.types import (
     GenerationConfig,
     Part,
     SafetySetting,
+    Tool as GoogleTool,
     ToolConfig,
     VideoMetadata,
 )
@@ -61,7 +61,6 @@ from langchain_core.messages import (
     AIMessageChunk,
     BaseMessage,
     ChatMessage,
-    ChatResult,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -76,7 +75,7 @@ from langchain_core.output_parsers.openai_tools import (
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import (
@@ -459,6 +458,36 @@ def _parse_response_candidate(
             elif text:
                 raise Exception("Unexpected content type")
 
+        if hasattr(part, "executable_code") and part.executable_code:
+            executable_code = part.executable_code
+            if executable_code.code and executable_code.language:
+                code_message = {
+                    "type": "executable_code",
+                    "executable_code": executable_code.code,
+                    "language": executable_code.language,
+                }
+                content = self._update_content(content, code_message)
+
+        if hasattr(part, "code_execution_result") and part.code_execution_result:
+            code_execution_result = part.code_execution_result
+            if code_execution_result.output:
+                execution_result = {
+                    "type": "code_execution_result",
+                    "code_execution_result": code_execution_result.output,
+                }
+                content = self._update_content(content, execution_result)
+
+    def _update_content(self, content, new_item):
+        if not content:
+            return [new_item]
+        elif isinstance(content, str):
+            return [content, new_item]
+        elif isinstance(content, list):
+            content.append(new_item)
+            return content
+        else:
+            raise Exception("Unexpected content type")
+
         if part.function_call:
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
@@ -502,6 +531,16 @@ def _parse_response_candidate(
                     )
     if content is None:
         content = ""
+
+    if any(isinstance(item, dict) and "executable_code" in item for item in content):
+    warning_message = (
+        "⚠️ Warning: Output may vary each run.  \n"
+        "- 'executable_code': Always present.  \n"
+        "- 'execution_result' & 'image_url': May be absent for some queries.  \n"
+        "\n"
+        "Validate before using in production."
+    )
+    warnings.warn(warning_message)
 
     if streaming:
         return AIMessageChunk(
@@ -827,6 +866,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "chat-google-generative-ai"
+    
+    @property
+    def _supports_code_execution(self) -> bool:
+        supported_models = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2"]
+        return any(model_name in self.model for model_name in supported_models)
 
     @classmethod
     def is_lc_serializable(self) -> bool:
@@ -900,6 +944,41 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "n": self.n,
             "safety_settings": self.safety_settings,
         }
+    
+    def invoke(
+        self,
+        input: LanguageModelInput,
+        config: Optional[RunnableConfig] = None,
+        *,
+        code_execution: Optional[bool] = None,
+        stop: Optional[list[str]] = None,
+        **kwargs: Any,
+    ) -> BaseMessage:
+        """
+        Enable code execution. Supported on: gemini-1.5-pro, gemini-1.5-flash,
+        gemini-2.0-flash, and gemini-2.0-pro. When enabled, the model can execute
+        code to solve problems.
+        """
+
+        if code_execution is not None:
+            self._handle_code_execution(code_execution, kwargs)
+
+        return super().invoke(input, config, stop=stop, **kwargs)
+
+    def _handle_code_execution(self, code_execution: bool, kwargs: dict) -> None:
+        if not self._supports_code_execution:
+            error_message = (
+                f"Code execution is only supported on Gemini 1.5 Pro, "
+                f"Gemini 1.5 Flash, Gemini 2.0 Flash, and Gemini 2.0 Pro models. "
+                f"Current model: {self.model}"
+            )
+            raise ValueError(error_message)
+
+        if "tools" in kwargs:
+            raise ValueError("Tools are already defined. Code execution tool can't be defined.")
+
+        code_execution_tool = GoogleTool(code_execution=CodeExecution())
+        kwargs["tools"] = [code_execution_tool]
 
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
@@ -939,44 +1018,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen_config = {**gen_config, **generation_config}
         return GenerationConfig(**gen_config)
       
-    async def _execute_code_safe(self, code: str) -> str:
-        """Executes Python code in a sandboxed environment."""
-        try:
-            process = await asyncio.create_subprocess_exec(
-                "python",
-                "-c",
-                code,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            stdout, stderr = await process.communicate()
-            output = stdout.decode() + stderr.decode()
-            return output
-        except Exception as e:
-            return f"Error: {e}"
-
-    async def _handle_code_execution(self, messages: List[BaseMessage]) -> List[BaseMessage]:
-        updated_messages = []
-        for message in messages:
-            if isinstance(message, HumanMessage):
-                code_blocks = re.findall(r"```python\n(.*?)\n```", message.content, re.DOTALL)
-                if code_blocks:
-                    parts = re.split(r"```python\n(.*?)\n```", message.content, re.DOTALL)
-                    for i, part in enumerate(parts):
-                        if i % 2 == 0:
-                            if part:
-                                updated_messages.append(HumanMessage(content=part))
-                        else:
-                            code_output = await self._execute_code_safe(part)
-                            updated_messages.append(HumanMessage(content=f"```python\n{part}\n```"))
-                            updated_messages.append(ChatMessage(role="code_output", content=code_output))
-                else:
-                    updated_messages.append(message)
-            else:
-                updated_messages.append(message)
-        return updated_messages
-
-
     def _generate(
         self,
         messages: List[BaseMessage],
@@ -984,7 +1025,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         *,
         tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[Union[_FunctionDeclarationType]]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
         tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
@@ -992,12 +1033,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        async def async_wrapper():
-            return await self._handle_code_execution(messages)
-        updated_messages = asyncio.run(async_wrapper())
-
         request = self._prepare_request(
-            updated_messages,
+            messages,
             stop=stop,
             tools=tools,
             functions=functions,
@@ -1030,8 +1067,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        updated_messages = await self._handle_code_execution(messages)
-
         if not self.async_client:
             updated_kwargs = {
                 **kwargs,
@@ -1044,14 +1079,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             }
             return await super()._agenerate(
-                updated_messages,
-                stop,
-                run_manager,
-                **updated_kwargs,
+                messages, stop, run_manager, **updated_kwargs
             )
-
         request = self._prepare_request(
-            updated_messages,
+            messages,
             stop=stop,
             tools=tools,
             functions=functions,
@@ -1226,7 +1257,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
         formatted_tools = None
-        if tools:
+        code_execution_tool = GoogleTool(code_execution=CodeExecution())
+        if tools == [code_execution_tool]:
             formatted_tools = [convert_to_genai_function_declarations(tools)]
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
