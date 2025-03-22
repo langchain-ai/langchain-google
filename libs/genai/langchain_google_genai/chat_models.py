@@ -109,7 +109,10 @@ from langchain_google_genai._function_utils import (
     is_basemodel_subclass_safe,
     tool_to_dict,
 )
-from langchain_google_genai._image_utils import ImageBytesLoader
+from langchain_google_genai._image_utils import (
+    ImageBytesLoader,
+    image_bytes_to_b64_string,
+)
 
 from . import _genai_extension as genaix
 
@@ -433,7 +436,7 @@ def _parse_chat_history(
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
-    content: Union[None, str, List[str]] = None
+    content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs = {}
     tool_calls = []
     invalid_tool_calls = []
@@ -458,6 +461,7 @@ def _parse_response_candidate(
             elif text:
                 raise Exception("Unexpected content type")
 
+<<<<<<< HEAD
         if hasattr(part, "executable_code") and part.executable_code:
             executable_code = part.executable_code
             if executable_code.code and executable_code.language:
@@ -487,6 +491,27 @@ def _parse_response_candidate(
             return content
         else:
             raise Exception("Unexpected content type")
+=======
+        if part.inline_data.mime_type.startswith("image/"):
+            image_format = part.inline_data.mime_type[6:]
+            message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format=image_format
+                    )
+                },
+            }
+
+            if not content:
+                content = [message]
+            elif isinstance(content, str) and message:
+                content = [content, message]
+            elif isinstance(content, list) and message:
+                content.append(message)
+            elif message:
+                raise Exception("Unexpected content type")
+>>>>>>> 79dd26e95ac49838e5821b0072aa8a1d4070f3db
 
         if part.function_call:
             function_call = {"name": part.function_call.name}
