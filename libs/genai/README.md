@@ -77,7 +77,7 @@ meow_str = response.content[1]
 
 #### Multimodal Outputs in Chains
 
-'''
+```
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -93,7 +93,7 @@ prompt = ChatPromptTemplate(
 )
 chain = {"animal": RunnablePassthrough()} | prompt | llm
 res = chain.invoke("cat")
-'''
+```
 
 ## Embeddings
 
