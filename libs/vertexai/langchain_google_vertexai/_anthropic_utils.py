@@ -31,6 +31,9 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
+from langchain_google_vertexai._image_utils import image_bytes_to_b64_string
+from langchain_google_vertexai._utils import load_image_from_gcs
+
 if TYPE_CHECKING:
     from anthropic.types import (
         RawMessageStreamEvent,  # type: ignore[unused-ignore, import-not-found]
@@ -59,6 +62,16 @@ def _format_image(image_url: str) -> Dict:
         return {
             "type": "url",
             "url": image_url,
+        }
+    elif image_url.startswith("gs://"):
+        # Gets image and encodes to base64.
+        image = load_image_from_gcs(image_url)
+        return {
+            "type": "base64",
+            "media_type": image._mime_type(),
+            "data": image_bytes_to_b64_string(
+                image.data(), "ascii", image._mime_type().split("/")[-1]
+            ),
         }
     else:
         raise ValueError(
