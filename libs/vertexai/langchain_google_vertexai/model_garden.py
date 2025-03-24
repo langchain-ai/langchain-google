@@ -232,14 +232,14 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     @property
     def _default_params(self):
-        d = {
+        default_parameters = {
             "model": self.model_name,
             "max_tokens": self.max_output_tokens,
             "temperature": self.temperature,
             "top_k": self.top_k,
             "top_p": self.top_p,
         }
-        return {**d, **self.model_kwargs}
+        return {**default_parameters, **self.model_kwargs}
 
     def _format_params(
         self,
