@@ -1178,6 +1178,18 @@ def test_init_client_with_custom_base_url() -> None:
         assert transport == "rest"
 
 
+def test_init_client_with_custom_model_kwargs() -> None:
+    llm = ChatAnthropicVertex(
+        project="test-project",
+        location="test-location",
+        model_kwargs={"thinking": {"type": "enabled", "budget_tokens": 1024}},
+    )
+    assert llm.model_kwargs == {"thinking": {"type": "enabled", "budget_tokens": 1024}}
+
+    default_params = llm._default_params
+    assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
+
+
 def test_anthropic_format_output() -> None:
     """Test format output handles different content structures correctly."""
 
