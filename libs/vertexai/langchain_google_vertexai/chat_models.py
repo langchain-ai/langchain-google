@@ -67,7 +67,10 @@ from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import BaseModel, Field, model_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import (
+    convert_to_json_schema,
+    convert_to_openai_tool,
+)
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
@@ -138,7 +141,8 @@ from langchain_google_vertexai.functions_utils import (
     _ToolType,
 )
 from pydantic import ConfigDict
-from typing_extensions import Self
+from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import Self, is_typeddict
 
 
 logger = logging.getLogger(__name__)
@@ -1844,7 +1848,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def with_structured_output(
         self,
-        schema: Union[Dict, Type[BaseModel]],
+        schema: Union[Dict, Type[BaseModel], Type],
         *,
         include_raw: bool = False,
         method: Optional[Literal["json_mode"]] = None,
@@ -1950,29 +1954,37 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         """  # noqa: E501
 
+        _ = kwargs.pop("strict", None)
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
 
         parser: OutputParserLike
 
         if method == "json_mode":
-            if isinstance(schema, type):
+            schema_is_typeddict = is_typeddict(schema)
+            if isinstance(schema, type) and not schema_is_typeddict:
                 # TODO: This gets the json schema of a pydantic model. It fails for
                 # nested models because the generated schema contains $refs that the
                 # gemini api doesn't support. We can implement a postprocessing function
                 # that takes care of this if necessary.
-                schema_json = schema.model_json_schema()
+                if issubclass(schema, BaseModelV1):
+                    schema_json = schema.schema()
+                else:
+                    schema_json = schema.model_json_schema()
                 schema_json = replace_defs_in_schema(schema_json)
                 parser = PydanticOutputParser(pydantic_object=schema)
-                schema = schema_json
             else:
+                if schema_is_typeddict:
+                    schema_json = convert_to_json_schema(schema)
+                else:
+                    schema_json = cast(dict, schema)
                 parser = JsonOutputParser()
             llm = self.bind(
                 response_mime_type="application/json",
-                response_schema=schema,
+                response_schema=schema_json,
                 ls_structured_output_format={
                     "kwargs": {"method": method},
-                    "schema": schema,
+                    "schema": convert_to_json_schema(schema),
                 },
             )
 

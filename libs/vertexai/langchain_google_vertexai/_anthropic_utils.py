@@ -16,6 +16,7 @@ from typing import (
     cast,
 )
 
+import validators
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -47,16 +48,24 @@ def _format_image(image_url: str) -> Dict:
     """Formats a message image to a dict for anthropic api."""
     regex = r"^data:(?P<media_type>image/.+);base64,(?P<data>.+)$"
     match = re.match(regex, image_url)
-    if match is None:
+
+    if match:
+        return {
+            "type": "base64",
+            "media_type": match.group("media_type"),
+            "data": match.group("data"),
+        }
+    elif validators.url(image_url):
+        return {
+            "type": "url",
+            "url": image_url,
+        }
+    else:
         raise ValueError(
-            "Anthropic only supports base64-encoded images currently."
+            "Anthropic only supports base64-encoded images and urls currently."
             " Example: data:image/png;base64,'/9j/4AAQSk'..."
+            " Example: https://your-valid-image-url.png"
         )
-    return {
-        "type": "base64",
-        "media_type": match.group("media_type"),
-        "data": match.group("data"),
-    }
 
 
 def _get_cache_control(message: BaseMessage) -> Optional[Dict[str, Any]]:
