@@ -27,7 +27,7 @@ def test_format_message_anthropic_with_cache_control_in_kwargs():
     message = HumanMessage(
         content="Hello", additional_kwargs={"cache_control": {"type": "semantic"}}
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == {
         "role": "user",
         "content": [
@@ -43,7 +43,7 @@ def test_format_message_anthropic_with_cache_control_in_block():
             {"type": "text", "text": "Hello", "cache_control": {"type": "semantic"}}
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == {
         "role": "user",
         "content": [
@@ -61,7 +61,7 @@ def test_format_message_anthropic_with_mixed_blocks():
             "Plain text",
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == {
         "role": "user",
         "content": [
@@ -81,7 +81,9 @@ def test_format_messages_anthropic_with_system_cache_control():
         ),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {
@@ -102,7 +104,7 @@ def test_format_message_anthropic_system():
         content="System message",
         additional_kwargs={"cache_control": {"type": "ephemeral"}},
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == [
         {
             "type": "text",
@@ -124,7 +126,7 @@ def test_format_message_anthropic_system_list():
             {"type": "text", "text": "System rule 2"},
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == [
         {
             "type": "text",
@@ -156,7 +158,7 @@ def test_format_message_anthropic_with_chain_of_thoughts():
             },
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == [
         {
             "type": "text",
@@ -185,7 +187,7 @@ def test_format_message_anthropic_with_image_content():
             },
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == [
         {
             "type": "image",
@@ -211,7 +213,9 @@ def test_format_messages_anthropic_with_system_string():
         SystemMessage(content="System message"),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [{"type": "text", "text": "System message"}]
 
@@ -235,7 +239,9 @@ def test_format_messages_anthropic_with_system_list():
         ),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {
@@ -266,7 +272,9 @@ def test_format_messages_anthropic_with_system_mixed_list():
         ),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {"type": "text", "text": "Plain system rule"},
@@ -308,7 +316,9 @@ def test_format_messages_anthropic_with_mixed_messages():
             additional_kwargs={"cache_control": {"type": "semantic"}},
         ),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {
@@ -806,7 +816,9 @@ def test_format_messages_anthropic(
     source_history, expected_sm, expected_history
 ) -> None:
     """Test the original format_messages_anthropic functionality."""
-    sm, result_history = _format_messages_anthropic(source_history)
+    sm, result_history = _format_messages_anthropic(
+        source_history, project="test-project"
+    )
 
     for result, expected in zip(result_history, expected_history):
         assert result == expected

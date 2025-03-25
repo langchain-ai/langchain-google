@@ -248,7 +248,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         stop: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        system_message, formatted_messages = _format_messages_anthropic(messages)
+        system_message, formatted_messages = _format_messages_anthropic(
+            messages, self.project
+        )
         params = self._default_params
         params.update(kwargs)
         if kwargs.get("model_name"):
