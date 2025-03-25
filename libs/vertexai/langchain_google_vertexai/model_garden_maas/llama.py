@@ -71,7 +71,7 @@ def _parse_response_candidate_llama(
 
 
 def _parse_response_candidate_llama(
-    response_candidate: Dict[str, str], streaming: bool = False
+    response_candidate: Dict[str, Any], streaming: bool = False
 ) -> AIMessage:
     content = response_candidate.get("content", "")
     role = response_candidate["role"]
