@@ -31,6 +31,9 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
+from langchain_google_vertexai._image_utils import image_bytes_to_b64_string
+from langchain_google_vertexai._utils import load_image_from_gcs
+
 if TYPE_CHECKING:
     from anthropic.types import (
         RawMessageStreamEvent,  # type: ignore[unused-ignore, import-not-found]
@@ -44,7 +47,7 @@ _message_type_lookups = {
 }
 
 
-def _format_image(image_url: str) -> Dict:
+def _format_image(image_url: str, project: Optional[str]) -> Dict:
     """Formats a message image to a dict for anthropic api."""
     regex = r"^data:(?P<media_type>image/.+);base64,(?P<data>.+)$"
     match = re.match(regex, image_url)
@@ -59,6 +62,16 @@ def _format_image(image_url: str) -> Dict:
         return {
             "type": "url",
             "url": image_url,
+        }
+    elif image_url.startswith("gs://"):
+        # Gets image and encodes to base64.
+        image = load_image_from_gcs(image_url, project)
+        return {
+            "type": "base64",
+            "media_type": image._mime_type(),
+            "data": image_bytes_to_b64_string(
+                image.data(), "ascii", image._mime_type().split("/")[-1]
+            ),
         }
     else:
         raise ValueError(
@@ -83,7 +96,9 @@ def _format_text_content(text: str) -> Dict[str, Union[str, Dict[str, Any]]]:
     return content
 
 
-def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMessage]):
+def _format_message_anthropic(
+    message: Union[HumanMessage, AIMessage, SystemMessage], project: Optional[str]
+):
     """Format a message for Anthropic API.
 
     Args:
@@ -152,7 +167,7 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMess
 
                 if block["type"] == "image_url":
                     # convert format
-                    source = _format_image(block["image_url"]["url"])
+                    source = _format_image(block["image_url"]["url"], project)
                     content.append({"type": "image", "source": source})
                     continue
 
@@ -183,6 +198,7 @@ def _format_message_anthropic(message: Union[HumanMessage, AIMessage, SystemMess
 
 def _format_messages_anthropic(
     messages: List[BaseMessage],
+    project: Optional[str],
 ) -> Tuple[Optional[Dict[str, Any]], List[Dict]]:
     """Formats messages for anthropic."""
     system_messages: Optional[Dict[str, Any]] = None
@@ -193,12 +209,12 @@ def _format_messages_anthropic(
         if message.type == "system":
             if i != 0:
                 raise ValueError("System message must be at beginning of message list.")
-            fm = _format_message_anthropic(message)
+            fm = _format_message_anthropic(message, project)
             if fm:
                 system_messages = fm
             continue
 
-        fm = _format_message_anthropic(message)
+        fm = _format_message_anthropic(message, project)
         if not fm:
             continue
         formatted_messages.append(fm)
