@@ -538,16 +538,8 @@ def _parse_response_candidate(
                 raise Exception("Unexpected content type")
 
         if part.function_call:
-            if "function_call" in additional_kwargs:
-                logger.warning(
-                    (
-                        "This model can reply with multiple "
-                        "function calls in one response. "
-                        "Please don't rely on `additional_kwargs.function_call` "
-                        "as only the last one will be saved."
-                        "Use `tool_calls` instead."
-                    )
-                )
+            # For backward compatibility we store a function call in additional_kwargs,
+            # but in general the full set of function calls is stored in tool_calls.
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
