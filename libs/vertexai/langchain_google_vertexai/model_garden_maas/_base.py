@@ -34,6 +34,7 @@ _MISTRAL_MODELS: List[str] = [
     "mistral-nemo@2407",
     "mistral-large@2407",
     "mistral-large-2411@001",
+    "mistral-small-2503@001",
     "codestral-2501@001",
 ]
 _LLAMA_MODELS: List[str] = [
