@@ -119,7 +119,7 @@ def test_parse_history_llama_tools(mock_auth: Any) -> None:
 
 
 def test_parse_response():
-    candidate: Dict[str, str] = {
+    candidate: Dict[str, Any] = {
         "content": "London is the capital of Great Britain",
         "role": "assistant",
     }
@@ -128,6 +128,28 @@ def test_parse_response():
     )
     candidate = {
         "content": ('{"name": "test_tool", "parameters": {"arg1": "test", "arg2": 2}}'),
+        "role": "assistant",
+    }
+    parsed = _parse_response_candidate_llama(candidate)
+    assert isinstance(parsed, AIMessage)
+    assert parsed.content == ""
+    assert parsed.tool_calls == [
+        {
+            "name": "test_tool",
+            "args": {"arg1": "test", "arg2": 2},
+            "id": ANY,
+            "type": "tool_call",
+        }
+    ]
+    candidate = {
+        "tool_calls": [
+            {
+                "function": {
+                    "name": "test_tool",
+                    "arguments": '{"arg1": "test", "arg2": 2}',
+                }
+            }
+        ],
         "role": "assistant",
     }
     parsed = _parse_response_candidate_llama(candidate)
