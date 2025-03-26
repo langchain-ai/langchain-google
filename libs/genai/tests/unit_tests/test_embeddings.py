@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 from google.ai.generativelanguage_v1beta.types import (
     BatchEmbedContentsRequest,
     BatchEmbedContentsResponse,
-    EmbedContentResponse,
     ContentEmbedding,
     EmbedContentRequest,
+    EmbedContentResponse,
 )
 from pydantic import SecretStr
 from pytest import CaptureFixture
@@ -82,7 +82,6 @@ def test_embed_query() -> None:
             output_dimensionality=524,
         )
         mock_embed.assert_called_once_with(request)
-
 
 
 def test_embed_documents() -> None:
