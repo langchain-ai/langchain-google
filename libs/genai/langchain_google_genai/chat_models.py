@@ -619,6 +619,8 @@ def _response_to_result(
         generation_info = {}
         if candidate.finish_reason:
             generation_info["finish_reason"] = candidate.finish_reason.name
+            # Add model_name in last chunk
+            generation_info["model_name"] = response.model_version
         generation_info["safety_ratings"] = [
             proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
             for safety_rating in candidate.safety_ratings
