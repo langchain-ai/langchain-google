@@ -2127,6 +2127,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 is_gemini=True,
                 usage_metadata={},
             )
+            # add model name if final chunk
+            if generation_info.get("finish_reason"):
+                message.response_metadata["model_name"] = self.model_name
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
             generation_info.pop("is_blocked", None)
