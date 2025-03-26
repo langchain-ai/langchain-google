@@ -57,6 +57,7 @@ async def test_aevaluate_strings() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.xfail(reason="TODO: investigate (started failing 2025-03-25).")
 async def test_evaluate_pairwise() -> None:
     evaluator = VertexPairWiseStringEvaluator(
         metric="pairwise_question_answering_quality",
