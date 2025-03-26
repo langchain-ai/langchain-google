@@ -822,7 +822,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Use Search with Gemini 2:
         .. code-block:: python
 
-            import google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+            from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
             llm = ChatVertexAI(model="gemini-2.0-flash-exp")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
