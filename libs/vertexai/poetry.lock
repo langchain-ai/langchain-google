@@ -1534,14 +1534,14 @@ xai = ["langchain-xai"]
 
 [[package]]
 name = "langchain-core"
-version = "0.3.48"
+version = "0.3.49"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main", "test", "test_integration"]
 files = [
-    {file = "langchain_core-0.3.48-py3-none-any.whl", hash = "sha256:21e4fe84262b9c7ad8aefe7816439ede130893f8a64b8c965cd9695c2be91c73"},
-    {file = "langchain_core-0.3.48.tar.gz", hash = "sha256:be4b2fe36d8a11fb4b6b13e0808b12aea9f25e345624ffafe1d606afb6059f21"},
+    {file = "langchain_core-0.3.49-py3-none-any.whl", hash = "sha256:893ee42c9af13bf2a2d8c2ec15ba00a5c73cccde21a2bd005234ee0e78a2bdf8"},
+    {file = "langchain_core-0.3.49.tar.gz", hash = "sha256:d9dbff9bac0021463a986355c13864d6a68c41f8559dbbd399a68e1ebd9b04b9"},
 ]
 
 [package.dependencies]
@@ -1577,19 +1577,19 @@ tokenizers = ">=0.15.1,<1"
 
 [[package]]
 name = "langchain-tests"
-version = "0.3.15"
+version = "0.3.17"
 description = "Standard tests for LangChain implementations"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["test"]
 files = [
-    {file = "langchain_tests-0.3.15-py3-none-any.whl", hash = "sha256:a667907dca7d4af0f1dfc474f0efcf6548e484cf08f9d5e585efa51856a1ead3"},
-    {file = "langchain_tests-0.3.15.tar.gz", hash = "sha256:e623b1bb9481fa15394b681289ec1b826781b846815c4626b53e538b769cbce3"},
+    {file = "langchain_tests-0.3.17-py3-none-any.whl", hash = "sha256:7b156322d6579f3fd0028930f6a0172d6e0a3270bf0efbfa8118c5fcc3d50d14"},
+    {file = "langchain_tests-0.3.17.tar.gz", hash = "sha256:d4e27c8a6cdc680988f2261f892b927f835711a41facc74b2e31ffd4d56c86c2"},
 ]
 
 [package.dependencies]
 httpx = ">=0.25.0,<1"
-langchain-core = ">=0.3.47,<1.0.0"
+langchain-core = ">=0.3.49,<1.0.0"
 numpy = ">=1.26.2,<3"
 pytest = ">=7,<9"
 pytest-asyncio = ">=0.20,<1"
@@ -3328,4 +3328,4 @@ mistral = ["langchain-mistralai"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "1e4b40ea77d47b1f032899e809e388731aacf5583decb2beb23ee82eb4df8c5d"
+content-hash = "a91e0a18d4effb1461fe179d68356fb4e666a56d1d2f07056a17740795e81471"
