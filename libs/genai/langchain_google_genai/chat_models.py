@@ -962,12 +962,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # this check ensures that async client is only initialized
         # within an asyncio event loop to avoid the error
         if not self.async_client_running and _is_event_loop_running():
+            # async clients don't support "rest" transport
+            # https://github.com/googleapis/gapic-generator-python/issues/1962
+            transport = self.transport
+            if transport == "rest":
+                transport = "grpc_asyncio"
             self.async_client_running = genaix.build_generative_async_service(
                 credentials=self.credentials,
                 api_key=google_api_key,
                 client_info=get_client_info("ChatGoogleGenerativeAI"),
                 client_options=self.client_options,
-                transport=self.transport,
+                transport=transport,
             )
         return self.async_client_running
 
