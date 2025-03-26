@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from google.ai.generativelanguage_v1beta.types import (
     BatchEmbedContentsRequest,
     BatchEmbedContentsResponse,
+    EmbedContentResponse,
     ContentEmbedding,
     EmbedContentRequest,
 )
@@ -64,30 +65,24 @@ def test_embed_query() -> None:
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         mock_embed = MagicMock()
-        mock_embed.return_value = BatchEmbedContentsResponse(
-            embeddings=[ContentEmbedding(values=[1.0, 2])]
+        mock_embed.return_value = EmbedContentResponse(
+            embedding=ContentEmbedding(values=[1.0, 2])
         )
-        mock_prediction_service.return_value.batch_embed_contents = mock_embed
-
+        mock_prediction_service.return_value.embed_content = mock_embed
         llm = GoogleGenerativeAIEmbeddings(
             model="models/embedding-test",
             google_api_key=SecretStr("test-key"),
             task_type="classification",
         )
-
         llm.embed_query("test text", output_dimensionality=524)
-        request = BatchEmbedContentsRequest(
+        request = EmbedContentRequest(
             model="models/embedding-test",
-            requests=[
-                EmbedContentRequest(
-                    model="models/embedding-test",
-                    content={"parts": [{"text": "test text"}]},
-                    task_type="CLASSIFICATION",
-                    output_dimensionality=524,
-                )
-            ],
+            content={"parts": [{"text": "test text"}]},
+            task_type="CLASSIFICATION",
+            output_dimensionality=524,
         )
         mock_embed.assert_called_once_with(request)
+
 
 
 def test_embed_documents() -> None:
