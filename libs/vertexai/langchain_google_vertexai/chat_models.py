@@ -822,7 +822,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Use Search with Gemini 2:
         .. code-block:: python
 
-            import google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+            from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
             llm = ChatVertexAI(model="gemini-2.0-flash-exp")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
@@ -2127,6 +2127,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 is_gemini=True,
                 usage_metadata={},
             )
+            # add model name if final chunk
+            if generation_info.get("finish_reason"):
+                message.response_metadata["model_name"] = self.model_name
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
             generation_info.pop("is_blocked", None)
