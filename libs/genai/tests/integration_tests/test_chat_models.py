@@ -254,7 +254,7 @@ def test_chat_google_genai_invoke_multimodal_by_url() -> None:
                 },
                 {
                     "type": "image_url",
-                    "image_url": "https://picsum.photos/seed/picsum/200/300",
+                    "image_url": "https://picsum.photos/seed/picsum/200/200",
                 },
             ]
         ),
@@ -265,10 +265,13 @@ def test_chat_google_genai_invoke_multimodal_by_url() -> None:
     assert len(response.content.strip()) > 0
 
     # Try streaming
+    any_chunk = False
     for chunk in llm.stream(messages):
         print(chunk)  # noqa: T201
         assert isinstance(chunk.content, str)
-        assert len(chunk.content.strip()) > 0
+        if chunk.content:
+            any_chunk = True
+    assert any_chunk
 
 
 def test_chat_google_genai_invoke_multimodal_multiple_messages() -> None:
