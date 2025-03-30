@@ -1,32 +1,4 @@
 # serializer version: 1
-# name: TestGeminiAIStandard.test_serdes[serialized]
-  dict({
-    'id': list([
-      'langchain',
-      'chat_models',
-      'vertexai',
-      'ChatVertexAI',
-    ]),
-    'kwargs': dict({
-      'default_metadata': list([
-      ]),
-      'location': 'us-central1',
-      'max_output_tokens': 100,
-      'max_retries': 2,
-      'model_family': '1',
-      'model_name': 'gemini-1.0-pro-001',
-      'n': 1,
-      'project': 'test-project',
-      'request_parallelism': 5,
-      'stop': list([
-      ]),
-      'temperature': 0.0,
-    }),
-    'lc': 1,
-    'name': 'ChatVertexAI',
-    'type': 'constructor',
-  })
-# ---
 # name: TestGemini_15_AIStandard.test_serdes[serialized]
   dict({
     'id': list([
@@ -38,13 +10,15 @@
     'kwargs': dict({
       'default_metadata': list([
       ]),
+      'endpoint_version': 'v1beta1',
       'location': 'us-central1',
       'max_output_tokens': 100,
       'max_retries': 2,
       'model_family': '2',
       'model_name': 'gemini-1.5-pro-001',
       'n': 1,
-      'project': 'test-project',
+      'perform_literal_eval_on_string_raw_content': True,
+      'project': 'test-proj',
       'request_parallelism': 5,
       'stop': list([
       ]),

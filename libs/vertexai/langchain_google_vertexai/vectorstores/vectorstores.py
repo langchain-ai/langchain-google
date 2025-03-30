@@ -6,6 +6,7 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
     Namespace,
     NumericNamespace,
 )
+from google.oauth2.service_account import Credentials
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
@@ -398,6 +399,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         index_id: str,
         endpoint_id: str,
         private_service_connect_ip_address: Optional[str] = None,
+        credentials: Optional[Credentials] = None,
         credentials_path: Optional[str] = None,
         embedding: Optional[Embeddings] = None,
         stream_update: bool = False,
@@ -415,6 +417,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
             endpoint_id: The id of the created endpoint.
             private_service_connect_ip_address: The IP address of the private
             service connect instance.
+            credentials: Google cloud Credentials object.
             credentials_path: (Optional) The path of the Google credentials on
             the local file system.
             embedding: The :class:`Embeddings` that will be used for
@@ -429,7 +432,10 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         """
 
         sdk_manager = VectorSearchSDKManager(
-            project_id=project_id, region=region, credentials_path=credentials_path
+            project_id=project_id,
+            region=region,
+            credentials=credentials,
+            credentials_path=credentials_path,
         )
         bucket = sdk_manager.get_gcs_bucket(bucket_name=gcs_bucket_name)
         index = sdk_manager.get_index(index_id=index_id)
@@ -469,6 +475,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         index_id: str,
         endpoint_id: str,
         index_staging_bucket_name: Optional[str] = None,
+        credentials: Optional[Credentials] = None,
         credentials_path: Optional[str] = None,
         embedding: Optional[Embeddings] = None,
         stream_update: bool = False,
@@ -490,6 +497,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
             index_staging_bucket_name: (Optional) If the index is updated by batch,
                 bucket where the data will be staged before updating the index. Only
                 required when updating the index.
+            credentials: Google cloud Credentials object.
             credentials_path: (Optional) The path of the Google credentials on
             the local file system.
             embedding: The :class:`Embeddings` that will be used for
@@ -505,11 +513,10 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         """
 
         sdk_manager = VectorSearchSDKManager(
-            project_id=project_id, region=region, credentials_path=credentials_path
-        )
-
-        sdk_manager = VectorSearchSDKManager(
-            project_id=project_id, region=region, credentials_path=credentials_path
+            project_id=project_id,
+            region=region,
+            credentials=credentials,
+            credentials_path=credentials_path,
         )
 
         if index_staging_bucket_name is not None:

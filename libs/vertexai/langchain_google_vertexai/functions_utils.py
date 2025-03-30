@@ -18,6 +18,9 @@ from typing import (
 
 import google.cloud.aiplatform_v1beta1.types as gapic
 import vertexai.generative_models as vertexai  # type: ignore
+from google.cloud.aiplatform_v1beta1.types import (
+    ToolConfig as GapicToolConfig,
+)
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.outputs import ChatGeneration, Generation
@@ -184,7 +187,7 @@ def _format_base_tool_to_function_declaration(
         schema = tool.args_schema.model_json_schema()
         pydantic_version = "v2"
     else:
-        schema = tool.args_schema.schema()
+        schema = tool.args_schema.schema()  # type: ignore[attr-defined]
         pydantic_version = "v1"
 
     parameters = _dict_to_gapic_schema(schema, pydantic_version=pydantic_version)
@@ -252,11 +255,15 @@ def _format_to_gapic_function_declaration(
         return _format_base_tool_to_function_declaration(tool)
     elif isinstance(tool, type) and issubclass(tool, BaseModel):
         return _format_pydantic_to_function_declaration(tool)
-    elif callable(tool):
+    elif callable(tool) and not (
+        isinstance(tool, type) and hasattr(tool, "__annotations__")
+    ):
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
     elif isinstance(tool, vertexai.FunctionDeclaration):
         return _format_vertex_to_function_declaration(tool)
-    elif isinstance(tool, dict):
+    elif isinstance(tool, dict) or (
+        isinstance(tool, type) and hasattr(tool, "__annotations__")
+    ):
         # this could come from
         # 'langchain_core.utils.function_calling.convert_to_openai_tool'
         function = convert_to_openai_tool(cast(dict, tool))["function"]
@@ -420,7 +427,7 @@ def _format_tool_config(tool_config: _ToolConfigDict) -> Union[gapic.ToolConfig,
 def _tool_choice_to_tool_config(
     tool_choice: _ToolChoiceType,
     all_names: List[str],
-) -> _ToolConfigDict:
+) -> Optional[GapicToolConfig]:
     allowed_function_names: Optional[List[str]] = None
     if tool_choice is True or tool_choice == "any":
         mode = gapic.FunctionCallingConfig.Mode.ANY
@@ -444,6 +451,14 @@ def _tool_choice_to_tool_config(
             allowed_function_names = tool_choice["function_calling_config"].get(
                 "allowed_function_names"
             )
+        elif (
+            "type" in tool_choice
+            and tool_choice["type"] == "function"
+            and "function" in tool_choice
+            and "name" in tool_choice["function"]
+        ):
+            mode = gapic.FunctionCallingConfig.Mode.ANY
+            allowed_function_names = [tool_choice["function"]["name"]]
         else:
             raise ValueError(
                 f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
@@ -451,9 +466,10 @@ def _tool_choice_to_tool_config(
             )
     else:
         raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
-    return _ToolConfigDict(
+    tool_config = _ToolConfigDict(
         function_calling_config=_FunctionCallingConfigDict(
             mode=mode,
             allowed_function_names=allowed_function_names,
         )
     )
+    return _format_tool_config(tool_config)

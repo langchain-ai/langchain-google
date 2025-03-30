@@ -71,9 +71,9 @@ def _parse_response_candidate_llama(
 
 
 def _parse_response_candidate_llama(
-    response_candidate: Dict[str, str], streaming: bool = False
+    response_candidate: Dict[str, Any], streaming: bool = False
 ) -> AIMessage:
-    content = response_candidate["content"]
+    content = response_candidate.get("content", "")
     role = response_candidate["role"]
     if role != "assistant":
         raise ValueError(f"Role in response is {role}, expected 'assistant'!")
@@ -82,7 +82,8 @@ def _parse_response_candidate_llama(
 
     response_json = None
     try:
-        response_json = json.loads(response_candidate["content"])
+        if "content" in response_candidate:
+            response_json = json.loads(response_candidate["content"])
     except ValueError:
         pass
     if response_json and "name" in response_json:
@@ -101,6 +102,31 @@ def _parse_response_candidate_llama(
                 )
             )
         content = ""
+    elif "tool_calls" in response_candidate:
+        for tool_call in response_candidate["tool_calls"]:
+            function_name = tool_call["function"]["name"]
+            function_args = tool_call["function"].get("arguments", None)
+            if function_args is not None:
+                try:
+                    function_args = json.loads(function_args)
+                except ValueError:
+                    pass
+            if streaming:
+                tool_call_chunks.append(
+                    tool_call_chunk(
+                        name=function_name,
+                        args=function_args,
+                        id=str(uuid.uuid4()),
+                    )
+                )
+            else:
+                tool_calls.append(
+                    create_tool_call(
+                        name=tool_call["function"]["name"],
+                        args=function_args,
+                        id=str(uuid.uuid4()),
+                    )
+                )
 
     if streaming:
         return AIMessageChunk(

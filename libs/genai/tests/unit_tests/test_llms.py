@@ -1,11 +1,4 @@
-from langchain_google_genai.llms import GoogleGenerativeAI, GoogleModelFamily
-
-
-def test_model_family() -> None:
-    model = GoogleModelFamily("gemini-pro")
-    assert model == GoogleModelFamily.GEMINI
-    model = GoogleModelFamily("gemini-ultra")
-    assert model == GoogleModelFamily.GEMINI
+from langchain_google_genai.llms import GoogleGenerativeAI
 
 
 def test_tracing_params() -> None:

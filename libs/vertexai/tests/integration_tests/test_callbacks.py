@@ -77,15 +77,3 @@ def test_llm_stream() -> None:
     assert vb.successful_requests == 1
     assert vb.prompt_tokens > 0
     assert vb.completion_tokens > 0
-
-
-@pytest.mark.xfail(reason="investigating")
-@pytest.mark.release
-def test_chat_stream() -> None:
-    vb = VertexAICallbackHandler()
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0.0, callbacks=[vb])
-    for _ in llm.stream("2+2"):
-        pass
-    assert vb.successful_requests == 1
-    assert vb.completion_tokens > 0
-    assert vb.completion_tokens > 0

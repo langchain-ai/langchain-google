@@ -19,6 +19,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 )
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -29,11 +30,15 @@ from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
 from pydantic import BaseModel
+from vertexai.generative_models import (  # type: ignore
+    SafetySetting as VertexSafetySetting,
+)
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
     InputOutputTextPair,
 )
 
+from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _parse_chat_history,
@@ -111,15 +116,48 @@ def test_init_client(model: str, location: str) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "model,location",
+    [
+        (
+            "gemini-1.0-pro-001",
+            "moon-dark1",
+        ),
+    ],
+)
+def test_model_name_presence_in_chat_results(model: str, location: str) -> None:
+    config = {"model": model, "location": location}
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+    with patch(
+        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm_response = llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        assert len(llm_response.generations) != 0
+        assert isinstance(llm_response.generations[0].message, AIMessage)
+        assert (
+            llm_response.generations[0].message.response_metadata["model_name"]
+            == "gemini-1.0-pro-001"
+        )
+
+
 def test_tuned_model_name() -> None:
     llm = ChatVertexAI(
         model_name="gemini-pro",
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
+        max_tokens=500,
     )
     assert llm.model_name == "gemini-pro"
     assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
     assert llm.full_model_name == "projects/123/locations/europe-west4/endpoints/456"
+    assert llm.max_output_tokens == 500
+    assert llm.max_tokens == 500
 
 
 def test_parse_examples_correct() -> None:
@@ -232,7 +270,10 @@ def test_parse_history_gemini() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
-    system_instructions, history = _parse_chat_history_gemini(messages)
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader
+    )
     assert len(history) == 3
     assert history[0].role == "user"
     assert history[0].parts[0].text == text_question1
@@ -250,8 +291,9 @@ def test_parse_history_gemini_converted_message() -> None:
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
     messages = [system_message, message1, message2, message3]
+    image_bytes_loader = ImageBytesLoader()
     _, history = _parse_chat_history_gemini(
-        messages, convert_system_message_to_human=True
+        messages, image_bytes_loader, convert_system_message_to_human=True
     )
     assert len(history) == 3
     assert history[0].role == "user"
@@ -317,7 +359,10 @@ def test_parse_history_gemini_function() -> None:
         message6,
         message7,
     ]
-    system_instructions, history = _parse_chat_history_gemini(messages)
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader
+    )
     assert len(history) == 6
     assert system_instructions and system_instructions.parts[0].text == system_input
     assert history[0].role == "user"
@@ -523,7 +568,10 @@ def test_parse_history_gemini_function() -> None:
 def test_parse_history_gemini_multi(
     source_history, expected_sm, expected_history
 ) -> None:
-    sm, result_history = _parse_chat_history_gemini(history=source_history)
+    image_bytes_loader = ImageBytesLoader()
+    sm, result_history = _parse_chat_history_gemini(
+        history=source_history, imageBytesLoader=image_bytes_loader
+    )
 
     for result, expected in zip(result_history, expected_history):
         assert result == expected
@@ -945,7 +993,7 @@ def test_safety_settings_gemini() -> None:
 
 def test_safety_settings_gemini_init() -> None:
     expected_safety_setting = [
-        SafetySetting(
+        VertexSafetySetting(
             category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
             threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
             method=SafetySetting.HarmBlockMethod.SEVERITY,
@@ -994,7 +1042,8 @@ def test_multiple_fc() -> None:
             content='{"condition": "rainy", "temp_c": 25.2}',
         ),
     ]
-    _, history = _parse_chat_history_gemini(raw_history)
+    image_bytes_loader = ImageBytesLoader()
+    _, history = _parse_chat_history_gemini(raw_history, image_bytes_loader)
     expected = [
         Content(
             parts=[Part(text=prompt)],
@@ -1047,7 +1096,43 @@ def test_multiple_fc() -> None:
     assert history == expected
 
 
-def test_init_client_with_custom_api() -> None:
+def test_parse_chat_history_gemini_with_literal_eval() -> None:
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([text_message])
+    history: list[BaseMessage] = [HumanMessage(content=message)]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+        perform_literal_eval_on_string_raw_content=True,
+    )
+    parts = [
+        Part(text=instruction),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    assert expected == response
+
+
+def test_parse_chat_history_gemini_without_literal_eval() -> None:
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([text_message])
+    history: list[BaseMessage] = [HumanMessage(content=message)]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+        perform_literal_eval_on_string_raw_content=False,
+    )
+    parts = [
+        Part(text=message),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    assert expected == response
+
+
+def test_init_client_with_custom_api_endpoint() -> None:
     config = {
         "model": "gemini-1.5-pro",
         "api_endpoint": "https://example.com",
@@ -1068,6 +1153,41 @@ def test_init_client_with_custom_api() -> None:
         transport = mock_prediction_service.call_args.kwargs["transport"]
         assert client_options.api_endpoint == "https://example.com"
         assert transport == "rest"
+
+
+def test_init_client_with_custom_base_url() -> None:
+    config = {
+        "model": "gemini-1.5-pro",
+        "base_url": "https://example.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+    with patch(
+        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        transport = mock_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://example.com"
+        assert transport == "rest"
+
+
+def test_init_client_with_custom_model_kwargs() -> None:
+    llm = ChatAnthropicVertex(
+        project="test-project",
+        location="test-location",
+        model_kwargs={"thinking": {"type": "enabled", "budget_tokens": 1024}},
+    )
+    assert llm.model_kwargs == {"thinking": {"type": "enabled", "budget_tokens": 1024}}
+
+    default_params = llm._default_params
+    assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
 
 
 def test_anthropic_format_output() -> None:
@@ -1123,6 +1243,74 @@ def test_anthropic_format_output() -> None:
     assert len(message.tool_calls) == 1
     assert message.tool_calls[0]["name"] == "calculator"
     assert message.tool_calls[0]["args"] == {"number": 42}
+    assert message.usage_metadata == {
+        "input_tokens": 2,
+        "output_tokens": 1,
+        "total_tokens": 3,
+        "cache_creation_input_tokens": 1,
+        "cache_read_input_tokens": 1,
+    }
+
+
+def test_anthropic_format_output_with_chain_of_thoughts() -> None:
+    """Test format output handles chain of thoughts correctly."""
+
+    @dataclass
+    class Usage:
+        input_tokens: int
+        output_tokens: int
+        cache_creation_input_tokens: Optional[int]
+        cache_read_input_tokens: Optional[int]
+
+    @dataclass
+    class Message:
+        def model_dump(self):
+            return {
+                "content": [
+                    {
+                        "type": "thinking",
+                        "thinking": "Thoughts of the model...",
+                        "signature": "thought-signatire",
+                    },
+                    {
+                        "type": "redacted_thinking",
+                        "data": "redacted-thoughts-data",
+                    },
+                    {
+                        "type": "text",
+                        "text": "Final output the model",
+                    },
+                ],
+                "model": "baz",
+                "role": "assistant",
+                "usage": Usage(
+                    input_tokens=2,
+                    output_tokens=1,
+                    cache_creation_input_tokens=1,
+                    cache_read_input_tokens=1,
+                ),
+                "type": "message",
+            }
+
+        usage: Usage
+
+    test_msg = Message(
+        usage=Usage(
+            input_tokens=2,
+            output_tokens=1,
+            cache_creation_input_tokens=1,
+            cache_read_input_tokens=1,
+        )
+    )
+
+    model = ChatAnthropicVertex(project="test-project", location="test-location")
+    result = model._format_output(test_msg)
+
+    message = result.generations[0].message
+    print(message)
+    assert isinstance(message, AIMessage)
+    assert len(message.content) == 3
+    assert message.content == test_msg.model_dump()["content"]
     assert message.usage_metadata == {
         "input_tokens": 2,
         "output_tokens": 1,

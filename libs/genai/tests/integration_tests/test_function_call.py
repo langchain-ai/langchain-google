@@ -29,7 +29,9 @@ def test_function_call() -> None:
             },
         }
     ]
-    llm = ChatGoogleGenerativeAI(model="gemini-pro").bind(functions=functions)
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind(
+        functions=functions
+    )
     res = llm.invoke("what weather is today in san francisco?")
     assert res
     assert res.additional_kwargs
@@ -47,7 +49,9 @@ def test_tool_call() -> None:
         """Searches the web for `query` and returns the result."""
         raise NotImplementedError
 
-    llm = ChatGoogleGenerativeAI(model="gemini-pro").bind(functions=[search_tool])
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind(
+        functions=[search_tool]
+    )
     response = llm.invoke("weather in san francisco")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -67,7 +71,9 @@ class MyModel(BaseModel):
 
 
 def test_pydantic_call() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-pro").bind(functions=[MyModel])
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind(
+        functions=[MyModel]
+    )
     response = llm.invoke("my name is Erick and I am 27 years old")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)

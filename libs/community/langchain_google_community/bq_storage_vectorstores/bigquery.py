@@ -1,7 +1,8 @@
+import json
 import uuid
 from datetime import datetime, timedelta
 from threading import Lock, Thread
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from google.api_core.exceptions import ClientError
 from langchain_core.documents import Document
@@ -36,6 +37,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
     `batch_search` method.
     Optionally, this class can leverage a Vertex AI Feature Store for online serving
     through the `to_vertex_fs_vector_store` method.
+    Note that the `bigquery.datasets.create permission` is required even if the
+    dataset already exists. This can be avoided by specifying `temp_dataset_name` as
+    the name of an existing dataset.
 
     Attributes:
         embedding: Embedding model for generating and comparing embeddings.
@@ -46,6 +50,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         content_field: Name of the column storing document content (default: "content").
         embedding_field: Name of the column storing text embeddings (default:
             "embedding").
+        temp_dataset_name: Name of the BigQuery dataset to be used to upload temporary
+            BQ tables. If None, will default to "{dataset_name}_temp".
         doc_id_field: Name of the column storing document IDs (default: "doc_id").
         credentials: Optional Google Cloud credentials object.
         embedding_dimension: Dimension of the embedding vectors (inferred if not
@@ -72,11 +78,14 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         Args:
             ids: List of ids of documents to retrieve from the vectorstore.
-            filter: Filter on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
@@ -184,6 +193,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
         batch_size: Union[int, None] = 100,
+        **kwargs: Any,
     ) -> List[List[List[Any]]]:
         """Performs a similarity search using vector embeddings
 
@@ -196,21 +206,16 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 query embedding.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding
-                values. The method will generate SQL expressions based on the data
-                types defined
-                in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is used
-                    directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                        {
-                            "str_property": "foo",
-                            "int_property": 123
-                        }
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: The number of top results to return for each query.
             batch_size: The size of batches to process embeddings.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
 
         Returns:
             A list of lists of lists. Each inner list represents the results for a
@@ -227,7 +232,12 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             end = start + batch_size  # type: ignore[operator]
             embs_batch = embeddings[start:end]
             search_results.extend(
-                self._search_embeddings(embeddings=embs_batch, filter=filter, k=k)
+                self._search_embeddings(
+                    embeddings=embs_batch,
+                    filter=filter,
+                    k=k,
+                    options=kwargs.get("options", None),
+                )
             )
 
         return self._create_langchain_documents(
@@ -250,18 +260,12 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         Args:
             filter: (Optional) A dictionary or a string specifying filter criteria.
-                - If a dictionary is provided, it should map column names to
-                their corresponding
-                values. The method will generate SQL expressions based on the
-                data types defined in `self.table_schema`:
-                    - For columns of type "INTEGER" or "FLOAT", the value is
-                    used directly.
-                    - For other data types, the value is enclosed in single quotes.
-                Example:
-                    {
-                        "str_property": "foo",
-                        "int_property": 123
-                    }
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
 
         Returns:
@@ -294,6 +298,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         k: int = 5,
         table_to_query: Any = None,
         fields_to_exclude: Optional[List[str]] = None,
+        options: Optional[dict[str, Any]] = None,
     ) -> str:
         # Get where filter
         where_filter_expr = self._create_filters(filter)
@@ -337,7 +342,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             "{self.embedding_field}",
             (SELECT row_num, {self.embedding_field} FROM embeddings),
             distance_type => "{self.distance_type}",
-            top_k => {k}
+            top_k => {k},
+            options => '{json.dumps(options if options else {})}'
         )
         """
         # Wrap the Inner Query with an Outer SELECT to eliminate "base." column prefix
@@ -355,11 +361,15 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         embeddings: List[List[float]],
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
+        options: Optional[dict[str, Any]] = None,
     ) -> list:
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
         full_query = self._create_search_query(
-            filter=filter, k=k, num_embeddings=len(embeddings)
+            filter=filter,
+            k=k,
+            num_embeddings=len(embeddings),
+            options=options,
         )
 
         job_config = bigquery.QueryJobConfig(
@@ -455,22 +465,31 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         filter: Optional[Union[Dict[str, Any], str]] = None,
         k: int = 5,
         expire_hours_temp_table: int = 12,
+        options: Optional[dict[str, Any]] = None,
     ) -> List[List[List[Any]]]:
         """Multi-purpose batch search function. Accepts either embeddings or queries
-            but not both. Optionally returns similarity scores and/or matched embeddings
+        but not both. Optionally returns similarity scores and/or matched embeddings
+
         Args:
-        embeddings: A list of embeddings to search with. If provided, each
-            embedding represents a query vector.
-        queries: A list of text queries to search with.  If provided, each
-            query represents a query text.
-        filter: A dictionary of filters to apply to the search. The keys
-            of the dictionary should be field names, and the values should be the
-                values to filter on. (e.g., {"category": "news"})
-        k: The number of top results to return per query. Defaults to 5.
-        with_scores: If True, returns the relevance scores of the results along with
-            the documents
-        with_embeddings: If True, returns the embeddings of the results along with
-            the documents
+            embeddings: A list of embeddings to search with. If provided, each
+                embedding represents a query vector.
+            queries: A list of text queries to search with.  If provided, each
+                query represents a query text.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: The number of top results to return per query. Defaults to 5.
+            with_scores: If True, returns the relevance scores of the results along with
+                the documents
+            with_embeddings: If True, returns the embeddings of the results along with
+                the documents
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
@@ -500,6 +519,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             num_embeddings=len(embeddings),
             table_to_query=table_ref,
             fields_to_exclude=[self.embedding_field],
+            options=options,
         )
 
         job_config = bigquery.QueryJobConfig(
@@ -518,6 +538,176 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             k=k,
             num_queries=len(embeddings),
             with_embeddings=False,
+        )
+
+    def similarity_search_by_vectors(
+        self,
+        embeddings: List[List[float]],
+        filter: Optional[Union[Dict[str, Any], str]] = None,
+        k: int = 5,
+        with_scores: bool = False,
+        with_embeddings: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Core similarity search function. Handles a list of embedding vectors,
+        optionally returning scores and embeddings.
+
+        Args:
+            embeddings: A list of embedding vectors, where each vector is a list of
+                floats.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+            with_scores: (Optional) If True, include similarity scores in the result
+                for each matched document. Defaults to False.
+            with_embeddings: (Optional) If True, include the matched document's
+                embedding vector in the result. Defaults to False.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
+        Returns:
+            A list of `k` documents for each embedding in `embeddings`
+        """
+        results = self._similarity_search_by_vectors_with_scores_and_embeddings(
+            embeddings=embeddings, k=k, filter=filter, **kwargs
+        )
+
+        # Process results based on options
+        for i, query_results in enumerate(results):
+            if not with_scores and not with_embeddings:
+                # return only docs
+                results[i] = [x[0] for x in query_results]
+            elif not with_embeddings:
+                # return only docs and score
+                results[i] = [[x[0], x[1]] for x in query_results]
+            elif not with_scores:
+                # return only docs and embeddings
+                results[i] = [[x[0], x[2]] for x in query_results]
+
+        return results  # type: ignore[return-value]
+
+    def similarity_search_by_vector(
+        self,
+        embedding: List[float],
+        k: int = 5,
+        **kwargs: Any,
+    ) -> List[Document]:
+        """Return docs most similar to embedding vector.
+
+        Args:
+            embedding: Embedding to look up documents similar to.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
+        Returns:
+            Return docs most similar to embedding vector.
+        """
+        return self.similarity_search_by_vectors(embeddings=[embedding], k=k, **kwargs)[
+            0
+        ]
+
+    def similarity_search_by_vector_with_score(
+        self,
+        embedding: List[float],
+        filter: Optional[Union[Dict[str, Any], str]] = None,
+        k: int = 5,
+        **kwargs: Any,
+    ) -> List[Tuple[Document, float]]:
+        """Return docs most similar to embedding vector with scores.
+
+        Args:
+            embedding: Embedding to look up documents similar to.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
+        Returns:
+            Return docs most similar to embedding vector.
+        """
+        return self.similarity_search_by_vectors(
+            embeddings=[embedding], filter=filter, k=k, with_scores=True, **kwargs
+        )[0]
+
+    def similarity_search(
+        self, query: str, k: int = 5, **kwargs: Any
+    ) -> List[Document]:
+        """Search for top `k` docs most similar to input query.
+
+        Args:
+            query: search query to search documents with.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
+        Returns:
+            Return docs most similar to input query.
+        """
+        embedding = self.embedding.embed_query(query)
+        return self.similarity_search_by_vectors(embeddings=[embedding], k=k, **kwargs)[
+            0
+        ]
+
+    def similarity_search_with_score(
+        self,
+        query: str,
+        filter: Optional[Union[Dict[str, Any], str]] = None,
+        k: int = 5,
+        **kwargs: Any,
+    ) -> List[Tuple[Document, float]]:
+        """Search for top `k` docs most similar to input query, returns both docs and
+        scores.
+
+        Args:
+            query: search query to search documents with.
+            filter: (Optional) A dictionary or a string specifying filter criteria.
+                - If a dictionary is provided, it should map column names to their
+                corresponding values. The method will generate SQL expressions based
+                on the data types defined in `self.table_schema`. The value is enclosed
+                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
+                which case the value is used directly. E.g., `{"str_property": "foo",
+                "int_property": 123}`.
+                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+            k: (Optional) The number of top-ranking similar documents to return per
+                embedding. Defaults to 5.
+            options: (Optional) A dictionary representing additional options for
+                VECTOR_SEARCH.
+        Returns:
+            Return docs most similar to input query along with scores.
+        """
+        embedding = self.embedding.embed_query(query)
+        return self.similarity_search_by_vector_with_score(
+            embedding=embedding, filter=filter, k=k, **kwargs
         )
 
     @classmethod
@@ -544,12 +734,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         return vs_obj
 
     def to_vertex_fs_vector_store(self, **kwargs: Any) -> Any:
-        """
-        Creates and returns a VertexFSVectorStore instance based on configuration.
+        """Creates and returns a VertexFSVectorStore instance based on configuration.
 
         This method merges the base BigQuery vector store configuration with provided
-            keyword arguments,
-        then uses the combined parameters to instantiate a VertexFSVectorStore.
+        keyword arguments, then uses the combined parameters to instantiate a 
+        VertexFSVectorStore.
 
         Args:
             **kwargs: Additional keyword arguments to override or extend the base

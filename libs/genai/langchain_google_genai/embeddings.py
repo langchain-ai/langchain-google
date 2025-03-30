@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from google.ai.generativelanguage_v1beta.types import (
     BatchEmbedContentsRequest,
     EmbedContentRequest,
+    EmbedContentResponse,
 )
 from langchain_core.embeddings import Embeddings
 from langchain_core.utils import secret_from_env
@@ -239,7 +240,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         title: Optional[str] = None,
         output_dimensionality: Optional[int] = None,
     ) -> List[float]:
-        """Embed a text.
+        """Embed a text, using the non-batch endpoint:
+        https://ai.google.dev/api/rest/v1/models/embedContent#EmbedContentRequest
 
         Args:
             text: The text to embed.
@@ -247,15 +249,19 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             title: An optional title for the text.
             Only applicable when TaskType is RETRIEVAL_DOCUMENT.
             output_dimensionality: Optional reduced dimension for the output embedding.
-            https://ai.google.dev/api/rest/v1/models/batchEmbedContents#EmbedContentRequest
 
         Returns:
             Embedding for the text.
         """
         task_type = self.task_type or "RETRIEVAL_QUERY"
-        return self.embed_documents(
-            [text],
-            task_type=task_type,
-            titles=[title] if title else None,
-            output_dimensionality=output_dimensionality,
-        )[0]
+        try:
+            request: EmbedContentRequest = self._prepare_request(
+                text=text,
+                task_type=task_type,
+                title=title,
+                output_dimensionality=output_dimensionality,
+            )
+            result: EmbedContentResponse = self.client.embed_content(request)
+        except Exception as e:
+            raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e
+        return list(result.embedding.values)

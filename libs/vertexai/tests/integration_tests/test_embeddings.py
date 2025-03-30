@@ -58,7 +58,41 @@ def test_langchain_google_vertexai_embedding_documents(
     "model_name, embeddings_dim",
     _EMBEDDING_MODELS,
 )
+def test_langchain_google_vertexai_embedding_documents_with_task_type(
+    model_name: str,
+    embeddings_dim: int,
+) -> None:
+    documents = ["foo bar"] * 8
+    model = VertexAIEmbeddings(model_name)
+    output = model.embed_documents(documents)
+    assert len(output) == 8
+    for embedding in output:
+        assert len(embedding) == embeddings_dim
+    assert model.model_name == model.client._model_id
+    assert model.model_name == model_name
+
+
+@pytest.mark.release
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    _EMBEDDING_MODELS,
+)
 def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -> None:
+    document = "foo bar"
+    model = VertexAIEmbeddings(model_name)
+    output = model.embed_query(document)
+    assert len(output) == embeddings_dim
+
+
+@pytest.mark.release
+@pytest.mark.parametrize(
+    "model_name, embeddings_dim",
+    _EMBEDDING_MODELS,
+)
+def test_langchain_google_vertexai_embedding_query_with_task_type(
+    model_name: str,
+    embeddings_dim: int,
+) -> None:
     document = "foo bar"
     model = VertexAIEmbeddings(model_name)
     output = model.embed_query(document)

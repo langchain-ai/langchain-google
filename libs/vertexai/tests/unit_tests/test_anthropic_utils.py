@@ -1,8 +1,14 @@
 """Unit tests for _anthropic_utils.py."""
 
 import pytest
+from anthropic.types import (
+    RawContentBlockDeltaEvent,
+    SignatureDelta,
+    ThinkingDelta,
+)
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     HumanMessage,
     SystemMessage,
     ToolMessage,
@@ -12,6 +18,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_google_vertexai._anthropic_utils import (
     _format_message_anthropic,
     _format_messages_anthropic,
+    _make_message_chunk_from_anthropic_event,
 )
 
 
@@ -20,7 +27,7 @@ def test_format_message_anthropic_with_cache_control_in_kwargs():
     message = HumanMessage(
         content="Hello", additional_kwargs={"cache_control": {"type": "semantic"}}
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == {
         "role": "user",
         "content": [
@@ -36,7 +43,7 @@ def test_format_message_anthropic_with_cache_control_in_block():
             {"type": "text", "text": "Hello", "cache_control": {"type": "semantic"}}
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == {
         "role": "user",
         "content": [
@@ -54,7 +61,7 @@ def test_format_message_anthropic_with_mixed_blocks():
             "Plain text",
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == {
         "role": "user",
         "content": [
@@ -74,7 +81,9 @@ def test_format_messages_anthropic_with_system_cache_control():
         ),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {
@@ -95,7 +104,7 @@ def test_format_message_anthropic_system():
         content="System message",
         additional_kwargs={"cache_control": {"type": "ephemeral"}},
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == [
         {
             "type": "text",
@@ -117,7 +126,7 @@ def test_format_message_anthropic_system_list():
             {"type": "text", "text": "System rule 2"},
         ]
     )
-    result = _format_message_anthropic(message)
+    result = _format_message_anthropic(message, project="test-project")
     assert result == [
         {
             "type": "text",
@@ -128,13 +137,85 @@ def test_format_message_anthropic_system_list():
     ]
 
 
+def test_format_message_anthropic_with_chain_of_thoughts():
+    """Test formatting a system message with chain of thoughts."""
+    message = SystemMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "final output of the model",
+            },
+            {
+                "type": "thinking",
+                "thinking": "thoughts of the model...",
+                "signature": "thinking-signature",
+                "additional_keys": "additional_values",
+            },
+            {
+                "type": "redacted_thinking",
+                "data": "redacted-thoughts-data",
+                "additional_keys": "additional_values",
+            },
+        ]
+    )
+    result = _format_message_anthropic(message, project="test-project")
+    assert result == [
+        {
+            "type": "text",
+            "text": "final output of the model",
+        },
+        {
+            "type": "thinking",
+            "thinking": "thoughts of the model...",
+            "signature": "thinking-signature",
+        },
+        {"type": "redacted_thinking", "data": "redacted-thoughts-data"},
+    ]
+
+
+def test_format_message_anthropic_with_image_content():
+    """Test formatting a system message with chain of thoughts."""
+    message = SystemMessage(
+        content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64,/9j/4AAQSk"},
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://your-valid-image-url.png"},
+            },
+        ]
+    )
+    result = _format_message_anthropic(message, project="test-project")
+    assert result == [
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "/9j/4AAQSk",
+            },
+        },
+        {
+            "type": "image",
+            "source": {
+                "type": "url",
+                "url": "https://your-valid-image-url.png",
+            },
+        },
+    ]
+
+
 def test_format_messages_anthropic_with_system_string():
     """Test formatting messages with system message as string."""
     messages = [
         SystemMessage(content="System message"),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [{"type": "text", "text": "System message"}]
 
@@ -158,7 +239,9 @@ def test_format_messages_anthropic_with_system_list():
         ),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {
@@ -189,7 +272,9 @@ def test_format_messages_anthropic_with_system_mixed_list():
         ),
         HumanMessage(content="Hello"),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {"type": "text", "text": "Plain system rule"},
@@ -231,7 +316,9 @@ def test_format_messages_anthropic_with_mixed_messages():
             additional_kwargs={"cache_control": {"type": "semantic"}},
         ),
     ]
-    system_messages, formatted_messages = _format_messages_anthropic(messages)
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
 
     assert system_messages == [
         {
@@ -729,8 +816,59 @@ def test_format_messages_anthropic(
     source_history, expected_sm, expected_history
 ) -> None:
     """Test the original format_messages_anthropic functionality."""
-    sm, result_history = _format_messages_anthropic(source_history)
+    sm, result_history = _format_messages_anthropic(
+        source_history, project="test-project"
+    )
 
     for result, expected in zip(result_history, expected_history):
         assert result == expected
     assert sm == expected_sm
+
+
+def test_make_thinking_message_chunk_from_anthropic_event() -> None:
+    """Test the conversion of Anthropic event into AIMessageChunk."""
+    thinking_chunk = _make_message_chunk_from_anthropic_event(
+        event=RawContentBlockDeltaEvent(
+            type="content_block_delta",
+            index=1,
+            delta=ThinkingDelta(
+                thinking="thoughts of the model...",
+                type="thinking_delta",
+            ),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+    signature_chunk = _make_message_chunk_from_anthropic_event(
+        event=RawContentBlockDeltaEvent(
+            type="content_block_delta",
+            index=1,
+            delta=SignatureDelta(
+                signature="thoughts-signature",
+                type="signature_delta",
+            ),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+
+    assert thinking_chunk == AIMessageChunk(
+        content=[
+            {
+                "index": 1,
+                "type": "thinking",
+                "thinking": "thoughts of the model...",
+            }
+        ]
+    )
+    assert signature_chunk == AIMessageChunk(
+        content=[
+            {
+                "index": 1,
+                "type": "thinking",
+                "signature": "thoughts-signature",
+            }
+        ]
+    )
+    assert isinstance(thinking_chunk, AIMessageChunk)
+    assert isinstance(signature_chunk, AIMessageChunk)
