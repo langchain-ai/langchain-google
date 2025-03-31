@@ -1142,7 +1142,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         for arg in kwargs:
             if arg not in valid_fields:
                 suggestions = get_close_matches(arg, valid_fields, n=1)
-                suggestion = f" Did you mean '{suggestions[0]}'?" if suggestions else ""
+                suggestion = (
+                    f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
+                )
                 logger.warning(
                     f"Unexpected argument '{arg}' "
                     f"provided to ChatVertexAI.{suggestion}"

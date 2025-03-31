@@ -94,7 +94,7 @@ def test_init() -> None:
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
-        assert "Did you mean 'safety_settings'?" in call_args
+        assert "Did you mean: 'safety_settings'?" in call_args
 
 
 @pytest.mark.parametrize(

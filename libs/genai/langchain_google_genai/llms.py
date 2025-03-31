@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from difflib import get_close_matches
 from typing import Any, Iterator, List, Optional
 
 from langchain_core.callbacks import (
@@ -17,6 +19,8 @@ from langchain_google_genai._common import (
 )
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 
+logger = logging.getLogger(__name__)
+
 
 class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     """Google GenerativeAI models.
@@ -32,6 +36,28 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     model_config = ConfigDict(
         populate_by_name=True,
     )
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Needed for arg validation."""
+        # Get all valid field names, including aliases
+        valid_fields = set()
+        for field_name, field_info in self.model_fields.items():
+            valid_fields.add(field_name)
+            if hasattr(field_info, "alias") and field_info.alias is not None:
+                valid_fields.add(field_info.alias)
+
+        # Check for unrecognized arguments
+        for arg in kwargs:
+            if arg not in valid_fields:
+                suggestions = get_close_matches(arg, valid_fields, n=1)
+                suggestion = (
+                    f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
+                )
+                logger.warning(
+                    f"Unexpected argument '{arg}' "
+                    f"provided to GoogleGenerativeAI.{suggestion}"
+                )
+        super().__init__(**kwargs)
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
