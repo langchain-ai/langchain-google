@@ -574,3 +574,21 @@ def test_astream_without_eventloop() -> None:
     result = asyncio.run(model_astream("How can you help me?"))
     assert len(result) > 0
     assert isinstance(result[0], AIMessageChunk)
+
+@pytest.mark.extended
+def test_prediction_client_transport():
+    model = ChatGoogleGenerativeAI(model=_MODEL)
+    assert model.client.transport.kind == "grpc"
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, transport="rest")
+    assert model.client.transport.kind == "rest"
+
+    async def check_async_client():
+        model = ChatGoogleGenerativeAI(model=_MODEL)
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+        # test auto conversion of transport to "grpc_asyncio" from "rest"
+        model = ChatGoogleGenerativeAI(model=_MODEL, transport="rest")
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+    asyncio.run(check_async_client())
