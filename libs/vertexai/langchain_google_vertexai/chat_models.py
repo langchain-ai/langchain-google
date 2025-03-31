@@ -143,6 +143,7 @@ from langchain_google_vertexai.functions_utils import (
 from pydantic import ConfigDict
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self, is_typeddict
+from difflib import get_close_matches
 
 
 logger = logging.getLogger(__name__)
@@ -1124,9 +1125,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
-        """Needed for mypy typing to recognize model_name as a valid arg."""
+        """Needed for mypy typing to recognize model_name as a valid arg
+        and for arg validation.
+        """
         if model_name:
             kwargs["model_name"] = model_name
+
+        # Get all valid field names, including aliases
+        valid_fields = set()
+        for field_name, field_info in self.model_fields.items():
+            valid_fields.add(field_name)
+            if hasattr(field_info, "alias") and field_info.alias is not None:
+                valid_fields.add(field_info.alias)
+
+        # Check for unrecognized arguments
+        for arg in kwargs:
+            if arg not in valid_fields:
+                suggestions = get_close_matches(arg, valid_fields, n=1)
+                suggestion = f" Did you mean '{suggestions[0]}'?" if suggestions else ""
+                logger.warning(
+                    f"Unexpected argument '{arg}' "
+                    f"provided to ChatVertexAI.{suggestion}"
+                )
         super().__init__(**kwargs)
 
     model_config = ConfigDict(

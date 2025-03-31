@@ -76,6 +76,21 @@ def test_integration_initialization() -> None:
         temperature=0.7,
     )
 
+    # test initialization with an invalid argument to check warning
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-nano",
+            google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+            safety_setting={
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+            },  # Invalid arg
+        )
+        assert llm.model == "models/gemini-nano"
+        mock_warning.assert_called_once()
+        call_args = mock_warning.call_args[0][0]
+        assert "Unexpected argument 'safety_setting'" in call_args
+        assert "Did you mean 'safety_settings'?" in call_args
+
 
 def test_initialization_inside_threadpool() -> None:
     # new threads don't have a running event loop,
