@@ -5,6 +5,7 @@ import json
 import logging
 import uuid
 import warnings
+from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
     Any,
@@ -890,6 +891,28 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
     ``cachedContents/{cachedContent}``.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Needed for arg validation."""
+        # Get all valid field names, including aliases
+        valid_fields = set()
+        for field_name, field_info in self.model_fields.items():
+            valid_fields.add(field_name)
+            if hasattr(field_info, "alias") and field_info.alias is not None:
+                valid_fields.add(field_info.alias)
+
+        # Check for unrecognized arguments
+        for arg in kwargs:
+            if arg not in valid_fields:
+                suggestions = get_close_matches(arg, valid_fields, n=1)
+                suggestion = (
+                    f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
+                )
+                logger.warning(
+                    f"Unexpected argument '{arg}' "
+                    f"provided to ChatGoogleGenerativeAI.{suggestion}"
+                )
+        super().__init__(**kwargs)
 
     model_config = ConfigDict(
         populate_by_name=True,

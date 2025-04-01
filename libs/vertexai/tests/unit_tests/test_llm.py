@@ -23,6 +23,22 @@ def test_model_name() -> None:
         assert llm.model_name == "gemini-pro"
         assert llm.max_output_tokens == 10
 
+    # Test initialization with an invalid argument to check warning
+    with patch("langchain_google_vertexai.llms.logger.warning") as mock_warning:
+        llm = VertexAI(
+            model_name="gemini-pro",
+            project="test-project",
+            safety_setting={
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+            },  # Invalid arg
+        )
+        assert llm.model_name == "gemini-pro"
+        assert llm.project == "test-project"
+        mock_warning.assert_called_once()
+        call_args = mock_warning.call_args[0][0]
+        assert "Unexpected argument 'safety_setting'" in call_args
+        assert "Did you mean: 'safety_settings'?" in call_args
+
 
 def test_tuned_model_name() -> None:
     llm = VertexAI(
