@@ -575,6 +575,7 @@ def test_astream_without_eventloop() -> None:
     assert len(result) > 0
     assert isinstance(result[0], AIMessageChunk)
 
+
 @pytest.mark.extended
 def test_prediction_client_transport():
     model = ChatGoogleGenerativeAI(model=_MODEL)
