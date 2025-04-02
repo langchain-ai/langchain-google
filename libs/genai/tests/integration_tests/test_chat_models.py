@@ -577,14 +577,14 @@ def test_astream_without_eventloop() -> None:
 
 
 @pytest.mark.extended
-def test_prediction_client_transport():
+def test_prediction_client_transport() -> None:
     model = ChatGoogleGenerativeAI(model=_MODEL)
     assert model.client.transport.kind == "grpc"
 
     model = ChatGoogleGenerativeAI(model=_MODEL, transport="rest")
     assert model.client.transport.kind == "rest"
 
-    async def check_async_client():
+    async def check_async_client() -> None:
         model = ChatGoogleGenerativeAI(model=_MODEL)
         assert model.async_client.transport.kind == "grpc_asyncio"
 
