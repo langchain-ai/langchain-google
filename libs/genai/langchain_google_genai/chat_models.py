@@ -740,6 +740,109 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # batch:
             # await llm.abatch([messages])
 
+    Context Caching:
+        Context caching allows you to store and reuse content (e.g., PDFs, images) for faster processing.
+        The `cached_content` parameter accepts a cache name created via the Google Generative AI API.
+        Below are two examples: caching a single file directly and caching multiple files using `Part`.
+
+        Single File Example:
+        This caches a single file and queries it.
+
+        .. code-block:: python
+
+            from google import genai
+            from google.genai import types
+            import time
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain_core.messages import HumanMessage
+
+            client = genai.Client()
+
+            # Upload file
+            file = client.files.upload(file="./example_file")
+            while file.state.name == 'PROCESSING':
+                time.sleep(2)
+                file = client.files.get(name=file.name)
+
+            # Create cache
+            model = 'models/gemini-1.5-flash-001'
+            cache = client.caches.create(
+                model=model,
+                config=types.CreateCachedContentConfig(
+                    display_name='Cached Content',
+                    system_instruction=(
+                        'You are an expert content analyzer, and your job is to answer '
+                        'the user\'s query based on the file you have access to.'
+                    ),
+                    contents=[file],
+                    ttl="300s",
+                )
+            )
+
+            # Query with LangChain
+            llm = ChatGoogleGenerativeAI(
+                model=model,
+                cached_content=cache.name,
+            )
+            message = HumanMessage(content="Summarize the main points of the content.")
+            llm.invoke([message])
+
+        Multiple Files Example:
+        This caches two files using `Part` and queries them together.
+
+        .. code-block:: python
+
+            from google import genai
+            from google.genai.types import CreateCachedContentConfig, Content, Part
+            import time
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain_core.messages import HumanMessage
+
+            client = genai.Client()
+
+            # Upload files
+            file_1 = client.files.upload(file="./file1")
+            while file_1.state.name == 'PROCESSING':
+                time.sleep(2)
+                file_1 = client.files.get(name=file_1.name)
+
+            file_2 = client.files.upload(file="./file2")
+            while file_2.state.name == 'PROCESSING':
+                time.sleep(2)
+                file_2 = client.files.get(name=file_2.name)
+
+            # Create cache with multiple files
+            contents = [
+                Content(
+                    role="user",
+                    parts=[
+                        Part.from_uri(file_uri=file_1.uri, mime_type=file_1.mime_type),
+                        Part.from_uri(file_uri=file_2.uri, mime_type=file_2.mime_type),
+                    ],
+                )
+            ]
+            model = "gemini-1.5-flash-001"
+            cache = client.caches.create(
+                model=model,
+                config=CreateCachedContentConfig(
+                    display_name='Cached Contents',
+                    system_instruction=(
+                        'You are an expert content analyzer, and your job is to answer '
+                        'the user\'s query based on the files you have access to.'
+                    ),
+                    contents=contents,
+                    ttl="300s",
+                )
+            )
+
+            # Query with LangChain
+            llm = ChatGoogleGenerativeAI(
+                model=model,
+                cached_content=cache.name,
+            )
+            message = HumanMessage(content="Provide a summary of the key information across both files.")
+            llm.invoke([message])
+
     Tool calling:
         .. code-block:: python
 

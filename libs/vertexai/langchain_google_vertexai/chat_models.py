@@ -784,6 +784,56 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             AIMessage(content="J'adore programmer. ", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
 
+    Context Caching:
+        Context caching allows you to store and reuse content (e.g., PDFs, images) for faster processing.
+        The `cached_content` parameter accepts a cache name created via the Google Generative AI API with Vertex AI.
+        Below is an example of caching content from GCS and querying it.
+
+        Example:
+        This caches content from GCS and queries it.
+
+        .. code-block:: python
+
+            from google import genai
+            from google.genai.types import Content, CreateCachedContentConfig, HttpOptions, Part
+            from langchain_google_vertexai import ChatVertexAI
+            from langchain_core.messages import HumanMessage
+
+            client = genai.Client(http_options=HttpOptions(api_version="v1beta1"))
+
+            contents = [
+                Content(
+                    role="user",
+                    parts=[
+                        Part.from_uri(
+                            file_uri="gs://your-bucket/file1",
+                            mime_type="application/pdf",
+                        ),
+                        Part.from_uri(
+                            file_uri="gs://your-bucket/file2",
+                            mime_type="image/jpeg",
+                        ),
+                    ],
+                )
+            ]
+
+            cache = client.caches.create(
+                model="gemini-1.5-flash-001",
+                config=CreateCachedContentConfig(
+                    contents=contents,
+                    system_instruction="You are an expert content analyzer.",
+                    display_name="content-cache",
+                    ttl="300s",
+                ),
+            )
+
+            llm = ChatVertexAI(
+                model_name="gemini-1.5-flash-001",
+                cached_content=cache.name,
+            )
+            message = HumanMessage(content="Provide a summary of the key information across the content.")
+            llm.invoke([message])
+
     Tool calling:
         .. code-block:: python
 
