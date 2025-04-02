@@ -36,7 +36,7 @@ Supported examples:
     "the GOOGLE_API_KEY envvar"
     temperature: float = 0.7
     """Run inference with this temperature. Must by in the closed interval
-       [0.0, 1.0]."""
+       [0.0, 2.0]."""
     top_p: Optional[float] = None
     """Decode using nucleus sampling: consider the smallest set of tokens whose
        probability sum is at least top_p. Must be in the closed interval [0.0, 1.0]."""
