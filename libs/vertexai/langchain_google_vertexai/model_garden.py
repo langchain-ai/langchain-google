@@ -55,8 +55,10 @@ from langchain_google_vertexai._anthropic_parsers import (
     _extract_tool_calls,
 )
 from langchain_google_vertexai._anthropic_utils import (
+    _documents_in_params,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
+    _thinking_in_params,
     _tools_in_params,
     convert_to_anthropic_tool,
 )
@@ -378,7 +380,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return self.client.messages.create(**params, stream=True)
 
         stream = _stream_with_retry(**params)
-        coerce_content_to_string = not _tools_in_params(params)
+        coerce_content_to_string = (
+            not _tools_in_params(params)
+            and not _documents_in_params(params)
+            and not _thinking_in_params(params)
+        )
         for event in stream:
             msg = _make_message_chunk_from_anthropic_event(
                 event,
@@ -414,7 +420,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return await self.async_client.messages.create(**params, stream=True)
 
         stream = await _astream_with_retry(**params)
-        coerce_content_to_string = not _tools_in_params(params)
+        coerce_content_to_string = (
+            not _tools_in_params(params)
+            and not _documents_in_params(params)
+            and not _thinking_in_params(params)
+        )
         async for event in stream:
             msg = _make_message_chunk_from_anthropic_event(
                 event,
