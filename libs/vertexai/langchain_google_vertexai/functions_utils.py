@@ -157,7 +157,12 @@ def _format_json_schema_to_gapic(
 def _dict_to_gapic_schema(
     schema: Dict[str, Any], pydantic_version: str = "v1"
 ) -> gapic.Schema:
+    # Resolve refs in schema because $refs and $defs are not supported
+    # by the Gemini API.
     dereferenced_schema = dereference_refs(schema)
+    if "$defs" in dereferenced_schema:
+        del dereferenced_schema["$defs"]
+
     if pydantic_version == "v1":
         formatted_schema = _format_json_schema_to_gapic_v1(dereferenced_schema)
     else:
