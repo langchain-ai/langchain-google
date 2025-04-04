@@ -1150,12 +1150,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     logprobs: Union[bool, int] = False
     """Whether to return logprobs as part of AIMessage.response_metadata.
-    
-    If False, don't return logprobs. If True, return logprobs for top candidate. 
+
+    If False, don't return logprobs. If True, return logprobs for top candidate.
     If int, return logprobs for top ``logprobs`` candidates.
-    
+
     **NOTE**: As of 10.28.24 this is only supported for gemini-1.5-flash models.
-    
+
     .. versionadded: 2.0.6
     """
     labels: Optional[Dict[str, str]] = None
@@ -2025,41 +2025,43 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         parser: OutputParserLike
 
         if method == "json_mode":
-            schema_is_typeddict = is_typeddict(schema)
-            if isinstance(schema, type) and not schema_is_typeddict:
-                # TODO: This gets the json schema of a pydantic model. It fails for
-                # nested models because the generated schema contains $refs that the
-                # gemini api doesn't support. We can implement a postprocessing function
-                # that takes care of this if necessary.
+            if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
                 else:
                     schema_json = schema.model_json_schema()
-                schema_json = replace_defs_in_schema(schema_json)
                 parser = PydanticOutputParser(pydantic_object=schema)
             else:
-                if schema_is_typeddict:
+                if is_typeddict(schema):
                     schema_json = convert_to_json_schema(schema)
+                elif isinstance(schema, dict):
+                    schema_json = schema
                 else:
-                    schema_json = cast(dict, schema)
+                    raise ValueError(f"Unsupported schema type {type(schema)}")
                 parser = JsonOutputParser()
+
+            # Resolve refs in schema because they are not supported
+            # by the Gemini API.
+            schema_json = replace_defs_in_schema(schema_json)
+
             llm = self.bind(
                 response_mime_type="application/json",
                 response_schema=schema_json,
                 ls_structured_output_format={
                     "kwargs": {"method": method},
-                    "schema": convert_to_json_schema(schema),
+                    "schema": schema_json,
                 },
             )
-
         else:
             tool_name = _get_tool_name(schema)
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 parser = PydanticToolsParser(tools=[schema], first_tool_only=True)
-            else:
+            elif is_typeddict(schema) or isinstance(schema, dict):
                 parser = JsonOutputKeyToolsParser(
                     key_name=tool_name, first_tool_only=True
                 )
+            else:
+                raise ValueError(f"Unsupported schema type {type(schema)}")
             tool_choice = tool_name if self._is_gemini_advanced else None
 
             try:
