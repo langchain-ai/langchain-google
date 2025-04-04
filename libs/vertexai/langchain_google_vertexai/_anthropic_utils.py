@@ -425,3 +425,20 @@ def _tools_in_params(params: dict) -> bool:
     return "tools" in params or (
         "extra_body" in params and params["extra_body"].get("tools")
     )
+
+
+def _thinking_in_params(params: dict) -> bool:
+    return params.get("thinking", {}).get("type") == "enabled"
+
+
+def _documents_in_params(params: dict) -> bool:
+    for message in params.get("messages", []):
+        if isinstance(message.get("content"), list):
+            for block in message["content"]:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "document"
+                    and block.get("citations", {}).get("enabled")
+                ):
+                    return True
+    return False
