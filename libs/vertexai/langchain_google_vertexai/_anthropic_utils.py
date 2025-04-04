@@ -1,3 +1,4 @@
+import base64
 import re
 import warnings
 from typing import (
@@ -31,7 +32,9 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
-from langchain_google_vertexai._image_utils import image_bytes_to_b64_string
+from langchain_google_vertexai._image_utils import (
+    ImageBytesLoader,
+)
 from langchain_google_vertexai._utils import load_image_from_gcs
 
 if TYPE_CHECKING:
@@ -49,9 +52,8 @@ _message_type_lookups = {
 
 def _format_image(image_url: str, project: Optional[str]) -> Dict:
     """Formats a message image to a dict for anthropic api."""
-    regex = r"^data:(?P<media_type>image/.+);base64,(?P<data>.+)$"
+    regex = r"^data:(?P<media_type>(?:image|application)/.+);base64,(?P<data>.+)$"
     match = re.match(regex, image_url)
-
     if match:
         return {
             "type": "base64",
@@ -59,19 +61,34 @@ def _format_image(image_url: str, project: Optional[str]) -> Dict:
             "data": match.group("data"),
         }
     elif validators.url(image_url):
+        loader = ImageBytesLoader(project=project)
+        image_bytes = loader.load_bytes(image_url)
+        raw_mime_type = image_url.split(".")[-1].lower()
+        doc_type = "application" if raw_mime_type == "pdf" else "image"
+        mime_type = (
+            f"{doc_type}/jpeg"
+            if raw_mime_type == "jpg"
+            else f"{doc_type}/{raw_mime_type}"
+        )
         return {
-            "type": "url",
-            "url": image_url,
+            "type": "base64",
+            "media_type": mime_type,
+            "data": base64.b64encode(image_bytes).decode("ascii"),
         }
     elif image_url.startswith("gs://"):
         # Gets image and encodes to base64.
-        image = load_image_from_gcs(image_url, project)
+        loader = ImageBytesLoader(project=project)
+        part = loader.load_part(image_url)
+        if part.file_data.mime_type:
+            mime_type = part.file_data.mime_type
+            image_data = load_image_from_gcs(image_url, project=project).data
+        else:
+            mime_type = part.inline_data.mime_type
+            image_data = part.inline_data.data
         return {
             "type": "base64",
-            "media_type": image._mime_type(),
-            "data": image_bytes_to_b64_string(
-                image.data(), "ascii", image._mime_type().split("/")[-1]
-            ),
+            "media_type": mime_type,
+            "data": base64.b64encode(image_data).decode("ascii"),
         }
     else:
         raise ValueError(
@@ -168,7 +185,11 @@ def _format_message_anthropic(
                 if block["type"] == "image_url":
                     # convert format
                     source = _format_image(block["image_url"]["url"], project)
-                    content.append({"type": "image", "source": source})
+                    if source["media_type"] == "application/pdf":
+                        doc_type = "document"
+                    else:
+                        doc_type = "image"
+                    content.append({"type": doc_type, "source": source})
                     continue
 
                 if block["type"] == "tool_use":

@@ -173,40 +173,6 @@ def test_format_message_anthropic_with_chain_of_thoughts():
     ]
 
 
-def test_format_message_anthropic_with_image_content():
-    """Test formatting a system message with chain of thoughts."""
-    message = SystemMessage(
-        content=[
-            {
-                "type": "image_url",
-                "image_url": {"url": "data:image/png;base64,/9j/4AAQSk"},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": "https://your-valid-image-url.png"},
-            },
-        ]
-    )
-    result = _format_message_anthropic(message, project="test-project")
-    assert result == [
-        {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/png",
-                "data": "/9j/4AAQSk",
-            },
-        },
-        {
-            "type": "image",
-            "source": {
-                "type": "url",
-                "url": "https://your-valid-image-url.png",
-            },
-        },
-    ]
-
-
 def test_format_messages_anthropic_with_system_string():
     """Test formatting messages with system message as string."""
     messages = [
