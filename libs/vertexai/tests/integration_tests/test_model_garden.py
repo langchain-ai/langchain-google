@@ -152,10 +152,10 @@ def test_anthropic_thinking_stream() -> None:
         model_kwargs={
             "thinking": {
                 "type": "enabled",
-                "budget_tokens": 1024 # budget tokens >= 1024
+                "budget_tokens": 1024,  # budget tokens >= 1024
             },
         },
-        max_tokens=2048, # max_tokens must be greater than budget_tokens
+        max_tokens=2048,  # max_tokens must be greater than budget_tokens
     )
     question = (
         "Hello, could you recommend a good movie for me to watch this evening, please?"

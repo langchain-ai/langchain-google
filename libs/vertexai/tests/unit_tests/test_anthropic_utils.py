@@ -875,27 +875,20 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
     assert isinstance(thinking_chunk, AIMessageChunk)
     assert isinstance(signature_chunk, AIMessageChunk)
 
+
 def test_thinking_in_params_true() -> None:
     """Test _thinking_in_params when thinking.type is 'enabled'."""
-    params = {
-        "thinking": {
-            "type": "enabled",
-            "budget_tokens": 1024
-        }
-    }
+    params = {"thinking": {"type": "enabled", "budget_tokens": 1024}}
 
     assert _thinking_in_params(params)
 
+
 def test_thinking_in_params_false_different_type() -> None:
     """Test _thinking_in_params when thinking.type is 'disabled'."""
-    params = {
-        "thinking": {
-            "type": "disabled",
-            "budget_tokens": 1024
-        }
-    }
+    params = {"thinking": {"type": "disabled", "budget_tokens": 1024}}
 
     assert not _thinking_in_params(params)
+
 
 def test_documents_in_params_true() -> None:
     """Test _documents_in_params when document with citations is enabled."""
@@ -903,19 +896,13 @@ def test_documents_in_params_true() -> None:
         "messages": [
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "citations": {
-                            "enabled": True
-                        }
-                    }
-                ]
+                "content": [{"type": "document", "citations": {"enabled": True}}],
             }
         ]
     }
 
     assert _documents_in_params(params)
+
 
 def test_documents_in_params_false_citations_disabled() -> None:
     """Test _documents_in_params when citations are not enabled."""
@@ -923,34 +910,18 @@ def test_documents_in_params_false_citations_disabled() -> None:
         "messages": [
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "citations": {
-                            "enabled": False
-                        }
-                    }
-                ]
+                "content": [{"type": "document", "citations": {"enabled": False}}],
             }
         ]
     }
 
     assert not _documents_in_params(params)
 
+
 def test_documents_in_params_false_no_document() -> None:
     """Test _documents_in_params when there are no documents."""
     params = {
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Hello"
-                    }
-                ]
-            }
-        ]
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
     }
 
     assert not _documents_in_params(params)
