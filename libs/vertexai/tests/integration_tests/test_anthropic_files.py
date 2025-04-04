@@ -1,11 +1,14 @@
 """Test ChatGoogleVertexAI chat model."""
 import os
+
 import pytest
+
 from langchain_google_vertexai._image_utils import image_bytes_to_b64_string
 from langchain_google_vertexai._utils import load_image_from_gcs
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
 
+@pytest.mark.extended
 def test_pdf_gcs_uri():
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
@@ -29,6 +32,7 @@ def test_pdf_gcs_uri():
     assert len(res.content) > 100
 
 
+@pytest.mark.extended
 def test_pdf_byts():
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
@@ -54,6 +58,7 @@ def test_pdf_byts():
     assert len(res.content) > 100
 
 
+@pytest.mark.extended
 def test_https_image():
     uri = "https://picsum.photos/seed/picsum/200/300.jpg"
 
