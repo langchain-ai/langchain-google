@@ -16,9 +16,11 @@ from langchain_core.messages import (
 from langchain_core.messages.tool import tool_call as create_tool_call
 
 from langchain_google_vertexai._anthropic_utils import (
+    _documents_in_params,
     _format_message_anthropic,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
+    _thinking_in_params,
 )
 
 
@@ -872,3 +874,83 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
     )
     assert isinstance(thinking_chunk, AIMessageChunk)
     assert isinstance(signature_chunk, AIMessageChunk)
+
+def test_thinking_in_params_true() -> None:
+    """Test _thinking_in_params when thinking.type is 'enabled'."""
+    params = {
+        "thinking": {
+            "type": "enabled",
+            "budget_tokens": 1024
+        }
+    }
+
+    assert _thinking_in_params(params)
+
+def test_thinking_in_params_false_different_type() -> None:
+    """Test _thinking_in_params when thinking.type is 'disabled'."""
+    params = {
+        "thinking": {
+            "type": "disabled",
+            "budget_tokens": 1024
+        }
+    }
+
+    assert not _thinking_in_params(params)
+
+def test_documents_in_params_true() -> None:
+    """Test _documents_in_params when document with citations is enabled."""
+    params = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "citations": {
+                            "enabled": True
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    assert _documents_in_params(params)
+
+def test_documents_in_params_false_citations_disabled() -> None:
+    """Test _documents_in_params when citations are not enabled."""
+    params = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "citations": {
+                            "enabled": False
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    assert not _documents_in_params(params)
+
+def test_documents_in_params_false_no_document() -> None:
+    """Test _documents_in_params when there are no documents."""
+    params = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hello"
+                    }
+                ]
+            }
+        ]
+    }
+
+    assert not _documents_in_params(params)
