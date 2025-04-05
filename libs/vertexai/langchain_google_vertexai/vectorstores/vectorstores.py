@@ -30,22 +30,22 @@ class _BaseVertexAIVectorStore(VectorStore):
         self,
         searcher: Searcher,
         document_storage: DocumentStorage,
-        embbedings: Optional[Embeddings] = None,
+        embeddings: Optional[Embeddings] = None,
     ) -> None:
         """Constructor.
 
         Args:
             searcher: Object in charge of searching and storing the index.
             document_storage: Object in charge of storing and retrieving documents.
-            embbedings: Object in charge of transforming text to embbeddings.
+            embeddings: Object in charge of transforming text to embeddings.
         """
         super().__init__()
         self._searcher = searcher
         self._document_storage = document_storage
-        self._embeddings = embbedings or self._get_default_embeddings()
+        self._embeddings = embeddings or self._get_default_embeddings()
 
     @property
-    def embbedings(self) -> Embeddings:
+    def embeddings(self) -> Embeddings:
         """Returns the embeddings object."""
         return self._embeddings
 
@@ -359,14 +359,14 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         warnings.warn(
             message=(
-                "`TensorflowHubEmbeddings` as a default embbedings is deprecated."
-                " Will change to `VertexAIEmbbedings`. Please specify the embedding "
+                "`TensorflowHubEmbeddings` as a default embeddings is deprecated."
+                " Will change to `VertexAIEmbeddings`. Please specify the embedding "
                 "type in the constructor."
             ),
             category=DeprecationWarning,
         )
 
-        # TODO: Change to vertexai embbedingss
+        # TODO: Change to vertexai embeddings
         from langchain_community.embeddings import (  # type: ignore[import-not-found, unused-ignore]
             TensorflowHubEmbeddings,
         )
@@ -454,7 +454,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
                 staging_bucket=bucket,
                 stream_update=stream_update,
             ),
-            embbedings=embedding,
+            embeddings=embedding,
         )
 
 
@@ -550,5 +550,5 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
                 staging_bucket=bucket,
                 stream_update=stream_update,
             ),
-            embbedings=embedding,
+            embeddings=embedding,
         )
