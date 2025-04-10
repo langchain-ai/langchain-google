@@ -113,9 +113,6 @@ from langchain_google_genai._image_utils import (
 
 from . import _genai_extension as genaix
 
-WARNED_STRUCTURED_OUTPUT_JSON_MODE = False
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -1539,14 +1536,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tools=[schema], first_tool_only=True
             )
         else:
-            global WARNED_STRUCTURED_OUTPUT_JSON_MODE
-            warnings.warn(
-                "ChatGoogleGenerativeAI.with_structured_output with dict schema has "
-                "changed recently to align with behavior of other LangChain chat "
-                "models. More context: "
-                "https://github.com/langchain-ai/langchain-google/pull/772"
-            )
-            WARNED_STRUCTURED_OUTPUT_JSON_MODE = True
             parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
         tool_choice = tool_name if self._supports_tool_choice else None
         try:
