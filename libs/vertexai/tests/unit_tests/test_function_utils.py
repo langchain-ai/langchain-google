@@ -1,4 +1,5 @@
 import json
+import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 from unittest.mock import Mock, patch
@@ -13,6 +14,10 @@ from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
 )
 from langchain_core.tools import BaseTool, tool
+from langchain_core.utils.function_calling import (
+    FunctionDescription,
+    convert_to_openai_tool,
+)
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel, Field
 from pydantic.v1 import (
@@ -518,3 +523,20 @@ def test__tool_choice_to_tool_config(choice: Any) -> None:
     )
     actual = _tool_choice_to_tool_config(choice, ["foo"])
     assert expected == actual
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="Requires Python 3.10 or higher")
+def test_nested_bind_tools():
+    class Person(BaseModel):
+        name: str = Field(description="The name.")
+        hair_color: str | None = Field("Hair color, only if provided.")  # type: ignore[syntax, unused-ignore]
+
+    class People(BaseModel):
+        data: list[Person] = Field(description="The people.")
+
+    tool = convert_to_openai_tool(People)
+    function = convert_to_openai_tool(cast(dict, tool))["function"]
+    converted_tool = _format_dict_to_function_declaration(
+        cast(FunctionDescription, function)
+    )
+    assert converted_tool.name == "People"
