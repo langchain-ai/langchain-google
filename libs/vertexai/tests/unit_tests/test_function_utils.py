@@ -529,7 +529,7 @@ def test__tool_choice_to_tool_config(choice: Any) -> None:
 def test_nested_bind_tools():
     class Person(BaseModel):
         name: str = Field(description="The name.")
-        hair_color: str | None = Field("Hair color, only if provided.")
+        hair_color: str | None = Field("Hair color, only if provided.")  # type: ignore[syntax, unused-ignore]
 
     class People(BaseModel):
         data: list[Person] = Field(description="The people.")
