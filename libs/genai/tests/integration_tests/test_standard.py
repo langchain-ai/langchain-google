@@ -25,6 +25,10 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
             "rate_limiter": rate_limiter,
         }
 
+    @property
+    def supports_image_inputs(self) -> bool:
+        return True
+
     @pytest.mark.xfail(
         reason="Likely a bug in genai: prompt_token_count inconsistent in final chunk."
     )
