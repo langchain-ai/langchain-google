@@ -30,7 +30,7 @@ from langchain_core.prompts import (
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableSerializable
 from langchain_core.tools import tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 from langchain_google_vertexai import (
@@ -1301,3 +1301,20 @@ def test_location_init() -> None:
     vertexai.init(location="us-central1")
     llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
     assert llm.location == "us-central1"
+
+
+def test_nested_bind_tools():
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
+
+    class Person(BaseModel):
+        name: str = Field(description="The name.")
+        hair_color: str | None = Field("Hair color, only if provided.")
+
+    class People(BaseModel):
+        data: list[Person] = Field(description="The people.")
+
+    llm = ChatVertexAI(model="gemini-2.0-flash-001")
+    llm_with_tools = llm.bind_tools([People], tool_choice="People")
+
+    response = llm_with_tools.invoke("Chester, no hair color provided.")
+    assert response.tool_calls[0]["name"] == "People"  # type: ignore[attr-defined]
