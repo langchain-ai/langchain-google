@@ -237,7 +237,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     return await _achat_with_retry(**kwargs)
 
 
-def _is_openai_parts_format(part: dict) -> bool:
+def _is_lc_content_block(part: dict) -> bool:
     return "type" in part
 
 
@@ -252,8 +252,7 @@ def _convert_to_parts(
         if isinstance(part, str):
             parts.append(Part(text=part))
         elif isinstance(part, Mapping):
-            # OpenAI Format
-            if _is_openai_parts_format(part):
+            if _is_lc_content_block(part):
                 if part["type"] == "text":
                     parts.append(Part(text=part["text"]))
                 elif part["type"] == "image_url":
