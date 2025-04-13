@@ -337,8 +337,8 @@ class _BaseVertexAIVectorStore(VectorStore):
             )
 
         documents = [
-            Document(page_content=text, metadata=metadata)
-            for text, metadata in zip(texts, metadatas)
+            Document(id=id_, page_content=text, metadata=metadata)
+            for id_, text, metadata in zip(ids, texts, metadatas)
         ]
 
         self._document_storage.mset(list(zip(ids, documents)))
