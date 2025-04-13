@@ -1308,7 +1308,7 @@ def test_nested_bind_tools():
 
     class Person(BaseModel):
         name: str = Field(description="The name.")
-        hair_color: str | None = Field("Hair color, only if provided.")  # type: ignore[syntax, unused-ignore]
+        hair_color: Optional[str] = Field("Hair color, only if provided.")
 
     class People(BaseModel):
         data: list[Person] = Field(description="The people.")
@@ -1317,4 +1317,5 @@ def test_nested_bind_tools():
     llm_with_tools = llm.bind_tools([People], tool_choice="People")
 
     response = llm_with_tools.invoke("Chester, no hair color provided.")
-    assert response.tool_calls[0]["name"] == "People"  # type: ignore[attr-defined]
+    assert isinstance(response, AIMessage)
+    assert response.tool_calls[0]["name"] == "People"
