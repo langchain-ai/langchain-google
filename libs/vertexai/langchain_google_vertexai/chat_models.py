@@ -240,11 +240,11 @@ def _parse_chat_history_gemini(
         if is_data_content_block(part):
             # LangChain standard format
             if part["type"] == "image" and part["source_type"] == "url":
-                oai_content_block = convert_to_openai_image_block(part)  # type: ignore[arg-type]
+                oai_content_block = convert_to_openai_image_block(part)
                 url = oai_content_block["image_url"]["url"]
                 return imageBytesLoader.load_gapic_part(url)
             elif part["source_type"] == "base64":
-                bytes_ = base64.b64decode(part["source"])
+                bytes_ = base64.b64decode(part["data"])
             else:
                 raise ValueError("source_type must be url or base64.")
             inline_data: dict = {"data": bytes_}
