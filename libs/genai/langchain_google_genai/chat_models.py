@@ -261,22 +261,24 @@ def _convert_to_parts(
                     parts.append(Part(text=part["text"]))
                 elif is_data_content_block(part):
                     if part["source_type"] == "url":
-                        bytes_ = image_loader._bytes_from_url(part["source"])
+                        bytes_ = image_loader._bytes_from_url(part["url"])
                     elif part["source_type"] == "base64":
-                        bytes_ = base64.b64decode(part["source"])
+                        bytes_ = base64.b64decode(part["data"])
                     else:
                         raise ValueError("source_type must be url or base64.")
                     inline_data: dict = {"data": bytes_}
                     if "mime_type" in part:
                         inline_data["mime_type"] = part["mime_type"]
                     else:
-                        mime_type, _ = mimetypes.guess_type(part["source"])
+                        source = cast(str, part.get("url") or part.get("data"))
+                        mime_type, _ = mimetypes.guess_type(source)
                         if not mime_type:
                             kind = filetype.guess(bytes_)
                             if kind:
                                 mime_type = kind.mime
                         if mime_type:
                             inline_data["mime_type"] = mime_type
+                    parts.append(Part(inline_data=inline_data))
                 elif part["type"] == "image_url":
                     img_url = part["image_url"]
                     if isinstance(img_url, dict):

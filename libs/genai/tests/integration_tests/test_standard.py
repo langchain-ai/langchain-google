@@ -29,6 +29,14 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     def supports_image_inputs(self) -> bool:
         return True
 
+    @property
+    def supports_image_urls(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_inputs(self) -> bool:
+        return True
+
     @pytest.mark.xfail(
         reason="Likely a bug in genai: prompt_token_count inconsistent in final chunk."
     )
