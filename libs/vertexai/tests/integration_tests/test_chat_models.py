@@ -1212,8 +1212,8 @@ def multimodal_pdf_chain() -> RunnableSerializable:
             ),
             HumanMessagePromptTemplate.from_template(
                 [
-                    {"type": "text", "text": "# Document"},  # type: ignore
-                    {"type": "image_url", "image_url": {"url": "{image}"}},  # type: ignore
+                    {"type": "text", "text": "# Document"},
+                    {"type": "image_url", "image_url": {"url": "{image}"}},
                 ]
             ),
         ]
