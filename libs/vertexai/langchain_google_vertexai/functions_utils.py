@@ -47,12 +47,14 @@ _GoogleSearchRetrievalLike = Union[
     gapic.GoogleSearchRetrieval,
     Dict[str, Any],
 ]
+_GoogleSearchLike = Union[gapic.Tool.GoogleSearch, Dict[str, Any]]
 _RetrievalLike = Union[gapic.Retrieval, Dict[str, Any]]
 
 
 class _ToolDictLike(TypedDict):
     function_declarations: Optional[List[_FunctionDeclarationLike]]
     google_search_retrieval: Optional[_GoogleSearchRetrievalLike]
+    google_search: Optional[_GoogleSearchLike]
     retrieval: Optional[_RetrievalLike]
 
 
@@ -311,6 +313,7 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 for f in [
                     "function_declarations",
                     "google_search_retrieval",
+                    "google_search",
                     "retrieval",
                 ]
             ):
@@ -335,6 +338,10 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
             if "google_search_retrieval" in tool:
                 gapic_tool.google_search_retrieval = gapic.GoogleSearchRetrieval(
                     tool["google_search_retrieval"]
+                )
+            if "google_search" in tool:
+                gapic_tool.google_search = gapic.Tool.GoogleSearch(
+                    tool["google_search"]
                 )
             if "retrieval" in tool:
                 gapic_tool.retrieval = gapic.Retrieval(tool["retrieval"])
