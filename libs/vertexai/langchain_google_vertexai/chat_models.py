@@ -2,6 +2,7 @@
 
 from __future__ import annotations  # noqa
 import ast
+import base64
 from functools import cached_property
 import json
 import logging
@@ -50,6 +51,8 @@ from langchain_core.messages import (
     SystemMessage,
     ToolCall,
     ToolMessage,
+    convert_to_openai_image_block,
+    is_data_content_block,
 )
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import (
@@ -234,6 +237,22 @@ def _parse_chat_history_gemini(
                 return Part(text=part["text"])
             else:
                 return None
+        if is_data_content_block(part):
+            # LangChain standard format
+            if part["type"] == "image" and part["source_type"] == "url":
+                oai_content_block = convert_to_openai_image_block(part)
+                url = oai_content_block["image_url"]["url"]
+                return imageBytesLoader.load_gapic_part(url)
+            elif part["source_type"] == "base64":
+                bytes_ = base64.b64decode(part["data"])
+            else:
+                raise ValueError("source_type must be url or base64.")
+            inline_data: dict = {"data": bytes_}
+            if "mime_type" in part:
+                inline_data["mime_type"] = part["mime_type"]
+
+            return Part(inline_data=Blob(**inline_data))
+
         if part["type"] == "image_url":
             path = part["image_url"]["url"]
             return imageBytesLoader.load_gapic_part(path)
