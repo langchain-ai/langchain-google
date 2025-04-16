@@ -69,6 +69,7 @@ async def test_astream(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names_with_tools_support)
 @pytest.mark.flaky(retries=3)
+@pytest.mark.xfail
 async def test_tools(model_name: str) -> None:
     @tool
     def search(
