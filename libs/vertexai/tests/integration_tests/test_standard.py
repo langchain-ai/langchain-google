@@ -32,6 +32,14 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
         return True
 
     @property
+    def supports_image_urls(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_inputs(self) -> bool:
+        return True
+
+    @property
     def supports_video_inputs(self) -> bool:
         return True
 
@@ -60,6 +68,14 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
 
     @property
     def supports_image_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_image_urls(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_inputs(self) -> bool:
         return True
 
     @property
