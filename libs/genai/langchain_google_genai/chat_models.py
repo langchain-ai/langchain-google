@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
+import mimetypes
 import uuid
 import warnings
 from difflib import get_close_matches
@@ -23,6 +25,7 @@ from typing import (
     cast,
 )
 
+import filetype  # type: ignore[import]
 import google.api_core
 
 # TODO: remove ignore once the google package is published with types
@@ -62,6 +65,7 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
     ToolMessage,
+    is_data_content_block,
 )
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
@@ -237,7 +241,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     return await _achat_with_retry(**kwargs)
 
 
-def _is_openai_parts_format(part: dict) -> bool:
+def _is_lc_content_block(part: dict) -> bool:
     return "type" in part
 
 
@@ -252,10 +256,29 @@ def _convert_to_parts(
         if isinstance(part, str):
             parts.append(Part(text=part))
         elif isinstance(part, Mapping):
-            # OpenAI Format
-            if _is_openai_parts_format(part):
+            if _is_lc_content_block(part):
                 if part["type"] == "text":
                     parts.append(Part(text=part["text"]))
+                elif is_data_content_block(part):
+                    if part["source_type"] == "url":
+                        bytes_ = image_loader._bytes_from_url(part["url"])
+                    elif part["source_type"] == "base64":
+                        bytes_ = base64.b64decode(part["data"])
+                    else:
+                        raise ValueError("source_type must be url or base64.")
+                    inline_data: dict = {"data": bytes_}
+                    if "mime_type" in part:
+                        inline_data["mime_type"] = part["mime_type"]
+                    else:
+                        source = cast(str, part.get("url") or part.get("data"))
+                        mime_type, _ = mimetypes.guess_type(source)
+                        if not mime_type:
+                            kind = filetype.guess(bytes_)
+                            if kind:
+                                mime_type = kind.mime
+                        if mime_type:
+                            inline_data["mime_type"] = mime_type
+                    parts.append(Part(inline_data=inline_data))
                 elif part["type"] == "image_url":
                     img_url = part["image_url"]
                     if isinstance(img_url, dict):
