@@ -21,7 +21,7 @@ langchain-mistralai = { version = ">=0.2.0,<1", optional = true }
 httpx = "^0.28.0"
 httpx-sse = "^0.4.0"
 pydantic = "^2.9"
-validators = "^0.34.0"
+validators = ">=0.22.0,<1"
 
 [tool.poetry.group.test]
 optional = true
