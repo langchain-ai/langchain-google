@@ -1539,14 +1539,14 @@ xai = ["langchain-xai"]
 
 [[package]]
 name = "langchain-core"
-version = "0.3.52"
+version = "0.3.53"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main", "test", "test_integration"]
 files = [
-    {file = "langchain_core-0.3.52-py3-none-any.whl", hash = "sha256:cd137109c1e3d04f5a582c2cae9539b2cd5e4b795f486b58969dbc3d0387fe7c"},
-    {file = "langchain_core-0.3.52.tar.gz", hash = "sha256:f1981ec9efa4fceb11ff5ca57f5f9c8e22859cea3a94f8a044e6de8815afbd57"},
+    {file = "langchain_core-0.3.53-py3-none-any.whl", hash = "sha256:bf7e6027b841804fe0686d1dc07f26528528fd995dab1e38ffc53e1d76f1163d"},
+    {file = "langchain_core-0.3.53.tar.gz", hash = "sha256:94fa88d6d3a9695665c3d60e2a296148a8a2cea7a6f5f738cb75210581db15c1"},
 ]
 
 [package.dependencies]
@@ -1582,19 +1582,19 @@ tokenizers = ">=0.15.1,<1"
 
 [[package]]
 name = "langchain-tests"
-version = "0.3.18"
+version = "0.3.19"
 description = "Standard tests for LangChain implementations"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["test"]
 files = [
-    {file = "langchain_tests-0.3.18-py3-none-any.whl", hash = "sha256:d8f3542050f13f0c3e452a10027cd31bd02f5e1d16f7710c35fff2ba3cbfe67d"},
-    {file = "langchain_tests-0.3.18.tar.gz", hash = "sha256:2c6c1fd94b6773b2f97f93c99dd3d6cb62481887b95efadf464232b0fd288b1c"},
+    {file = "langchain_tests-0.3.19-py3-none-any.whl", hash = "sha256:f235b74421e9bf71e9453405287204a4e11f20ed3829f9b7eee9ef55df47a50a"},
+    {file = "langchain_tests-0.3.19.tar.gz", hash = "sha256:0d835148fdea7a5bcb3e26c7128b110bb4fa9532b070993566d107632a26b3a0"},
 ]
 
 [package.dependencies]
 httpx = ">=0.25.0,<1"
-langchain-core = ">=0.3.52,<1.0.0"
+langchain-core = ">=0.3.53,<1.0.0"
 numpy = [
     {version = ">=1.26.2", markers = "python_version < \"3.13\""},
     {version = ">=2.1.0", markers = "python_version >= \"3.13\""},
@@ -3403,4 +3403,4 @@ mistral = ["langchain-mistralai"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "6b9e5298bc91863ff3596dc83fb1718ecf7ca9ea92f5471922b9f5b375d9bdb2"
+content-hash = "bf3ae139f215c0773029101b41be295bb7540be6eaf5c34812392d7f41b85c4c"
