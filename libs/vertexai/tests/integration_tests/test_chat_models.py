@@ -1303,6 +1303,27 @@ def test_location_init() -> None:
     assert llm.location == "us-central1"
 
 
+@pytest.mark.release
+@pytest.mark.parametrize("model_name", model_names_to_test)
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+def test_vertexai_global_location_single_call(
+    model_name: Optional[str], endpoint_version: str
+) -> None:
+    """Test ChatVertexAI single call with global location."""
+    model = ChatVertexAI(
+        model_name=model_name,
+        location="global",
+        rate_limiter=rate_limiter,
+        endpoint_version=endpoint_version,
+    )
+    assert model.location == "global"
+    message = HumanMessage(content="Hello")
+    response = model([message])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    _check_usage_metadata(response)
+
+
 def test_nested_bind_tools():
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
 
