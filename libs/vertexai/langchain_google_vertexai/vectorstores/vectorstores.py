@@ -281,7 +281,11 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         # Makes sure is a list and can get the length, should we support iterables?
         # metadata is a list so probably not?
-        texts = list(texts)
+        if isinstance(texts, str):
+            texts = [texts]
+        else:
+            texts = list(texts)
+
         embeddings = self._embeddings.embed_documents(texts)
 
         return self.add_texts_with_embeddings(
