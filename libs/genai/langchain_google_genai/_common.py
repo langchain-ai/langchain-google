@@ -1,4 +1,5 @@
 from importlib import metadata
+import logging
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from google.api_core.gapic_v1.client_info import ClientInfo
@@ -7,6 +8,15 @@ from pydantic import BaseModel, Field, SecretStr
 
 from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality
 
+try:
+    from google.cloud.aiplatform import telemetry
+except ModuleNotFoundError as e:
+    telemetry = None
+    logging.debug(
+        "Cannot import telemetry to add custom tool context."
+        "Please run `pip install google-cloud-aiplatform`."
+        f"Error: {e}"
+    )
 
 class GoogleGenerativeAIError(Exception):
     """
@@ -124,6 +134,8 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     client_library_version = (
         f"{langchain_version}-{module}" if module else langchain_version
     )
+    if telemetry and telemetry._tool_names_to_append:
+        client_library_version += f"+tools+{'+'.join(telemetry._tool_names_to_append[::-1])}"
     return client_library_version, f"langchain-google-genai/{client_library_version}"
 
 

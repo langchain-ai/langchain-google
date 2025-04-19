@@ -1,6 +1,7 @@
 """Utilities to init Vertex AI."""
 
 import dataclasses
+import logging
 import math
 import re
 from enum import Enum, auto
@@ -24,6 +25,16 @@ from vertexai.language_models import (  # type: ignore[import-untyped]
 )
 
 from langchain_google_vertexai._retry import create_base_retry_decorator
+
+try:
+    from google.cloud.aiplatform import telemetry
+except ModuleNotFoundError as e:
+    telemetry = None
+    logging.debug(
+        "Cannot import telemetry to add custom tool context."
+        "Please run `pip install google-cloud-aiplatform`."
+        f"Error: {e}"
+    )
 
 
 def create_retry_decorator(
@@ -95,6 +106,8 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     client_library_version = (
         f"{langchain_version}-{module}" if module else langchain_version
     )
+    if telemetry and telemetry._tool_names_to_append:
+        client_library_version += f"+tools+{'+'.join(telemetry._tool_names_to_append[::-1])}"
     return client_library_version, f"langchain-google-vertexai/{client_library_version}"
 
 
