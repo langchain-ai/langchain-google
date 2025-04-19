@@ -1,3 +1,4 @@
+import os
 from importlib import metadata
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
@@ -6,6 +7,10 @@ from langchain_core.utils import secret_from_env
 from pydantic import BaseModel, Field, SecretStr
 
 from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality
+
+
+_TELEMETRY_TAG = "remote_reasoning_engine"
+_TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
 
 class GoogleGenerativeAIError(Exception):
@@ -124,6 +129,8 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     client_library_version = (
         f"{langchain_version}-{module}" if module else langchain_version
     )
+    if os.environ.get(_TELEMETRY_ENV_VARIABLE_NAME):
+        client_library_version += f"+{_TELEMETRY_TAG}"
     return client_library_version, f"langchain-google-genai/{client_library_version}"
 
 

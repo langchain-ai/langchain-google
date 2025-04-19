@@ -1,4 +1,5 @@
 from typing import Any, List
+from unittest.mock import patch
 
 import pytest
 from google.api_core.exceptions import ClientError, GoogleAPICallError, InvalidArgument
@@ -8,6 +9,7 @@ from langchain_google_vertexai._utils import (
     GoogleModelFamily,
     _get_def_key_from_schema_path,
     replace_defs_in_schema,
+    get_user_agent,
 )
 
 
@@ -182,3 +184,23 @@ def test_retry_decorator_for_invalid_argument():
         pass
 
     assert len(invalid_argument_retries) == 1
+
+
+@patch("langchain_google_vertexai._utils.os.environ.get")
+@patch("langchain_google_vertexai._utils.metadata.version")
+def test_get_user_agent_with_telemetry_env_variable(mock_version, mock_environ_get):
+    mock_version.return_value = "1.2.3"
+    mock_environ_get.return_value = True
+    client_lib_version, user_agent_str = get_user_agent(module="test-module")
+    assert client_lib_version == "1.2.3-test-module+remote_reasoning_engine"
+    assert user_agent_str == "langchain-google-vertexai/1.2.3-test-module+remote_reasoning_engine"
+
+
+@patch("langchain_google_vertexai._utils.os.environ.get")
+@patch("langchain_google_vertexai._utils.metadata.version")
+def test_get_user_agent_without_telemetry_env_variable(mock_version, mock_environ_get):
+    mock_version.return_value = "1.2.3"
+    mock_environ_get.return_value = False
+    client_lib_version, user_agent_str = get_user_agent(module="test-module")
+    assert client_lib_version == "1.2.3-test-module"
+    assert user_agent_str == "langchain-google-vertexai/1.2.3-test-module"
