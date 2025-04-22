@@ -726,3 +726,63 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
     gapic_tool = convert_to_genai_function_declarations([MyModel])
     tool_dict = tool_to_dict(gapic_tool)
     assert gapic_tool == convert_to_genai_function_declarations([tool_dict])
+
+
+def test_tool_with_doubly_nested_list_param() -> None:
+    """
+    Tests a tool parameter with a doubly nested list (List[List[str]]),
+    verifying that the GAPIC schema correctly represents the nested items.
+    """
+
+    @tool(parse_docstring=True)
+    def process_nested_data(
+        matrix: List[List[str]],
+    ) -> str:
+        """
+        Processes a matrix (list of lists of strings).
+
+        Args:
+          matrix: The nested list data.
+        """
+        return f"Processed {len(matrix)} rows."
+
+    oai_tool = convert_to_openai_tool(process_nested_data)
+
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+
+    genai_tool_dict = tool_to_dict(genai_tool)
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list) and len(function_declarations) == 1
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict)
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict)
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict)
+
+    matrix_property = properties.get("matrix")
+    assert isinstance(matrix_property, dict)
+
+    assert (
+        matrix_property.get("type_") == glm.Type.ARRAY
+    ), "Expected 'matrix' to be ARRAY."
+
+    items_level1 = matrix_property.get("items")
+    assert isinstance(items_level1, dict), "Expected first level 'items' to be a dict."
+    assert (
+        items_level1.get("type_") == glm.Type.ARRAY
+    ), "Expected first level items to be ARRAY."
+
+    items_level2 = items_level1.get("items")
+    assert isinstance(items_level2, dict), "Expected second level 'items' to be a dict."
+    assert (
+        items_level2.get("type_") == glm.Type.STRING
+    ), "Expected second level items to be STRING."
+
+    assert "description" in matrix_property
+    assert "description" in items_level1
+    assert "description" in items_level2
