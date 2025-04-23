@@ -119,9 +119,8 @@ class _VertexAIBase(BaseModel):
         else:
             location = values.get("location", cls.model_fields["location"].default)
             api_endpoint = (
-                "aiplatform.googleapis.com"
-                if location == "global"
-                else f"{location}-{constants.PREDICTION_API_BASE_PATH}"
+                f"{'' if location == 'global' else location + '-'}"
+                f"{constants.PREDICTION_API_BASE_PATH}"
             )
         client_options = ClientOptions(api_endpoint=api_endpoint)
         if values.get("client_cert_source"):
