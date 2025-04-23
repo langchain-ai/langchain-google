@@ -11,6 +11,8 @@ from langchain_google_vertexai.model_garden_maas.llama import (
     _parse_response_candidate_llama,
 )
 
+_MODEL_NAME = "meta/llama-3.3-70b-instruct-maas"
+
 
 @patch("langchain_google_vertexai.model_garden_maas._base.auth")
 def test_llama_init(mock_auth: Any) -> None:
@@ -18,12 +20,12 @@ def test_llama_init(mock_auth: Any) -> None:
     mock_credentials.token.return_value = "test-token"
     mock_auth.default.return_value = (mock_credentials, None)
     llm = get_vertex_maas_model(
-        model_name="meta/llama3-405b-instruct-maas",
+        model_name=_MODEL_NAME,
         location="moon-dark",
         project="test-project",
     )
     assert llm._llm_type == "vertexai_model_garden_maas_llama"
-    assert llm.model_name == "meta/llama3-405b-instruct-maas"
+    assert llm.model_name == _MODEL_NAME
 
     assert (
         llm.get_url()
@@ -37,7 +39,7 @@ def test_llama_init(mock_auth: Any) -> None:
 @patch("langchain_google_vertexai.model_garden_maas._base.auth")
 def test_parse_history(mock_auth: Any) -> None:
     llm = get_vertex_maas_model(
-        model_name="meta/llama3-405b-instruct-maas",
+        model_name=_MODEL_NAME,
         location="us-central1",
         project="test-project",
     )
@@ -65,7 +67,7 @@ def test_parse_history_llama_tools(mock_auth: Any) -> None:
     schema = convert_to_openai_function(get_weather)
 
     llm = get_vertex_maas_model(
-        model_name="meta/llama3-405b-instruct-maas",
+        model_name=_MODEL_NAME,
         location="us-central1",
         project="test-project",
         append_tools_to_system_message=True,
