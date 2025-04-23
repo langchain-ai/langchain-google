@@ -76,6 +76,10 @@ Supported examples:
         default=None, description=("A list of modalities of the response")
     )
 
+    thinking_budget: Optional[int] = Field(
+        default=None, description="Indicates the thinking budget in tokens."
+    )
+
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
     """The default safety settings to use for all generations. 
     

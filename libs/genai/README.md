@@ -95,6 +95,22 @@ chain = {"animal": RunnablePassthrough()} | prompt | llm
 res = chain.invoke("cat")
 ```
 
+#### Thinking support
+
+Gemini 2.5 Flash model supports reasoning through their thoughts
+
+```
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash-preview-04-17", thinking_budget=1024)
+
+response = llm.invoke(
+    "How many O's are in Google? Please tell me how you double checked the result"
+)
+
+assert response.usage_metadata["output_token_details"]["reasoning"] > 0
+```
+
 ## Embeddings
 
 This package also adds support for google's embeddings models.
