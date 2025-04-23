@@ -43,7 +43,7 @@ types-requests = "^2.31.0.20231231"
 types-protobuf = "^4.24.0.4"
 google-api-python-client = "^2.117.0"
 langchain = "^0.3.7"
-langchain-tests = "0.3.18"
+langchain-tests = "0.3.19"
 anthropic = { extras = ["vertexai"], version = ">=0.35.0,<1" }
 validators = "^0.34.0"
 
