@@ -78,7 +78,9 @@ from langchain_core.output_parsers.openai_tools import (
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_core.tools import BaseTool
+from langchain_core.utils import get_pydantic_field_names
 from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.utils import _build_model_kwargs
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -1015,6 +1017,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ``cachedContents/{cachedContent}``.
     """
 
+    model_kwargs: dict[str, Any] = Field(default_factory=dict)
+    """Holds any unexpected initialization parameters."""
+
     def __init__(self, **kwargs: Any) -> None:
         """Needed for arg validation."""
         # Get all valid field names, including aliases
@@ -1060,6 +1065,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @classmethod
     def is_lc_serializable(self) -> bool:
         return True
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_extra(cls, values: dict[str, Any]) -> Any:
+        """Build extra kwargs from additional params that were passed in."""
+        all_required_field_names = get_pydantic_field_names(cls)
+        values = _build_model_kwargs(values, all_required_field_names)
+        return values
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
