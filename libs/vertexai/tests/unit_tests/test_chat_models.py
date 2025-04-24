@@ -971,15 +971,27 @@ def test_parser_multiple_tools():
 
 
 def test_generation_config_gemini() -> None:
-    model = ChatVertexAI(model_name="gemini-pro", temperature=0.2, top_k=3)
+    model = ChatVertexAI(
+        model_name="gemini-pro",
+        temperature=0.2,
+        top_k=3,
+        frequency_penalty=0.2,
+        presence_penalty=0.6,
+    )
     generation_config = model._generation_config_gemini(
-        temperature=0.3, stop=["stop"], candidate_count=2
+        temperature=0.3,
+        stop=["stop"],
+        candidate_count=2,
+        frequency_penalty=0.9,
+        presence_penalty=0.8,
     )
     expected = GenerationConfig(
         stop_sequences=["stop"],
         temperature=0.3,
         top_k=3,
         candidate_count=2,
+        frequency_penalty=0.9,
+        presence_penalty=0.8,
     )
     assert generation_config == expected
 
