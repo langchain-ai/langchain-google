@@ -463,7 +463,7 @@ def _parse_response_candidate(
         try:
             text: Optional[str] = part.text
             # Remove erroneous newline character if present
-            if text is not None:
+            if not streaming and text is not None:
                 text = text.rstrip("\n")
         except AttributeError:
             text = None
@@ -579,9 +579,9 @@ def _parse_response_candidate(
     if any(isinstance(item, dict) and "executable_code" in item for item in content):
         warnings.warn(
             """
-        ⚠️ Warning: Output may vary each run.  
-        - 'executable_code': Always present.  
-        - 'execution_result' & 'image_url': May be absent for some queries.  
+        ⚠️ Warning: Output may vary each run.
+        - 'executable_code': Always present.
+        - 'execution_result' & 'image_url': May be absent for some queries.
 
         Validate before using in production.
 """
@@ -1008,10 +1008,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     raise an error."""
 
     cached_content: Optional[str] = None
-    """The name of the cached content used as context to serve the prediction. 
+    """The name of the cached content used as context to serve the prediction.
 
-    Note: only used in explicit caching, where users can have control over caching 
-    (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
+    Note: only used in explicit caching, where users can have control over caching
+    (e.g. what content to cache) and enjoy guaranteed cost savings. Format:
     ``cachedContents/{cachedContent}``.
     """
 
@@ -1169,7 +1169,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             else:
                 raise ValueError(
-                    "Tools are already defined." "code_execution tool can't be defined"
+                    "Tools are already defined.code_execution tool can't be defined"
                 )
 
         return super().invoke(input, config, stop=stop, **kwargs)
