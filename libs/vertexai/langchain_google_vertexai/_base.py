@@ -243,6 +243,9 @@ class _VertexAICommon(_VertexAIBase):
     """The name of a tuned model. If tuned_model_name is passed
     model_name will be used to determine the model family
     """
+    thinking_budget: Optional[int] = Field(
+        default=None, description="Indicates the thinking budget in tokens."
+    )
 
     @property
     def _is_gemini_model(self) -> bool:
