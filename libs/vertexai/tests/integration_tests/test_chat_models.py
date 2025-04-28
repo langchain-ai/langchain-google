@@ -440,9 +440,8 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("model_name", ["gemini-1.0-pro-002"])
-def test_vertexai_system_message(model_name: Optional[str]) -> None:
-    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
+def test_vertexai_system_message() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
     system_instruction = """CymbalBank is a bank located in London"""
     text_question1 = "Where is Cymbal located? Provide only the name of the city."
     sys_message = SystemMessage(content=system_instruction)

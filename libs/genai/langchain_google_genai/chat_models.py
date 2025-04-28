@@ -1080,7 +1080,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
-        client_info = get_client_info("ChatGoogleGenerativeAI")
+        client_info = get_client_info(f"ChatGoogleGenerativeAI:{self.model}")
         google_api_key = None
         if not self.credentials:
             if isinstance(self.google_api_key, SecretStr):
@@ -1120,7 +1120,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             self.async_client_running = genaix.build_generative_async_service(
                 credentials=self.credentials,
                 api_key=google_api_key,
-                client_info=get_client_info("ChatGoogleGenerativeAI"),
+                client_info=get_client_info(f"ChatGoogleGenerativeAI:{self.model}"),
                 client_options=self.client_options,
                 transport=transport,
             )
