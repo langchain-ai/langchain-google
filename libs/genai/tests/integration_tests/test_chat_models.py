@@ -196,6 +196,7 @@ def test_chat_google_genai_invoke_thinking() -> None:
 
     _check_usage_metadata(result)
 
+    assert result.usage_metadata is not None
     assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
@@ -213,7 +214,9 @@ def test_chat_google_genai_invoke_thinking_default() -> None:
 
     _check_usage_metadata(result)
 
+    assert result.usage_metadata is not None
     assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
@@ -229,6 +232,7 @@ def test_chat_google_genai_invoke_thinking_disabled() -> None:
 
     _check_usage_metadata(result)
 
+    assert result.usage_metadata is not None
     assert "output_token_details" not in result.usage_metadata
 
 
