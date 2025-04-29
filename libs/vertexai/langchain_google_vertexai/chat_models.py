@@ -70,11 +70,13 @@ from langchain_core.output_parsers.openai_tools import parse_tool_calls
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import BaseModel, Field, model_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.utils import get_pydantic_field_names
 from langchain_core.utils.function_calling import (
     convert_to_json_schema,
     convert_to_openai_tool,
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
+from langchain_core.utils.utils import _build_model_kwargs
 from vertexai.generative_models import (  # type: ignore
     Tool as VertexTool,
 )
@@ -1193,6 +1195,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         - exp_base: Exponent base to use (default: 2.0)
     """
 
+    model_kwargs: dict[str, Any] = Field(default_factory=dict)
+    """Holds any unexpected initialization parameters."""
+
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
         """Needed for mypy typing to recognize model_name as a valid arg
         and for arg validation.
@@ -1233,6 +1238,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""
         return ["langchain", "chat_models", "vertexai"]
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_extra(cls, values: dict[str, Any]) -> Any:
+        """Build extra kwargs from additional params that were passed in."""
+        all_required_field_names = get_pydantic_field_names(cls)
+        values = _build_model_kwargs(values, all_required_field_names)
+        return values
 
     @model_validator(mode="after")
     def validate_labels(self) -> Self:
