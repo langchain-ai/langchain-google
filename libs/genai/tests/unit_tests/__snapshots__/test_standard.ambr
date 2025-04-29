@@ -19,6 +19,10 @@
       'max_output_tokens': 100,
       'max_retries': 2,
       'model': 'models/gemini-1.0-pro-001',
+      'model_kwargs': dict({
+        'stop': list([
+        ]),
+      }),
       'n': 1,
       'temperature': 0.0,
       'timeout': 60.0,
@@ -48,6 +52,10 @@
       'max_output_tokens': 100,
       'max_retries': 2,
       'model': 'models/gemini-1.5-pro-001',
+      'model_kwargs': dict({
+        'stop': list([
+        ]),
+      }),
       'n': 1,
       'temperature': 0.0,
       'timeout': 60.0,

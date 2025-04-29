@@ -1218,6 +1218,28 @@ def test_init_client_with_custom_model_kwargs() -> None:
     assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
 
 
+def test_model_kwargs_chat_vertex() -> None:
+    """Test we can transfer unknown params to model_kwargs."""
+    llm = ChatVertexAI(
+        model="my-model",
+        convert_system_message_to_human=True,
+        model_kwargs={"foo": "bar"},
+    )
+    assert llm.model_name == "my-model"
+    assert llm.convert_system_message_to_human is True
+    assert llm.model_kwargs == {"foo": "bar"}
+
+    with pytest.warns(match="transferred to model_kwargs"):
+        llm = ChatVertexAI(
+            model="my-model",
+            convert_system_message_to_human=True,
+            foo="bar",
+        )
+    assert llm.model_name == "my-model"
+    assert llm.convert_system_message_to_human is True
+    assert llm.model_kwargs == {"foo": "bar"}
+
+
 def test_anthropic_format_output() -> None:
     """Test format output handles different content structures correctly."""
 
