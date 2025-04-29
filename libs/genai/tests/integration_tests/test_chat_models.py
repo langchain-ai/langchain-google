@@ -40,9 +40,11 @@ def _check_usage_metadata(message: AIMessage) -> None:
         thought_tokens = message.usage_metadata["output_token_details"]["reasoning"]
     else:
         thought_tokens = 0
-        
+
     assert (
-        message.usage_metadata["input_tokens"] + message.usage_metadata["output_tokens"] + thought_tokens
+        message.usage_metadata["input_tokens"]
+        + message.usage_metadata["output_tokens"]
+        + thought_tokens
     ) == message.usage_metadata["total_tokens"]
 
 
@@ -195,7 +197,23 @@ def test_chat_google_genai_invoke_thinking() -> None:
     _check_usage_metadata(result)
 
     assert result.usage_metadata["output_token_details"]["reasoning"] > 0
-    
+
+
+def test_chat_google_genai_invoke_thinking_default() -> None:
+    """Test invoke thinking model from ChatGoogleGenerativeAI with
+    default thinking config"""
+    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
+
+    result = llm.invoke(
+        "How many O's are in Google? Please tell me how you double checked the result",
+    )
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, str)
+
+    _check_usage_metadata(result)
+
+    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
@@ -212,6 +230,7 @@ def test_chat_google_genai_invoke_thinking_disabled() -> None:
     _check_usage_metadata(result)
 
     assert "output_token_details" not in result.usage_metadata
+
 
 def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI without response

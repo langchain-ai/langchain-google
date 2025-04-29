@@ -632,14 +632,14 @@ def _response_to_result(
                     output_tokens=output_tokens - prev_output_tokens,
                     total_tokens=total_tokens - prev_total_tokens,
                     input_token_details={"cache_read": cache_read_tokens},
-                    output_token_details={"reasoning": thought_tokens}
+                    output_token_details={"reasoning": thought_tokens},
                 )
             else:
                 lc_usage = UsageMetadata(
                     input_tokens=input_tokens - prev_input_tokens,
                     output_tokens=output_tokens - prev_output_tokens,
                     total_tokens=total_tokens - prev_total_tokens,
-                    input_token_details={"cache_read": cache_read_tokens}
+                    input_token_details={"cache_read": cache_read_tokens},
                 )
         else:
             lc_usage = None
@@ -1230,11 +1230,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
+                "thinking_config" :  {"thinking_budget": self.thinking_budget}
             }.items()
             if v is not None
         }
-        if self.thinking_budget is not None:
-            gen_config["thinking_config"] = {"thinking_budget": self.thinking_budget}
         if generation_config:
             gen_config = {**gen_config, **generation_config}
         return GenerationConfig(**gen_config)
