@@ -13,7 +13,7 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
 langchain-core = "^0.3.52"
-google-ai-generativelanguage = "^0.6.16"
+google-ai-generativelanguage = "^0.6.18"
 pydantic = ">=2,<3"
 filetype = "^1.2.0"
 
