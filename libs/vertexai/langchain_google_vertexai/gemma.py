@@ -101,8 +101,6 @@ class GemmaVertexAIModelGarden(VertexAIModelGarden):
         "top_p",
         "top_k",
         "max_tokens",
-        "frequency_penalty",
-        "presence_penalty",
     ]
 
     @property
@@ -121,8 +119,6 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
         "top_k",
         "max_tokens",
         "max_length",
-        "frequency_penalty",
-        "presence_penalty",
     ]
     parse_response: bool = False
     """Whether to post-process the chat response and clean repeations """
