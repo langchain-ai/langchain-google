@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field, SecretStr
 
 from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality
 
-
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 

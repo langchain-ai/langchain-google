@@ -6,7 +6,6 @@ from typing import Optional, Tuple
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 
-
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
