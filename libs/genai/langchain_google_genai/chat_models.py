@@ -463,7 +463,7 @@ def _parse_response_candidate(
         try:
             text: Optional[str] = part.text
             # Remove erroneous newline character if present
-            if text is not None:
+            if not streaming and text is not None:
                 text = text.rstrip("\n")
         except AttributeError:
             text = None
