@@ -168,7 +168,7 @@ _allowed_params = [
     "response_logprobs",
     "logprobs",
     "labels",
-    "thinking_budget"
+    "thinking_budget",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
@@ -2255,7 +2255,7 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
     input_tokens = raw_metadata.get("prompt_token_count", 0)
     output_tokens = raw_metadata.get("candidates_token_count", 0)
     total_tokens = raw_metadata.get("total_token_count", 0)
-    thought_tokens = raw_metadata.get("thoughts_token_count", 0) 
+    thought_tokens = raw_metadata.get("thoughts_token_count", 0)
     if all(count == 0 for count in [input_tokens, output_tokens, total_tokens]):
         return None
     else:
@@ -2264,7 +2264,7 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=total_tokens,
-                output_token_details={"reasoning": thought_tokens}
+                output_token_details={"reasoning": thought_tokens},
             )
         else:
             return UsageMetadata(

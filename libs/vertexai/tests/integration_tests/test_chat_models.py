@@ -42,7 +42,10 @@ from langchain_google_vertexai import (
 )
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
-from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME, _DEFAULT_THINKING_MODEL_NAME
+from tests.integration_tests.conftest import (
+    _DEFAULT_MODEL_NAME,
+    _DEFAULT_THINKING_MODEL_NAME,
+)
 
 model_names_to_test = [_DEFAULT_MODEL_NAME]
 endpoint_versions = ["v1", "v1beta1"]
@@ -783,38 +786,28 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     assert "brown" in result.content
     assert len(result.tool_calls) == 0
 
+
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
-    response = model.invoke(
-        [
-            HumanMessage("How many O's are in Google? Please tell me how you double checked the result")
-        ]
-    )
+    response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
     assert response.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_configured() -> None:
-    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget = 100)
-    response = model.invoke(
-        [
-            HumanMessage("How many O's are in Google? Please tell me how you double checked the result")
-        ]
-    )
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
+    response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
     assert response.usage_metadata["output_token_details"]["reasoning"] > 0
     assert response.usage_metadata["output_token_details"]["reasoning"] < 1000
 
+
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
-    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget = 0)
-    response = model.invoke(
-        [
-            HumanMessage("How many O's are in Google? Please tell me how you double checked the result")
-        ]
-    )
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
+    response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
     assert "output_token_details" not in response.usage_metadata
 

@@ -3,6 +3,7 @@ import pytest
 _DEFAULT_MODEL_NAME = "gemini-2.0-flash-001"
 _DEFAULT_THINKING_MODEL_NAME = "gemini-2.5-flash-preview-04-17"
 
+
 @pytest.fixture
 def base64_image() -> str:
     return (
