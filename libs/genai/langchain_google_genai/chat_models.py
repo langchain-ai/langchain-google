@@ -1192,9 +1192,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
+        models_prefix = "models/"
+        ls_model_name = self.model[len(models_prefix):]
+            if self.model and self.model.startswith(models_prefix)
+            else self.model
         ls_params = LangSmithParams(
             ls_provider="google_genai",
-            ls_model_name=self.model,
+            ls_model_name=ls_model_name,
             ls_model_type="chat",
             ls_temperature=params.get("temperature", self.temperature),
         )
