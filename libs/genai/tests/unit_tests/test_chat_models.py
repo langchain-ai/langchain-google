@@ -749,3 +749,25 @@ def test_temperature_range_model_validation() -> None:
 
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.5)
+
+
+def test_model_kwargs() -> None:
+    """Test we can transfer unknown params to model_kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model="my-model",
+        convert_system_message_to_human=True,
+        model_kwargs={"foo": "bar"},
+    )
+    assert llm.model == "models/my-model"
+    assert llm.convert_system_message_to_human is True
+    assert llm.model_kwargs == {"foo": "bar"}
+
+    with pytest.warns(match="transferred to model_kwargs"):
+        llm = ChatGoogleGenerativeAI(
+            model="my-model",
+            convert_system_message_to_human=True,
+            foo="bar",
+        )
+    assert llm.model == "models/my-model"
+    assert llm.convert_system_message_to_human is True
+    assert llm.model_kwargs == {"foo": "bar"}
