@@ -623,14 +623,24 @@ def _response_to_result(
         input_tokens = response.usage_metadata.prompt_token_count
         output_tokens = response.usage_metadata.candidates_token_count
         total_tokens = response.usage_metadata.total_token_count
+        thought_tokens = response.usage_metadata.thoughts_token_count
         cache_read_tokens = response.usage_metadata.cached_content_token_count
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
-            lc_usage = UsageMetadata(
-                input_tokens=input_tokens - prev_input_tokens,
-                output_tokens=output_tokens - prev_output_tokens,
-                total_tokens=total_tokens - prev_total_tokens,
-                input_token_details={"cache_read": cache_read_tokens},
-            )
+            if thought_tokens > 0:
+                lc_usage = UsageMetadata(
+                    input_tokens=input_tokens - prev_input_tokens,
+                    output_tokens=output_tokens - prev_output_tokens,
+                    total_tokens=total_tokens - prev_total_tokens,
+                    input_token_details={"cache_read": cache_read_tokens},
+                    output_token_details={"reasoning": thought_tokens},
+                )
+            else:
+                lc_usage = UsageMetadata(
+                    input_tokens=input_tokens - prev_input_tokens,
+                    output_tokens=output_tokens - prev_output_tokens,
+                    total_tokens=total_tokens - prev_total_tokens,
+                    input_token_details={"cache_read": cache_read_tokens},
+                )
         else:
             lc_usage = None
     except AttributeError:
@@ -1149,6 +1159,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "n": self.n,
             "safety_settings": self.safety_settings,
             "response_modalities": self.response_modalities,
+            "thinking_budget": self.thinking_budget,
         }
 
     def invoke(
@@ -1219,6 +1230,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
+                "thinking_config": {"thinking_budget": self.thinking_budget}
+                if self.thinking_budget is not None
+                else None,
             }.items()
             if v is not None
         }
