@@ -1230,7 +1230,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
-                "thinking_config": {"thinking_budget": self.thinking_budget},
+                "thinking_config": {"thinking_budget": self.thinking_budget}
+                if self.thinking_budget is not None
+                else None,
             }.items()
             if v is not None
         }
