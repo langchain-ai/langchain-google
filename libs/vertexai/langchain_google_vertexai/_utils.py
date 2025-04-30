@@ -2,6 +2,7 @@
 
 import dataclasses
 import math
+import os
 import re
 from enum import Enum, auto
 from importlib import metadata
@@ -24,6 +25,9 @@ from vertexai.language_models import (  # type: ignore[import-untyped]
 )
 
 from langchain_google_vertexai._retry import create_base_retry_decorator
+
+_TELEMETRY_TAG = "remote_reasoning_engine"
+_TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
 
 def create_retry_decorator(
@@ -95,6 +99,8 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     client_library_version = (
         f"{langchain_version}-{module}" if module else langchain_version
     )
+    if os.environ.get(_TELEMETRY_ENV_VARIABLE_NAME):
+        client_library_version += f"+{_TELEMETRY_TAG}"
     return client_library_version, f"langchain-google-vertexai/{client_library_version}"
 
 
