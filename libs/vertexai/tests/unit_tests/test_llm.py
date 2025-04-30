@@ -62,6 +62,8 @@ def test_vertexai_args_passed() -> None:
         "temperature": 0,
         "top_k": 10,
         "top_p": 0.5,
+        "frequency_penalty": 0.2,
+        "presence_penalty": 0.3,
     }
 
     # Mock the library to ensure the args are passed correctly
@@ -78,7 +80,9 @@ def test_vertexai_args_passed() -> None:
         mock_prediction_service.return_value.generate_content = mock_generate_content
 
         llm = VertexAI(model_name="gemini-pro", **prompt_params)
-        response = llm.invoke(user_prompt, temperature=0.5)
+        response = llm.invoke(
+            user_prompt, temperature=0.5, frequency_penalty=0.5, presence_penalty=0.5
+        )
         assert response == response_text
         mock_generate_content.assert_called_once()
 
@@ -90,7 +94,13 @@ def test_vertexai_args_passed() -> None:
             == "Hello"
         )
         expected = GenerationConfig(
-            candidate_count=1, temperature=0.5, top_p=0.5, top_k=10, max_output_tokens=1
+            candidate_count=1,
+            temperature=0.5,
+            top_p=0.5,
+            top_k=10,
+            max_output_tokens=1,
+            frequency_penalty=0.5,
+            presence_penalty=0.5,
         )
         assert (
             mock_generate_content.call_args.kwargs["request"].generation_config

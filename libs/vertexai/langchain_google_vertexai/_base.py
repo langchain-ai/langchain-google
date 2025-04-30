@@ -202,6 +202,12 @@ class _VertexAICommon(_VertexAIBase):
     "Underlying model name."
     temperature: Optional[float] = None
     "Sampling temperature, it controls the degree of randomness in token selection."
+    frequency_penalty: Optional[float] = None
+    "Positive values penalize tokens that repeatedly appear in the generated text, "
+    "decreasing the probability of repeating content."
+    presence_penalty: Optional[float] = None
+    "Positive values penalize tokens that already appear in the generated text, "
+    "increasing the probability of generating more diverse content."
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     "Token limit determines the maximum amount of text output from one prompt."
     top_p: Optional[float] = None
