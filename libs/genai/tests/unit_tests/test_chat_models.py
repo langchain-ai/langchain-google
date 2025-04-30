@@ -49,7 +49,7 @@ def test_integration_initialization() -> None:
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "models/gemini-nano",
+        "ls_model_name": "gemini-nano",
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
@@ -62,7 +62,7 @@ def test_integration_initialization() -> None:
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "models/gemini-nano",
+        "ls_model_name": "gemini-nano",
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
         "ls_max_tokens": 10,
@@ -735,7 +735,7 @@ def test_temperature_range_pydantic_validation() -> None:
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "models/gemini-2.0-flash",
+        "ls_model_name": "gemini-2.0-flash",
         "ls_model_type": "chat",
         "ls_temperature": 1.5,
     }
