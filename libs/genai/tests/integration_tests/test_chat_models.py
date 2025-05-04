@@ -145,7 +145,7 @@ def test_chat_google_genai_invoke_with_image() -> None:
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
 
     result = llm.invoke(
-        "Generate an image of a cat and say meow",
+        "Generate an image of a cat. Then, say meow!",
         config=dict(tags=["meow"]),
         generation_config=dict(
             top_k=2, top_p=1, temperature=0.7, response_modalities=["TEXT", "IMAGE"]
@@ -169,7 +169,7 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
     )
 
     result = llm.invoke(
-        "Generate an image of a cat and say meow",
+        "Generate an image of a cat. Then, say meow!",
         config=dict(tags=["meow"]),
         generation_config=dict(top_k=2, top_p=1, temperature=0.7),
     )
