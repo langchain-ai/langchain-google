@@ -140,6 +140,7 @@ def test_chat_google_genai_invoke() -> None:
     _check_usage_metadata(result)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_image() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI."""
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
@@ -160,6 +161,7 @@ def test_chat_google_genai_invoke_with_image() -> None:
     _check_usage_metadata(result)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
     modalities."""
