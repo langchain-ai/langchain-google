@@ -140,12 +140,13 @@ def test_chat_google_genai_invoke() -> None:
     _check_usage_metadata(result)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_image() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI."""
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
 
     result = llm.invoke(
-        "Generate an image of a cat and say meow",
+        "Generate an image of a cat. Then, say meow!",
         config=dict(tags=["meow"]),
         generation_config=dict(
             top_k=2, top_p=1, temperature=0.7, response_modalities=["TEXT", "IMAGE"]
@@ -160,6 +161,7 @@ def test_chat_google_genai_invoke_with_image() -> None:
     _check_usage_metadata(result)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
     modalities."""
@@ -169,7 +171,7 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
     )
 
     result = llm.invoke(
-        "Generate an image of a cat and say meow",
+        "Generate an image of a cat. Then, say meow!",
         config=dict(tags=["meow"]),
         generation_config=dict(top_k=2, top_p=1, temperature=0.7),
     )
@@ -236,13 +238,14 @@ def test_chat_google_genai_invoke_thinking_disabled() -> None:
     assert "output_token_details" not in result.usage_metadata
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI without response
     modalities."""
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
 
     result = llm.invoke(
-        "Generate an image of a cat and say meow",
+        "Generate an image of a cat. Then, say meow!",
         config=dict(tags=["meow"]),
         generation_config=dict(top_k=2, top_p=1, temperature=0.7),
     )
@@ -252,6 +255,7 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> No
     _check_usage_metadata(result)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
     modalities specified in both modal init and invoke generation_config."""
@@ -260,7 +264,7 @@ def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> No
         response_modalities=[Modality.TEXT],  # type: ignore[list-item]
     )
     result = llm.invoke(
-        "Generate an image of a cat and say meow",
+        "Generate an image of a cat. Then, say meow!",
         config=dict(tags=["meow"]),
         generation_config=dict(
             top_k=2,
