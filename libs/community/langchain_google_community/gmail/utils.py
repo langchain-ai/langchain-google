@@ -24,58 +24,6 @@ DEFAULT_CLIENT_SECRETS_FILE = "credentials.json"
 DEFAULT_SERVICE_ACCOUNT_FILE = "service_account.json"
 
 
-def get_gmail_credentials(
-    token_file: Optional[str] = None,
-    client_secrets_file: Optional[str] = None,
-    service_account_file: Optional[str] = None,
-    scopes: Optional[List[str]] = None,
-    use_domain_wide: bool = False,
-    delegated_user: Optional[str] = None,
-) -> Credentials:
-    """Get credentials."""
-    if use_domain_wide:
-        _, _, ServiceCredentials = import_google()
-        service_account_file = service_account_file or DEFAULT_SERVICE_ACCOUNT_FILE
-        scopes = scopes or DEFAULT_SERVICE_SCOPES
-        credentials = ServiceCredentials.from_service_account_file(
-            service_account_file, scopes=scopes
-        )
-
-        if delegated_user:
-            credentials = credentials.with_subject(delegated_user)
-
-        return credentials
-    else:
-        # From https://developers.google.com/gmail/api/quickstart/python
-        Request, Credentials, _ = import_google()
-        InstalledAppFlow = import_installed_app_flow()
-        creds = None
-        scopes = scopes or DEFAULT_SCOPES
-        token_file = token_file or DEFAULT_CREDS_TOKEN_FILE
-        client_secrets_file = client_secrets_file or DEFAULT_CLIENT_SECRETS_FILE
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first
-        # time.
-
-        if os.path.exists(token_file):
-            creds = Credentials.from_authorized_user_file(token_file, scopes)
-
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())  # type: ignore[call-arg]
-            else:
-                # https://developers.google.com/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application # noqa
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    client_secrets_file, scopes
-                )
-                creds = flow.run_local_server(port=0)
-
-            with open(token_file, "w") as token:
-                token.write(creds.to_json())
-
-        return creds
-
-
 def build_resource_service(
     credentials: Optional[Credentials] = None,
     service_name: str = "gmail",

@@ -106,3 +106,60 @@ def import_googleapiclient_resource_builder() -> build_resource:
     return guard_import(
         module_name="googleapiclient.discovery", pip_name="google-api-python-client"
     ).build
+
+
+DEFAULT_SCOPES = ["https://www.googleapis.com/auth/calendar",
+                  "https://mail.google.com/"]
+DEFAULT_CREDS_TOKEN_FILE = "token.json"
+DEFAULT_CLIENT_SECRETS_FILE = "credentials.json"
+DEFAULT_SERVICE_ACCOUNT_FILE = "service_account.json"
+DEFAULT_SERVICE_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+
+def get_google_credentials(
+    token_file: Optional[str] = None,
+    client_secrets_file: Optional[str] = None,
+    service_account_file: Optional[str] = None,
+    scopes: Optional[List[str]] = None,
+    use_domain_wide: bool = False,
+    delegated_user: Optional[str] = None,
+) -> Credentials:
+    """Get credentials."""
+    if use_domain_wide:
+        _, _, ServiceCredentials = import_google()
+        service_account_file = service_account_file
+        scopes = scopes
+        credentials = ServiceCredentials.from_service_account_file(
+            service_account_file, scopes=scopes
+        )
+
+        if delegated_user:
+            credentials = credentials.with_subject(delegated_user)
+
+        return credentials
+    else:
+        Request, Credentials, ServiceCredentials = import_google()
+        InstalledAppFlow = import_installed_app_flow()
+        creds = None
+        scopes = scopes
+        token_file = token_file or DEFAULT_CREDS_TOKEN_FILE
+        client_secrets_file = client_secrets_file or DEFAULT_CLIENT_SECRETS_FILE
+        # The file token.json stores the user's access and refresh tokens, and is
+        # created automatically when the authorization flow completes for the first
+        # time.
+        if os.path.exists(token_file):
+            creds = Credentials.from_authorized_user_file(token_file, scopes)
+        # If there are no (valid) credentials available, let the user log in.
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())  # type: ignore[call-arg]
+            else:
+                # https://developers.google.com/calendar/api/quickstart/python#authorize_credentials_for_a_desktop_application # noqa
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    client_secrets_file, scopes
+                )
+                creds = flow.run_local_server(port=0)
+            # Save the credentials for the next run
+            with open(token_file, "w") as token:
+                token.write(creds.to_json())
+        return creds
