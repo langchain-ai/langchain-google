@@ -19,18 +19,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-
-def import_installed_app_flow() -> InstalledAppFlow:
-    """Import InstalledAppFlow class.
-
-    Returns:
-        InstalledAppFlow: InstalledAppFlow class.
-    """
-    return guard_import(
-        module_name="google_auth_oauthlib.flow", pip_name="google-auth-oauthlib"
-    ).InstalledAppFlow
-
-
 def import_googleapiclient_resource_builder() -> build_resource:
     """Import googleapiclient.discovery.build function.
 

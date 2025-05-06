@@ -17,25 +17,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-
-
-def import_installed_app_flow() -> InstalledAppFlow:
-    """Import InstalledAppFlow class.
-
-    Returns:
-        InstalledAppFlow: InstalledAppFlow class.
-    """
-    try:
-        from google_auth_oauthlib.flow import InstalledAppFlow
-    except ImportError:
-        raise ImportError(
-            "You need to install gmail dependencies to use this toolkit. "
-            "Please, install bigquery dependency group: "
-            "`pip install langchain-google-community[gmail]`"
-        )
-    return InstalledAppFlow
-
-
 def import_googleapiclient_resource_builder() -> build_resource:
     """Import googleapiclient.discovery.build function.
 

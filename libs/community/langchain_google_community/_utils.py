@@ -84,3 +84,15 @@ def import_google() -> Tuple[Request, Credentials, ServiceCredentials]:
             module_name="google.oauth2.service_account", pip_name="google-auth"
         ).ServiceCredentials
     )
+
+
+def import_installed_app_flow() -> InstalledAppFlow:
+    """Import InstalledAppFlow class.
+
+    Returns:
+        InstalledAppFlow: InstalledAppFlow class.
+    """
+    return guard_import(
+        module_name="google_auth_oauthlib.flow", pip_name="google-auth-oauthlib"
+    ).InstalledAppFlow
+
