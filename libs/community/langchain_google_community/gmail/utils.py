@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import os
 from typing import TYPE_CHECKING, List, Optional, Tuple
+
 from langchain_google_community._utils import (
-    import_googleapiclient_resource_builder,
     get_google_credentials,
+    import_googleapiclient_resource_builder,
 )
 
 if TYPE_CHECKING:

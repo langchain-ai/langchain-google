@@ -1,16 +1,14 @@
 """Utilities to init Vertex AI."""
 from __future__ import annotations
-import os
-from importlib import metadata
-from typing import Optional, Tuple
 
 import logging
 import os
 from datetime import datetime
+from importlib import metadata
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from langchain_core.utils import guard_import
 from google.api_core.gapic_v1.client_info import ClientInfo
+from langchain_core.utils import guard_import
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
@@ -24,6 +22,7 @@ if TYPE_CHECKING:
     from googleapiclient.discovery import build as build_resource
 
 logger = logging.getLogger(__name__)
+
 
 def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     r"""Returns a custom user agent header.
@@ -81,7 +80,7 @@ def import_google() -> Tuple[Request, Credentials, ServiceCredentials]:
         ).Credentials,
         guard_import(
             module_name="google.oauth2.service_account", pip_name="google-auth"
-        ).ServiceCredentials
+        ).ServiceCredentials,
     )
 
 

@@ -6,11 +6,13 @@ import logging
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Tuple
-from langchain_google_community._utils import (
-    import_googleapiclient_resource_builder,
-    get_google_credentials,
-)
+
 from langchain_core.utils import guard_import
+
+from langchain_google_community._utils import (
+    get_google_credentials,
+    import_googleapiclient_resource_builder,
+)
 
 if TYPE_CHECKING:
     from google.auth.transport.requests import Request
@@ -20,7 +22,6 @@ if TYPE_CHECKING:
     from googleapiclient.discovery import build as build_resource
 
 logger = logging.getLogger(__name__)
-
 
 
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/calendar"]
