@@ -64,3 +64,23 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
         client_library_version=client_library_version,
         user_agent=user_agent,
     )
+
+
+def import_google() -> Tuple[Request, Credentials, ServiceCredentials]:
+    """Import google libraries.
+
+    Returns:
+        Tuple[Request, Credentials]: Request and Credentials classes.
+    """
+    return (
+        guard_import(
+            module_name="google.auth.transport.requests",
+            pip_name="google-auth",
+        ).Request,
+        guard_import(
+            module_name="google.oauth2.credentials", pip_name="google-auth"
+        ).Credentials,
+        guard_import(
+            module_name="google.oauth2.service_account", pip_name="google-auth"
+        ).ServiceCredentials
+    )

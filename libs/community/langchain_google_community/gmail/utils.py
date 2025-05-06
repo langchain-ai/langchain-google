@@ -17,22 +17,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def import_google() -> Tuple[Request, Credentials, ServiceCredentials]:
-    """Import google libraries.
-
-    Returns:
-        Tuple[Request, Credentials]: Request and Credentials classes.
-    """
-    try:
-        from google.auth.transport.requests import Request  # noqa: F401
-        from google.oauth2.credentials import Credentials  # noqa: F401
-        from google.oauth2.service_account import Credentials as ServiceCredentials
-    except ImportError:
-        raise ImportError(
-            "You need to install gmail dependencies to use this toolkit. "
-            "Try running poetry install --with gmail"
-        )
-    return Request, Credentials, ServiceCredentials  # type: ignore[return-value]
 
 
 def import_installed_app_flow() -> InstalledAppFlow:

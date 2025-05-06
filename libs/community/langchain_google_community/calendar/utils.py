@@ -19,22 +19,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def import_google() -> Tuple[Request, Credentials]:
-    """Import google libraries.
-
-    Returns:
-        Tuple[Request, Credentials]: Request and Credentials classes.
-    """
-    return (
-        guard_import(
-            module_name="google.auth.transport.requests",
-            pip_name="google-auth",
-        ).Request,
-        guard_import(
-            module_name="google.oauth2.credentials", pip_name="google-auth"
-        ).Credentials,
-    )
-
 
 def import_installed_app_flow() -> InstalledAppFlow:
     """Import InstalledAppFlow class.
