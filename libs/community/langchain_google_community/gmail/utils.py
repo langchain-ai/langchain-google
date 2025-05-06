@@ -5,6 +5,10 @@ from __future__ import annotations
 import logging
 import os
 from typing import TYPE_CHECKING, List, Optional, Tuple
+from langchain_google_community._utils import (
+    import_googleapiclient_resource_builder,
+    get_google_credentials,
+)
 
 if TYPE_CHECKING:
     from google.auth.transport.requests import Request  # type: ignore[import]
@@ -19,12 +23,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SCOPES = ["https://mail.google.com/"]
 DEFAULT_SERVICE_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-DEFAULT_CREDS_TOKEN_FILE = "token.json"
-DEFAULT_CLIENT_SECRETS_FILE = "credentials.json"
-DEFAULT_SERVICE_ACCOUNT_FILE = "service_account.json"
 
 
-def build_resource_service(
+def build_gmail_service(
     credentials: Optional[Credentials] = None,
     service_name: str = "gmail",
     service_version: str = "v1",
@@ -34,12 +35,20 @@ def build_resource_service(
     scopes: Optional[List[str]] = None,
 ) -> Resource:
     """Build a Gmail service."""
-    credentials = credentials or get_gmail_credentials(
-        use_domain_wide=use_domain_wide,
-        delegated_user=delegated_user,
-        service_account_file=service_account_file,
-        scopes=scopes,
-    )
+    if use_domain_wide:
+        credentials = credentials or get_google_credentials(
+            scopes=scopes or DEFAULT_SERVICE_SCOPES,
+            use_domain_wide=use_domain_wide,
+            delegated_user=delegated_user,
+            service_account_file=service_account_file,
+        )
+    else:
+        credentials = credentials or get_google_credentials(
+            scopes=scopes or DEFAULT_SCOPES,
+            use_domain_wide=use_domain_wide,
+            delegated_user=delegated_user,
+            service_account_file=service_account_file,
+        )
     builder = import_googleapiclient_resource_builder()
     return builder(service_name, service_version, credentials=credentials)
 
