@@ -3,12 +3,28 @@
 import os
 from importlib import metadata
 from typing import Optional, Tuple
+from __future__ import annotations
 
+import logging
+import os
+from datetime import datetime
+from typing import TYPE_CHECKING, List, Optional, Tuple
+
+from langchain_core.utils import guard_import
 from google.api_core.gapic_v1.client_info import ClientInfo
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
+if TYPE_CHECKING:
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google.oauth2.service_account import Credentials as ServiceCredentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import Resource
+    from googleapiclient.discovery import build as build_resource
+
+logger = logging.getLogger(__name__)
 
 def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     r"""Returns a custom user agent header.
