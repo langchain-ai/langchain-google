@@ -6,7 +6,10 @@ import logging
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Tuple
-
+from langchain_google_community._utils import (
+    import_googleapiclient_resource_builder,
+    get_google_credentials,
+)
 from langchain_core.utils import guard_import
 
 if TYPE_CHECKING:
@@ -23,13 +26,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
-def build_resource_service(
+def build_calendar_service(
     credentials: Optional[Credentials] = None,
     service_name: str = "calendar",
     service_version: str = "v3",
 ) -> Resource:
     """Build a Google Calendar service."""
-    credentials = credentials or get_google_credentials()
+    credentials = credentials or get_google_credentials(scopes=DEFAULT_SCOPES)
     builder = import_googleapiclient_resource_builder()
     return builder(service_name, service_version, credentials=credentials)
 
