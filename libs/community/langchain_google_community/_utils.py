@@ -1,9 +1,8 @@
 """Utilities to init Vertex AI."""
-
+from __future__ import annotations
 import os
 from importlib import metadata
 from typing import Optional, Tuple
-from __future__ import annotations
 
 import logging
 import os
