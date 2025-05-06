@@ -108,27 +108,23 @@ def import_googleapiclient_resource_builder() -> build_resource:
     ).build
 
 
-DEFAULT_SCOPES = ["https://www.googleapis.com/auth/calendar",
-                  "https://mail.google.com/"]
 DEFAULT_CREDS_TOKEN_FILE = "token.json"
 DEFAULT_CLIENT_SECRETS_FILE = "credentials.json"
 DEFAULT_SERVICE_ACCOUNT_FILE = "service_account.json"
-DEFAULT_SERVICE_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 
 def get_google_credentials(
+    scopes: List[str],
     token_file: Optional[str] = None,
     client_secrets_file: Optional[str] = None,
     service_account_file: Optional[str] = None,
-    scopes: Optional[List[str]] = None,
     use_domain_wide: bool = False,
     delegated_user: Optional[str] = None,
 ) -> Credentials:
     """Get credentials."""
     if use_domain_wide:
         _, _, ServiceCredentials = import_google()
-        service_account_file = service_account_file
-        scopes = scopes
+        service_account_file = service_account_file or DEFAULT_SERVICE_ACCOUNT_FILE
         credentials = ServiceCredentials.from_service_account_file(
             service_account_file, scopes=scopes
         )
@@ -141,7 +137,6 @@ def get_google_credentials(
         Request, Credentials, ServiceCredentials = import_google()
         InstalledAppFlow = import_installed_app_flow()
         creds = None
-        scopes = scopes
         token_file = token_file or DEFAULT_CREDS_TOKEN_FILE
         client_secrets_file = client_secrets_file or DEFAULT_CLIENT_SECRETS_FILE
         # The file token.json stores the user's access and refresh tokens, and is
