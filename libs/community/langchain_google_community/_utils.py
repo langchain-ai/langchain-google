@@ -96,3 +96,13 @@ def import_installed_app_flow() -> InstalledAppFlow:
         module_name="google_auth_oauthlib.flow", pip_name="google-auth-oauthlib"
     ).InstalledAppFlow
 
+
+def import_googleapiclient_resource_builder() -> build_resource:
+    """Import googleapiclient.discovery.build function.
+
+    Returns:
+        build_resource: googleapiclient.discovery.build function.
+    """
+    return guard_import(
+        module_name="googleapiclient.discovery", pip_name="google-api-python-client"
+    ).build

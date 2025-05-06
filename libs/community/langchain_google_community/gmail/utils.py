@@ -17,22 +17,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def import_googleapiclient_resource_builder() -> build_resource:
-    """Import googleapiclient.discovery.build function.
-
-    Returns:
-        build_resource: googleapiclient.discovery.build function.
-    """
-    try:
-        from googleapiclient.discovery import build
-    except ImportError:
-        raise ImportError(
-            "You need to install all dependencies to use this toolkit. "
-            "Try running pip install langchain-google-community"
-        )
-    return build
-
-
 DEFAULT_SCOPES = ["https://mail.google.com/"]
 DEFAULT_SERVICE_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 DEFAULT_CREDS_TOKEN_FILE = "token.json"

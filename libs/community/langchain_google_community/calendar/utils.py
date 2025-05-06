@@ -19,16 +19,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def import_googleapiclient_resource_builder() -> build_resource:
-    """Import googleapiclient.discovery.build function.
-
-    Returns:
-        build_resource: googleapiclient.discovery.build function.
-    """
-    return guard_import(
-        module_name="googleapiclient.discovery", pip_name="google-api-python-client"
-    ).build
-
 
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 DEFAULT_CREDS_TOKEN_FILE = "token.json"
