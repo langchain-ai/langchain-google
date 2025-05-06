@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -36,6 +37,20 @@ def build_calendar_service(
     credentials = credentials or get_google_credentials(scopes=DEFAULT_SCOPES)
     builder = import_googleapiclient_resource_builder()
     return builder(service_name, service_version, credentials=credentials)
+
+
+def build_resouce_service(
+    credentials: Optional[Credentials] = None,
+    service_name: str = "calendar",
+    service_version: str = "v3",
+) -> Resource:
+    warnings.warn(
+        "build_resource_service is deprecated and will be removed in a future version."
+        "Use build_calendar_service instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return build_calendar_service(credentials, service_name, service_version)
 
 
 def is_all_day_event(start_datetime: str, end_datetime: str) -> bool:
