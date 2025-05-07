@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-import os
 import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional
 
 from langchain_google_community._utils import (
     get_google_credentials,
@@ -13,12 +12,8 @@ from langchain_google_community._utils import (
 )
 
 if TYPE_CHECKING:
-    from google.auth.transport.requests import Request  # type: ignore[import]
     from google.oauth2.credentials import Credentials  # type: ignore[import]
-    from google.oauth2.service_account import Credentials as ServiceCredentials
-    from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import]
     from googleapiclient.discovery import Resource  # type: ignore[import]
-    from googleapiclient.discovery import build as build_resource
 
 logger = logging.getLogger(__name__)
 

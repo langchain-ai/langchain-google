@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
 from importlib import metadata
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
     from google.oauth2.service_account import Credentials as ServiceCredentials
     from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import Resource
     from googleapiclient.discovery import build as build_resource
 
 logger = logging.getLogger(__name__)

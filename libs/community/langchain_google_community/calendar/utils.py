@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import logging
-import os
 import warnings
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional, Tuple
-
-from langchain_core.utils import guard_import
+from typing import TYPE_CHECKING, Optional
 
 from langchain_google_community._utils import (
     get_google_credentials,
@@ -16,11 +13,8 @@ from langchain_google_community._utils import (
 )
 
 if TYPE_CHECKING:
-    from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import Resource
-    from googleapiclient.discovery import build as build_resource
 
 logger = logging.getLogger(__name__)
 
