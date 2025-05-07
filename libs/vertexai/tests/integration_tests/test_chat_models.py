@@ -181,7 +181,7 @@ async def test_vertexai_astream() -> None:
 
 @pytest.mark.release
 def test_multimodal() -> None:
-    llm = ChatVertexAI(model_name="gemini-pro-vision", rate_limiter=rate_limiter)
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
     gcs_url = (
         "gs://cloud-samples-data/generative-ai/image/"
         "320px-Felis_catus-cat_on_snow.jpg"
@@ -267,7 +267,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 @pytest.mark.release
 @pytest.mark.first
 def test_multimodal_media_inline_base64_template() -> None:
-    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt_template = ChatPromptTemplate.from_messages(
         [
             ("human", "{input}"),
@@ -302,7 +302,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
         """Retrieves information about the Climate."""
         return "MOCK CLIMATE INFO STRING"
 
-    llm = ChatVertexAI(model_name="gemini-1.5-pro-001")
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt_template = ChatPromptTemplate.from_messages(
         [
             ("human", "{input}"),
@@ -715,7 +715,7 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
         response: str
         reasons: list[Reason]
 
-    model = ChatVertexAI(model_name="gemini-1.5-pro-001").with_structured_output(
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME).with_structured_output(
         Response, method="json_mode"
     )
 
@@ -792,7 +792,7 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert response.usage_metadata["output_token_details"]["reasoning"] > 0
+    assert response.usage_metadata["output_token_details"]["reasoning"] > 0  # type: ignore
 
 
 @pytest.mark.release
@@ -800,8 +800,8 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert response.usage_metadata["output_token_details"]["reasoning"] > 0
-    assert response.usage_metadata["output_token_details"]["reasoning"] < 1000
+    assert response.usage_metadata["output_token_details"]["reasoning"] > 0  # type: ignore
+    assert response.usage_metadata["output_token_details"]["reasoning"] < 1000  # type: ignore
 
 
 @pytest.mark.release
@@ -809,7 +809,7 @@ def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert "output_token_details" not in response.usage_metadata
+    assert "output_token_details" not in response.usage_metadata  # type: ignore
 
 
 @pytest.mark.extended
@@ -1129,7 +1129,7 @@ def test_langgraph_example() -> None:
 @pytest.mark.release
 async def test_astream_events_langgraph_example() -> None:
     llm = ChatVertexAI(
-        model_name="gemini-1.5-flash-002",
+        model_name=_DEFAULT_MODEL_NAME,
         max_output_tokens=8192,
         temperature=0.2,
     )
@@ -1246,7 +1246,7 @@ def multimodal_pdf_chain() -> RunnableSerializable:
         ]
     )
 
-    model = ChatVertexAI(model_name="gemini-1.5-flash-001")
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
 
     chain = prompt | model
 
