@@ -41,6 +41,7 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
     VectorSearchVectorStore,
     VectorSearchVectorStoreDatastore,
 )
+from tests.integration_tests.conftest import _DEFAULT_EMBEDDINGS_MODEL_NAME
 
 
 @pytest.fixture
@@ -80,7 +81,7 @@ def datastore_document_storage(
 
 @pytest.fixture
 def embeddings() -> VertexAIEmbeddings:
-    return VertexAIEmbeddings(model_name="textembedding-gecko@001")
+    return VertexAIEmbeddings(model_name=_DEFAULT_EMBEDDINGS_MODEL_NAME)
 
 
 @pytest.fixture
