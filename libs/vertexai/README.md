@@ -32,13 +32,13 @@ llm.invoke("Sing a ballad of LangChain.")
 
 #### Multimodal inputs
 
-Gemini vision model supports image inputs when providing a single chat message. Example:
+Gemini supports image inputs when providing a single chat message. Example:
 
 ```python
 from langchain_core.messages import HumanMessage
 from langchain_google_vertexai import ChatVertexAI
 
-llm = ChatVertexAI(model_name="gemini-pro-vision")
+llm = ChatVertexAI(model_name="gemini-2.0-flash-001")
 # example
 message = HumanMessage(
     content=[

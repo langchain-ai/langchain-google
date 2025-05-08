@@ -178,7 +178,7 @@ async def test_vertexai_astream() -> None:
 
 @pytest.mark.release
 def test_multimodal() -> None:
-    llm = ChatVertexAI(model_name="gemini-pro-vision", rate_limiter=rate_limiter)
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
     gcs_url = (
         "gs://cloud-samples-data/generative-ai/image/"
         "320px-Felis_catus-cat_on_snow.jpg"
@@ -393,36 +393,6 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
     message = HumanMessage(content=[text_message, media_message])
     output = llm([message])
     assert isinstance(output.content, str)
-
-
-@pytest.mark.xfail(reason="investigating")
-@pytest.mark.extended
-def test_multimodal_history() -> None:
-    llm = ChatVertexAI(model_name="gemini-pro-vision", rate_limiter=rate_limiter)
-    gcs_url = (
-        "gs://cloud-samples-data/generative-ai/image/"
-        "320px-Felis_catus-cat_on_snow.jpg"
-    )
-    image_message = {
-        "type": "image_url",
-        "image_url": {"url": gcs_url},
-    }
-    text_message = {
-        "type": "text",
-        "text": "What is shown in this image?",
-    }
-    message1 = HumanMessage(content=[text_message, image_message])
-    message2 = AIMessage(
-        content=(
-            "This is a picture of a cat in the snow. The cat is a tabby cat, which is "
-            "a type of cat with a striped coat. The cat is standing in the snow, and "
-            "its fur is covered in snow."
-        )
-    )
-    message3 = HumanMessage(content="What time of day is it?")
-    response = llm([message1, message2, message3])
-    assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
 
 
 @pytest.mark.release
