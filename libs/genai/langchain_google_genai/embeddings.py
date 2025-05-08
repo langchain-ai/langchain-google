@@ -253,8 +253,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             Embedding for the text.
         """
-        # Determine the task_type to use for this specific query
-        task_type_to_use = task_type if task_type is not None else self.task_type
+        task_type_to_use = task_type if task_type else self.task_type
         if task_type_to_use is None:
             task_type_to_use = "RETRIEVAL_QUERY"  # Default to RETRIEVAL_QUERY
         try:
