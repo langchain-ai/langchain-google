@@ -266,6 +266,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 
 @pytest.mark.release
 @pytest.mark.first
+@pytest.mark.xfail(reason="need a model supporting more than 1M input tokens")
 def test_multimodal_media_inline_base64_template() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt_template = ChatPromptTemplate.from_messages(
@@ -294,7 +295,6 @@ def test_multimodal_media_inline_base64_template() -> None:
 
 
 @pytest.mark.extended
-@pytest.mark.xfail(reason="need a model supporting more than 1M input tokens")
 def test_multimodal_media_inline_base64_agent() -> None:
     from langchain import agents
 
