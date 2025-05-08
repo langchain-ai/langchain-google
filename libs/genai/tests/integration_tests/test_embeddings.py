@@ -103,3 +103,23 @@ def test_embed_documents_quality() -> None:
         np.array(dissimilar_embeddings[0]) - np.array(dissimilar_embeddings[1])
     )
     assert similar_distance < dissimilar_distance
+
+
+def test_embed_query_task_type() -> None:
+    """Test for task_type"""
+
+    embeddings = GoogleGenerativeAIEmbeddings(model=_MODEL, task_type="clustering")
+    emb = embeddings.embed_query("How does alphafold work?", output_dimensionality=768)
+
+    embeddings2 = GoogleGenerativeAIEmbeddings(model=_MODEL)
+    emb2 = embeddings2.embed_query(
+        "How does alphafold work?", task_type="clustering", output_dimensionality=768
+    )
+
+    embeddings3 = GoogleGenerativeAIEmbeddings(model=_MODEL)
+    emb3 = embeddings3.embed_query(
+        "How does alphafold work?", output_dimensionality=768
+    )
+
+    assert emb == emb2
+    assert emb != emb3
