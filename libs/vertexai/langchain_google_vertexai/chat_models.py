@@ -168,6 +168,7 @@ _allowed_params = [
     "response_logprobs",
     "logprobs",
     "labels",
+    "thinking_budget",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
@@ -1354,6 +1355,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             gapic_response_schema = _convert_schema_dict_to_gapic(response_schema)
             params["response_schema"] = gapic_response_schema
 
+        thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
+        if thinking_budget is not None:
+            params["thinking_config"] = {"thinking_budget": thinking_budget}
+
         return params
 
     def _get_ls_params(
@@ -2250,14 +2255,23 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
     input_tokens = raw_metadata.get("prompt_token_count", 0)
     output_tokens = raw_metadata.get("candidates_token_count", 0)
     total_tokens = raw_metadata.get("total_token_count", 0)
+    thought_tokens = raw_metadata.get("thoughts_token_count", 0)
     if all(count == 0 for count in [input_tokens, output_tokens, total_tokens]):
         return None
     else:
-        return UsageMetadata(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-        )
+        if thought_tokens > 0:
+            return UsageMetadata(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                output_token_details={"reasoning": thought_tokens},
+            )
+        else:
+            return UsageMetadata(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+            )
 
 
 def _get_usage_metadata_non_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
