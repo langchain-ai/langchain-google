@@ -763,7 +763,11 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert response.usage_metadata["total_tokens"] > response.usage_metadata["input_tokens"] + response.usage_metadata["output_tokens"]
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
 
 
 @pytest.mark.release
@@ -771,7 +775,11 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert response.usage_metadata["total_tokens"] > response.usage_metadata["input_tokens"] + response.usage_metadata["output_tokens"]
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
 
 
 @pytest.mark.release
@@ -779,7 +787,11 @@ def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert response.usage_metadata["total_tokens"] == response.usage_metadata["input_tokens"] + response.usage_metadata["output_tokens"]
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        == response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
     assert "output_token_details" not in response.usage_metadata  # type: ignore
 
 
