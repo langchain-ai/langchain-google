@@ -294,6 +294,7 @@ def test_multimodal_media_inline_base64_template() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.xfail(reason="need a model supporting more than 1M input tokens")
 def test_multimodal_media_inline_base64_agent() -> None:
     from langchain import agents
 
