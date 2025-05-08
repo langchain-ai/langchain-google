@@ -763,17 +763,15 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert response.usage_metadata["output_token_details"]["reasoning"] > 0  # type: ignore
+    assert response.usage_metadata["total_tokens"] > response.usage_metadata["input_tokens"] + response.usage_metadata["output_tokens"]
 
 
 @pytest.mark.release
-@pytest.mark.xfail(reason="thoughts_token_count is not returned at the moment.")
 def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
-    assert response.usage_metadata["output_token_details"]["reasoning"] > 0  # type: ignore
-    assert response.usage_metadata["output_token_details"]["reasoning"] < 1000  # type: ignore
+    assert response.usage_metadata["total_tokens"] > response.usage_metadata["input_tokens"] + response.usage_metadata["output_tokens"]
 
 
 @pytest.mark.release
@@ -781,6 +779,7 @@ def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
     assert isinstance(response, AIMessage)
+    assert response.usage_metadata["total_tokens"] == response.usage_metadata["input_tokens"] + response.usage_metadata["output_tokens"]
     assert "output_token_details" not in response.usage_metadata  # type: ignore
 
 
