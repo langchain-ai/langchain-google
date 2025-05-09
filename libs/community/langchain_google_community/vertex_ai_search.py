@@ -70,11 +70,12 @@ class _BaseVertexAISearchRetriever(Serializable):
     """The default custom credentials (google.auth.credentials.Credentials) to use
     when making API calls. If not provided, credentials will be ascertained from
     the environment."""
-    engine_data_type: int = Field(default=0, ge=0, le=2)
+    engine_data_type: int = Field(default=0, ge=0, le=3)
     """ Defines the Vertex AI Search data type
     0 - Unstructured data 
     1 - Structured data
     2 - Website data
+    3 - Blended data
     """
     _beta: bool = PrivateAttr(default=False)
     """Whether to use beta version of Vertex AI Search."""
@@ -493,9 +494,9 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             )
         else:
             raise NotImplementedError(
-                "Only data store type 0 (Unstructured), 1 (Structured),"
-                "or 2 (Website) are supported currently."
-                + f" Got {self.engine_data_type}"
+                "Only data store types 0 (Unstructured), 1 (Structured), "
+                "2 (Website), or 3 (Blended) are supported currently. "
+                + f"Got {self.engine_data_type}"
             )
         return content_search_spec
 
@@ -574,11 +575,21 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             documents = self._convert_website_search_response(
                 response.results, chunk_type
             )
+        elif self.engine_data_type == 3:
+            # Blended search might return varied results; treat similarly to unstructured/website
+            chunk_type = (
+                "extractive_answers"
+                if self.get_extractive_answers
+                else "extractive_segments"  # Or perhaps 'snippets', depending on API behavior
+            )
+            documents = self._convert_unstructured_search_response(
+                response.results, chunk_type
+            )
         else:
             raise NotImplementedError(
-                "Only data store type 0 (Unstructured), 1 (Structured),"
-                "or 2 (Website) are supported currently."
-                + f" Got {self.engine_data_type}"
+                "Only data store types 0 (Unstructured), 1 (Structured), "
+                "2 (Website), or 3 (Blended) are supported currently. "
+                + f"Got {self.engine_data_type}"
             )
 
         return documents
