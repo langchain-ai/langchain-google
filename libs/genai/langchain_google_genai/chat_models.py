@@ -5,6 +5,7 @@ import base64
 import json
 import logging
 import mimetypes
+import time
 import uuid
 import warnings
 from difflib import get_close_matches
@@ -139,7 +140,12 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """
 
 
-def _create_retry_decorator() -> Callable[[Any], Any]:
+def _create_retry_decorator(
+    max_retries: int = 6,
+    wait_exponential_multiplier: float = 2.0,
+    wait_exponential_min: float = 1.0,
+    wait_exponential_max: float = 60.0,
+) -> Callable[[Any], Any]:
     """
     Creates and returns a preconfigured tenacity retry decorator.
 
@@ -151,15 +157,14 @@ def _create_retry_decorator() -> Callable[[Any], Any]:
         Callable[[Any], Any]: A retry decorator configured for handling specific
         Google API exceptions.
     """
-    multiplier = 2
-    min_seconds = 1
-    max_seconds = 60
-    max_retries = 2
-
     return retry(
         reraise=True,
         stop=stop_after_attempt(max_retries),
-        wait=wait_exponential(multiplier=multiplier, min=min_seconds, max=max_seconds),
+        wait=wait_exponential(
+            multiplier=wait_exponential_multiplier,
+            min=wait_exponential_min,
+            max=wait_exponential_max,
+        ),
         retry=(
             retry_if_exception_type(google.api_core.exceptions.ResourceExhausted)
             | retry_if_exception_type(google.api_core.exceptions.ServiceUnavailable)
@@ -184,13 +189,17 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     Returns:
         Any: The result from the chat generation method.
     """
-    retry_decorator = _create_retry_decorator()
+    retry_decorator = _create_retry_decorator(
+        max_retries=kwargs.get("max_retries", 6),
+        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
+        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
+        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
+    )
 
     @retry_decorator
     def _chat_with_retry(**kwargs: Any) -> Any:
         try:
             return generation_method(**kwargs)
-        # Do not retry for these errors.
         except google.api_core.exceptions.FailedPrecondition as exc:
             if "location is not supported" in exc.message:
                 error_msg = (
@@ -204,6 +213,13 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise ChatGoogleGenerativeAIError(
                 f"Invalid argument provided to Gemini: {e}"
             ) from e
+        except google.api_core.exceptions.ResourceExhausted as e:
+            # Handle quota-exceeded error with recommended retry delay
+            if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
+                "wait_exponential_max", 60.0
+            ):
+                time.sleep(e.retry_after)
+            raise e
         except Exception as e:
             raise e
 
