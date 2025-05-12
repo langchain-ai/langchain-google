@@ -47,10 +47,9 @@ from google.ai.generativelanguage_v1beta.types import (
     GenerationConfig,
     Part,
     SafetySetting,
-    ToolConfig,
-    VideoMetadata,
 )
 from google.ai.generativelanguage_v1beta.types import Tool as GoogleTool
+from google.ai.generativelanguage_v1beta.types import ToolConfig, VideoMetadata
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -81,13 +80,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils import get_pydantic_field_names
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.utils import _build_model_kwargs
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    SecretStr,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from tenacity import (
     before_sleep_log,
     retry,
@@ -453,7 +446,9 @@ def _parse_chat_history(
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Candidate,
+    streaming: bool = False,
+    legacy_function_call: bool = False,
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs = {}
@@ -542,7 +537,9 @@ def _parse_response_candidate(
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
-            additional_kwargs["function_call"] = function_call
+            # add legacy key only if the caller asked for it
+            if legacy_function_call:
+                additional_kwargs["function_call"] = function_call
 
             if streaming:
                 tool_call_chunks.append(
@@ -608,6 +605,7 @@ def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: Optional[UsageMetadata] = None,
+    legacy_function_call: bool = False,
 ) -> ChatResult:
     """Converts a PaLM API response into a LangChain ChatResult."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
@@ -658,7 +656,11 @@ def _response_to_result(
             proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
             for safety_rating in candidate.safety_ratings
         ]
-        message = _parse_response_candidate(candidate, streaming=stream)
+        message = _parse_response_candidate(
+            candidate,
+            streaming=stream,
+            legacy_function_call=legacy_function_call,
+        )
         message.usage_metadata = lc_usage
         if stream:
             generations.append(
@@ -1027,6 +1029,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ``cachedContents/{cachedContent}``.
     """
 
+    legacy_function_call: bool = False
+    """
+    When **True**, every Gemini reply also includes the old
+    `additional_kwargs["function_call"]` dict (in addition to
+    `tool_calls`).  Default **False** to avoid OpenAI's
+    “'function_call' and 'tool_calls' cannot be used together”
+    error when you mix providers.
+    """
+
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
     """Holds any unexpected initialization parameters."""
 
@@ -1236,9 +1247,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
-                "thinking_config": {"thinking_budget": self.thinking_budget}
-                if self.thinking_budget is not None
-                else None,
+                "thinking_config": (
+                    {"thinking_budget": self.thinking_budget}
+                    if self.thinking_budget is not None
+                    else None
+                ),
             }.items()
             if v is not None
         }
@@ -1278,7 +1291,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_method=self.client.generate_content,
             metadata=self.default_metadata,
         )
-        return _response_to_result(response)
+        return _response_to_result(
+            response, legacy_function_call=self.legacy_function_call
+        )
 
     async def _agenerate(
         self,
@@ -1327,7 +1342,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_method=self.async_client.generate_content,
             metadata=self.default_metadata,
         )
-        return _response_to_result(response)
+        return _response_to_result(
+            response, legacy_function_call=self.legacy_function_call
+        )
 
     def _stream(
         self,
@@ -1365,7 +1382,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         prev_usage_metadata: UsageMetadata | None = None
         for chunk in response:
             _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
+                chunk,
+                stream=True,
+                prev_usage=prev_usage_metadata,
+                legacy_function_call=self.legacy_function_call,
             )
             gen = cast(ChatGenerationChunk, _chat_result.generations[0])
             message = cast(AIMessageChunk, gen.message)
@@ -1441,7 +1461,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 metadata=self.default_metadata,
             ):
                 _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
+                    chunk,
+                    stream=True,
+                    prev_usage=prev_usage_metadata,
+                    legacy_function_call=self.legacy_function_call,
                 )
                 gen = cast(ChatGenerationChunk, _chat_result.generations[0])
                 message = cast(AIMessageChunk, gen.message)
