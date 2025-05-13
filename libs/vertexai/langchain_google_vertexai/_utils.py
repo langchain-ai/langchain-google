@@ -116,6 +116,7 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     client_library_version, user_agent = get_user_agent(module)
     return ClientInfo(
         client_library_version=client_library_version,
+        gapic_version=client_library_version,
         user_agent=user_agent,
     )
 
