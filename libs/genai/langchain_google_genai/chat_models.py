@@ -247,6 +247,23 @@ def _is_lc_content_block(part: dict) -> bool:
     return "type" in part
 
 
+def _is_openai_image_block(block: dict) -> bool:
+    """Check if the block contains image data in OpenAI Chat Completions format."""
+    if block.get("type") == "image_url":
+        if (
+            (set(block.keys()) <= {"type", "image_url", "detail"})
+            and (image_url := block.get("image_url"))
+            and isinstance(image_url, dict)
+        ):
+            url = image_url.get("url")
+            if isinstance(url, str):
+                return True
+    else:
+        return False
+
+    return False
+
+
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
@@ -341,7 +358,21 @@ def _convert_tool_message_to_parts(
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
     name = message.name or name or message.additional_kwargs.get("name")
     response: Any
-    if not isinstance(message.content, str):
+    parts: list[Part] = []
+    if isinstance(message.content, list):
+        media_blocks = []
+        other_blocks = []
+        for block in message.content:
+            if isinstance(block, dict) and (
+                is_data_content_block(block) or _is_openai_image_block(block)
+            ):
+                media_blocks.append(block)
+            else:
+                other_blocks.append(block)
+        parts.extend(_convert_to_parts(media_blocks))
+        response = other_blocks
+
+    elif not isinstance(message.content, str):
         response = message.content
     else:
         try:
@@ -356,7 +387,8 @@ def _convert_tool_message_to_parts(
             ),
         )
     )
-    return [part]
+    parts.append(part)
+    return parts
 
 
 def _get_ai_message_tool_messages_parts(
