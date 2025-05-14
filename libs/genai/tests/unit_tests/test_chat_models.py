@@ -30,7 +30,7 @@ from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
-    _convert_tool_message_to_part,
+    _convert_tool_message_to_parts,
     _parse_chat_history,
     _parse_response_candidate,
 )
@@ -710,10 +710,12 @@ def test_serialize() -> None:
         ),
     ],
 )
-def test__convert_tool_message_to_part__sets_tool_name(
+def test__convert_tool_message_to_parts__sets_tool_name(
     tool_message: ToolMessage,
 ) -> None:
-    part = _convert_tool_message_to_part(tool_message)
+    parts = _convert_tool_message_to_parts(tool_message)
+    assert len(parts) == 1
+    part = parts[0]
     assert part.function_response.name == "tool_name"
     assert part.function_response.response == {"output": "test_content"}
 
