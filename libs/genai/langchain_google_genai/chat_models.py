@@ -247,6 +247,23 @@ def _is_lc_content_block(part: dict) -> bool:
     return "type" in part
 
 
+def _is_openai_image_block(block: dict) -> bool:
+    """Check if the block contains image data in OpenAI Chat Completions format."""
+    if block.get("type") == "image_url":
+        if (
+            (set(block.keys()) <= {"type", "image_url", "detail"})
+            and (image_url := block.get("image_url"))
+            and isinstance(image_url, dict)
+        ):
+            url = image_url.get("url")
+            if isinstance(url, str):
+                return True
+    else:
+        return False
+
+    return False
+
+
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
@@ -334,14 +351,28 @@ def _convert_to_parts(
     return parts
 
 
-def _convert_tool_message_to_part(
+def _convert_tool_message_to_parts(
     message: ToolMessage | FunctionMessage, name: Optional[str] = None
-) -> Part:
+) -> list[Part]:
     """Converts a tool or function message to a google part."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
     name = message.name or name or message.additional_kwargs.get("name")
     response: Any
-    if not isinstance(message.content, str):
+    parts: list[Part] = []
+    if isinstance(message.content, list):
+        media_blocks = []
+        other_blocks = []
+        for block in message.content:
+            if isinstance(block, dict) and (
+                is_data_content_block(block) or _is_openai_image_block(block)
+            ):
+                media_blocks.append(block)
+            else:
+                other_blocks.append(block)
+        parts.extend(_convert_to_parts(media_blocks))
+        response = other_blocks
+
+    elif not isinstance(message.content, str):
         response = message.content
     else:
         try:
@@ -356,7 +387,8 @@ def _convert_tool_message_to_part(
             ),
         )
     )
-    return part
+    parts.append(part)
+    return parts
 
 
 def _get_ai_message_tool_messages_parts(
@@ -374,8 +406,10 @@ def _get_ai_message_tool_messages_parts(
             break
         if message.tool_call_id in tool_calls_ids:
             tool_call = tool_calls_ids[message.tool_call_id]
-            part = _convert_tool_message_to_part(message, name=tool_call.get("name"))
-            parts.append(part)
+            message_parts = _convert_tool_message_to_parts(
+                message, name=tool_call.get("name")
+            )
+            parts.extend(message_parts)
             # remove the id from the dict, so that we do not iterate over it again
             tool_calls_ids.pop(message.tool_call_id)
     return parts
@@ -442,7 +476,7 @@ def _parse_chat_history(
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
-            parts = [_convert_tool_message_to_part(message)]
+            parts = _convert_tool_message_to_parts(message)
         else:
             raise ValueError(
                 f"Unexpected message with type {type(message)} at the position {i}."
