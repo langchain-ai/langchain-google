@@ -168,6 +168,7 @@ _allowed_params = [
     "response_logprobs",
     "logprobs",
     "labels",
+    "audio_timestamp",
     "thinking_budget",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
@@ -1354,6 +1355,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             gapic_response_schema = _convert_schema_dict_to_gapic(response_schema)
             params["response_schema"] = gapic_response_schema
+
+        audio_timestamp = kwargs.get("audio_timestamp", self.audio_timestamp)
+        if audio_timestamp is not None:
+            params["audio_timestamp"] = audio_timestamp
 
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         if thinking_budget is not None:
