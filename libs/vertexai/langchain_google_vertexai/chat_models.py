@@ -1363,6 +1363,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         if thinking_budget is not None:
             params["thinking_config"] = {"thinking_budget": thinking_budget}
+        _ = params.pop("thinking_budget", None)
 
         return params
 
