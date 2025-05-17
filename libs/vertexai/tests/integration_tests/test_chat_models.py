@@ -29,7 +29,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.runnables import RunnableSerializable
+from langchain_core.runnables import ConfigurableField, RunnableSerializable
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -825,7 +825,25 @@ def test_chat_vertexai_gemini_thinking() -> None:
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
-    response = model.invoke([HumanMessage("How many O's are in Google?")])
+    response = model.invoke("How many O's are in Google?")
+    assert isinstance(response, AIMessage)
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        == response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+    assert "output_token_details" not in response.usage_metadata  # type: ignore
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_configurable() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
+    configurable_model = model.configurable_fields(
+        thinking_budget=ConfigurableField(id="thinking_budget")
+    )
+    response = configurable_model.invoke(
+        "How many O's are in Google?", {"configurable": {"thinking_budget": 0}}
+    )
     assert isinstance(response, AIMessage)
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
