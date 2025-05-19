@@ -361,6 +361,7 @@ def _parse_chat_history_gemini(
             if not message.content and message.response_metadata.get(
                 "is_blocked", False
             ):
+                logger.warning("Ignoring blocked AIMessage with empty content")
                 continue
 
             parts = []
