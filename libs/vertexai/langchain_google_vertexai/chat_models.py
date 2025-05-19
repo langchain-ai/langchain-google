@@ -357,6 +357,12 @@ def _parse_chat_history_gemini(
             prev_ai_message = message
             role = "model"
 
+            # Previous blocked messages will have empty content which should be ignored
+            if not message.content and message.response_metadata.get(
+                "is_blocked", False
+            ):
+                continue
+
             parts = []
             if message.content:
                 parts = _convert_to_parts(message)
