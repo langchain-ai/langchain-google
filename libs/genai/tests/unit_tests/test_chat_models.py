@@ -9,6 +9,7 @@ from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
 import pytest
+import vcr
 from google.ai.generativelanguage_v1beta.types import (
     Candidate,
     Content,
@@ -27,6 +28,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
 from pytest import CaptureFixture
+from pytest_benchmark.fixture import BenchmarkFixture
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
@@ -773,3 +775,59 @@ def test_model_kwargs() -> None:
     assert llm.model == "models/my-model"
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
+
+
+# Set up mock stream data
+single_token = GenerateContentResponse(
+    candidates=[Candidate(content=Content(role="model", parts=[Part(text="token ")]))],
+    model_version="gemini-2.0-flash-001",
+    usage_metadata={"prompt_token_count": 2, "total_token_count": 2},
+)
+
+last_token = GenerateContentResponse(
+    candidates=[
+        Candidate(
+            content=Content(role="model", parts=[Part(text="token.")]),
+            finish_reason=1,  # STOP
+        )
+    ],
+    model_version="gemini-2.0-flash-001",
+    usage_metadata={
+        "prompt_token_count": 2,
+        "candidates_token_count": 100,
+        "total_token_count": 102,
+    },
+)
+
+mock_stream: list[GenerateContentResponse] = [single_token] * 100 + [last_token]
+
+
+def test_stream_time(benchmark: BenchmarkFixture, vcr: vcr.VCR) -> None:
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = mock_stream
+    mock_client.return_value.stream_generate_content = mock_generate_content
+    api_endpoint = "http://127.0.0.1:8000/ai"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+    param_client_options = {"api_endpoint": api_endpoint}
+    param_transport = "rest"
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-pro",
+            google_api_key=param_secret_api_key,  # type: ignore[call-arg]
+            client_options=param_client_options,
+            transport=param_transport,
+        )
+
+    def _run():
+        cassette_name = "test_stream_time.yaml"
+        with vcr.use_cassette(cassette_name, record_mode="once"):
+            for _ in llm.stream("Write a story about a cat."):
+                pass
+
+    benchmark(_run)
