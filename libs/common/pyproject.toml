@@ -1,0 +1,61 @@
+[tool.poetry]
+name = "langchain-google-common"
+version = "0.0.1"
+description = ""
+authors = []
+readme = "README.md"
+repository = "https://github.com/langchain-ai/langchain-google"
+license = "MIT"
+
+[tool.poetry.urls]
+"Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/common"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+langchain-core = ">=0.3.55,<0.4"
+google-cloud-aiplatform = "^1.92.0"
+google-ai-generativelanguage = "^0.6.18"
+pydantic = "^2.9"
+
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.3.0"
+syrupy = "^4.0.2"
+
+[tool.poetry.group.lint]
+optional = true
+
+[tool.poetry.group.lint.dependencies]
+ruff = "^0.1.5"
+
+[tool.poetry.group.typing.dependencies]
+mypy = "^1"
+types-google-cloud-ndb = "^2.2.0.20240106"
+types-protobuf = "^4.24.0.4"
+types-requests = "^2.31.0"
+
+[tool.ruff.lint]
+select = [
+  "E", # pycodestyle
+  "F", # pyflakes
+  "I", # isort
+]
+
+[tool.mypy]
+check_untyped_defs = true
+error_summary = false
+pretty = true
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
