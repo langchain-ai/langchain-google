@@ -18,9 +18,6 @@ This package enables seamless access to Google Gemini's chat, vision, embeddings
   - [Thinking Support](#thinking-support)
 - [Embeddings](#embeddings)
 - [Semantic Retrieval (RAG)](#semantic-retrieval-rag)
-- [Requirements](#requirements)
-- [Environment Variables](#environment-variables)
-- [License](#license)
 
 ---
 
