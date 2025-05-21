@@ -98,25 +98,25 @@ You can use Gemini models for code generation tasks to generate code snippets, f
 ### Example: Generate a Python function
 
 ```python
-from langchain_google_vertexai import VertexAI
+from langchain_google_vertexai import ChatVertexAI
 
-llm = VertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
+llm = ChatVertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
 
 prompt = "Write a Python function that checks if a string is a valid email address."
 
-generated_code = llm(prompt)
+generated_code = llm.invoke(prompt)
 print(generated_code)
 ```
 
 ### Example: Generate JavaScript code
 
 ```python
-from langchain_google_vertexai import VertexAI
+from langchain_google_vertexai import ChatVertexAI
 
-llm = VertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
+llm = ChatVertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
 prompt_js = "Write a JavaScript function that returns the factorial of a number."
 
-print(llm(prompt_js))
+print(llm.invoke(prompt_js))
 ```
 
 ### Notes
