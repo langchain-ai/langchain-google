@@ -504,7 +504,21 @@ def _parse_response_candidate(
         except AttributeError:
             text = None
 
-        if text is not None:
+        if part.thought:
+            thinking_message = {
+                "type": "thinking",
+                "thinking": part.text,
+            }
+            if not content:
+                content = [thinking_message]
+            elif isinstance(content, str):
+                content = [thinking_message, content]
+            elif isinstance(content, list):
+                content.append(thinking_message)
+            else:
+                raise Exception("Unexpected content type")
+
+        elif text is not None:
             if not content:
                 content = text
             elif isinstance(content, str) and text:
@@ -1194,6 +1208,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "safety_settings": self.safety_settings,
             "response_modalities": self.response_modalities,
             "thinking_budget": self.thinking_budget,
+            "include_thoughts": self.include_thoughts,
         }
 
     def invoke(
@@ -1270,8 +1285,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
-                "thinking_config": {"thinking_budget": self.thinking_budget}
-                if self.thinking_budget is not None
+                "thinking_config": (
+                    (
+                        {"thinking_budget": self.thinking_budget}
+                        if self.thinking_budget is not None
+                        else {}
+                    )
+                    | (
+                        {"include_thoughts": self.include_thoughts}
+                        if self.include_thoughts is not None
+                        else {}
+                    )
+                )
+                if self.thinking_budget is not None or self.include_thoughts is not None
                 else None,
             }.items()
             if v is not None
