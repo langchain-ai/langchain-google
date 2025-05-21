@@ -308,6 +308,8 @@ def _parse_chat_history_gemini(
         # error.
         if isinstance(raw_content, int):  # type: ignore
             raw_content = str(raw_content)  # type: ignore
+        if isinstance(raw_content, float):
+            raw_content = str(raw_content)
         if isinstance(raw_content, str):
             raw_content = [raw_content]
         result = []
