@@ -6,12 +6,10 @@ This package contains the LangChain integrations for Google Cloud generative mod
 
 1. [Installation](#installation)
 2. [Chat Models](#chat-models)
-
    * [Multimodal inputs](#multimodal-inputs)
 3. [Embeddings](#embeddings)
 4. [LLMs](#llms)
 5. [Code Generation](#code-generation)
-
    * [Example: Generate a Python function](#example-generate-a-python-function)
    * [Example: Generate JavaScript code](#example-generate-javascript-code)
    * [Notes](#notes)
@@ -24,7 +22,7 @@ pip install -U langchain-google-vertexai
 
 ## Chat Models
 
-`ChatVertexAI` class exposes models such as `gemini-pro` and `chat-bison`.
+`ChatVertexAI` class exposes models such as `gemini-pro` and other Gemini variants.
 
 To use, you should have a Google Cloud project with APIs enabled, and configured credentials. Initialize the model as:
 
@@ -32,15 +30,6 @@ To use, you should have a Google Cloud project with APIs enabled, and configured
 from langchain_google_vertexai import ChatVertexAI
 
 llm = ChatVertexAI(model_name="gemini-pro")
-llm.invoke("Sing a ballad of LangChain.")
-```
-
-You can also use other models, e.g. `chat-bison`:
-
-```python
-from langchain_google_vertexai import ChatVertexAI
-
-llm = ChatVertexAI(model_name="chat-bison", temperature=0.3)
 llm.invoke("Sing a ballad of LangChain.")
 ```
 
@@ -84,7 +73,7 @@ embeddings.embed_query("hello, world!")
 
 ## LLMs
 
-Use Google Cloud’s generative AI models as LangChain LLMs:
+Use Google Cloud's generative AI models as LangChain LLMs:
 
 ```python
 from langchain_core.prompts import PromptTemplate
@@ -104,14 +93,14 @@ print(chain.invoke({"question": question}))
 
 ## Code Generation
 
-You can use Vertex AI’s code generation models like `code-bison` to generate code snippets, functions, or scripts in various programming languages.
+You can use Gemini models for code generation tasks to generate code snippets, functions, or scripts in various programming languages.
 
 ### Example: Generate a Python function
 
 ```python
 from langchain_google_vertexai import VertexAI
 
-llm = VertexAI(model_name="code-bison", temperature=0.3, max_output_tokens=1000)
+llm = VertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
 
 prompt = "Write a Python function that checks if a string is a valid email address."
 
@@ -122,6 +111,9 @@ print(generated_code)
 ### Example: Generate JavaScript code
 
 ```python
+from langchain_google_vertexai import VertexAI
+
+llm = VertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
 prompt_js = "Write a JavaScript function that returns the factorial of a number."
 
 print(llm(prompt_js))
@@ -131,6 +123,4 @@ print(llm(prompt_js))
 
 * Adjust `temperature` to control creativity (higher values increase randomness).
 * Use `max_output_tokens` to limit the length of the generated code.
-* `code-bison` and similar models are optimized for code generation tasks in Vertex AI.
-
----
+* Gemini models are well-suited for code generation tasks with advanced understanding of programming concepts.
