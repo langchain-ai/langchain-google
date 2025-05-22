@@ -23,7 +23,7 @@ This package enables seamless access to Google Gemini's chat, vision, embeddings
 
 ## Overview
 
-This package provides LangChain support for Google Gemini models (via the official [Google Generative AI SDK](https://github.com/google/generative-ai-python)). It supports:
+This package provides LangChain support for Google Gemini models (via the official [Google Generative AI SDK](https://googleapis.github.io/python-genai/)). It supports:
 
 - Text and vision-based chat models
 - Embeddings for semantic search
@@ -212,7 +212,7 @@ print("Answerable probability:", response.answerable_probability)
 ## Resources
 
 * [LangChain Documentation](https://docs.langchain.com/)
-* [Google Generative AI SDK](https://github.com/google/generative-ai-python)
+* [Google Generative AI SDK](https://googleapis.github.io/python-genai/)
 * [Gemini Model Documentation](https://ai.google.dev/)
 
 
