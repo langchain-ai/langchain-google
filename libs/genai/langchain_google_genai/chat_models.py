@@ -1369,7 +1369,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             metadata=self.default_metadata,
             
         )
-        # print("🟢 Raw Gemini Response:", response.__dict__)
         return _response_to_result(response)
 
     async def _agenerate(
