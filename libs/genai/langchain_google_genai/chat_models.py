@@ -746,7 +746,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro")
+            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-001")
             llm.invoke("Write me a ballad about LangChain")
 
     Invoke:
@@ -831,7 +831,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 file = client.files.get(name=file.name)
 
             # Create cache
-            model = 'models/gemini-1.5-flash-001'
+            model = 'models/gemini-1.5-flash-latest'
             cache = client.caches.create(
                 model=model,
                 config=types.CreateCachedContentConfig(
@@ -887,7 +887,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     ],
                 )
             ]
-            model = "gemini-1.5-flash-001"
+            model = "gemini-1.5-flash-latest"
             cache = client.caches.create(
                 model=model,
                 config=CreateCachedContentConfig(
