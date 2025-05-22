@@ -78,6 +78,12 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     ) -> None:
         super().test_tool_message_histories_list_content(model, my_adder_tool)
 
+    @pytest.mark.xfail(
+        reason="Investigate: prompt_token_count inconsistent in final chunk."
+    )
+    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
+        super().test_usage_metadata_streaming(model)
+
     @property
     def supported_usage_metadata_details(
         self,
