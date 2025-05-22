@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Optional
+from typing import Dict, Generator, List
 
 import pytest
 from langchain_core.messages import (
