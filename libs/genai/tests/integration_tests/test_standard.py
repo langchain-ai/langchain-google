@@ -68,7 +68,7 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-1.5-pro-001",
+            "model": "models/gemini-1.5-pro-latest",
             "rate_limiter": rate_limiter,
         }
 
@@ -94,6 +94,3 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         ],
     ]:
         return {"invoke": [], "stream": []}
-
-
-# TODO: increase quota on gemini-1.5-pro-001 and test as well
