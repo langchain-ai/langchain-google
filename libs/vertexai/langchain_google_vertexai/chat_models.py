@@ -303,15 +303,12 @@ def _parse_chat_history_gemini(
                 pass
             except ValueError:
                 pass
-        # A linting error is thrown here because it does not think this line is
-        # reachable due to typing, but mypy is wrong so we ignore the lint
-        # error.
-        if isinstance(raw_content, int):  # type: ignore
-            raw_content = str(raw_content)  # type: ignore
-        if isinstance(raw_content, float):
-            raw_content = str(raw_content)
-        if isinstance(raw_content, str):
-            raw_content = [raw_content]
+        if isinstance(raw_content, (int, float, str)):
+            raw_content = [str(raw_content)]
+        elif isinstance(raw_content, list):
+            raw_content = [str(item) for item in raw_content]
+        else:
+            raise TypeError(f"Unsupported type: {type(raw_content)}")
         result = []
         for raw_part in raw_content:
             part = _convert_to_prompt(raw_part)
