@@ -246,6 +246,10 @@ class _VertexAICommon(_VertexAIBase):
     thinking_budget: Optional[int] = Field(
         default=None, description="Indicates the thinking budget in tokens."
     )
+    audio_timestamp: Optional[bool] = Field(
+        default=None,
+        description="Enable timestamp understanding of audio-only files",
+    )
 
     @property
     def _is_gemini_model(self) -> bool:

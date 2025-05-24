@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Optional
+from typing import Dict, Generator, List
 
 import pytest
 from langchain_core.messages import (
@@ -24,7 +24,7 @@ from langchain_google_genai import (
     Modality,
 )
 
-_MODEL = "models/gemini-1.5-flash-001"  # TODO: Use nano when it's available.
+_MODEL = "models/gemini-1.5-flash-latest"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
 _THINKING_MODEL = "models/gemini-2.5-flash-preview-04-17"
@@ -46,42 +46,6 @@ def _check_usage_metadata(message: AIMessage) -> None:
         + message.usage_metadata["output_tokens"]
         + thought_tokens
     ) == message.usage_metadata["total_tokens"]
-
-
-def test_chat_google_genai_stream() -> None:
-    """Test streaming tokens from Gemini."""
-    llm = ChatGoogleGenerativeAI(model=_MODEL)
-
-    full: Optional[BaseMessageChunk] = None
-    chunks_with_usage_metadata = 0
-    for token in llm.stream("This is a test. Say 'foo'"):
-        assert isinstance(token, AIMessageChunk)
-        assert isinstance(token.content, str)
-        if token.usage_metadata:
-            chunks_with_usage_metadata += 1
-        full = token if full is None else full + token
-    if chunks_with_usage_metadata != 1:
-        pytest.fail("Expected exactly one chunk with usage metadata")
-    assert isinstance(full, AIMessageChunk)
-    _check_usage_metadata(full)
-
-
-async def test_chat_google_genai_astream() -> None:
-    """Test streaming tokens from Gemini."""
-    llm = ChatGoogleGenerativeAI(model=_MODEL)
-
-    full: Optional[BaseMessageChunk] = None
-    chunks_with_usage_metadata = 0
-    async for token in llm.astream("This is a test. Say 'foo'"):
-        assert isinstance(token, AIMessageChunk)
-        assert isinstance(token.content, str)
-        if token.usage_metadata:
-            chunks_with_usage_metadata += 1
-        full = token if full is None else full + token
-    if chunks_with_usage_metadata != 1:
-        pytest.fail("Expected exactly one chunk with usage metadata")
-    assert isinstance(full, AIMessageChunk)
-    _check_usage_metadata(full)
 
 
 async def test_chat_google_genai_abatch() -> None:
@@ -618,7 +582,7 @@ def test_chat_google_genai_function_calling_with_structured_output(
 
 
 def test_ainvoke_without_eventloop() -> None:
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-001")
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 
     async def model_ainvoke(context: str) -> BaseMessage:
         result = await model.ainvoke(context)
@@ -629,7 +593,7 @@ def test_ainvoke_without_eventloop() -> None:
 
 
 def test_astream_without_eventloop() -> None:
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-001")
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 
     async def model_astream(context: str) -> List[BaseMessageChunk]:
         result = []

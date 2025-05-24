@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import os
+import re
 from typing import List, Literal, Optional, cast
 
 import pytest
@@ -340,6 +341,33 @@ def test_multimodal_media_inline_base64_agent() -> None:
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
+
+
+def test_audio_timestamp():
+    storage_client = storage.Client()
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    instruction = """
+    Transcribe the video.
+    """
+    text_message = {"type": "text", "text": instruction}
+
+    message = HumanMessage(content=[media_message, text_message])
+    output = llm.invoke([message], audio_timestamp=True)
+
+    assert isinstance(output.content, str)
+    assert re.search(r"^\d+:\d+", output.content)
 
 
 def test_parse_history_gemini_multimodal_FC():
@@ -761,7 +789,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
-    response = model.invoke([HumanMessage("How many O's are in Google?")])
+    response = model.invoke("How many O's are in Google?")
     assert isinstance(response, AIMessage)
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
@@ -773,7 +801,19 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
-    response = model.invoke([HumanMessage("How many O's are in Google?")])
+    response = model.invoke("How many O's are in Google?")
+    assert isinstance(response, AIMessage)
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
+    response = model.invoke("How many O's are in Google?", thinking_budget=100)
     assert isinstance(response, AIMessage)
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
