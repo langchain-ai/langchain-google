@@ -165,9 +165,10 @@ def _format_json_schema_to_gapic(
     return converted_schema
 
 
-def _dict_to_gapic_schema(
+def _dict_to_gapic_schema_utils(
     schema: Dict[str, Any], pydantic_version: str = "v1"
-) -> gapic.Schema:
+) -> Dict[str, Any]:
+    """Convert the schema to make gemini understand."""
     # Resolve refs in schema because $refs and $defs are not supported
     # by the Gemini API.
     dereferenced_schema = dereference_refs(schema)
@@ -176,6 +177,13 @@ def _dict_to_gapic_schema(
         formatted_schema = _format_json_schema_to_gapic_v1(dereferenced_schema)
     else:
         formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
+    return formatted_schema
+
+
+def _dict_to_gapic_schema(
+    schema: Dict[str, Any], pydantic_version: str = "v1"
+) -> gapic.Schema:
+    formatted_schema = _dict_to_gapic_schema_utils(schema, pydantic_version)
     json_schema = json.dumps(formatted_schema)
     return gapic.Schema.from_json(json_schema)
 
@@ -230,19 +238,20 @@ def _format_pydantic_to_function_declaration(
     )
 
 
-    # Ensure we send "anyOf" parameters through pydantic v2 schema parsing
-    def _check_v2(parameters):
-        properties = parameters.get("properties", {}).values()
-        for property in properties:
-            if "anyOf" in property:
+# Ensure we send "anyOf" parameters through pydantic v2 schema parsing
+def _check_v2(parameters):
+    properties = parameters.get("properties", {}).values()
+    for property in properties:
+        if "anyOf" in property:
+            return True
+        if "parameters" in property:
+            if _check_v2(property["parameters"]):
                 return True
-            if "parameters" in property:
-                if _check_v2(property["parameters"]):
-                    return True
-            if "items" in property:
-                if _check_v2(property["items"]):
-                    return True
-        return False
+        if "items" in property:
+            if _check_v2(property["items"]):
+                return True
+
+    return False
 
 
 def _format_dict_to_function_declaration(
