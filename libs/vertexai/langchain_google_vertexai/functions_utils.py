@@ -230,11 +230,6 @@ def _format_pydantic_to_function_declaration(
     )
 
 
-def _format_dict_to_function_declaration(
-    tool: Union[FunctionDescription, Dict[str, Any]],
-) -> gapic.FunctionDeclaration:
-    pydantic_version_v2 = False
-
     # Ensure we send "anyOf" parameters through pydantic v2 schema parsing
     def _check_v2(parameters):
         properties = parameters.get("properties", {}).values()
@@ -248,6 +243,12 @@ def _format_dict_to_function_declaration(
                 if _check_v2(property["items"]):
                     return True
         return False
+
+
+def _format_dict_to_function_declaration(
+    tool: Union[FunctionDescription, Dict[str, Any]],
+) -> gapic.FunctionDeclaration:
+    pydantic_version_v2 = False
 
     if isinstance(tool, dict):
         pydantic_version_v2 = _check_v2(tool.get("parameters", {}))
