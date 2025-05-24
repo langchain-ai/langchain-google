@@ -692,6 +692,13 @@ def _response_to_result(
             proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
             for safety_rating in candidate.safety_ratings
         ]
+        try:
+            if candidate.grounding_metadata:
+                generation_info["grounding_metadata"] = proto.Message.to_dict(
+                    candidate.grounding_metadata
+                )
+        except AttributeError:
+            pass
         message = _parse_response_candidate(candidate, streaming=stream)
         message.usage_metadata = lc_usage
         if stream:
