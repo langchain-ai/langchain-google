@@ -33,6 +33,7 @@ from langchain_google_genai.chat_models import (
     _convert_tool_message_to_parts,
     _parse_chat_history,
     _parse_response_candidate,
+    _response_to_result,
 )
 
 
@@ -773,3 +774,99 @@ def test_model_kwargs() -> None:
     assert llm.model == "models/my-model"
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
+
+
+@pytest.mark.parametrize(
+    "raw_response, expected_grounding_metadata",
+    [
+        (
+            # Case 1: Response with grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "grounding_metadata": {
+                            "grounding_chunks": [
+                                {
+                                    "web": {
+                                        "uri": "https://example.com",
+                                        "title": "Example Site",
+                                    }
+                                }
+                            ],
+                            "grounding_supports": [
+                                {
+                                    "segment": {
+                                        "start_index": 0,
+                                        "end_index": 13,
+                                        "text": "Test response",
+                                    },
+                                    "grounding_chunk_indices": [0],
+                                    "confidence_scores": [0.95],
+                                }
+                            ],
+                            "web_search_queries": ["test query"],
+                        },
+                    }
+                ],
+                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {
+                "grounding_chunks": [
+                    {"web": {"uri": "https://example.com", "title": "Example Site"}}
+                ],
+                "grounding_supports": [
+                    {
+                        "segment": {
+                            "start_index": 0,
+                            "end_index": 13,
+                            "text": "Test response",
+                            "part_index": 0,
+                        },
+                        "grounding_chunk_indices": [0],
+                        "confidence_scores": [0.95],
+                    }
+                ],
+                "web_search_queries": ["test query"],
+            },
+        ),
+        (
+            # Case 2: Response without grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                    }
+                ],
+                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {},
+        ),
+    ],
+)
+def test_response_to_result_grounding_metadata(
+    raw_response: Dict, expected_grounding_metadata: Dict
+) -> None:
+    """Test that _response_to_result includes grounding_metadata in the response."""
+    response = GenerateContentResponse(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    assert len(result.generations) == len(raw_response["candidates"])
+    for generation in result.generations:
+        assert generation.message.content == "Test response"
+        grounding_metadata = (
+            generation.generation_info.get("grounding_metadata", {})
+            if generation.generation_info is not None
+            else {}
+        )
+        assert grounding_metadata == expected_grounding_metadata
