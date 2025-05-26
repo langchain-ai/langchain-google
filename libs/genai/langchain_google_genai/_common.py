@@ -84,6 +84,11 @@ Supported examples:
         default=None, description="Indicates the thinking budget in tokens."
     )
 
+    include_thoughts: Optional[bool] = Field(
+        default=None,
+        description="Indicates whether to include thoughts in the response.",
+    )
+
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
     """The default safety settings to use for all generations. 
     
