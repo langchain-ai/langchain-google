@@ -177,6 +177,21 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
 
 def test_chat_google_genai_invoke_with_audio() -> None:
     """Test invoke tokens with audio from ChatGoogleGenerativeAI."""
+    llm = ChatGoogleGenerativeAI(model=_AUDIO_OUTPUT_MODEL, response_modalities=[Modality.AUDIO])
+
+    result = llm.invoke(
+        "Please say The quick brown fox jumps over the lazy dog",
+    )
+    assert isinstance(result, AIMessage)
+    assert result.content == ""
+    audio_data = result.additional_kwargs.get("audio")
+    assert isinstance(audio_data, bytes)
+    assert get_wav_type_from_bytes(audio_data)
+    _check_usage_metadata(result)
+
+
+def test_chat_google_genai_invoke_with_audio_genconfig() -> None:
+    """Test invoke tokens with audio from ChatGoogleGenerativeAI."""
     llm = ChatGoogleGenerativeAI(model=_AUDIO_OUTPUT_MODEL)
 
     result = llm.invoke(
