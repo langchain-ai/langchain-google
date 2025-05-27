@@ -177,7 +177,9 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
 
 def test_chat_google_genai_invoke_with_audio() -> None:
     """Test invoke tokens with audio from ChatGoogleGenerativeAI."""
-    llm = ChatGoogleGenerativeAI(model=_AUDIO_OUTPUT_MODEL, response_modalities=[Modality.AUDIO])
+    llm = ChatGoogleGenerativeAI(
+        model=_AUDIO_OUTPUT_MODEL, response_modalities=[Modality.AUDIO]
+    )
 
     result = llm.invoke(
         "Please say The quick brown fox jumps over the lazy dog",
