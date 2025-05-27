@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import mimetypes
 import uuid
 import warnings
+import wave
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
@@ -562,6 +564,18 @@ def _parse_response_candidate(
                     content.append(execution_result)
                 else:
                     raise Exception("Unexpected content type")
+
+        if part.inline_data.mime_type.startswith("audio/"):
+            buffer = io.BytesIO()
+
+            with wave.open(buffer, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                # TODO: Read Sample Rate from MIME content type.
+                wf.setframerate(24000)
+                wf.writeframes(part.inline_data.data)
+
+            additional_kwargs["audio"] = buffer.getvalue()
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
