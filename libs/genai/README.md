@@ -75,6 +75,24 @@ image_base64 = response.content[0].get("image_url").get("url").split(",")[-1]
 meow_str = response.content[1]
 ```
 
+#### Audio Output
+
+```
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash-preview-tts")
+# example
+response = llm.invoke(
+    "Please say The quick brown fox jumps over the lazy dog",
+    generation_config=dict(response_modalities=["AUDIO"]),
+)
+
+# Base64 encoded binary data of the image
+wav_data = response.additional_kwargs.get("audio")
+with open("output.wav", "wb") as f:
+    f.write(wav_data)
+```
+
 #### Multimodal Outputs in Chains
 
 ```
