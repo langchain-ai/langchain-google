@@ -469,6 +469,38 @@ def test_vertexai_single_call_with_no_system_messages() -> None:
 
 
 @pytest.mark.release
+def test_vertexai_single_call_previous_blocked_response() -> None:
+    """If a previous call was blocked, the AIMessage will have empty content which
+    should be ignored."""
+
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    text_question2 = "How much is 3+3?"
+    # Previous blocked response included in history. This can happen with a LangGraph
+    # ReAct agent.
+    message1 = AIMessage(
+        content="",
+        response_metadata={
+            "is_blocked": True,
+            "safety_ratings": [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "probability_label": "MEDIUM",
+                    "probability_score": 0.33039191365242004,
+                    "blocked": True,
+                    "severity": "HARM_SEVERITY_MEDIUM",
+                    "severity_score": 0.2782268822193146,
+                },
+            ],
+            "finish_reason": "SAFETY",
+        },
+    )
+    message2 = HumanMessage(content=text_question2)
+    response = model([message1, message2])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+
+@pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_get_num_tokens_from_messages(model_name: str) -> None:
     model = ChatVertexAI(
