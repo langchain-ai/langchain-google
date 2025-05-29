@@ -66,6 +66,8 @@ class GoogleEmbeddingModelType(str, Enum):
     def _missing_(cls, value: Any) -> Optional["GoogleEmbeddingModelType"]:
         if value.lower().startswith("text"):
             return GoogleEmbeddingModelType.TEXT
+        if value.lower().startswith("gemini"):
+            return GoogleEmbeddingModelType.TEXT
         if "multimodalembedding" in value.lower():
             return GoogleEmbeddingModelType.MULTIMODAL
         return None
@@ -77,6 +79,7 @@ class GoogleEmbeddingModelVersion(str, Enum):
     EMBEDDINGS_DEC_2023 = auto()
     EMBEDDINGS_MAY_2024 = auto()
     EMBEDDINGS_NOV_2024 = auto()
+    EMBEDDINGS_MAY_2025 = auto()
 
     @classmethod
     def _missing_(cls, value: Any) -> "GoogleEmbeddingModelVersion":
@@ -99,6 +102,9 @@ class GoogleEmbeddingModelVersion(str, Enum):
         if "text-embedding-005" in value.lower():
             return GoogleEmbeddingModelVersion.EMBEDDINGS_NOV_2024
 
+        if "gemini-embedding-001" in value.lower():
+            return GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2025
+
         return GoogleEmbeddingModelVersion.EMBEDDINGS_JUNE_2023
 
     @property
@@ -113,7 +119,11 @@ class GoogleEmbeddingModelVersion(str, Enum):
         """
         Checks if the model generation supports output dimensionality.
         """
-        return self == GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024
+        supported = [
+            GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024,
+            GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2025,
+        ]
+        return self in supported
 
 
 class VertexAIEmbeddings(_VertexAICommon, Embeddings):
