@@ -616,24 +616,21 @@ files = [
 
 [[package]]
 name = "langchain-core"
-version = "0.3.53"
+version = "0.3.62"
 description = "Building applications with LLMs through composability"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = ">=3.9"
 groups = ["main", "test"]
 files = [
-    {file = "langchain_core-0.3.53-py3-none-any.whl", hash = "sha256:bf7e6027b841804fe0686d1dc07f26528528fd995dab1e38ffc53e1d76f1163d"},
-    {file = "langchain_core-0.3.53.tar.gz", hash = "sha256:94fa88d6d3a9695665c3d60e2a296148a8a2cea7a6f5f738cb75210581db15c1"},
+    {file = "langchain_core-0.3.62-py3-none-any.whl", hash = "sha256:242cef42be32baa5c7cd03df719d21093323b5271fff9efbe0ca9a0dfa8ee2bf"},
+    {file = "langchain_core-0.3.62.tar.gz", hash = "sha256:e75e483b0b602a2fdcfbe349be7efb7f1c1c04b20f8d51c7892e78fbecc8a823"},
 ]
 
 [package.dependencies]
 jsonpatch = ">=1.33,<2.0"
-langsmith = ">=0.1.125,<0.4"
+langsmith = ">=0.1.126,<0.4"
 packaging = ">=23.2,<25"
-pydantic = [
-    {version = ">=2.5.2,<3.0.0", markers = "python_full_version < \"3.12.4\""},
-    {version = ">=2.7.4,<3.0.0", markers = "python_full_version >= \"3.12.4\""},
-]
+pydantic = ">=2.7.4"
 PyYAML = ">=5.3"
 tenacity = ">=8.1.0,<8.4.0 || >8.4.0,<10.0.0"
 typing-extensions = ">=4.7"
@@ -1791,4 +1788,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "bb80b60a0c3e0f575f5b90bf5dd69db92960607760e86012b4682ce37d18c656"
+content-hash = "84a4702836774f32920d1304e6ead667db1d0edd91777a9f609a2ba36bbdb8da"
