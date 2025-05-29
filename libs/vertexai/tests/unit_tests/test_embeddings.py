@@ -11,6 +11,9 @@ from langchain_google_vertexai.embeddings import (
     GoogleEmbeddingModelType,
 )
 
+def test_langchain_google_vertexai_supports_gemini_embedding_model() -> None:
+    mock_embeddings = MockVertexAIEmbeddings("gemini-embedding-001")
+    assert mock_embeddings.model_type == GoogleEmbeddingModelType.TEXT
 
 def test_langchain_google_vertexai_embed_image_multimodal_only() -> None:
     mock_embeddings = MockVertexAIEmbeddings("textembedding-gecko@001")
