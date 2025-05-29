@@ -178,9 +178,7 @@ def _create_retry_decorator() -> Callable[[Any], Any]:
     max_retries = 2
 
     fallback_wait = wait_exponential(
-        multiplier=multiplier,
-        min=min_seconds,
-        max=max_seconds
+        multiplier=multiplier, min=min_seconds, max=max_seconds
     )
 
     return retry(
