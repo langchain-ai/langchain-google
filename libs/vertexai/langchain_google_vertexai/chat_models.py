@@ -539,7 +539,7 @@ def _parse_response_candidate(
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: bool = False
 ) -> AIMessage:
-    content: Union[None, str, List[str]] = None
+    content: Union[None, str, List[Union[str, dict[str, Any]]]] = None
     additional_kwargs = {}
     tool_calls = []
     invalid_tool_calls = []
@@ -607,6 +607,41 @@ def _parse_response_candidate(
                             error=str(e),
                         )
                     )
+        if hasattr(part, "executable_code") and part.executable_code is not None:
+            if part.executable_code.code and part.executable_code.language:
+                code_message = {
+                    "type": "executable_code",
+                    "executable_code": part.executable_code.code,
+                    "language": part.executable_code.language,
+                }
+                if not content:
+                    content = [code_message]
+                elif isinstance(content, str):
+                    content = [content, code_message]
+                elif isinstance(content, list):
+                    content.append(code_message)
+                else:
+                    raise Exception("Unexpected content type")
+
+        if (
+            hasattr(part, "code_execution_result")
+            and part.code_execution_result is not None
+        ):
+            if part.code_execution_result.output:
+                execution_result = {
+                    "type": "code_execution_result",
+                    "code_execution_result": part.code_execution_result.output,
+                }
+
+                if not content:
+                    content = [execution_result]
+                elif isinstance(content, str):
+                    content = [content, execution_result]
+                elif isinstance(content, list):
+                    content.append(execution_result)
+                else:
+                    raise Exception("Unexpected content type")
+
     if content is None:
         content = ""
 
