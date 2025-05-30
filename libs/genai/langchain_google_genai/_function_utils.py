@@ -30,6 +30,7 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import NotRequired
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +66,15 @@ _GoogleSearchRetrievalLike = Union[
     gapic.GoogleSearchRetrieval,
     Dict[str, Any],
 ]
+_GoogleSearchLike = Union[gapic.Tool.GoogleSearch, Dict[str, Any]]
+_CodeExecutionLike = Union[gapic.CodeExecution, Dict[str, Any]]
 
 
 class _ToolDict(TypedDict):
     function_declarations: Sequence[_FunctionDeclarationLike]
     google_search_retrieval: Optional[_GoogleSearchRetrievalLike]
+    google_search: NotRequired[_GoogleSearchLike]
+    code_execution: NotRequired[_CodeExecutionLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -158,6 +163,8 @@ def convert_to_genai_function_declarations(
                 for f in [
                     "function_declarations",
                     "google_search_retrieval",
+                    "google_search",
+                    "code_execution",
                 ]
             ):
                 fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
@@ -184,6 +191,12 @@ def convert_to_genai_function_declarations(
                 gapic_tool.google_search_retrieval = gapic.GoogleSearchRetrieval(
                     tool["google_search_retrieval"]
                 )
+            if "google_search" in tool:
+                gapic_tool.google_search = gapic.Tool.GoogleSearch(
+                    tool["google_search"]
+                )
+            if "code_execution" in tool:
+                gapic_tool.code_execution = gapic.CodeExecution(tool["code_execution"])
         else:
             fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
             gapic_tool.function_declarations.append(fd)

@@ -679,3 +679,22 @@ def test_astream_without_eventloop() -> None:
     result = asyncio.run(model_astream("How can you help me?"))
     assert len(result) > 0
     assert isinstance(result[0], AIMessageChunk)
+
+
+def test_search_builtin() -> None:
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
+        [{"google_search": {}}]
+    )
+    response = llm.invoke("What is today's news?")
+    assert "grounding_metadata" in response.response_metadata
+
+
+def test_code_execution_builtin() -> None:
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
+        [{"code_execution": {}}]
+    )
+    with pytest.warns(match="executable_code"):
+        response = llm.invoke("What is 3^3?")
+    content_blocks = [block for block in response.content if isinstance(block, dict)]
+    expected_block_types = {"executable_code", "code_execution_result"}
+    assert set(block.get("type") for block in content_blocks) == expected_block_types
