@@ -122,6 +122,11 @@ def test_langchain_google_vertexai_text_model() -> None:
     assert isinstance(embeddings_model.client, TextEmbeddingModel)
     assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
 
+@pytest.mark.release
+def test_langchain_google_vertexai_text_gemini_model() -> None:
+    embeddings_model = VertexAIEmbeddings(model_name="gemini-embedding-001")
+    assert isinstance(embeddings_model.client, TextEmbeddingModel)
+    assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
 
 @pytest.mark.release
 def test_langchain_google_vertexai_multimodal_model() -> None:
