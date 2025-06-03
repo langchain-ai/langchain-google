@@ -1368,3 +1368,39 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
         "cache_creation_input_tokens": 1,
         "cache_read_input_tokens": 1,
     }
+
+
+def test_message_content_types() -> None:
+    """Test handling of different message content types."""
+    test_cases = [
+        # Alpha characters only
+        "Hello World",
+        # Numeric characters only
+        "12345",
+        # Float representation
+        "3.14159",
+        # Mixed content
+        "Hello123 3.14 World!",
+    ]
+
+    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+        response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Response")]))]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
+
+        model = ChatVertexAI(model_name="gemini-pro", project="test-project")
+
+        for test_content in test_cases:
+            message = HumanMessage(content=test_content)
+            result = model.invoke([message])
+
+            # Verify the content was passed correctly to the model
+            mock_generate_content.assert_called()
+            call_args = mock_generate_content.call_args.kwargs["request"]
+            assert call_args.contents[0].parts[0].text == test_content
+
+            # Verify the response was handled correctly
+            assert isinstance(result, AIMessage)
+            assert result.content == "Response"
