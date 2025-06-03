@@ -52,6 +52,7 @@ class VertexAIRank(BaseDocumentCompressor):
         credentials (Optional[Credentials]): Google Cloud credentials object.
         credentials_path (Optional[str]): Path to the Google Cloud service
         account credentials file.
+        timeout (Optional[int]): Timeout for API calls in seconds.
     """
 
     project_id: str = Field(default=None)  # type: ignore
