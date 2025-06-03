@@ -323,7 +323,7 @@ def _parse_chat_history_gemini(
         # A linting error is thrown here because it does not think this line is
         # reachable due to typing, but mypy is wrong so we ignore the lint
         # error.
-        if isinstance(raw_content, int):  # type: ignore
+        if isinstance(raw_content, int) or isinstance(raw_content, float):  # type: ignore
             raw_content = str(raw_content)  # type: ignore
         if isinstance(raw_content, str):
             raw_content = [raw_content]
