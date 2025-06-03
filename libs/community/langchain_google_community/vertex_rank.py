@@ -64,6 +64,7 @@ class VertexAIRank(BaseDocumentCompressor):
     title_field: Optional[str] = Field(default=None)
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
+    timeout: Optional[int] = Field(default=None)
     client: Any = None
 
     def __init__(self, **kwargs: Any):
@@ -152,7 +153,7 @@ class VertexAIRank(BaseDocumentCompressor):
         )
 
         try:
-            response = self.client.rank(request=request)
+            response = self.client.rank(request=request, timeout=self.timeout)
         except core_exceptions.GoogleAPICallError as e:
             print(f"Error in Vertex AI Ranking API call: {str(e)}")
             raise RuntimeError(f"Error in Vertex AI Ranking API call: {str(e)}") from e
