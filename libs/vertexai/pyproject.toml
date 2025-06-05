@@ -39,6 +39,7 @@ pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
+types-requests = "^2.31.0"
 types-protobuf = "^4.24.0.4"
 google-api-python-client = "^2.117.0"
 langchain = "^0.3.7"
@@ -83,6 +84,7 @@ ruff = "^0.1.5"
 mypy = "^1"
 types-google-cloud-ndb = "^2.2.0.20240106"
 types-protobuf = "^4.24.0.4"
+types-requests = "^2.31.0"
 anthropic = { extras = ["vertexai"], version = ">=0.35.0,<1", optional = true }
 
 
