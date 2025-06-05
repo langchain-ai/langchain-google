@@ -32,6 +32,7 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel
+from typing_extensions import NotRequired
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ _GoogleSearchRetrievalLike = Union[
 ]
 _GoogleSearchLike = Union[gapic.Tool.GoogleSearch, Dict[str, Any]]
 _RetrievalLike = Union[gapic.Retrieval, Dict[str, Any]]
+_CodeExecutionLike = Union[gapic.Tool.CodeExecution, Dict[str, Any]]
 
 
 class _ToolDictLike(TypedDict):
@@ -56,6 +58,7 @@ class _ToolDictLike(TypedDict):
     google_search_retrieval: Optional[_GoogleSearchRetrievalLike]
     google_search: Optional[_GoogleSearchLike]
     retrieval: Optional[_RetrievalLike]
+    code_execution: NotRequired[_CodeExecutionLike]
 
 
 _ToolType = Union[gapic.Tool, vertexai.Tool, _ToolDictLike, _FunctionDeclarationLike]
@@ -306,6 +309,8 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 gapic_tool.function_declarations.extend(rt.function_declarations)
             if "google_search" in rt:
                 gapic_tool.google_search = rt.google_search
+            if "code_execution" in rt:
+                gapic_tool.code_execution = rt.code_execution
         elif isinstance(tool, dict):
             # not _ToolDictLike
             if not any(
@@ -315,6 +320,7 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                     "google_search_retrieval",
                     "google_search",
                     "retrieval",
+                    "code_execution",
                 ]
             ):
                 fd = _format_to_gapic_function_declaration(tool)
@@ -345,6 +351,10 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 )
             if "retrieval" in tool:
                 gapic_tool.retrieval = gapic.Retrieval(tool["retrieval"])
+            if "code_execution" in tool:
+                gapic_tool.code_execution = gapic.Tool.CodeExecution(
+                    tool["code_execution"]
+                )
         else:
             fd = _format_to_gapic_function_declaration(tool)
             gapic_tool.function_declarations.append(fd)
