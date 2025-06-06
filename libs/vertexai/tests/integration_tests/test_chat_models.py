@@ -846,6 +846,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
     )
 
 
+@pytest.mark.release
 def test_chat_vertexai_gemini_thinking_configured_include_thoughts() -> None:
     model = ChatVertexAI(
         model=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100, include_thoughts=True
@@ -871,6 +872,7 @@ def test_chat_vertexai_gemini_thinking_configured_include_thoughts() -> None:
     )
 
 
+@pytest.mark.release
 def test_chat_vertexai_gemini_thinking_include_thoughts() -> None:
     model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME)
 
