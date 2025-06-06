@@ -823,6 +823,79 @@ def test_chat_vertexai_gemini_thinking() -> None:
 
 
 @pytest.mark.release
+def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
+    model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
+
+    response = model.invoke(
+        "How many O's are in Google?",
+    )
+
+    assert isinstance(response, AIMessage)
+    content = response.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+
+
+def test_chat_vertexai_gemini_thinking_configured_include_thoughts() -> None:
+    model = ChatVertexAI(
+        model=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100, include_thoughts=True
+    )
+
+    response = model.invoke(
+        "How many O's are in Google?",
+    )
+
+    assert isinstance(response, AIMessage)
+    content = response.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+
+
+def test_chat_vertexai_gemini_thinking_include_thoughts() -> None:
+    model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME)
+
+    response = model.invoke(
+        "How many O's are in Google?",
+        include_thoughts=True,
+    )
+
+    assert isinstance(response, AIMessage)
+    content = response.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+
+
+@pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
     response = model.invoke([HumanMessage("How many O's are in Google?")])
