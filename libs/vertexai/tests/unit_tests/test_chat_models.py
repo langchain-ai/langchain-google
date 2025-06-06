@@ -1387,7 +1387,7 @@ def test_init_time_with_client(benchmark: BenchmarkFixture) -> None:
 
     def _init_in_loop() -> None:
         for _ in range(10):
-            llm = ChatVertexAI(model="gemini-2.0-flash-001")
+            llm = ChatVertexAI(model="gemini-2.0-flash-001", project="test-project")
             _ = llm.prediction_client  # client is instantiated lazily
 
     benchmark(_init_in_loop)
