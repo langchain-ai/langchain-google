@@ -25,6 +25,16 @@ from langchain_core.runnables.config import RunnableConfig
 class ModelArmorSanitizeBaseRunnable(Runnable):
     """
     Base runnable for Model Armor prompt/response sanitization.
+
+    Attributes:
+        client: A model armor client instance for making snitization requests.
+        template_id: Model Armor template ID for sanitization.
+        fail_open: If True, allows unsafe prompts/responses to pass through.
+        return_findings: If True, returns dict with prompt/response with
+                    the model armor sanitization findings.
+        logger: Logger instance for logging events. if not provided,
+            a default logger is created with INFO level.
+
     """
 
     def __init__(
@@ -32,11 +42,13 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
         client: ModelArmorClient,
         template_id: str,
         fail_open: bool = True,
+        return_findings: bool = False,
         logger: Optional[logging.Logger] = None,
     ):
         self.client = client
         self.template_id = template_id
         self.fail_open = fail_open
+        self.return_findings = return_findings
 
         # Configure logger
         local_logger = logging.getLogger(__name__)
@@ -72,11 +84,9 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
             self.fail_open,
         )
 
-    def _extract_input(
-        self,
-        value: Any,
-    ) -> str:
-        """Extract text from various LangChain prompt/message types,
+    def _extract_input(self, value: Any) -> str:
+        """
+        Extract text from various LangChain prompt/message types,
         including BaseMessage,BasePromptTemplate and string.
 
         Args:
@@ -161,6 +171,8 @@ class ModelArmorSanitizePromptRunnable(ModelArmorSanitizeBaseRunnable):
         Returns:
             Any: The original prompt if safe or fail_open,
                 otherwise raises ValueError.
+                If return_findings is True in case of safe or fail_open,
+                returns a dict with the prompt and the sanitization findings.
 
         Raises:
             ValueError: If the prompt is flagged as unsafe by Model Armor and
@@ -189,6 +201,13 @@ class ModelArmorSanitizePromptRunnable(ModelArmorSanitizeBaseRunnable):
                 )
             else:
                 raise ValueError("Prompt flagged as unsafe by Model Armor.")
+
+        if self.return_findings:
+            return {
+                "prompt": input,
+                "findings": sanitization_findings,
+            }
+
         return input
 
 
@@ -214,6 +233,8 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
         Returns:
             Any: The original response if safe or fail_open,
                 otherwise raises ValueError.
+                If return_findings is True in case of safe or fail_open,
+                returns a dict with the response and the sanitization findings.
 
         Raises:
             ValueError: If the response is flagged as unsafe by Model Armor
@@ -243,4 +264,11 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
                 )
             else:
                 raise ValueError("Response flagged as unsafe by Model Armor.")
+
+        if self.return_findings:
+            return {
+                "response": input,
+                "findings": sanitization_findings,
+            }
+
         return input
