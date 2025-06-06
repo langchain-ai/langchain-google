@@ -44,11 +44,13 @@ def test_vertex_ai_ranker_initialization(mock_rank_service_client: Mock) -> None
         ranking_config="test-config",
         title_field="source",
         client=mock_rank_service_client,
+        timeout=5,
     )
     assert ranker.project_id == "test-project"
     assert ranker.location_id == "test-location"
     assert ranker.ranking_config == "test-config"
     assert ranker.title_field == "source"
+    assert ranker.timeout == 5
 
 
 @patch("google.cloud.discoveryengine_v1alpha.RankServiceClient")
