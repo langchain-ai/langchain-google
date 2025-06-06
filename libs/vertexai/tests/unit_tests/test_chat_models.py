@@ -30,7 +30,6 @@ from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
 from pydantic import BaseModel
-from pytest_benchmark.fixture import BenchmarkFixture  # type: ignore[import-untyped]
 from vertexai.generative_models import (  # type: ignore
     SafetySetting as VertexSafetySetting,
 )
