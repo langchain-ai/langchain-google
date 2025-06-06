@@ -786,10 +786,15 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     assert len(result.tool_calls) == 0
 
 
+# Marking the following 6 as flaky because it has been observed that gemini 2.5 models
+# don't always think before they answer even when thinking is turned on.
+
+
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
-    response = model.invoke("How many O's are in Google?")
+    response = model.invoke("How many O's are in Google? Think before you answer.")
     assert isinstance(response, AIMessage)
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
@@ -798,11 +803,69 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     )
 
 
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
-    response = model.invoke("How many O's are in Google?")
+    response = model.invoke("How many O's are in Google? Think before you answer.")
     assert isinstance(response, AIMessage)
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        - (
+            response.usage_metadata["input_tokens"]  # type: ignore
+            + response.usage_metadata["output_tokens"]  # type: ignore
+        )
+        <= 100
+    )
+
+
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
+    response = model.invoke(
+        "How many O's are in Google? Think before you answer.",
+        thinking_budget=100,
+    )
+    assert isinstance(response, AIMessage)
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        - (
+            response.usage_metadata["input_tokens"]  # type: ignore
+            + response.usage_metadata["output_tokens"]  # type: ignore
+        )
+        <= 100
+    )
+
+
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
+    model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
+
+    response = model.invoke(
+        "How many O's are in Google? Think before you answer.",
+    )
+
+    assert isinstance(response, AIMessage)
+    content = response.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
         > response.usage_metadata["input_tokens"]  # type: ignore
@@ -810,11 +873,61 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     )
 
 
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
-def test_chat_vertexai_gemini_thinking() -> None:
-    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
-    response = model.invoke("How many O's are in Google?", thinking_budget=100)
+def test_chat_vertexai_gemini_thinking_configured_include_thoughts() -> None:
+    model = ChatVertexAI(
+        model=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100, include_thoughts=True
+    )
+
+    response = model.invoke(
+        "How many O's are in Google? Think before you answer.",
+    )
+
     assert isinstance(response, AIMessage)
+    content = response.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        > response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
+    )
+
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        - (
+            response.usage_metadata["input_tokens"]  # type: ignore
+            + response.usage_metadata["output_tokens"]  # type: ignore
+        )
+        <= 100
+    )
+
+
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_include_thoughts() -> None:
+    model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME)
+
+    response = model.invoke(
+        "How many O's are in Google? Think before you answer.",
+        include_thoughts=True,
+    )
+
+    assert isinstance(response, AIMessage)
+    content = response.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
         > response.usage_metadata["input_tokens"]  # type: ignore
