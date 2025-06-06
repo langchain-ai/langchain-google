@@ -86,6 +86,31 @@ def _get_prediction_client(
         return v1beta1PredictionServiceClient(**client_kwargs)
 
 
+@lru_cache
+def _get_async_prediction_client(
+    *,
+    endpoint_version: str,
+    credentials: Any,
+    client_options: ClientOptions,
+    user_agent: str,
+):
+    """Return a shared PredictionServiceAsyncClient."""
+    async_client_kwargs: dict[str, Any] = {
+        "client_options": client_options,
+        "client_info": get_client_info(module=user_agent),
+        "credentials": credentials,
+    }
+
+    # async clients don't support "rest" transport
+    # https://github.com/googleapis/gapic-generator-python/issues/1962
+    async_client_kwargs["transport"] = "grpc_asyncio"
+
+    if endpoint_version == "v1":
+        return v1PredictionServiceAsyncClient(**async_client_kwargs)
+    else:
+        return v1beta1PredictionServiceAsyncClient(**async_client_kwargs)
+
+
 class _VertexAIBase(BaseModel):
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
@@ -195,24 +220,12 @@ class _VertexAIBase(BaseModel):
     ) -> Union[v1PredictionServiceAsyncClient, v1beta1PredictionServiceAsyncClient]:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
-            async_client_kwargs: dict[str, Any] = dict(
-                client_options=self.client_options,
-                client_info=get_client_info(module=self._user_agent),
+            self.async_client = _get_async_prediction_client(
+                endpoint_version=self.endpoint_version,
                 credentials=self.credentials,
+                client_options=self.client_options,
+                user_agent=self._user_agent,
             )
-
-            # async clients don't support "rest" transport
-            # https://github.com/googleapis/gapic-generator-python/issues/1962
-            async_client_kwargs["transport"] = "grpc_asyncio"
-
-            if self.endpoint_version == "v1":
-                self.async_client = v1PredictionServiceAsyncClient(
-                    **async_client_kwargs
-                )
-            else:
-                self.async_client = v1beta1PredictionServiceAsyncClient(
-                    **async_client_kwargs
-                )
         return self.async_client
 
     @property
