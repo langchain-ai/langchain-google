@@ -3,10 +3,9 @@ Model Armor Runnables for LangChain
 for prompt/response sanitization using Google Cloud Model Armor.
 """
 
-import sys
-import json
 import logging
-from typing import Any, List, Optional, Union
+import sys
+from typing import Any, Optional
 
 from google.cloud.modelarmor_v1 import (
     DataItem,
@@ -20,6 +19,7 @@ from langchain_core.callbacks.manager import dispatch_custom_event
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
+from langchain_core.runnables.config import RunnableConfig
 
 
 class ModelArmorSanitizeBaseRunnable(Runnable):
@@ -74,23 +74,17 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
 
     def _extract_input(
         self,
-        value: Union[
-            str,
-            BaseMessage,
-            BasePromptTemplate,
-            List[BasePromptTemplate],
-            List[BasePromptTemplate],
-        ],
+        value: Any,
     ) -> str:
-        """
-        Extract text from various LangChain prompt/message types,
+        """Extract text from various LangChain prompt/message types,
         including BaseMessage,BasePromptTemplate and string.
 
         Args:
-            value (Any): The input value to extract text from. Can be a string, BaseMessage, BasePromptTemplate, or a list of these types.
+            value (Any): Prompt/Response content to be extracted
+                    from langchain formats
 
         Returns:
-            str: The extracted text representation.
+            str: Extracted string content of prompt/response
         """
         if isinstance(value, str):
             return value
@@ -99,7 +93,7 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
         if isinstance(value, BasePromptTemplate):
             # Render with empty dict if possible, else fallback to string
             try:
-                return value.format({})
+                return value.format()
             except Exception:
                 return str(value)
         if isinstance(value, list):
@@ -139,10 +133,7 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
             )
 
         self.logger.info(
-            (
-                "Evaluated content, based on Model Armor "
-                "sanitization response as %s"
-            ),
+            "Evaluated content based on Model Armor sanitization response as %s",
             "Safe" if is_safe else "Unsafe",
         )
         return is_safe
@@ -155,21 +146,17 @@ class ModelArmorSanitizePromptRunnable(ModelArmorSanitizeBaseRunnable):
 
     def invoke(
         self,
-        prompt: Union[
-            str,
-            BaseMessage,
-            BasePromptTemplate,
-            List[BasePromptTemplate],
-            List[BasePromptTemplate],
-        ],
-        config: Optional[dict] = None,
+        input: Any,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Any,
     ) -> Any:
         """
         Sanitize a user prompt using Model Armor.
 
         Args:
-            prompt (Any): The user prompt to sanitize.
-            config (Optional[Any]): Optional config for invocation (unused).
+            input (Any): The user prompt to sanitize.
+            config (Optional[RunnableConfig]): Optional config for
+                                                invocation (unused).
 
         Returns:
             Any: The original prompt if safe or fail_open,
@@ -179,7 +166,7 @@ class ModelArmorSanitizePromptRunnable(ModelArmorSanitizeBaseRunnable):
             ValueError: If the prompt is flagged as unsafe by Model Armor and
                 fail_open is False.
         """
-        content = self._extract_input(prompt)
+        content = self._extract_input(input)
         self.logger.info(
             "Starting prompt sanitization request with template id %s",
             self.template_id,
@@ -202,7 +189,7 @@ class ModelArmorSanitizePromptRunnable(ModelArmorSanitizeBaseRunnable):
                 )
             else:
                 raise ValueError("Prompt flagged as unsafe by Model Armor.")
-        return prompt
+        return input
 
 
 class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
@@ -210,13 +197,19 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
     Runnable to sanitize LLM responses using Model Armor.
     """
 
-    def invoke(self, response: Any, config: Optional[Any] = None) -> Any:
+    def invoke(
+        self,
+        input: Any,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         Sanitize an LLM response using Model Armor.
 
         Args:
-            response (Any): The LLM response to sanitize.
-            config (Optional[Any]): Optional config for invocation (unused).
+            input (Any): The LLM response to sanitize.
+            config (Optional[RunnableConfig]): Optional config
+                                                for invocation (unused).
 
         Returns:
             Any: The original response if safe or fail_open,
@@ -226,7 +219,7 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
             ValueError: If the response is flagged as unsafe by Model Armor
                 and fail_open is False.
         """
-        content = self._extract_input(response)
+        content = self._extract_input(input)
         self.logger.info(
             "Starting response sanitization request with template id %s",
             self.template_id,
@@ -250,4 +243,4 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
                 )
             else:
                 raise ValueError("Response flagged as unsafe by Model Armor.")
-        return response
+        return input
