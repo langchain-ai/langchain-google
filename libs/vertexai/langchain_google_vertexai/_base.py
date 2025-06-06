@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from concurrent.futures import Executor
+from functools import lru_cache
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
 
 import vertexai  # type: ignore[import-untyped]
@@ -49,6 +50,65 @@ _PALM_DEFAULT_TEMPERATURE = 0.0
 _PALM_DEFAULT_TOP_P = 0.95
 _PALM_DEFAULT_TOP_K = 40
 _DEFAULT_LOCATION = "us-central1"
+
+
+@lru_cache
+def _get_client_options(
+    api_endpoint: Optional[str],
+    cert_source: Optional[Callable[[], Tuple[bytes, bytes]]],
+) -> ClientOptions:
+    """Return a shared ClientOptions object for each unique configuration."""
+    client_options = ClientOptions(api_endpoint=api_endpoint)
+    if cert_source:
+        client_options.client_cert_source = cert_source
+    return client_options
+
+
+@lru_cache
+def _get_prediction_client(
+    *,
+    endpoint_version: str,
+    credentials: Any,
+    client_options: ClientOptions,
+    transport: str,
+    user_agent: str,
+):
+    """Return a shared PredictionServiceClient."""
+    client_kwargs: dict[str, Any] = {
+        "credentials": credentials,
+        "client_options": client_options,
+        "client_info": get_client_info(module=user_agent),
+        "transport": transport,
+    }
+    if endpoint_version == "v1":
+        return v1PredictionServiceClient(**client_kwargs)
+    else:
+        return v1beta1PredictionServiceClient(**client_kwargs)
+
+
+@lru_cache
+def _get_async_prediction_client(
+    *,
+    endpoint_version: str,
+    credentials: Any,
+    client_options: ClientOptions,
+    user_agent: str,
+):
+    """Return a shared PredictionServiceAsyncClient."""
+    async_client_kwargs: dict[str, Any] = {
+        "client_options": client_options,
+        "client_info": get_client_info(module=user_agent),
+        "credentials": credentials,
+    }
+
+    # async clients don't support "rest" transport
+    # https://github.com/googleapis/gapic-generator-python/issues/1962
+    async_client_kwargs["transport"] = "grpc_asyncio"
+
+    if endpoint_version == "v1":
+        return v1PredictionServiceAsyncClient(**async_client_kwargs)
+    else:
+        return v1beta1PredictionServiceAsyncClient(**async_client_kwargs)
 
 
 class _VertexAIBase(BaseModel):
@@ -122,10 +182,10 @@ class _VertexAIBase(BaseModel):
                 f"{'' if location == 'global' else location + '-'}"
                 f"{constants.PREDICTION_API_BASE_PATH}"
             )
-        client_options = ClientOptions(api_endpoint=api_endpoint)
-        if values.get("client_cert_source"):
-            client_options.client_cert_source = values["client_cert_source"]
-        values["client_options"] = client_options
+        values["client_options"] = _get_client_options(
+            api_endpoint=api_endpoint,
+            cert_source=values.get("client_cert_source"),
+        )
         additional_headers = values.get("additional_headers") or {}
         values["default_metadata"] = tuple(additional_headers.items())
         return values
@@ -145,16 +205,13 @@ class _VertexAIBase(BaseModel):
     ) -> Union[v1beta1PredictionServiceClient, v1PredictionServiceClient]:
         """Returns PredictionServiceClient."""
         if self.client is None:
-            client_kwargs: dict[str, Any] = {
-                "credentials": self.credentials,
-                "client_options": self.client_options,
-                "client_info": get_client_info(module=self._user_agent),
-                "transport": self.api_transport,
-            }
-            if self.endpoint_version == "v1":
-                self.client = v1PredictionServiceClient(**client_kwargs)
-            else:
-                self.client = v1beta1PredictionServiceClient(**client_kwargs)
+            self.client = _get_prediction_client(
+                endpoint_version=self.endpoint_version,
+                credentials=self.credentials,
+                client_options=self.client_options,
+                transport=self.api_transport,
+                user_agent=self._user_agent,
+            )
         return self.client
 
     @property
@@ -163,24 +220,12 @@ class _VertexAIBase(BaseModel):
     ) -> Union[v1PredictionServiceAsyncClient, v1beta1PredictionServiceAsyncClient]:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
-            async_client_kwargs: dict[str, Any] = dict(
-                client_options=self.client_options,
-                client_info=get_client_info(module=self._user_agent),
+            self.async_client = _get_async_prediction_client(
+                endpoint_version=self.endpoint_version,
                 credentials=self.credentials,
+                client_options=self.client_options,
+                user_agent=self._user_agent,
             )
-
-            # async clients don't support "rest" transport
-            # https://github.com/googleapis/gapic-generator-python/issues/1962
-            async_client_kwargs["transport"] = "grpc_asyncio"
-
-            if self.endpoint_version == "v1":
-                self.async_client = v1PredictionServiceAsyncClient(
-                    **async_client_kwargs
-                )
-            else:
-                self.async_client = v1beta1PredictionServiceAsyncClient(
-                    **async_client_kwargs
-                )
         return self.async_client
 
     @property

@@ -38,6 +38,7 @@ from vertexai.language_models import (  # type: ignore
     InputOutputTextPair,
 )
 
+from langchain_google_vertexai._base import _get_prediction_client
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
@@ -47,6 +48,13 @@ from langchain_google_vertexai.chat_models import (
     _parse_response_candidate,
 )
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
+
+@pytest.fixture
+def clear_prediction_client_cache() -> None:
+    # Clear the prediction client cache so we can mock varied calls to
+    # PredictionServiceClient
+    _get_prediction_client.cache_clear()
 
 
 def test_init() -> None:
@@ -141,7 +149,9 @@ def test_init_client(model: str, location: str) -> None:
         ),
     ],
 )
-def test_model_name_presence_in_chat_results(model: str, location: str) -> None:
+def test_model_name_presence_in_chat_results(
+    model: str, location: str, clear_prediction_client_cache: Any
+) -> None:
     config = {"model": model, "location": location}
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
@@ -1183,7 +1193,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
         assert transport == "rest"
 
 
-def test_init_client_with_custom_base_url() -> None:
+def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
     config = {
         "model": "gemini-1.5-pro",
         "base_url": "https://example.com",
