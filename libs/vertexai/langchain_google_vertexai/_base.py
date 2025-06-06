@@ -53,7 +53,7 @@ _DEFAULT_LOCATION = "us-central1"
 
 
 @lru_cache
-def get_client_options(
+def _get_client_options(
     api_endpoint: Optional[str],
     cert_source: Optional[Callable[[], Tuple[bytes, bytes]]],
 ) -> ClientOptions:
@@ -68,19 +68,15 @@ def get_client_options(
 def _get_prediction_client(
     *,
     endpoint_version: str,
-    credentials_id: int,
-    client_options_id: int,
+    credentials: Any,
+    client_options: ClientOptions,
     transport: str,
     user_agent: str,
-    # The next two args are only here so we can actually build the client;
-    # they are *not* used in the cache key because they are un-hashable.
-    _credentials_obj,
-    _client_options_obj,
 ):
     """Return a shared PredictionServiceClient."""
     client_kwargs: dict[str, Any] = {
-        "credentials": _credentials_obj,
-        "client_options": _client_options_obj,
+        "credentials": credentials,
+        "client_options": client_options,
         "client_info": get_client_info(module=user_agent),
         "transport": transport,
     }
@@ -161,7 +157,7 @@ class _VertexAIBase(BaseModel):
                 f"{'' if location == 'global' else location + '-'}"
                 f"{constants.PREDICTION_API_BASE_PATH}"
             )
-        values["client_options"] = get_client_options(
+        values["client_options"] = _get_client_options(
             api_endpoint=api_endpoint,
             cert_source=values.get("client_cert_source"),
         )
@@ -186,10 +182,8 @@ class _VertexAIBase(BaseModel):
         if self.client is None:
             self.client = _get_prediction_client(
                 endpoint_version=self.endpoint_version,
-                credentials_id=id(self.credentials),
-                _credentials_obj=self.credentials,  # non-hashable
-                client_options_id=id(self.client_options),
-                _client_options_obj=self.client_options,  # non-hashable
+                credentials=self.credentials,
+                client_options=self.client_options,
                 transport=self.api_transport,
                 user_agent=self._user_agent,
             )
