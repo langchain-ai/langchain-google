@@ -117,7 +117,11 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
                 return str(value)
         return str(value)
 
-    def evaluate(self, findings: SanitizationResult) -> bool:
+    def evaluate(
+        self,
+        findings: SanitizationResult,
+        config: Optional[RunnableConfig] = None,
+    ) -> bool:
         """
         Evaluate findings from Model Armor.
 
@@ -134,13 +138,15 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
             return is_safe
         if findings.filter_match_state == FilterMatchState.MATCH_FOUND:
             is_safe = False
-            dispatch_custom_event(
-                "on_model_armor_finding",
-                {
-                    "findings": findings,
-                    "template_id": self.template_id,
-                },
-            )
+            if config:
+                dispatch_custom_event(
+                    "on_model_armor_finding",
+                    {
+                        "findings": findings,
+                        "template_id": self.template_id,
+                    },
+                    config=config,
+                )
 
         self.logger.info(
             "Evaluated content based on Model Armor sanitization response as %s",
@@ -190,7 +196,7 @@ class ModelArmorSanitizePromptRunnable(ModelArmorSanitizeBaseRunnable):
             )
         )
         sanitization_findings = result.sanitization_result
-        if not self.evaluate(sanitization_findings):
+        if not self.evaluate(sanitization_findings, config=config):
             self.logger.info(
                 "Found following unsafe prompt findings from Model Armor: %s",
                 sanitization_findings,
@@ -253,7 +259,7 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
         )
 
         sanitization_findings = result.sanitization_result
-        if not self.evaluate(sanitization_findings):
+        if not self.evaluate(sanitization_findings, config=config):
             self.logger.info(
                 "Found following unsafe response findings from Model Armor: %s",
                 sanitization_findings,
