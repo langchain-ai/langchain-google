@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from concurrent.futures import Executor
+from functools import lru_cache
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
 
 import vertexai  # type: ignore[import-untyped]
@@ -49,6 +50,44 @@ _PALM_DEFAULT_TEMPERATURE = 0.0
 _PALM_DEFAULT_TOP_P = 0.95
 _PALM_DEFAULT_TOP_K = 40
 _DEFAULT_LOCATION = "us-central1"
+
+
+@lru_cache
+def get_client_options(
+    api_endpoint: Optional[str],
+    cert_source: Optional[Callable[[], Tuple[bytes, bytes]]],
+) -> ClientOptions:
+    """Return a shared ClientOptions object for each unique configuration."""
+    client_options = ClientOptions(api_endpoint=api_endpoint)
+    if cert_source:
+        client_options.client_cert_source = cert_source
+    return client_options
+
+
+@lru_cache
+def _get_prediction_client(
+    *,
+    endpoint_version: str,
+    credentials_id: int,
+    client_options_id: int,
+    transport: str,
+    user_agent: str,
+    # The next two args are only here so we can actually build the client;
+    # they are *not* used in the cache key because they are un-hashable.
+    _credentials_obj,
+    _client_options_obj,
+):
+    """Return a shared PredictionServiceClient."""
+    client_kwargs: dict[str, Any] = {
+        "credentials": _credentials_obj,
+        "client_options": _client_options_obj,
+        "client_info": get_client_info(module=user_agent),
+        "transport": transport,
+    }
+    if endpoint_version == "v1":
+        return v1PredictionServiceClient(**client_kwargs)
+    else:
+        return v1beta1PredictionServiceClient(**client_kwargs)
 
 
 class _VertexAIBase(BaseModel):
@@ -122,10 +161,10 @@ class _VertexAIBase(BaseModel):
                 f"{'' if location == 'global' else location + '-'}"
                 f"{constants.PREDICTION_API_BASE_PATH}"
             )
-        client_options = ClientOptions(api_endpoint=api_endpoint)
-        if values.get("client_cert_source"):
-            client_options.client_cert_source = values["client_cert_source"]
-        values["client_options"] = client_options
+        values["client_options"] = get_client_options(
+            api_endpoint=api_endpoint,
+            cert_source=values.get("client_cert_source"),
+        )
         additional_headers = values.get("additional_headers") or {}
         values["default_metadata"] = tuple(additional_headers.items())
         return values
@@ -145,16 +184,15 @@ class _VertexAIBase(BaseModel):
     ) -> Union[v1beta1PredictionServiceClient, v1PredictionServiceClient]:
         """Returns PredictionServiceClient."""
         if self.client is None:
-            client_kwargs: dict[str, Any] = {
-                "credentials": self.credentials,
-                "client_options": self.client_options,
-                "client_info": get_client_info(module=self._user_agent),
-                "transport": self.api_transport,
-            }
-            if self.endpoint_version == "v1":
-                self.client = v1PredictionServiceClient(**client_kwargs)
-            else:
-                self.client = v1beta1PredictionServiceClient(**client_kwargs)
+            self.client = _get_prediction_client(
+                endpoint_version=self.endpoint_version,
+                credentials_id=id(self.credentials),
+                _credentials_obj=self.credentials,  # non-hashable
+                client_options_id=id(self.client_options),
+                _client_options_obj=self.client_options,  # non-hashable
+                transport=self.api_transport,
+                user_agent=self._user_agent,
+            )
         return self.client
 
     @property
