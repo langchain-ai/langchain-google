@@ -10,9 +10,11 @@ Tests will be skipped if the required environment variable is not set.
 """
 
 import os
+
 import pytest
-from google.cloud.modelarmor_v1 import ModelArmorClient, FilterMatchState
+from google.cloud.modelarmor_v1 import ModelArmorClient
 from langchain_core.runnables.config import RunnableConfig
+
 from langchain_google_community.model_armor.runnable import (
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
