@@ -12,23 +12,24 @@ Tests will be skipped if the required environment variable is not set.
 import os
 
 import pytest
+from google.api_core.client_options import ClientOptions
 from google.cloud.modelarmor_v1 import ModelArmorClient
 from langchain_core.runnables.config import RunnableConfig
-
 from langchain_google_community.model_armor.runnable import (
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
 )
 
 
-# Mark all tests in this module as integration tests
-def pytestmark():
-    return pytest.mark.integration
-
-
 def get_model_armor_client():
     # Assumes ADC or env vars are set for authentication
-    return ModelArmorClient()
+    model_armor_location = os.environ.get("MODEL_ARMOR_LOCATION", "us-central1")
+    return ModelArmorClient(
+        transport="rest",
+        client_options=ClientOptions(
+            api_endpoint=f"modelarmor.{model_armor_location}.rep.googleapis.com"
+        ),
+    )
 
 
 def get_template_id():
@@ -110,11 +111,9 @@ def test_pipeline_integration_real():
     # Dummy LLM step (replace with real LLM if desired)
     llm = RunnableLambda(lambda x, **kwargs: f"Echo: {x}")
     chain = RunnableSequence(
-        [
-            prompt_sanitizer,
-            llm,
-            response_sanitizer,
-        ]
+        prompt_sanitizer,
+        llm,
+        response_sanitizer,
     )
     config = RunnableConfig()
     result = chain.invoke("Hello, world!", config=config)
