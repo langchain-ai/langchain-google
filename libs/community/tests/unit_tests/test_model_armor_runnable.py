@@ -6,6 +6,7 @@ from google.cloud.modelarmor_v1 import FilterMatchState, SanitizationResult
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.config import RunnableConfig
+
 from langchain_google_community.model_armor.runnable import (
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
@@ -154,9 +155,7 @@ def test_prompt_event_dispatch(mock_client):
     )
     config = RunnableConfig(run_id=str(uuid.uuid4()), callbacks=[catcher])
     # Pass config through the lambda!
-    wrapper = RunnableLambda(
-        lambda x, config=None: runnable.invoke(x, config=config)
-    )
+    wrapper = RunnableLambda(lambda x, config=None: runnable.invoke(x, config=config))
     wrapper.invoke("unsafe prompt", config=config)
     assert any(e[0] == "on_model_armor_finding" for e in catcher.events)
 
@@ -175,8 +174,6 @@ def test_response_event_dispatch(mock_client):
         run_name="test_runner", run_id=str(uuid.uuid4()), callbacks=[catcher]
     )
     # Pass config through the lambda!
-    wrapper = RunnableLambda(
-        lambda x, config=None: runnable.invoke(x, config=config)
-    )
+    wrapper = RunnableLambda(lambda x, config=None: runnable.invoke(x, config=config))
     wrapper.invoke("unsafe response", config=config)
     assert any(e[0] == "on_model_armor_finding" for e in catcher.events)
