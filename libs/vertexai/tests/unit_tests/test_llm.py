@@ -79,7 +79,7 @@ def test_vertexai_args_passed(clear_prediction_client_cache: Any) -> None:
 
     # Mock the library to ensure the args are passed correctly
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         mock_generate_content = MagicMock(
             return_value=GenerateContentResponse(

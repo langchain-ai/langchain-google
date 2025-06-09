@@ -121,7 +121,7 @@ def test_init_client(model: str, location: str) -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -157,7 +157,7 @@ def test_model_name_presence_in_chat_results(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -635,7 +635,9 @@ def test_default_params_palm() -> None:
 def test_default_params_gemini() -> None:
     user_prompt = "Hello"
 
-    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
         response = GenerateContentResponse(
             candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
         )
@@ -940,7 +942,9 @@ def test_parser_multiple_tools():
         arg1: int
         arg2: int
 
-    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
         response = GenerateContentResponse(
             candidates=[
                 Candidate(
@@ -1180,7 +1184,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -1203,7 +1207,7 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
