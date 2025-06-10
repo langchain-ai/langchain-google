@@ -1,6 +1,6 @@
 import asyncio
 from functools import lru_cache
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Literal, Optional, Tuple, Union
 from weakref import WeakKeyDictionary
 
 from google.api_core.client_options import ClientOptions
@@ -36,12 +36,12 @@ def _get_client_options(
 @lru_cache
 def _get_prediction_client(
     *,
-    endpoint_version: str,
+    endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
     transport: str,
     user_agent: str,
-):
+) -> Union[v1PredictionServiceClient, v1beta1PredictionServiceClient]:
     """Return a shared PredictionServiceClient."""
     client_kwargs: dict[str, Any] = {
         "credentials": credentials,
@@ -61,11 +61,11 @@ _client_caches: WeakKeyDictionary = WeakKeyDictionary()
 
 def _create_async_prediction_client(
     *,
-    endpoint_version: str,
+    endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
     user_agent: str,
-):
+) -> Union[v1PredictionServiceAsyncClient, v1beta1PredictionServiceAsyncClient]:
     """Create a new PredictionServiceAsyncClient."""
     async_client_kwargs: dict[str, Any] = {
         "client_options": client_options,
@@ -84,7 +84,7 @@ def _create_async_prediction_client(
 
 def _get_async_prediction_client(
     *,
-    endpoint_version: str,
+    endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
     user_agent: str,
