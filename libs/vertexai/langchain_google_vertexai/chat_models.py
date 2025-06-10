@@ -255,14 +255,14 @@ def _parse_chat_history_gemini(
                 )
             )
         if part["type"] == "code_execution_result":
-            if "output" not in part or "outcome" not in part:
+            if "code_execution_result" not in part or "outcome" not in part:
                 raise ValueError(
-                    "Code execution result part must have 'output' and 'outcome' keys, "
-                    f"got {part}"
+                    "Code execution result part must have 'code_execution_result' and "
+                    f"'outcome' keys, got {part}"
                 )
             return Part(
                 code_execution_result=CodeExecutionResult(
-                    output=part["output"], outcome=part["outcome"]
+                    output=part["code_execution_result"], outcome=part["outcome"]
                 )
             )
 
@@ -655,7 +655,9 @@ def _parse_response_candidate(
             if part.code_execution_result.output and part.code_execution_result.outcome:
                 execution_result = {
                     "type": "code_execution_result",
-                    "output": part.code_execution_result.output,
+                    # Name output -> code_execution_result for consistency with
+                    # langchain-google-genai
+                    "code_execution_result": part.code_execution_result.output,
                     "outcome": part.code_execution_result.outcome,
                 }
 
