@@ -114,9 +114,11 @@ from google.cloud.aiplatform_v1.types import (
 from google.cloud.aiplatform_v1beta1.types import (
     Blob,
     Candidate,
+    CodeExecutionResult,
     Part,
     HarmCategory,
     Content,
+    ExecutableCode,
     FileData,
     FunctionCall,
     FunctionResponse,
@@ -241,6 +243,29 @@ def _parse_chat_history_gemini(
                 return Part(text=part["text"])
             else:
                 return None
+        if part["type"] == "executable_code":
+            if "executable_code" not in part or "language" not in part:
+                raise ValueError(
+                    "Executable code part must have 'code' and 'language' keys, got "
+                    f"{part}"
+                )
+            return Part(
+                executable_code=ExecutableCode(
+                    language=part["language"], code=part["executable_code"]
+                )
+            )
+        if part["type"] == "code_execution_result":
+            if "output" not in part or "outcome" not in part:
+                raise ValueError(
+                    "Code execution result part must have 'output' and 'outcome' keys, "
+                    f"got {part}"
+                )
+            return Part(
+                code_execution_result=CodeExecutionResult(
+                    output=part["output"], outcome=part["outcome"]
+                )
+            )
+
         if is_data_content_block(part):
             # LangChain standard format
             if part["type"] == "image" and part["source_type"] == "url":
@@ -627,10 +652,11 @@ def _parse_response_candidate(
             hasattr(part, "code_execution_result")
             and part.code_execution_result is not None
         ):
-            if part.code_execution_result.output:
+            if part.code_execution_result.output and part.code_execution_result.outcome:
                 execution_result = {
                     "type": "code_execution_result",
-                    "code_execution_result": part.code_execution_result.output,
+                    "output": part.code_execution_result.output,
+                    "outcome": part.code_execution_result.outcome,
                 }
 
                 if not content:
