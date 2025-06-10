@@ -3,3 +3,9 @@ from .runnable import (
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
 )
+
+__all__ = [
+    "ModelArmorSanitizeBaseRunnable",
+    "ModelArmorSanitizePromptRunnable",
+    "ModelArmorSanitizeResponseRunnable",
+]

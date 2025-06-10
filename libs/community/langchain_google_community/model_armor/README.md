@@ -69,4 +69,4 @@ print(output)
 - Easy integration into LangChain chains and pipelines
 
 ## License
-See LICENSE file.
+See [LICENSE](../../LICENSE) file.
