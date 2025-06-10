@@ -318,6 +318,7 @@ def test_parse_history_gemini_converted_message() -> None:
     assert history[1].role == "model"
     assert history[1].parts[0].text == text_answer1
 
+
 def test_parse_history_gemini_function_empty_list() -> None:
     system_input = "You're supposed to answer math questions."
     text_question1 = "Solve the following equation. x^2+16=0"
