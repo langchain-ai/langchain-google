@@ -1,5 +1,5 @@
+from .base_runnable import ModelArmorSanitizeBaseRunnable
 from .runnable import (
-    ModelArmorSanitizeBaseRunnable,
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
 )
