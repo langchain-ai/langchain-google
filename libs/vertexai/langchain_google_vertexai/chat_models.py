@@ -451,8 +451,10 @@ def _parse_chat_history_gemini(
                         "Merging values together"
                     )
                     content = {k: "".join(v) for k, v in merged_content.items()}
-                else:
+                elif len(parsed_content) == 1:
                     content = parsed_content[0]
+                else:
+                    content = {"content": ""}
             else:
                 content = _parse_content(message.content)
 
