@@ -377,10 +377,9 @@ def _strip_nullable_anyof(schema: dict[str, Any]) -> dict[str, Any]:
 
         props = node.get("properties", {})
         for prop_name, prop_schema in list(props.items()):
-
             any_of = prop_schema.get("anyOf")
             if any_of and len(any_of) == 2:
-                null_branch  = next((b for b in any_of if b.get("type") == "null"), None)
+                null_branch = next((b for b in any_of if b.get("type") == "null"), None)
                 other_branch = next((b for b in any_of if b is not null_branch), None)
 
                 if null_branch and other_branch:
