@@ -254,3 +254,75 @@ def test_response_event_dispatch(mock_client: MagicMock) -> None:
         "To make cheesecake without oven, follow these steps....", config=config
     )
     assert any(e[0] == "on_model_armor_finding" for e in catcher.events)
+
+
+def test_extract_input_chat_message_and_prompt_template(
+    mock_client: MagicMock,
+) -> None:
+    """
+    Test input extraction for different input types supported in Langchain
+    """
+    from langchain_core.messages import ChatMessage
+    from langchain_core.prompts import PromptTemplate
+
+    from langchain_google_community.model_armor.runnable import (
+        ModelArmorSanitizePromptRunnable,
+    )
+
+    runnable = ModelArmorSanitizePromptRunnable(
+        client=mock_client,
+        template_id="test-template",
+    )
+    # Single ChatMessage
+    chat_msg = ChatMessage(content="chat message content", role="user")
+    assert runnable._extract_input(chat_msg) == "chat message content"
+    # Single PromptTemplate
+    prompt = PromptTemplate(input_variables=["name"], template="Hello {name}!")
+    # Should raise because format() requires 'name', fallback to str
+    result = runnable._extract_input(prompt)
+    assert result.startswith("PromptTemplate") or result == str(prompt)
+    # List of ChatMessage
+    chat_msgs = [
+        ChatMessage(content="msg1", role="user"),
+        ChatMessage(content="msg2", role="assistant"),
+    ]
+    assert runnable._extract_input(chat_msgs) == "msg1\nmsg2"
+    # List of PromptTemplate
+    prompts = [
+        PromptTemplate(input_variables=["name"], template="Hi {name}!"),
+        PromptTemplate(input_variables=["city"], template="Welcome to {city}!"),
+    ]
+    # Each will fallback to str, so join of their str representations
+    result = runnable._extract_input(prompts)
+    assert all(isinstance(s, str) for s in result.split("\n"))
+    assert len(result.split("\n")) == 2
+
+    class DummyObjectWithToString:
+        """
+        Dummy object with a to_string method for testing input.
+        """
+
+        def __init__(self, value: str):
+            self.value = value
+
+        def to_string(self) -> str:
+            return f"DummyObjectWithToString: {self.value}"
+
+    assert "DummyObjectWithToString" in runnable._extract_input(
+        DummyObjectWithToString("prompt")
+    )
+
+    class DummyObjectWithFormat:
+        """
+        Dummy object with a format method for testing input.
+        """
+
+        def __init__(self, value: str):
+            self.value = value
+
+        def format(self) -> str:
+            return f"DummyObjectWithFormat: {self.value}"
+
+    assert "DummyObjectWithFormat" in runnable._extract_input(
+        DummyObjectWithFormat("response")
+    )
