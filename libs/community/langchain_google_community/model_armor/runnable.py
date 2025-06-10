@@ -1,6 +1,6 @@
 """
-Model Armor Runnables for LangChain
-for prompt/response sanitization using Google Cloud Model Armor.
+Langchain Runnables to screen user prompt and/or model response using Google
+Cloud Model Armor.
 """
 
 import logging
