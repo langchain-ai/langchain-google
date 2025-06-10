@@ -63,7 +63,7 @@ print(output)
 
 ## Features
 - Prompt and response sanitization using Google Cloud Model Armor
-- Configurable fail-open to continue flow incase of unsafe prompt/response
+- Configurable fail-open to continue flow in case of unsafe prompt/response
 - Configurable return object to include Model Armor sanitization findings.
 - Compatible with LangChain Runnable interface
 - Easy integration into LangChain chains and pipelines
