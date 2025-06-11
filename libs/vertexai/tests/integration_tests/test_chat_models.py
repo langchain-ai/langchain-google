@@ -1390,3 +1390,57 @@ def test_nested_bind_tools():
     response = llm_with_tools.invoke("Chester, no hair color provided.")
     assert isinstance(response, AIMessage)
     assert response.tool_calls[0]["name"] == "People"
+
+
+def test_search_builtin() -> None:
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"google_search": {}}])
+    input_message = {
+        "role": "user",
+        "content": "What is today's news?",
+    }
+    response = llm.invoke([input_message])
+    assert "grounding_metadata" in response.response_metadata
+
+    # Test streaming
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    assert "grounding_metadata" in full.response_metadata
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Tell me more about that last story.",
+    }
+    _ = llm.invoke([input_message, full, next_message])
+
+
+def test_code_execution_builtin() -> None:
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"code_execution": {}}])
+    input_message = {
+        "role": "user",
+        "content": "What is 3^3?",
+    }
+    response = llm.invoke([input_message])
+    content_blocks = [block for block in response.content if isinstance(block, dict)]
+    expected_block_types = {"executable_code", "code_execution_result"}
+    assert set(block.get("type") for block in content_blocks) == expected_block_types
+
+    # Test streaming
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    content_blocks = [block for block in full.content if isinstance(block, dict)]
+    expected_block_types = {"executable_code", "code_execution_result"}
+    assert set(block.get("type") for block in content_blocks) == expected_block_types
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Can you add some comments to the code?",
+    }
+    _ = llm.invoke([input_message, full, next_message])
