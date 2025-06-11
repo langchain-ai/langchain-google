@@ -956,14 +956,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         See ``ChatVertexAI.bind_tools()`` method for more.
 
-    Use Search with Gemini 2:
+    Built-in search:
         .. code-block:: python
 
             from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+            from langchain_google_vertexai import ChatVertexAI
+
             llm = ChatVertexAI(model="gemini-2.0-flash-exp")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
                 tools=[VertexTool(google_search={})],
+            )
+
+    Built-in code execution:
+        .. code-block:: python
+
+            from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+            from langchain_google_vertexai import ChatVertexAI
+
+            llm = ChatVertexAI(model="gemini-2.0-flash-exp")
+            resp = llm.invoke(
+                "What is 3^3?",
+                tools=[VertexTool(code_execution={})],
             )
 
     Structured output:
