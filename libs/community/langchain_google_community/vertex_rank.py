@@ -95,9 +95,9 @@ class VertexAIRank(BaseDocumentCompressor):
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
         return discoveryengine_v1alpha.RankServiceClient(
-            credentials=(
-                self.credentials
-                or Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
+            credentials=self.credentials
+            or (
+                Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
                 if self.credentials_path
                 else None
             ),

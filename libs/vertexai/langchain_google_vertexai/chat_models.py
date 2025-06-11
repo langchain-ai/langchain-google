@@ -137,6 +137,7 @@ from langchain_google_vertexai._utils import (
     _format_model_name,
     is_gemini_model,
     replace_defs_in_schema,
+    _strip_nullable_anyof,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
@@ -476,8 +477,10 @@ def _parse_chat_history_gemini(
                         "Merging values together"
                     )
                     content = {k: "".join(v) for k, v in merged_content.items()}
-                else:
+                elif len(parsed_content) == 1:
                     content = parsed_content[0]
+                else:
+                    content = {"content": ""}
             else:
                 content = _parse_content(message.content)
 
@@ -2163,6 +2166,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # Resolve refs in schema because they are not supported
             # by the Gemini API.
             schema_json = replace_defs_in_schema(schema_json)
+
+            # API does not support anyOf.
+            schema_json = _strip_nullable_anyof(schema_json)
 
             llm = self.bind(
                 response_mime_type="application/json",
