@@ -504,7 +504,7 @@ def _parse_response_candidate(
         except AttributeError:
             text = None
 
-        if hasattr(part, 'thought') and part.thought:
+        if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
