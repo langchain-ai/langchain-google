@@ -114,9 +114,11 @@ from google.cloud.aiplatform_v1.types import (
 from google.cloud.aiplatform_v1beta1.types import (
     Blob,
     Candidate,
+    CodeExecutionResult,
     Part,
     HarmCategory,
     Content,
+    ExecutableCode,
     FileData,
     FunctionCall,
     FunctionResponse,
@@ -135,6 +137,7 @@ from langchain_google_vertexai._utils import (
     _format_model_name,
     is_gemini_model,
     replace_defs_in_schema,
+    _strip_nullable_anyof,
 )
 from langchain_google_vertexai.functions_utils import (
     _format_tool_config,
@@ -241,6 +244,29 @@ def _parse_chat_history_gemini(
                 return Part(text=part["text"])
             else:
                 return None
+        if part["type"] == "executable_code":
+            if "executable_code" not in part or "language" not in part:
+                raise ValueError(
+                    "Executable code part must have 'code' and 'language' keys, got "
+                    f"{part}"
+                )
+            return Part(
+                executable_code=ExecutableCode(
+                    language=part["language"], code=part["executable_code"]
+                )
+            )
+        if part["type"] == "code_execution_result":
+            if "code_execution_result" not in part or "outcome" not in part:
+                raise ValueError(
+                    "Code execution result part must have 'code_execution_result' and "
+                    f"'outcome' keys, got {part}"
+                )
+            return Part(
+                code_execution_result=CodeExecutionResult(
+                    output=part["code_execution_result"], outcome=part["outcome"]
+                )
+            )
+
         if is_data_content_block(part):
             # LangChain standard format
             if part["type"] == "image" and part["source_type"] == "url":
@@ -451,8 +477,10 @@ def _parse_chat_history_gemini(
                         "Merging values together"
                     )
                     content = {k: "".join(v) for k, v in merged_content.items()}
-                else:
+                elif len(parsed_content) == 1:
                     content = parsed_content[0]
+                else:
+                    content = {"content": ""}
             else:
                 content = _parse_content(message.content)
 
@@ -539,7 +567,7 @@ def _parse_response_candidate(
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: bool = False
 ) -> AIMessage:
-    content: Union[None, str, List[str]] = None
+    content: Union[None, str, List[Union[str, dict[str, Any]]]] = None
     additional_kwargs = {}
     tool_calls = []
     invalid_tool_calls = []
@@ -607,6 +635,44 @@ def _parse_response_candidate(
                             error=str(e),
                         )
                     )
+        if hasattr(part, "executable_code") and part.executable_code is not None:
+            if part.executable_code.code and part.executable_code.language:
+                code_message = {
+                    "type": "executable_code",
+                    "executable_code": part.executable_code.code,
+                    "language": part.executable_code.language,
+                }
+                if not content:
+                    content = [code_message]
+                elif isinstance(content, str):
+                    content = [content, code_message]
+                elif isinstance(content, list):
+                    content.append(code_message)
+                else:
+                    raise Exception("Unexpected content type")
+
+        if (
+            hasattr(part, "code_execution_result")
+            and part.code_execution_result is not None
+        ):
+            if part.code_execution_result.output and part.code_execution_result.outcome:
+                execution_result = {
+                    "type": "code_execution_result",
+                    # Name output -> code_execution_result for consistency with
+                    # langchain-google-genai
+                    "code_execution_result": part.code_execution_result.output,
+                    "outcome": part.code_execution_result.outcome,
+                }
+
+                if not content:
+                    content = [execution_result]
+                elif isinstance(content, str):
+                    content = [content, execution_result]
+                elif isinstance(content, list):
+                    content.append(execution_result)
+                else:
+                    raise Exception("Unexpected content type")
+
     if content is None:
         content = ""
 
@@ -893,14 +959,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         See ``ChatVertexAI.bind_tools()`` method for more.
 
-    Use Search with Gemini 2:
+    Built-in search:
         .. code-block:: python
 
             from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+            from langchain_google_vertexai import ChatVertexAI
+
             llm = ChatVertexAI(model="gemini-2.0-flash-exp")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
                 tools=[VertexTool(google_search={})],
+            )
+
+    Built-in code execution:
+        .. code-block:: python
+
+            from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+            from langchain_google_vertexai import ChatVertexAI
+
+            llm = ChatVertexAI(model="gemini-2.0-flash-exp")
+            resp = llm.invoke(
+                "What is 3^3?",
+                tools=[VertexTool(code_execution={})],
             )
 
     Structured output:
@@ -2086,6 +2166,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # Resolve refs in schema because they are not supported
             # by the Gemini API.
             schema_json = replace_defs_in_schema(schema_json)
+
+            # API does not support anyOf.
+            schema_json = _strip_nullable_anyof(schema_json)
 
             llm = self.bind(
                 response_mime_type="application/json",
