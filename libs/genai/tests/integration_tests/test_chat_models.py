@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List
+from typing import Dict, Generator, List, Optional
 
 import pytest
 from langchain_core.messages import (
@@ -27,8 +27,35 @@ from langchain_google_genai import (
 _MODEL = "models/gemini-1.5-flash-latest"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
-_THINKING_MODEL = "models/gemini-2.5-flash-preview-04-17"
+_AUDIO_OUTPUT_MODEL = "models/gemini-2.5-flash-preview-tts"
+_THINKING_MODEL = "models/gemini-2.5-flash-preview-05-20"
 _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV8/xCIVQTuIKGSoTi2IijhqFYpQIdQKrTqYXPoFTRqSFBdHwbXg4Mdi1cHFWVcHV0EQ/ABxdXFSdJES/5cUWsR4cNyPd/ced+8Af6PCVDM4DqiaZaSTCSGbWxW6XxHECPoRQ0hipj4niil4jq97+Ph6F+dZ3uf+HL1K3mSATyCeZbphEW8QT29aOud94ggrSQrxOXHMoAsSP3JddvmNc9FhP8+MGJn0PHGEWCh2sNzBrGSoxFPEUUXVKN+fdVnhvMVZrdRY6578heG8trLMdZrDSGIRSxAhQEYNZVRgIU6rRoqJNO0nPPxDjl8kl0yuMhg5FlCFCsnxg//B727NwuSEmxROAF0vtv0xCnTvAs26bX8f23bzBAg8A1da219tADOfpNfbWvQI6NsGLq7bmrwHXO4Ag0+6ZEiOFKDpLxSA9zP6phwwcAv0rLm9tfZx+gBkqKvUDXBwCIwVKXvd492hzt7+PdPq7wdzbXKn5swsVgAAA8lJREFUeJx90dtPHHUUB/Dz+81vZhb2wrDI3soUKBSRcisF21iqqCRNY01NTE0k8aHpi0k18VJfjOFvUF9M44MmGrHFQqSQiKSmFloL5c4CXW6Fhb0vO3ufvczMzweiBGI9+eW8ffI95/yQqqrwv4UxBgCfJ9w/2NfSVB+Nyn6/r+vdLo7H6FkYY6yoABR2PJujj34MSo/d/nHeVLYbydmIp/bEO0fEy/+NMcbTU4/j4Vs6Lr0ccKeYuUKWS4ABVCVHmRdszbfvTgfjR8kz5Jjs+9RREl9Zy2lbVK9wU3/kWLJLCXnqza1bfVe7b9jLbIeTMcYu13Jg/aMiPrCwVFcgtDiMhnxwJ/zXVDwSdVCVMRV7nqzl2i9e/fKrw8mqSp84e2sFj3Oj8/SrF/MaicmyYhAaXu58NPAbeAeyzY0NLecmh2+ODN3BewYBAkAY43giI3kebrnsRmvV9z2D4ciOa3EBAf31Tp9sMgdxMTFm6j74/Ogb70VCYQKAAIDCXkOAIC6pkYBWdwwnpHEdf6L9dJtJKPh95DZhzFKMEWRAGL927XpWTmMA+s8DAOBYAoR483l/iHZ/8bXoODl8b9UfyH72SXepzbyRJNvjFGHKMlhvMBze+cH9+4lEuOOlU2X1tVkFTU7Om03q080NDGXV1cflRpHwaaoiiiildB8jhDLZ7HDfz2Yidba6Vn2L4fhzFrNRKy5OZ2QOZ1U5W8VtqlVH/iUHcM933zZYWS7Wtj66zZr65bzGJQt0glHgudi9XVzEl4vKw2kUPhO020oPYI1qYc+2Xc0bRXFwTLY0VXa2VibD/lBaIXm1UChN5JSRUcQQ1Tk/47Cf3x8bY7y17Y17PVYTG1UkLPBFcqik7Zoa9JcLYoHBqHhXNgd6gS1k9EJ1TQ2l9EDy1saErmQ2kGpwGC2MLOtCM8nZEV1K0tKJtEksSm26J/rHg2zzmabKisq939nHzqUH7efzd4f/nPGW6NP8ybNFrOsWQhpoCuuhnJ4hAnPhFam01K4oQMjBg/mzBjVhuvw2O++KKT+BIVxJKzQECBDLF2qu2WTMmCovtDQ1f8iyoGkUADBCCGPsdnvTW2OtFm01VeB06msvdWlpPZU0wJRG85ns84umU3k+VyxeEcWqvYUBAGsUrbvme4be99HFeisP/pwUOIZaOqQX31ISgrKmZhLHtXNXuJq68orrr5/9mBCglCLAGGPyy81votEbcjlKLrC9E8mhH3wdHRdcyyvjidSlxjftPJpD+o25JYvRHGFoZDdks1mBQhxJu9uxvwEiXuHnHbLd1AAAAABJRU5ErkJggg=="""  # noqa: E501
+
+
+def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
+    """
+    Determines if the given bytes represent a WAV file
+    by inspecting the header.
+
+    Args:
+        file_bytes: Bytes representing the file content.
+
+    Returns:
+        True if the bytes represent a WAV file, False otherwise.
+    """
+    if len(file_bytes) < 12:
+        return False
+
+    # Check for RIFF header (bytes 0-3)
+    if file_bytes[0:4] != b"RIFF":
+        return False
+
+    # Check for WAVE format (bytes 8-11)
+    if file_bytes[8:12] != b"WAVE":
+        return False
+
+    # If both checks pass, it's likely a WAV file
+    return True
 
 
 def _check_usage_metadata(message: AIMessage) -> None:
@@ -148,6 +175,41 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
     _check_usage_metadata(result)
 
 
+def test_chat_google_genai_invoke_with_audio() -> None:
+    """Test invoke tokens with audio from ChatGoogleGenerativeAI."""
+    llm = ChatGoogleGenerativeAI(
+        model=_AUDIO_OUTPUT_MODEL, response_modalities=[Modality.AUDIO]
+    )
+
+    result = llm.invoke(
+        "Please say The quick brown fox jumps over the lazy dog",
+    )
+    assert isinstance(result, AIMessage)
+    assert result.content == ""
+    audio_data = result.additional_kwargs.get("audio")
+    assert isinstance(audio_data, bytes)
+    assert get_wav_type_from_bytes(audio_data)
+    _check_usage_metadata(result)
+
+
+def test_chat_google_genai_invoke_with_audio_genconfig() -> None:
+    """Test invoke tokens with audio from ChatGoogleGenerativeAI."""
+    llm = ChatGoogleGenerativeAI(model=_AUDIO_OUTPUT_MODEL)
+
+    result = llm.invoke(
+        "Please say The quick brown fox jumps over the lazy dog",
+        generation_config=dict(
+            top_k=2, top_p=1, temperature=0.7, response_modalities=["AUDIO"]
+        ),
+    )
+    assert isinstance(result, AIMessage)
+    assert result.content == ""
+    audio_data = result.additional_kwargs.get("audio")
+    assert isinstance(audio_data, bytes)
+    assert get_wav_type_from_bytes(audio_data)
+    _check_usage_metadata(result)
+
+
 def test_chat_google_genai_invoke_thinking() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
     default thinking config"""
@@ -177,6 +239,81 @@ def test_chat_google_genai_invoke_thinking_default() -> None:
 
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, str)
+
+    _check_usage_metadata(result)
+
+    assert result.usage_metadata is not None
+    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
+
+def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None:
+    """Test invoke thinking model from ChatGoogleGenerativeAI with
+    default thinking config"""
+    llm = ChatGoogleGenerativeAI(
+        model=_THINKING_MODEL, thinking_budget=100, include_thoughts=True
+    )
+
+    result = llm.invoke(
+        "How many O's are in Google? Please tell me how you double checked the result",
+    )
+
+    assert isinstance(result, AIMessage)
+    content = result.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
+    _check_usage_metadata(result)
+
+    assert result.usage_metadata is not None
+    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
+
+def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
+    """Test invoke thinking model from ChatGoogleGenerativeAI with
+    default thinking config"""
+    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
+
+    result = llm.invoke(
+        "How many O's are in Google? Please tell me how you double checked the result",
+    )
+
+    assert isinstance(result, AIMessage)
+    content = result.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
+
+    _check_usage_metadata(result)
+
+    assert result.usage_metadata is not None
+    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
+
+def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() -> None:
+    """Test invoke thinking model from ChatGoogleGenerativeAI with
+    default thinking config"""
+    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
+
+    result = llm.invoke(
+        "How many O's are in Google? Please tell me how you double checked the result",
+        generation_config={"thinking_config": {"include_thoughts": True}},
+    )
+
+    assert isinstance(result, AIMessage)
+    content = result.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    assert isinstance(content[1], str)
 
     _check_usage_metadata(result)
 
@@ -604,3 +741,43 @@ def test_astream_without_eventloop() -> None:
     result = asyncio.run(model_astream("How can you help me?"))
     assert len(result) > 0
     assert isinstance(result[0], AIMessageChunk)
+
+
+def test_search_builtin() -> None:
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
+        [{"google_search": {}}]
+    )
+    query = "What is today's news?"
+    response = llm.invoke(query)
+    assert "grounding_metadata" in response.response_metadata
+
+    # Test streaming
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream(query):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    assert "grounding_metadata" in full.response_metadata
+
+
+def test_code_execution_builtin() -> None:
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
+        [{"code_execution": {}}]
+    )
+    query = "What is 3^3?"
+    with pytest.warns(match="executable_code"):
+        response = llm.invoke(query)
+    content_blocks = [block for block in response.content if isinstance(block, dict)]
+    expected_block_types = {"executable_code", "code_execution_result"}
+    assert set(block.get("type") for block in content_blocks) == expected_block_types
+
+    # Test streaming
+    full: Optional[BaseMessageChunk] = None
+    with pytest.warns(match="executable_code"):
+        for chunk in llm.stream(query):
+            assert isinstance(chunk, AIMessageChunk)
+            full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    content_blocks = [block for block in full.content if isinstance(block, dict)]
+    expected_block_types = {"executable_code", "code_execution_result"}
+    assert set(block.get("type") for block in content_blocks) == expected_block_types

@@ -1,6 +1,7 @@
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
+import pytest
 from google.cloud.aiplatform_v1beta1.types import (
     Candidate,
     Content,
@@ -11,8 +12,18 @@ from google.cloud.aiplatform_v1beta1.types import (
 from pydantic import model_validator
 from typing_extensions import Self
 
-from langchain_google_vertexai._base import _BaseVertexAIModelGarden
+from langchain_google_vertexai._base import (
+    _BaseVertexAIModelGarden,
+    _get_prediction_client,
+)
 from langchain_google_vertexai.llms import VertexAI
+
+
+@pytest.fixture
+def clear_prediction_client_cache() -> None:
+    # Clear the prediction client cache so we can mock varied calls to
+    # PredictionServiceClient
+    _get_prediction_client.cache_clear()
 
 
 def test_model_name() -> None:
@@ -54,7 +65,7 @@ def test_tuned_model_name() -> None:
     )
 
 
-def test_vertexai_args_passed() -> None:
+def test_vertexai_args_passed(clear_prediction_client_cache: Any) -> None:
     response_text = "Goodbye"
     user_prompt = "Hello"
     prompt_params: Dict[str, Any] = {
@@ -68,7 +79,7 @@ def test_vertexai_args_passed() -> None:
 
     # Mock the library to ensure the args are passed correctly
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         mock_generate_content = MagicMock(
             return_value=GenerateContentResponse(

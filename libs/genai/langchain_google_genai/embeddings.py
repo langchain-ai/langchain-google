@@ -98,6 +98,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             api_key=google_api_key,
             client_info=client_info,
             client_options=self.client_options,
+            transport=self.transport,
         )
         return self
 
