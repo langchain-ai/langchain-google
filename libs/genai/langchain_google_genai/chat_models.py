@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import mimetypes
 import uuid
 import warnings
+import wave
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
@@ -486,47 +488,54 @@ def _parse_chat_history(
     return system_instruction, messages
 
 
+# Helper function to append content consistently
+def _append_to_content(
+    current_content: Union[str, List[Any], None], new_item: Any
+) -> Union[str, List[Any]]:
+    """Appends a new item to the content, handling different initial content types."""
+    if current_content is None and isinstance(new_item, str):
+        return new_item
+    elif current_content is None:
+        return [new_item]
+    elif isinstance(current_content, str):
+        return [current_content, new_item]
+    elif isinstance(current_content, list):
+        current_content.append(new_item)
+        return current_content
+    else:
+        # This case should ideally not be reached with proper type checking,
+        # but it catches any unexpected types that might slip through.
+        raise TypeError(f"Unexpected content type: {type(current_content)}")
+
+
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict]]] = None
-    additional_kwargs = {}
+    additional_kwargs: Dict[str, Any] = {}
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
 
     for part in response_candidate.content.parts:
+        text: Optional[str] = None
         try:
-            text: Optional[str] = part.text
-            # Remove erroneous newline character if present
-            if not streaming and text is not None:
-                text = text.rstrip("\n")
+            if hasattr(part, "text") and part.text is not None:
+                text = part.text
+                # Remove erroneous newline character if present
+                if not streaming:
+                    text = text.rstrip("\n")
         except AttributeError:
-            text = None
+            pass
 
         if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
             }
-            if not content:
-                content = [thinking_message]
-            elif isinstance(content, str):
-                content = [thinking_message, content]
-            elif isinstance(content, list):
-                content.append(thinking_message)
-            else:
-                raise Exception("Unexpected content type")
-
-        elif text is not None:
-            if not content:
-                content = text
-            elif isinstance(content, str) and text:
-                content = [content, text]
-            elif isinstance(content, list) and text:
-                content.append(text)
-            elif text:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, thinking_message)
+        elif text is not None and text:
+            content = _append_to_content(content, text)
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
@@ -535,14 +544,7 @@ def _parse_response_candidate(
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
                 }
-                if not content:
-                    content = [code_message]
-                elif isinstance(content, str):
-                    content = [content, code_message]
-                elif isinstance(content, list):
-                    content.append(code_message)
-                else:
-                    raise Exception("Unexpected content type")
+                content = _append_to_content(content, code_message)
 
         if (
             hasattr(part, "code_execution_result")
@@ -553,19 +555,23 @@ def _parse_response_candidate(
                     "type": "code_execution_result",
                     "code_execution_result": part.code_execution_result.output,
                 }
+                content = _append_to_content(content, execution_result)
 
-                if not content:
-                    content = [execution_result]
-                elif isinstance(content, str):
-                    content = [content, execution_result]
-                elif isinstance(content, list):
-                    content.append(execution_result)
-                else:
-                    raise Exception("Unexpected content type")
+        if part.inline_data.mime_type.startswith("audio/"):
+            buffer = io.BytesIO()
+
+            with wave.open(buffer, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                # TODO: Read Sample Rate from MIME content type.
+                wf.setframerate(24000)
+                wf.writeframes(part.inline_data.data)
+
+            additional_kwargs["audio"] = buffer.getvalue()
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
-            message = {
+            image_message = {
                 "type": "image_url",
                 "image_url": {
                     "url": image_bytes_to_b64_string(
@@ -573,15 +579,7 @@ def _parse_response_candidate(
                     )
                 },
             }
-
-            if not content:
-                content = [message]
-            elif isinstance(content, str) and message:
-                content = [content, message]
-            elif isinstance(content, list) and message:
-                content.append(message)
-            elif message:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, image_message)
 
         if part.function_call:
             function_call = {"name": part.function_call.name}
