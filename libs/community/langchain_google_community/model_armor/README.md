@@ -1,72 +1,31 @@
 # Model Armor Runnables for LangChain
 
-This package provides LangChain-compatible Runnables for prompt and response sanitization using Google Cloud Model Armor.
+This package provides LangChain-compatible Runnables for user prompt and model response sanitization using [Google Cloud Model Armor](https://cloud.google.com/security-command-center/docs/model-armor-overview).
+
+## Prerequisites
+
+Before using Model Armor Runnables, ensure the following steps are completed:
+
+- **Select or create a Google Cloud Platform project.**
+  - You can do this at: https://console.cloud.google.com/project
+- **Enable billing for your project.**
+  - Instructions: https://cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_a_project
+- **Enable the Model Armor API in your GCP project.**
+  - See: https://cloud.google.com/security-command-center/docs/get-started-model-armor
+- **Grant the `modelarmor.user` IAM role** to any user or service account that will use the Model Armor runnables.
+- **Authentication:**
+  - Your application or environment must be authenticated and have the necessary permissions to access the Model Armor service.
+  - You can authenticate using several methods described [here](https://googleapis.dev/python/google-api-core/latest/auth.html)
+- **Model Armor Template:**
+  - You must create a Model Armor template for prompt and response sanitization. You may use a single template for both, or separate templates as needed.
+  - Refer to the guide: [Create and manage Model Armor templates](https://cloud.google.com/security-command-center/docs/get-started-model-armor)
+  - The template resource name must be provided when initializing the runnable. See the samples for how to supply the template.
+  - To manage Model Armor templates, the `modelarmor.admin` IAM role is required.
 
 
-## Usage Example
+## Usage Examples
+Following contains different usage examples for runnables: [Samples](./samples/)
 
-```python
-from google.cloud.modelarmor_v1 import ModelArmorClient
-from langchain_google_community.model_armor import (
-    ModelArmorSanitizePromptRunnable,
-    ModelArmorSanitizeResponseRunnable,
-)
-
-# Initialize Model Armor client and template ID
-gcp_client = ModelArmorClient()
-template_id = "projects/<project>/locations/<location>/templates/<template_id>"
-
-# Create Runnables
-prompt_sanitizer = ModelArmorSanitizePromptRunnable(
-    client=gcp_client,
-    template_id=template_id,
-    fail_open=True,
-    return_findings=True,
-)
-
-response_sanitizer = ModelArmorSanitizeResponseRunnable(
-    client=gcp_client,
-    template_id=template_id,
-    fail_open=True,
-    return_findings=True,
-)
-
-# Sanitize a prompt
-result = prompt_sanitizer.invoke("Your prompt here")
-print(result)
-
-# Sanitize a response
-result = response_sanitizer.invoke("LLM response here")
-print(result)
-```
-
-## Using Model Armor Runnables in a Chain
-
-You can use the Model Armor Runnables as part of a LangChain Runnable sequence or chain:
-
-```python
-from langchain_core.runnables import RunnableSequence
-
-# Example: Chain prompt sanitizer, LLM, and response sanitizer
-# (Assume `llm_runnable` is your LLM Runnable)
-
-chain = RunnableSequence([
-    prompt_sanitizer,
-    llm_runnable,  # Your LLM or other processing step
-    response_sanitizer,
-])
-
-# Run the chain
-output = chain.invoke("Your prompt here")
-print(output)
-```
-
-## Features
-- Prompt and response sanitization using Google Cloud Model Armor
-- Configurable fail-open to continue flow in case of unsafe prompt/response
-- Configurable return object to include Model Armor sanitization findings.
-- Compatible with LangChain Runnable interface
-- Easy integration into LangChain chains and pipelines
 
 ## License
 See [LICENSE](../../LICENSE) file.

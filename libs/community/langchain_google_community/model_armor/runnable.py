@@ -33,8 +33,11 @@ class ModelArmorSanitizePromptRunnable(ModelArmorSanitizeBaseRunnable):
 
         Args:
             input (Any): The user prompt to sanitize.
-            config (Optional[RunnableConfig]): Optional config for
-                                                invocation (unused).
+            config (Optional[RunnableConfig]): A config to use when invoking
+               the Runnable. The config supports standard keys like 'tags',
+               'metadata' for tracing purposes, 'max_concurrency' for
+               controlling how much work to do in parallel, and other keys.
+               Please refer to the RunnableConfig for more details.
 
         Returns:
             Any: The original prompt if safe or fail_open,
@@ -95,8 +98,11 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
 
         Args:
             input (Any): The LLM response to sanitize.
-            config (Optional[RunnableConfig]): Optional config
-                                                for invocation (unused).
+            config (Optional[RunnableConfig]): A config to use when invoking
+               the Runnable. The config supports standard keys like 'tags',
+               'metadata' for tracing purposes, 'max_concurrency' for
+               controlling how much work to do in parallel, and other keys.
+               Please refer to the RunnableConfig for more details.
 
         Returns:
             Any: The original response if safe or fail_open,

@@ -1,6 +1,6 @@
 """
 This module provides a base class for creating runnables that
-sanitize prompts and responses using Google Cloud Model Armor.
+sanitize user prompts and model responses using Google Cloud Model Armor.
 """
 
 import logging
@@ -19,12 +19,45 @@ from langchain_core.runnables import Runnable
 from langchain_core.runnables.config import RunnableConfig
 
 
+def setup_default_logging() -> logging.Logger:
+    """
+    Set up a logger for the Model Armor runnables.
+
+    Returns:
+        logging.Logger: Configured logger instance.
+    """
+    # Configure logger for module
+    local_logger = logging.getLogger(__name__)
+    local_logger.setLevel(logging.INFO)
+
+    # Clear existing handlers
+    if local_logger.hasHandlers():
+        local_logger.handlers.clear()
+
+    # Create console handler with formatting
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    console_handler.setFormatter(formatter)
+
+    # Add handler to logger
+    local_logger.addHandler(console_handler)
+
+    return local_logger
+
+
 class ModelArmorSanitizeBaseRunnable(Runnable):
     """
-    Base runnable for Model Armor prompt/response sanitization.
+    Base runnable for user prompt or model response sanitization using
+    Model Armor.
 
     Attributes:
-        client: A model armor client instance for making snitization requests.
+        client: A Model Armor client instance for making sanitization requests.
         template_id: Model Armor template ID for sanitization.
         fail_open: If True, allows unsafe prompts/responses to pass through.
         return_findings: If True, returns dict with prompt/response with
@@ -41,35 +74,13 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
         fail_open: bool = True,
         return_findings: bool = False,
         logger: Optional[logging.Logger] = None,
-    ):
+    ) -> None:
         self.client = client
         self.template_id = template_id
         self.fail_open = fail_open
         self.return_findings = return_findings
 
-        # Configure logger
-        local_logger = logging.getLogger(__name__)
-        local_logger.setLevel(logging.INFO)
-
-        # Clear existing handlers
-        if local_logger.hasHandlers():
-            local_logger.handlers.clear()
-
-        # Create console handler with formatting
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)
-
-        # Create formatter
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        console_handler.setFormatter(formatter)
-
-        # Add handler to logger
-        local_logger.addHandler(console_handler)
-
-        self.logger = logger or local_logger
+        self.logger = logger or setup_default_logging()
 
         self.logger.debug(
             (
@@ -125,6 +136,11 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
         Args:
             findings (SanitizationResult): SanitizationResult object from
                 Model Armor sanitization request.
+            config (Optional[RunnableConfig]): A config to use when invoking
+               the Runnable. The config supports standard keys like 'tags',
+               'metadata' for tracing purposes, 'max_concurrency' for
+               controlling how much work to do in parallel, and other keys.
+               Please refer to the RunnableConfig for more details.
 
         Returns:
             bool: True if all findings are safe, False if any are unsafe (MATCH_FOUND).
