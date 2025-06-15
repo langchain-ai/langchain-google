@@ -2,10 +2,13 @@
 Example usage of Model Armor runnables with custom runnables in chain.
 """
 
+from typing import Any, Optional
+
 from google.api_core.client_options import ClientOptions
 from google.cloud.modelarmor import ModelArmorClient
 from langchain_community.llms.vertexai import VertexAI  # Or any other LLM
-from langchain_core.runnables import Runnable, RunnableSequence
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableSequence
+
 from langchain_google_community.model_armor.runnable import (
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
@@ -25,9 +28,7 @@ client = ModelArmorClient(
 
 # Define Model Armor template name.
 # Ref: https://cloud.google.com/security-command-center/docs/manage-model-armor-templates
-template_name = (
-    f"projects/{project_id}/locations/{location_id}/templates/{template_id}"
-)
+template_name = f"projects/{project_id}/locations/{location_id}/templates/{template_id}"
 
 # Initialize your LLM.
 llm = VertexAI(model_name="gemini-pro")
@@ -43,13 +44,16 @@ response_sanitizer = ModelArmorSanitizeResponseRunnable(
 ######### Custom runnable #########
 
 
-# Define your custom runnable here. In this example, the following runnable replaces text in prompt_sanitizer runnable output.
+# Define your custom runnable here. In this example, the following runnable
+# replaces text in prompt_sanitizer runnable output.
 class ReplaceTextRunnable(Runnable):
     def __init__(self, old_text: str, new_text: str):
         self.old_text = old_text
         self.new_text = new_text
 
-    def run(self, input: str) -> str:
+    def invoke(
+        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
         return input.replace(self.old_text, self.new_text)
 
 
@@ -58,7 +62,7 @@ prompt_replacer = ReplaceTextRunnable("dangerous", "safe")
 ######### Custom runnable #########
 
 # Define the chain sequence.
-chain = RunnableSequence(
+chain: Runnable = RunnableSequence(
     prompt_sanitizer | prompt_replacer | llm | response_sanitizer
 )
 

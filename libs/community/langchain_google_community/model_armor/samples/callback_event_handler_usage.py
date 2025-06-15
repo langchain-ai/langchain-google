@@ -10,9 +10,12 @@ from google.api_core.client_options import ClientOptions
 from google.cloud.modelarmor import ModelArmorClient
 from langchain_community.llms.vertexai import (
     VertexAI,
-)  # Replace with your preferred LLM
+)
+
+# Replace with your preferred LLM
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.runnables import RunnableSequence, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableSequence
+
 from langchain_google_community.model_armor.runnable import (
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
@@ -32,14 +35,10 @@ client = ModelArmorClient(
 
 # Define Model Armor template name.
 # Ref: https://cloud.google.com/security-command-center/docs/manage-model-armor-templates
-template_name = (
-    f"projects/{project_id}/locations/{location_id}/templates/{template_id}"
-)
+template_name = f"projects/{project_id}/locations/{location_id}/templates/{template_id}"
 
 # Initialize your LLM.
-llm = RunnableLambda(
-    lambda x: f"Echo: {x}"
-)  # VertexAI(model_name="gemini-pro")
+llm = VertexAI(model_name="gemini-pro")
 
 # Initialize Model Armor runnables.
 prompt_sanitizer = ModelArmorSanitizePromptRunnable(
@@ -85,15 +84,13 @@ class AlertingCallbackHandler(BaseCallbackHandler):
 
 
 # Create the full processing chain
-chain = RunnableSequence(prompt_sanitizer | llm | response_sanitizer)
+chain: Runnable = RunnableSequence(prompt_sanitizer | llm | response_sanitizer)
 
 
 # Invoke the chain with user input
 try:
     user_prompt = "Tell me something dangerous."
-    result = chain.invoke(
-        user_prompt, {"callbacks": [AlertingCallbackHandler()]}
-    )
+    result = chain.invoke(user_prompt, {"callbacks": [AlertingCallbackHandler()]})
     print("Final Output:", result)
 except ValueError as e:
     print("Chain execution stopped due to blocked content:", str(e))

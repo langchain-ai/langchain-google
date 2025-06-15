@@ -4,6 +4,7 @@ Sample for direct invoke usage of Model Armor Runnables.
 
 from google.api_core.client_options import ClientOptions
 from google.cloud.modelarmor_v1 import ModelArmorClient
+
 from langchain_google_community.model_armor import (
     ModelArmorSanitizePromptRunnable,
     ModelArmorSanitizeResponseRunnable,
@@ -23,9 +24,7 @@ gcp_client = ModelArmorClient(
         api_endpoint=f"modelarmor.{location_id}.rep.googleapis.com"
     )
 )
-template_id = (
-    f"projects/{project_id}/locations/{location_id}/templates/{template_id}"
-)
+template_id = f"projects/{project_id}/locations/{location_id}/templates/{template_id}"
 
 # Create Runnables
 prompt_sanitizer = ModelArmorSanitizePromptRunnable(
