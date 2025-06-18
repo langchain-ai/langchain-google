@@ -100,7 +100,7 @@ from tenacity import (
 )
 from typing_extensions import Self, is_typeddict
 
-from langchain_google_genai._client_utils import _get_sync_client
+from langchain_google_genai._client_utils import _get_async_client, _get_sync_client
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
@@ -1158,7 +1158,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
-        client_info = get_client_info(f"ChatGoogleGenerativeAI:{self.model}")
         google_api_key = None
         if not self.credentials:
             if isinstance(self.google_api_key, SecretStr):
@@ -1198,18 +1197,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # this check ensures that async client is only initialized
         # within an asyncio event loop to avoid the error
         if not self.async_client_running and _is_event_loop_running():
-            # async clients don't support "rest" transport
-            # https://github.com/googleapis/gapic-generator-python/issues/1962
-            transport = self.transport
-            if transport == "rest":
-                transport = "grpc_asyncio"
-            self.async_client_running = genaix.build_generative_async_service(
-                credentials=self.credentials,
-                api_key=google_api_key,
-                client_info=get_client_info(f"ChatGoogleGenerativeAI:{self.model}"),
-                client_options=self.client_options,
-                transport=transport,
-            )
+            if self.credentials is None and self.client_options is None:
+                self.async_client_running = _get_async_client(
+                    api_key=google_api_key,
+                    model=self.model,
+                    transport=self.transport,
+                )
+            else:
+                self.async_client_running = genaix.build_generative_async_service(
+                    credentials=self.credentials,
+                    api_key=google_api_key,
+                    client_info=get_client_info(f"ChatGoogleGenerativeAI:{self.model}"),
+                    client_options=self.client_options,
+                    transport=self.transport,
+                )
         return self.async_client_running
 
     @property
