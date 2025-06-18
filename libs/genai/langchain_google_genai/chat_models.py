@@ -1247,7 +1247,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             else:
                 raise ValueError(
-                    "Tools are already defined." "code_execution tool can't be defined"
+                    "Tools are already defined.code_execution tool can't be defined"
                 )
 
         return super().invoke(input, config, stop=stop, **kwargs)
