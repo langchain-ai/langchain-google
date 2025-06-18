@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import base64
 import io
 import json
@@ -99,6 +100,7 @@ from tenacity import (
 )
 from typing_extensions import Self, is_typeddict
 
+from langchain_google_genai._client_utils import _get_sync_client
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
@@ -1164,14 +1166,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             else:
                 google_api_key = self.google_api_key
         transport: Optional[str] = self.transport
-        self.client = genaix.build_generative_service(
-            credentials=self.credentials,
-            api_key=google_api_key,
-            client_info=client_info,
-            client_options=self.client_options,
-            transport=transport,
-        )
+        if self.client_options is None and self.credentials is None:
+            self.client = _get_sync_client(
+                api_key=google_api_key,
+                model=self.model,
+                transport=transport,
+            )
+        else:
+            self.client = genaix.build_generative_service(
+                credentials=self.credentials,
+                api_key=google_api_key,
+                client_info=get_client_info(f"ChatGoogleGenerativeAI:{self.model}"),
+                client_options=self.client_options,
+                transport=transport,
+            )
         self.async_client_running = None
+        atexit.register(self.client.transport.close)
         return self
 
     @property
