@@ -777,8 +777,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Key init args — completion params:
         model: str
-            Name of ChatVertexAI model to use. e.g. "gemini-1.5-flash-001",
-            "gemini-1.5-pro-001", etc.
+            Name of ChatVertexAI model to use. e.g. "gemini-2.0-flash-001",
+            "gemini-2.5-pro", etc.
         temperature: Optional[float]
             Sampling temperature.
         seed: Optional[int]
@@ -1622,6 +1622,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 for part in content.parts:
                     raw_part = proto.Message.to_dict(part)
                     _ = raw_part.pop("thought")
+                    _ = raw_part.pop("thought_signature", None)
                     v1_parts.append(v1Part(**raw_part))
                 v1_contens.append(v1Content(role=content.role, parts=v1_parts))
             return v1_contens
