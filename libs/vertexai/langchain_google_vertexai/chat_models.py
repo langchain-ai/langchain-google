@@ -560,13 +560,15 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage: ...
+) -> AIMessage:
+    ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk: ...
+) -> AIMessageChunk:
+    ...
 
 
 def _parse_response_candidate(
@@ -2341,13 +2343,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
             generation_info.pop("is_blocked", None)
-        return (
-            ChatGenerationChunk(
-                message=message,
-                generation_info=generation_info,
-            ),
-            total_lc_usage,
-        )
+        return ChatGenerationChunk(
+            message=message,
+            generation_info=generation_info,
+        ), total_lc_usage
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
