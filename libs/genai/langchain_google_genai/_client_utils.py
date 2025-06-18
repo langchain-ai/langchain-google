@@ -1,7 +1,7 @@
 import asyncio
 from functools import lru_cache
 from typing import Optional
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakSet
 
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
@@ -35,6 +35,7 @@ def _get_sync_client(
 
 # Cache async client - must store caches per event loop
 _client_caches: WeakKeyDictionary = WeakKeyDictionary()
+_clients_to_close: WeakSet = WeakSet()
 
 
 def _create_async_client(
@@ -48,13 +49,15 @@ def _create_async_client(
     # https://github.com/googleapis/gapic-generator-python/issues/1962
     if transport == "rest":
         transport = "grpc_asyncio"
-    return genaix.build_generative_async_service(
+    client = genaix.build_generative_async_service(
         credentials=None,
         api_key=api_key,
         client_info=get_client_info(f"ChatGoogleGenerativeAI:{model}"),
         client_options=None,
         transport=transport,
     )
+    _clients_to_close.add(client)
+    return client
 
 
 def _get_async_client(
@@ -88,3 +91,27 @@ def _get_async_client(
         )
 
     return _client_caches[loop][cache_key]
+
+
+# import atexit
+
+# import asyncio, atexit
+
+# _cleanup_loop = asyncio.new_event_loop()
+
+# async def _close_everything():
+#     await asyncio.gather(
+#         *(c.transport.close() for c in _clients_to_close),
+#         return_exceptions=True,
+#     )
+#     # let grpc.aio finish any pending callbacks
+#     await asyncio.sleep(0)
+
+# def _shutdown_all_clients():
+#     try:
+#         _cleanup_loop.run_until_complete(_close_everything())
+#         _cleanup_loop.run_until_complete(_cleanup_loop.shutdown_asyncgens())
+#     finally:
+#         _cleanup_loop.close()
+
+# atexit.register(_shutdown_all_clients)

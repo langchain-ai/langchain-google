@@ -1183,6 +1183,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         atexit.register(self.client.transport.close)
         return self
 
+    # @atexit.register
+    # def close_async_client(self) -> None:
+    #     """Close the async client."""
+    #     loop = asyncio.get_event_loop()
+    #     loop.run_until_complete(self.await_close_async_client())
+
+    # async def await_close_async_client(self) -> None:
+    #     """Close the async client."""
+    #     if self.async_client_running:
+    #         await self.async_client_running.transport.close()
+
     @property
     def async_client(self) -> v1betaGenerativeServiceAsyncClient:
         google_api_key = None
@@ -1212,6 +1223,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     transport=self.transport,
                 )
         return self.async_client_running
+
+    # async def __aexit__(self) -> None:
+    #     if self.async_client_running:
+    #         await self.async_client_running.transport.close()
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:
