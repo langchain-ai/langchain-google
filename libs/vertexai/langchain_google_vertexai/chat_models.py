@@ -1619,7 +1619,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 v1_parts = []
                 for part in content.parts:
                     raw_part = proto.Message.to_dict(part)
-                    # Removing these fields because in v1beta Part they are added by default
+                    # Removing these fields they are in v1beta with text field
                     # But in v1 they are exclusive to the text field
                     raw_part.pop("thought", None)
                     raw_part.pop("thought_signature", None)
