@@ -560,15 +560,13 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -1621,7 +1619,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 v1_parts = []
                 for part in content.parts:
                     raw_part = proto.Message.to_dict(part)
-                    _ = raw_part.pop("thought")
+                    # Removing these fields because in v1beta Part they are added by default
+                    # But in v1 they are exclusive to the text field
+                    raw_part.pop("thought", None)
+                    raw_part.pop("thought_signature", None)
                     v1_parts.append(v1Part(**raw_part))
                 v1_contens.append(v1Content(role=content.role, parts=v1_parts))
             return v1_contens
@@ -2340,10 +2341,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
             generation_info.pop("is_blocked", None)
-        return ChatGenerationChunk(
-            message=message,
-            generation_info=generation_info,
-        ), total_lc_usage
+        return (
+            ChatGenerationChunk(
+                message=message,
+                generation_info=generation_info,
+            ),
+            total_lc_usage,
+        )
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
