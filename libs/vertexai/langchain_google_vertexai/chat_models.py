@@ -2353,7 +2353,11 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
     output_tokens = raw_metadata.get("candidates_token_count", 0)
     total_tokens = raw_metadata.get("total_token_count", 0)
     thought_tokens = raw_metadata.get("thoughts_token_count", 0)
-    if all(count == 0 for count in [input_tokens, output_tokens, total_tokens]):
+    cache_read_tokens = raw_metadata.get("cached_content_token_count", 0)
+    if all(
+        count == 0
+        for count in [input_tokens, output_tokens, total_tokens, cache_read_tokens]
+    ):
         return None
     else:
         if thought_tokens > 0:
@@ -2361,6 +2365,7 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=total_tokens,
+                input_token_details={"cache_read": cache_read_tokens},
                 output_token_details={"reasoning": thought_tokens},
             )
         else:
@@ -2368,6 +2373,7 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=total_tokens,
+                input_token_details={"cache_read": cache_read_tokens},
             )
 
 
