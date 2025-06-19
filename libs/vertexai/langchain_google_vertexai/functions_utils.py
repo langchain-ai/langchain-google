@@ -236,9 +236,11 @@ def _format_dict_to_function_declaration(
             if "anyOf" in property:
                 return True
             if "parameters" in property:
-                return _check_v2(property["parameters"])
+                if _check_v2(property["parameters"]):
+                    return True
             if "items" in property:
-                return _check_v2(property["items"])
+                if _check_v2(property["items"]):
+                    return True
         return False
 
     if isinstance(tool, dict):

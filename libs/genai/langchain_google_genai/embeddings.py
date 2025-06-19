@@ -254,7 +254,9 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             Embedding for the text.
         """
-        task_type = self.task_type or "RETRIEVAL_QUERY"
+        task_type_to_use = task_type if task_type else self.task_type
+        if task_type_to_use is None:
+            task_type_to_use = "RETRIEVAL_QUERY"  # Default to RETRIEVAL_QUERY
         try:
             request: EmbedContentRequest = self._prepare_request(
                 text=text,
