@@ -8,6 +8,7 @@ from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai._utils import (
     GoogleModelFamily,
     _get_def_key_from_schema_path,
+    _strip_nullable_anyof,
     get_user_agent,
     replace_defs_in_schema,
 )
@@ -210,3 +211,77 @@ def test_get_user_agent_without_telemetry_env_variable(
     client_lib_version, user_agent_str = get_user_agent(module="test-module")
     assert client_lib_version == "1.2.3-test-module"
     assert user_agent_str == "langchain-google-vertexai/1.2.3-test-module"
+
+
+def test_strip_nullable_anyof() -> None:
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "field1": {"type": "string"},
+            "field2": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"type": "integer"},
+                ]
+            },
+            "field3": {"type": "boolean"},
+        },
+        "required": ["field1", "field2", "field3"],
+    }
+    expected = {
+        "type": "object",
+        "properties": {
+            "field1": {"type": "string"},
+            "field2": {"type": "integer"},
+            "field3": {"type": "boolean"},
+        },
+        "required": ["field1", "field3"],
+    }
+    assert _strip_nullable_anyof(input_schema) == expected
+
+    # Nested schemas
+    input_schema = {
+        "properties": {
+            "fruits": {
+                "items": {
+                    "properties": {
+                        "name": {"title": "Name", "type": "string"},
+                        "color": {
+                            "anyOf": [{"type": "string"}, {"type": "null"}],
+                            "title": "Color",
+                        },
+                    },
+                    "required": ["name", "color"],
+                    "title": "Fruit",
+                    "type": "object",
+                },
+                "title": "Fruits",
+                "type": "array",
+            }
+        },
+        "required": ["fruits"],
+        "title": "FruitList",
+        "type": "object",
+    }
+
+    expected = {
+        "properties": {
+            "fruits": {
+                "items": {
+                    "properties": {
+                        "name": {"title": "Name", "type": "string"},
+                        "color": {"title": "Color", "type": "string"},
+                    },
+                    "required": ["name"],
+                    "title": "Fruit",
+                    "type": "object",
+                },
+                "title": "Fruits",
+                "type": "array",
+            }
+        },
+        "required": ["fruits"],
+        "title": "FruitList",
+        "type": "object",
+    }
+    assert _strip_nullable_anyof(input_schema) == expected

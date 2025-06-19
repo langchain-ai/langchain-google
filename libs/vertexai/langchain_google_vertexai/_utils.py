@@ -363,3 +363,46 @@ def _get_def_key_from_schema_path(schema_path: str) -> str:
         raise ValueError(error_message)
 
     return parts[-1]
+
+
+def _strip_nullable_anyof(schema: dict[str, Any]) -> dict[str, Any]:
+    """Collapse ``anyOf([{...}, {"type": "null"}])``` into the non-null schema,
+    leave the rest of the keywords alone, and make the property optional.
+    Works in place.
+    """
+
+    def walk(node):
+        if not isinstance(node, dict):
+            return
+
+        props = node.get("properties", {})
+        for prop_name, prop_schema in list(props.items()):
+            any_of = prop_schema.get("anyOf")
+            if any_of and len(any_of) == 2:
+                null_branch = next((b for b in any_of if b.get("type") == "null"), None)
+                other_branch = next((b for b in any_of if b is not null_branch), None)
+
+                if null_branch and other_branch:
+                    # remove the anyOf *only*
+                    prop_schema.pop("anyOf")
+                    # and overlay the surviving branch
+                    prop_schema.update(other_branch)
+
+                    # make the property optional
+                    req = node.get("required", [])
+                    if prop_name in req:
+                        req.remove(prop_name)
+                        if not req:
+                            node.pop("required")
+
+            walk(prop_schema)
+
+        if "items" in node:
+            walk(node["items"])
+
+        for combiner in ("allOf", "anyOf", "oneOf"):
+            for sub in node.get(combiner, []):
+                walk(sub)
+
+    walk(schema)
+    return schema

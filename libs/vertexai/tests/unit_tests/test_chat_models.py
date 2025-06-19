@@ -38,6 +38,7 @@ from vertexai.language_models import (  # type: ignore
     InputOutputTextPair,
 )
 
+from langchain_google_vertexai._base import _get_prediction_client
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
@@ -47,6 +48,13 @@ from langchain_google_vertexai.chat_models import (
     _parse_response_candidate,
 )
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
+
+@pytest.fixture
+def clear_prediction_client_cache() -> None:
+    # Clear the prediction client cache so we can mock varied calls to
+    # PredictionServiceClient
+    _get_prediction_client.cache_clear()
 
 
 def test_init() -> None:
@@ -113,7 +121,7 @@ def test_init_client(model: str, location: str) -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -141,13 +149,15 @@ def test_init_client(model: str, location: str) -> None:
         ),
     ],
 )
-def test_model_name_presence_in_chat_results(model: str, location: str) -> None:
+def test_model_name_presence_in_chat_results(
+    model: str, location: str, clear_prediction_client_cache: Any
+) -> None:
     config = {"model": model, "location": location}
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -317,6 +327,56 @@ def test_parse_history_gemini_converted_message() -> None:
     assert history[0].parts[1].text == text_question1
     assert history[1].role == "model"
     assert history[1].parts[0].text == text_answer1
+
+
+def test_parse_history_gemini_function_empty_list() -> None:
+    system_input = "You're supposed to answer math questions."
+    text_question1 = "Solve the following equation. x^2+16=0"
+    fn_name_1 = "root"
+
+    tool_call_1 = create_tool_call(
+        name=fn_name_1,
+        id="1",
+        args={
+            "arg1": "-10",
+            "arg2": "10",
+        },
+    )
+
+    system_message = SystemMessage(content=system_input)
+    message1 = HumanMessage(content=text_question1)
+    message2 = AIMessage(
+        content="",
+        tool_calls=[
+            tool_call_1,
+        ],
+    )
+    message3 = ToolMessage(content=[], tool_call_id="1")
+    messages = [
+        system_message,
+        message1,
+        message2,
+        message3,
+    ]
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader
+    )
+    assert len(history) == 3
+    assert system_instructions and system_instructions.parts[0].text == system_input
+    assert history[0].role == "user"
+    assert history[0].parts[0].text == text_question1
+
+    assert history[1].role == "model"
+    assert history[1].parts[0].function_call == FunctionCall(
+        name=tool_call_1["name"], args=tool_call_1["args"]
+    )
+
+    assert history[2].role == "function"
+    assert history[2].parts[0].function_response == FunctionResponse(
+        name=fn_name_1,
+        response={"content": ""},
+    )
 
 
 def test_parse_history_gemini_function() -> None:
@@ -625,7 +685,9 @@ def test_default_params_palm() -> None:
 def test_default_params_gemini() -> None:
     user_prompt = "Hello"
 
-    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
         response = GenerateContentResponse(
             candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
         )
@@ -930,7 +992,9 @@ def test_parser_multiple_tools():
         arg1: int
         arg2: int
 
-    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
         response = GenerateContentResponse(
             candidates=[
                 Candidate(
@@ -1170,7 +1234,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -1183,7 +1247,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
         assert transport == "rest"
 
 
-def test_init_client_with_custom_base_url() -> None:
+def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
     config = {
         "model": "gemini-1.5-pro",
         "base_url": "https://example.com",
@@ -1193,7 +1257,7 @@ def test_init_client_with_custom_base_url() -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
