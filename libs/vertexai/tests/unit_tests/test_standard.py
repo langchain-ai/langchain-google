@@ -13,4 +13,4 @@ class TestGemini_15_AIStandard(ChatModelUnitTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model_name": "gemini-1.5-pro-001"}
+        return {"model_name": "gemini-2.5-pro"}

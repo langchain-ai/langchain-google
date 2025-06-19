@@ -217,6 +217,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         self.client = AnthropicVertex(
             project_id=project_id,
             region=self.location,
+            base_url=self.api_endpoint,
             max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
@@ -225,6 +226,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
             region=self.location,
+            base_url=self.api_endpoint,
             max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
