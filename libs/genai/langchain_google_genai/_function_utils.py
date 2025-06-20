@@ -322,7 +322,7 @@ def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
 
 
 def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
-    properties = {}
+    properties: Dict[str, Dict[str, Union[str, int, Dict, List]]] = {}
     for k, v in schema.items():
         if not isinstance(k, str):
             logger.warning(f"Key '{k}' is not supported in schema, type={type(k)}")
@@ -331,7 +331,14 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
-        if v.get("type") or v.get("anyOf") or v.get("type_"):
+        if v.get("anyOf") and all(
+            anyOf_type.get("type") != "null" for anyOf_type in v.get("anyOf", [])
+        ):
+            properties_item["anyOf"] = [
+                _format_json_schema_to_gapic(anyOf_type)
+                for anyOf_type in v.get("anyOf", [])
+            ]
+        elif v.get("type") or v.get("anyOf") or v.get("type_"):
             item_type_ = _get_type_from_schema(v)
             properties_item["type_"] = item_type_
             if _is_nullable_schema(v):
