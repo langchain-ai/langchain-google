@@ -17,6 +17,7 @@ from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
     _ToolConfigDict,
     convert_to_genai_function_declarations,
+    replace_defs_in_schema,
     tool_to_dict,
 )
 
@@ -827,3 +828,58 @@ def test_tool_with_doubly_nested_list_param() -> None:
     assert "description" in matrix_property
     assert "description" in items_level1
     assert "description" in items_level2
+
+
+def test_schema_no_defs() -> None:
+    schema = {"type": "integer"}
+    expected_schema = {"type": "integer"}
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_empty_defs() -> None:
+    schema = {"$defs": {}, "type": "integer"}
+    expected_schema = {"type": "integer"}
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_simple_ref_replacement() -> None:
+    schema = {
+        "$defs": {"MyDefinition": {"type": "string"}},
+        "property": {"$ref": "#/$defs/MyDefinition"},
+    }
+    expected_schema = {"property": {"type": "string"}}
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_nested_ref_replacement() -> None:
+    schema = {
+        "$defs": {
+            "MyDefinition": {
+                "type": "object",
+                "properties": {"name": {"$ref": "#/$defs/NameDefinition"}},
+            },
+            "NameDefinition": {"type": "string"},
+        },
+        "property": {"$ref": "#/$defs/MyDefinition"},
+    }
+    expected_schema = {
+        "property": {"type": "object", "properties": {"name": {"type": "string"}}}
+    }
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_recursive_error_self_reference() -> None:
+    schema = {
+        "$defs": {
+            "Node": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "children": {"type": "array", "items": {"$ref": "#/$defs/Node"}},
+                },
+            }
+        },
+        "root": {"$ref": "#/$defs/Node"},
+    }
+    with pytest.raises(RecursionError):
+        _ = replace_defs_in_schema(schema)
