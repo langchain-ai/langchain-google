@@ -39,9 +39,9 @@ from google.ai.generativelanguage_v1beta.types import (
     Blob,
     Candidate,
     CodeExecution,
-    ExecutableCode,
     CodeExecutionResult,
     Content,
+    ExecutableCode,
     FileData,
     FunctionCall,
     FunctionDeclaration,
@@ -288,25 +288,29 @@ def _convert_to_parts(
                 elif part["type"] == "executable_code":
                     if "executable_code" not in part or "language" not in part:
                         raise ValueError(
-                            "Executable code part must have 'code' and 'language' keys, got "
-                            f"{part}"
+                            "Executable code part must have 'code' and 'language' keys,"
+                            f" got {part}"
                         )
-                    parts.append(Part(
-                        executable_code=ExecutableCode(
-                            language=part["language"], code=part["executable_code"]
+                    parts.append(
+                        Part(
+                            executable_code=ExecutableCode(
+                                language=part["language"], code=part["executable_code"]
+                            )
                         )
-                    ))
+                    )
                 elif part["type"] == "code_execution_result":
                     if "code_execution_result" not in part:
                         raise ValueError(
-                            "Code execution result part must have 'code_execution_result' key, "
-                            f"got {part}"
+                            "Code execution result part must have"
+                            f"'code_execution_result' key, got {part}"
                         )
-                    parts.append(Part(
-                        code_execution_result=CodeExecutionResult(
-                            output=part["code_execution_result"]
+                    parts.append(
+                        Part(
+                            code_execution_result=CodeExecutionResult(
+                                output=part["code_execution_result"]
+                            )
                         )
-                    ))
+                    )
                 elif is_data_content_block(part):
                     if part["source_type"] == "url":
                         bytes_ = image_loader._bytes_from_url(part["url"])
