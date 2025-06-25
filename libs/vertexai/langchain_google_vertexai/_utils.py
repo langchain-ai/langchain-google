@@ -214,14 +214,14 @@ def get_generation_info(
         if valid_log_probs:
             info["logprobs_result"] = valid_log_probs
 
-        try:
-            if candidate.grounding_metadata:
-                info["grounding_metadata"] = proto.Message.to_dict(
-                    candidate.grounding_metadata
-                )
-        except AttributeError:
-            pass
-        info = {k: v for k, v in info.items() if v is not None}
+    try:
+        if candidate.grounding_metadata:
+            info["grounding_metadata"] = proto.Message.to_dict(
+                candidate.grounding_metadata
+            )
+    except AttributeError:
+        pass
+    info = {k: v for k, v in info.items() if v is not None}
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/text-chat#response_body
 
     if stream:
