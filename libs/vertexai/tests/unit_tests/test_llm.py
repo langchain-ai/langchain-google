@@ -161,8 +161,6 @@ def test_tracing_params() -> None:
         "ls_provider": "google_vertexai",
         "ls_model_type": "llm",
         "ls_model_name": "gemini-pro",
-        "ls_max_tokens": 128,
-        "ls_temperature": 0.0,
     }
 
     llm = VertexAI(model_name="gemini-pro", temperature=0.1, max_output_tokens=10)

@@ -51,10 +51,6 @@ def create_context_cache(
         String with the identificator of the created cache.
     """
 
-    if not model._is_gemini_advanced:
-        error_msg = f"Model {model.full_model_name} doesn't support context catching"
-        raise ValueError(error_msg)
-
     system_instruction, contents = _parse_chat_history_gemini(
         messages, ImageBytesLoader(project=model.project)
     )
