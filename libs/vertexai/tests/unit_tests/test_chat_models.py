@@ -940,6 +940,7 @@ def test_parser_multiple_tools():
 def test_generation_config_gemini() -> None:
     model = ChatVertexAI(
         model_name="gemini-pro",
+        project="test-project",
         temperature=0.2,
         top_k=3,
         frequency_penalty=0.2,
