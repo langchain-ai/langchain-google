@@ -148,12 +148,11 @@ def test_vertexai_stream() -> None:
         if chunk.response_metadata.get("model_name"):
             chunks_with_model_name += 1
         full = chunk if full is None else full + chunk
-    if model._is_gemini_model:
-        if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
-            pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
-        assert isinstance(full, AIMessageChunk)
-        _check_usage_metadata(full)
-        assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
+    if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
+        pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
+    assert isinstance(full, AIMessageChunk)
+    _check_usage_metadata(full)
+    assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
 
 
 @pytest.mark.release
