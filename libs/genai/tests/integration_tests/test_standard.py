@@ -85,8 +85,10 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         super().test_usage_metadata_streaming(model)
 
     @pytest.mark.xfail(reason="investigate")
-    def test_tool_calling_with_no_arguments(self, model: BaseChatModel) -> None:
-        super().test_tool_calling_with_no_arguments(model)
+    def test_tool_calling_with_no_arguments(
+        self, model: BaseChatModel, magic_function_no_args: BaseTool
+    ) -> None:
+        super().test_tool_calling_with_no_arguments(model, magic_function_no_args)
 
     @property
     def supported_usage_metadata_details(
