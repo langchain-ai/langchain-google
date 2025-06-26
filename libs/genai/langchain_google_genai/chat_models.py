@@ -1365,31 +1365,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        # Use sync client wrapped in asyncio for REST transport
-        if self.transport == "rest" or not self.async_client:
-            request = self._prepare_request(
-                messages,
-                stop=stop,
-                tools=tools,
-                functions=functions,
-                safety_settings=safety_settings,
-                tool_config=tool_config,
-                generation_config=generation_config,
-                cached_content=cached_content or self.cached_content,
-                tool_choice=tool_choice,
-            )
-            # Wrap sync call in asyncio to make it async
-            response: GenerateContentResponse = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: _chat_with_retry(
-                    request=request,
-                    **kwargs,
-                    generation_method=self.client.generate_content,
-                    metadata=self.default_metadata,
-                )
-            )
-            return _response_to_result(response)
-
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -1401,12 +1376,26 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
         )
-        response: GenerateContentResponse = await _achat_with_retry(
-            request=request,
-            **kwargs,
-            generation_method=self.async_client.generate_content,
-            metadata=self.default_metadata,
-        )
+        
+        # Use sync client wrapped in asyncio for REST transport
+        if self.transport == "rest" or self.async_client is None:
+            # Wrap sync call in asyncio to make it async
+            response: GenerateContentResponse = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _chat_with_retry(
+                    request=request,
+                    **kwargs,
+                    generation_method=self.client.generate_content,
+                    metadata=self.default_metadata,
+                )
+            )
+        else:
+            response: GenerateContentResponse = await _achat_with_retry(
+                request=request,
+                **kwargs,
+                generation_method=self.async_client.generate_content,
+                metadata=self.default_metadata,
+            )
         return _response_to_result(response)
 
     def _stream(
@@ -1486,20 +1475,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        request = self._prepare_request(
+            messages,
+            stop=stop,
+            tools=tools,
+            functions=functions,
+            safety_settings=safety_settings,
+            tool_config=tool_config,
+            generation_config=generation_config,
+            cached_content=cached_content or self.cached_content,
+            tool_choice=tool_choice,
+        )
+        
         # Use sync client wrapped in asyncio for REST transport
-        if self.transport == "rest" or not self.async_client:
-            request = self._prepare_request(
-                messages,
-                stop=stop,
-                tools=tools,
-                functions=functions,
-                safety_settings=safety_settings,
-                tool_config=tool_config,
-                generation_config=generation_config,
-                cached_content=cached_content or self.cached_content,
-                tool_choice=tool_choice,
-            )
-            
+        if self.transport == "rest" or self.async_client is None:
             # Wrap sync streaming call in asyncio
             def sync_stream():
                 return _chat_with_retry(
@@ -1542,17 +1531,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     await run_manager.on_llm_new_token(gen.text)
                 yield gen
         else:
-            request = self._prepare_request(
-                messages,
-                stop=stop,
-                tools=tools,
-                functions=functions,
-                safety_settings=safety_settings,
-                tool_config=tool_config,
-                generation_config=generation_config,
-                cached_content=cached_content or self.cached_content,
-                tool_choice=tool_choice,
-            )
             prev_usage_metadata: UsageMetadata | None = None
             async for chunk in await _achat_with_retry(
                 request=request,
@@ -1599,7 +1577,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
-    ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
+    ) -> GenerateContentRequest:
         if tool_choice and tool_config:
             raise ValueError(
                 "Must specify at most one of tool_choice and tool_config, received "
