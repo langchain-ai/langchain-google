@@ -1380,13 +1380,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # Use sync client wrapped in asyncio for REST transport
         if self.transport == "rest" or self.async_client is None:
             # Wrap sync call in asyncio to make it async
-            response: GenerateContentResponse = await asyncio.get_event_loop().run_in_executor(
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.get_event_loop()
+            
+            response: GenerateContentResponse = await loop.run_in_executor(
                 None,
                 lambda: _chat_with_retry(
                     request=request,
-                    **kwargs,
                     generation_method=self.client.generate_content,
                     metadata=self.default_metadata,
+                    **kwargs
                 )
             )
         else:
@@ -1498,7 +1503,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     metadata=self.default_metadata,
                 )
             
-            response: GenerateContentResponse = await asyncio.get_event_loop().run_in_executor(
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.get_event_loop()
+            
+            response: GenerateContentResponse = await loop.run_in_executor(
                 None, sync_stream
             )
             
