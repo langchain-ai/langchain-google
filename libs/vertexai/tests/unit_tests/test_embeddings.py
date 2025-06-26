@@ -87,7 +87,7 @@ class MockVertexAIEmbeddings(VertexAIEmbeddings):
     """
 
     def __init__(self, model_name, **kwargs: Any) -> None:
-        super().__init__(model_name, **kwargs)
+        super().__init__(model_name, project="test-proj", **kwargs)
 
     @classmethod
     def _init_vertexai(cls, values: Dict) -> None:

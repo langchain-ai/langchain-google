@@ -90,7 +90,7 @@ def test_vertexai_args_passed(clear_prediction_client_cache: Any) -> None:
         )
         mock_prediction_service.return_value.generate_content = mock_generate_content
 
-        llm = VertexAI(model_name="gemini-pro", **prompt_params)
+        llm = VertexAI(model_name="gemini-pro", project="test-proj", **prompt_params)
         response = llm.invoke(
             user_prompt, temperature=0.5, frequency_penalty=0.5, presence_penalty=0.5
         )
@@ -137,12 +137,14 @@ def test_extract_response() -> None:
         ),
         ("Prompt:\na prompt\nNo Output", "Prompt:\na prompt\nNo Output"),
     ]
-    model = FakeModelGarden(endpoint_id="123", result_arg="result", credentials="Fake")
+    model = FakeModelGarden(
+        endpoint_id="123", result_arg="result", credentials="Fake", project="test-proj"
+    )
     for original_result, result in prompts_results:
         assert model._parse_prediction(original_result) == result
         assert model._parse_prediction({"result": original_result}) == result
 
-    model = FakeModelGarden(endpoint_id="123", result_arg=None)
+    model = FakeModelGarden(endpoint_id="123", result_arg=None, project="test-proj")
 
     class MyResult:
         def __init__(self, result):
@@ -155,22 +157,30 @@ def test_extract_response() -> None:
 
 def test_tracing_params() -> None:
     # Test standard tracing params
-    llm = VertexAI(model_name="gemini-pro")
-    ls_params = llm._get_ls_params()
-    assert ls_params == {
-        "ls_provider": "google_vertexai",
-        "ls_model_type": "llm",
-        "ls_model_name": "gemini-pro",
-        "ls_max_tokens": 128,
-        "ls_temperature": 0.0,
-    }
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
+        response = GenerateContentResponse(candidates=[])
+        mc.return_value.generate_content.return_value = response
+        llm = VertexAI(model_name="gemini-2.5-pro", project="test-proj")
+        ls_params = llm._get_ls_params()
+        assert ls_params == {
+            "ls_provider": "google_vertexai",
+            "ls_model_type": "llm",
+            "ls_model_name": "gemini-2.5-pro",
+        }
 
-    llm = VertexAI(model_name="gemini-pro", temperature=0.1, max_output_tokens=10)
-    ls_params = llm._get_ls_params()
-    assert ls_params == {
-        "ls_provider": "google_vertexai",
-        "ls_model_type": "llm",
-        "ls_model_name": "gemini-pro",
-        "ls_temperature": 0.1,
-        "ls_max_tokens": 10,
-    }
+        llm = VertexAI(
+            model_name="gemini-pro",
+            temperature=0.1,
+            max_output_tokens=10,
+            project="test-proj",
+        )
+        ls_params = llm._get_ls_params()
+        assert ls_params == {
+            "ls_provider": "google_vertexai",
+            "ls_model_type": "llm",
+            "ls_model_name": "gemini-pro",
+            "ls_temperature": 0.1,
+            "ls_max_tokens": 10,
+        }
