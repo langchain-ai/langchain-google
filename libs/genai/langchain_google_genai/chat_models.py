@@ -1175,7 +1175,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return self
 
     @property
-    def async_client(self) -> v1betaGenerativeServiceAsyncClient:
+    def async_client(self) -> Optional[v1betaGenerativeServiceAsyncClient]:
+        # REST transport doesn't support async clients
+        # https://github.com/googleapis/gapic-generator-python/issues/1962
+        if self.transport == "rest":
+            return None
+            
         google_api_key = None
         if not self.credentials:
             if isinstance(self.google_api_key, SecretStr):
@@ -1360,20 +1365,30 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if not self.async_client:
-            updated_kwargs = {
-                **kwargs,
-                **{
-                    "tools": tools,
-                    "functions": functions,
-                    "safety_settings": safety_settings,
-                    "tool_config": tool_config,
-                    "generation_config": generation_config,
-                },
-            }
-            return await super()._agenerate(
-                messages, stop, run_manager, **updated_kwargs
+        # Use sync client wrapped in asyncio for REST transport
+        if self.transport == "rest" or not self.async_client:
+            request = self._prepare_request(
+                messages,
+                stop=stop,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+                cached_content=cached_content or self.cached_content,
+                tool_choice=tool_choice,
             )
+            # Wrap sync call in asyncio to make it async
+            response: GenerateContentResponse = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _chat_with_retry(
+                    request=request,
+                    **kwargs,
+                    generation_method=self.client.generate_content,
+                    metadata=self.default_metadata,
+                )
+            )
+            return _response_to_result(response)
 
         request = self._prepare_request(
             messages,
@@ -1471,21 +1486,61 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        if not self.async_client:
-            updated_kwargs = {
-                **kwargs,
-                **{
-                    "tools": tools,
-                    "functions": functions,
-                    "safety_settings": safety_settings,
-                    "tool_config": tool_config,
-                    "generation_config": generation_config,
-                },
-            }
-            async for value in super()._astream(
-                messages, stop, run_manager, **updated_kwargs
-            ):
-                yield value
+        # Use sync client wrapped in asyncio for REST transport
+        if self.transport == "rest" or not self.async_client:
+            request = self._prepare_request(
+                messages,
+                stop=stop,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+                cached_content=cached_content or self.cached_content,
+                tool_choice=tool_choice,
+            )
+            
+            # Wrap sync streaming call in asyncio
+            def sync_stream():
+                return _chat_with_retry(
+                    request=request,
+                    generation_method=self.client.stream_generate_content,
+                    **kwargs,
+                    metadata=self.default_metadata,
+                )
+            
+            response: GenerateContentResponse = await asyncio.get_event_loop().run_in_executor(
+                None, sync_stream
+            )
+            
+            prev_usage_metadata: UsageMetadata | None = None
+            for chunk in response:
+                _chat_result = _response_to_result(
+                    chunk, stream=True, prev_usage=prev_usage_metadata
+                )
+                gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+                message = cast(AIMessageChunk, gen.message)
+
+                curr_usage_metadata: UsageMetadata | dict[str, int] = (
+                    message.usage_metadata or {}
+                )
+
+                prev_usage_metadata = (
+                    message.usage_metadata
+                    if prev_usage_metadata is None
+                    else UsageMetadata(
+                        input_tokens=prev_usage_metadata.get("input_tokens", 0)
+                        + curr_usage_metadata.get("input_tokens", 0),
+                        output_tokens=prev_usage_metadata.get("output_tokens", 0)
+                        + curr_usage_metadata.get("output_tokens", 0),
+                        total_tokens=prev_usage_metadata.get("total_tokens", 0)
+                        + curr_usage_metadata.get("total_tokens", 0),
+                    )
+                )
+
+                if run_manager:
+                    await run_manager.on_llm_new_token(gen.text)
+                yield gen
         else:
             request = self._prepare_request(
                 messages,
