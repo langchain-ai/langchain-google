@@ -747,17 +747,27 @@ def test_search_builtin() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
         [{"google_search": {}}]
     )
-    query = "What is today's news?"
-    response = llm.invoke(query)
+    input_message = {
+        "role": "user",
+        "content": "What is today's news?",
+    }
+    response = llm.invoke([input_message])
     assert "grounding_metadata" in response.response_metadata
 
     # Test streaming
     full: Optional[BaseMessageChunk] = None
-    for chunk in llm.stream(query):
+    for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
     assert "grounding_metadata" in full.response_metadata
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Tell me more about that last story.",
+    }
+    _ = llm.invoke([input_message, full, next_message])
 
 
 def test_code_execution_builtin() -> None:
