@@ -277,9 +277,15 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     default thinking config"""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
 
-    result = llm.invoke(
-        "How many O's are in Google? Please tell me how you double checked the result",
-    )
+    input_message = {
+        "role": "user",
+        "content": (
+            "How many O's are in Google? Please tell me how you double checked the "
+            "result."
+        ),
+    }
+
+    result = llm.invoke([input_message])
 
     assert isinstance(result, AIMessage)
     content = result.content
@@ -294,6 +300,10 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
 
     assert result.usage_metadata is not None
     assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm.invoke([input_message, result, next_message])
 
 
 def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() -> None:
