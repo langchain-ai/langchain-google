@@ -685,17 +685,12 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     _check_tool_call_args(arguments)
 
 
-# Test with model that supports tool choice (gemini 1.5) and one that doesn't
-# (gemini 1).
 @pytest.mark.parametrize(
     "model_name, method",
     [
         (_MODEL, None),
         (_MODEL, "function_calling"),
         (_MODEL, "json_mode"),
-        ("models/gemini-1.5-flash-latest", None),
-        ("models/gemini-1.5-flash-latest", "function_calling"),
-        ("models/gemini-1.5-flash-latest", "json_mode"),
     ],
 )
 def test_chat_google_genai_with_structured_output(
