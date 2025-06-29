@@ -364,6 +364,8 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
+                elif part["type"] == "thinking":
+                    parts.append(Part(text=part["thinking"], thought=True))
                 else:
                     raise ValueError(
                         f"Unrecognized message part type: {part['type']}. Only text, "
