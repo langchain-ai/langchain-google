@@ -364,6 +364,8 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(code_execution_result_part)
+                elif part["type"] == "thinking":
+                    parts.append(Part(text=part["thinking"], thought=True))
                 else:
                     raise ValueError(
                         f"Unrecognized message part type: {part['type']}. Only text, "
