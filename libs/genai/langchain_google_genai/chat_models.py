@@ -282,35 +282,6 @@ def _convert_to_parts(
             if _is_lc_content_block(part):
                 if part["type"] == "text":
                     parts.append(Part(text=part["text"]))
-                elif part["type"] == "tool_use":
-                    if part.get("text"):
-                        parts.append(Part(text=part["text"]))
-                elif part["type"] == "executable_code":
-                    if "executable_code" not in part or "language" not in part:
-                        raise ValueError(
-                            "Executable code part must have 'code' and 'language' keys,"
-                            f" got {part}"
-                        )
-                    parts.append(
-                        Part(
-                            executable_code=ExecutableCode(
-                                language=part["language"], code=part["executable_code"]
-                            )
-                        )
-                    )
-                elif part["type"] == "code_execution_result":
-                    if "code_execution_result" not in part:
-                        raise ValueError(
-                            "Code execution result part must have"
-                            f"'code_execution_result' key, got {part}"
-                        )
-                    parts.append(
-                        Part(
-                            code_execution_result=CodeExecutionResult(
-                                output=part["code_execution_result"]
-                            )
-                        )
-                    )
                 elif is_data_content_block(part):
                     if part["source_type"] == "url":
                         bytes_ = image_loader._bytes_from_url(part["url"])
@@ -364,6 +335,35 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
+                elif part["type"] == "executable_code":
+                    if "executable_code" not in part or "language" not in part:
+                        raise ValueError(
+                            "Executable code part must have 'code' and 'language' "
+                            f"keys, got {part}"
+                        )
+                    executable_code_part = Part(
+                        executable_code=ExecutableCode(
+                            language=part["language"], code=part["executable_code"]
+                        )
+                    )
+                    parts.append(executable_code_part)
+                elif part["type"] == "code_execution_result":
+                    if "code_execution_result" not in part:
+                        raise ValueError(
+                            "Code execution result part must have "
+                            f"'code_execution_result', got {part}"
+                        )
+                    if "outcome" in part:
+                        outcome = part["outcome"]
+                    else:
+                        # Backward compatibility
+                        outcome = 1  # Default to success if not specified
+                    code_execution_result_part = Part(
+                        code_execution_result=CodeExecutionResult(
+                            output=part["code_execution_result"], outcome=outcome
+                        )
+                    )
+                    parts.append(code_execution_result_part)
                 elif part["type"] == "thinking":
                     parts.append(Part(text=part["thinking"], thought=True))
                 else:
@@ -587,6 +587,7 @@ def _parse_response_candidate(
                 execution_result = {
                     "type": "code_execution_result",
                     "code_execution_result": part.code_execution_result.output,
+                    "outcome": part.code_execution_result.outcome,
                 }
                 content = _append_to_content(content, execution_result)
 
