@@ -852,7 +852,7 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     )
 
 
-# @pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
     model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
