@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import mimetypes
 import uuid
 import warnings
+import wave
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
@@ -16,6 +18,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -37,7 +40,9 @@ from google.ai.generativelanguage_v1beta.types import (
     Blob,
     Candidate,
     CodeExecution,
+    CodeExecutionResult,
     Content,
+    ExecutableCode,
     FileData,
     FunctionCall,
     FunctionDeclaration,
@@ -69,6 +74,7 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
+from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
@@ -79,7 +85,11 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_pydantic_field_names
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import (
+    convert_to_json_schema,
+    convert_to_openai_tool,
+)
+from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from pydantic import (
     BaseModel,
@@ -88,6 +98,7 @@ from pydantic import (
     SecretStr,
     model_validator,
 )
+from pydantic.v1 import BaseModel as BaseModelV1
 from tenacity import (
     before_sleep_log,
     retry,
@@ -104,12 +115,14 @@ from langchain_google_genai._common import (
     get_client_info,
 )
 from langchain_google_genai._function_utils import (
+    _dict_to_gapic_schema,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _ToolConfigDict,
     _ToolDict,
     convert_to_genai_function_declarations,
     is_basemodel_subclass_safe,
+    replace_defs_in_schema,
     tool_to_dict,
 )
 from langchain_google_genai._image_utils import (
@@ -121,6 +134,7 @@ from . import _genai_extension as genaix
 
 logger = logging.getLogger(__name__)
 
+_allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
 _FunctionDeclarationType = Union[
     FunctionDeclaration,
@@ -207,7 +221,14 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         except Exception as e:
             raise e
 
-    return _chat_with_retry(**kwargs)
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if (request := kwargs.get("request"))
+        and hasattr(request, "model")
+        and "gemini" in request.model
+        else kwargs
+    )
+    return _chat_with_retry(**params)
 
 
 async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
@@ -240,7 +261,14 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         except Exception as e:
             raise e
 
-    return await _achat_with_retry(**kwargs)
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if (request := kwargs.get("request"))
+        and hasattr(request, "model")
+        and "gemini" in request.model
+        else kwargs
+    )
+    return await _achat_with_retry(**params)
 
 
 def _is_lc_content_block(part: dict) -> bool:
@@ -331,6 +359,37 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
+                elif part["type"] == "executable_code":
+                    if "executable_code" not in part or "language" not in part:
+                        raise ValueError(
+                            "Executable code part must have 'code' and 'language' "
+                            f"keys, got {part}"
+                        )
+                    executable_code_part = Part(
+                        executable_code=ExecutableCode(
+                            language=part["language"], code=part["executable_code"]
+                        )
+                    )
+                    parts.append(executable_code_part)
+                elif part["type"] == "code_execution_result":
+                    if "code_execution_result" not in part:
+                        raise ValueError(
+                            "Code execution result part must have "
+                            f"'code_execution_result', got {part}"
+                        )
+                    if "outcome" in part:
+                        outcome = part["outcome"]
+                    else:
+                        # Backward compatibility
+                        outcome = 1  # Default to success if not specified
+                    code_execution_result_part = Part(
+                        code_execution_result=CodeExecutionResult(
+                            output=part["code_execution_result"], outcome=outcome
+                        )
+                    )
+                    parts.append(code_execution_result_part)
+                elif part["type"] == "thinking":
+                    parts.append(Part(text=part["thinking"], thought=True))
                 else:
                     raise ValueError(
                         f"Unrecognized message part type: {part['type']}. Only text, "
@@ -486,47 +545,54 @@ def _parse_chat_history(
     return system_instruction, messages
 
 
+# Helper function to append content consistently
+def _append_to_content(
+    current_content: Union[str, List[Any], None], new_item: Any
+) -> Union[str, List[Any]]:
+    """Appends a new item to the content, handling different initial content types."""
+    if current_content is None and isinstance(new_item, str):
+        return new_item
+    elif current_content is None:
+        return [new_item]
+    elif isinstance(current_content, str):
+        return [current_content, new_item]
+    elif isinstance(current_content, list):
+        current_content.append(new_item)
+        return current_content
+    else:
+        # This case should ideally not be reached with proper type checking,
+        # but it catches any unexpected types that might slip through.
+        raise TypeError(f"Unexpected content type: {type(current_content)}")
+
+
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict]]] = None
-    additional_kwargs = {}
+    additional_kwargs: Dict[str, Any] = {}
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
 
     for part in response_candidate.content.parts:
+        text: Optional[str] = None
         try:
-            text: Optional[str] = part.text
-            # Remove erroneous newline character if present
-            if not streaming and text is not None:
-                text = text.rstrip("\n")
+            if hasattr(part, "text") and part.text is not None:
+                text = part.text
+                # Remove erroneous newline character if present
+                if not streaming:
+                    text = text.rstrip("\n")
         except AttributeError:
-            text = None
+            pass
 
-        if part.thought:
+        if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
             }
-            if not content:
-                content = [thinking_message]
-            elif isinstance(content, str):
-                content = [thinking_message, content]
-            elif isinstance(content, list):
-                content.append(thinking_message)
-            else:
-                raise Exception("Unexpected content type")
-
-        elif text is not None:
-            if not content:
-                content = text
-            elif isinstance(content, str) and text:
-                content = [content, text]
-            elif isinstance(content, list) and text:
-                content.append(text)
-            elif text:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, thinking_message)
+        elif text is not None and text:
+            content = _append_to_content(content, text)
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
@@ -535,14 +601,7 @@ def _parse_response_candidate(
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
                 }
-                if not content:
-                    content = [code_message]
-                elif isinstance(content, str):
-                    content = [content, code_message]
-                elif isinstance(content, list):
-                    content.append(code_message)
-                else:
-                    raise Exception("Unexpected content type")
+                content = _append_to_content(content, code_message)
 
         if (
             hasattr(part, "code_execution_result")
@@ -552,20 +611,25 @@ def _parse_response_candidate(
                 execution_result = {
                     "type": "code_execution_result",
                     "code_execution_result": part.code_execution_result.output,
+                    "outcome": part.code_execution_result.outcome,
                 }
+                content = _append_to_content(content, execution_result)
 
-                if not content:
-                    content = [execution_result]
-                elif isinstance(content, str):
-                    content = [content, execution_result]
-                elif isinstance(content, list):
-                    content.append(execution_result)
-                else:
-                    raise Exception("Unexpected content type")
+        if part.inline_data.mime_type.startswith("audio/"):
+            buffer = io.BytesIO()
+
+            with wave.open(buffer, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                # TODO: Read Sample Rate from MIME content type.
+                wf.setframerate(24000)
+                wf.writeframes(part.inline_data.data)
+
+            additional_kwargs["audio"] = buffer.getvalue()
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
-            message = {
+            image_message = {
                 "type": "image_url",
                 "image_url": {
                     "url": image_bytes_to_b64_string(
@@ -573,15 +637,7 @@ def _parse_response_candidate(
                     )
                 },
             }
-
-            if not content:
-                content = [message]
-            elif isinstance(content, str) and message:
-                content = [content, message]
-            elif isinstance(content, list) and message:
-                content.append(message)
-            elif message:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, image_message)
 
         if part.function_call:
             function_call = {"name": part.function_call.name}
@@ -1074,6 +1130,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Gemini does not support system messages; any unsupported messages will
     raise an error."""
 
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only
+        supported in Gemini 1.5 and later models. Supported mimetype:
+            * "text/plain": (default) Text output.
+            * "application/json": JSON response in the candidates.
+            * "text/x.enum": Enum in plain text.
+       The model also needs to be prompted to output the appropriate response
+       type, otherwise the behavior is undefined. This is a preview feature.
+    """
+
+    response_schema: Optional[Dict[str, Any]] = None
+    """ Optional. Enforce an schema to the output.
+        The format of the dictionary should follow Open API schema.
+    """
+
     cached_content: Optional[str] = None
     """The name of the cached content used as context to serve the prediction. 
 
@@ -1281,6 +1352,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self,
         stop: Optional[List[str]],
         generation_config: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> GenerationConfig:
         gen_config = {
             k: v
@@ -1311,6 +1383,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         }
         if generation_config:
             gen_config = {**gen_config, **generation_config}
+
+        response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
+        if response_mime_type is not None:
+            gen_config["response_mime_type"] = response_mime_type
+
+        response_schema = kwargs.get("response_schema", self.response_schema)
+        if response_schema is not None:
+            allowed_mime_types = ("application/json", "text/x.enum")
+            if response_mime_type not in allowed_mime_types:
+                error_message = (
+                    "`response_schema` is only supported when "
+                    f"`response_mime_type` is set to one of {allowed_mime_types}"
+                )
+                raise ValueError(error_message)
+
+            gapic_response_schema = _dict_to_gapic_schema(response_schema)
+            if gapic_response_schema is not None:
+                gen_config["response_schema"] = gapic_response_schema
         return GenerationConfig(**gen_config)
 
     def _generate(
@@ -1338,6 +1428,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            **kwargs,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -1387,6 +1478,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            **kwargs,
         )
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
@@ -1421,6 +1513,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            **kwargs,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -1499,6 +1592,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 generation_config=generation_config,
                 cached_content=cached_content or self.cached_content,
                 tool_choice=tool_choice,
+                **kwargs,
             )
             prev_usage_metadata: UsageMetadata | None = None
             async for chunk in await _achat_with_retry(
@@ -1546,6 +1640,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
+        **kwargs: Any,
     ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
         if tool_choice and tool_config:
             raise ValueError(
@@ -1617,7 +1712,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_config=formatted_tool_config,
             safety_settings=formatted_safety_settings,
             generation_config=self._prepare_params(
-                stop, generation_config=generation_config
+                stop,
+                generation_config=generation_config,
+                **kwargs,
             ),
             cached_content=cached_content,
         )
@@ -1645,33 +1742,65 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def with_structured_output(
         self,
         schema: Union[Dict, Type[BaseModel]],
+        method: Optional[Literal["function_calling", "json_mode"]] = "function_calling",
         *,
         include_raw: bool = False,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
-        _ = kwargs.pop("method", None)
         _ = kwargs.pop("strict", None)
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
-        tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
-        if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
-            parser: OutputParserLike = PydanticToolsParser(
-                tools=[schema], first_tool_only=True
-            )
-        else:
-            parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
-        tool_choice = tool_name if self._supports_tool_choice else None
-        try:
-            llm = self.bind_tools(
-                [schema],
-                tool_choice=tool_choice,
+
+        parser: OutputParserLike
+
+        if method == "json_mode":
+            if isinstance(schema, type) and is_basemodel_subclass(schema):
+                if issubclass(schema, BaseModelV1):
+                    schema_json = schema.schema()
+                else:
+                    schema_json = schema.model_json_schema()
+                parser = PydanticOutputParser(pydantic_object=schema)
+            else:
+                if is_typeddict(schema):
+                    schema_json = convert_to_json_schema(schema)
+                elif isinstance(schema, dict):
+                    schema_json = schema
+                else:
+                    raise ValueError(f"Unsupported schema type {type(schema)}")
+                parser = JsonOutputParser()
+
+            # Resolve refs in schema because they are not supported
+            # by the Gemini API.
+            schema_json = replace_defs_in_schema(schema_json)
+
+            llm = self.bind(
+                response_mime_type="application/json",
+                response_schema=schema_json,
                 ls_structured_output_format={
-                    "kwargs": {"method": "function_calling"},
-                    "schema": convert_to_openai_tool(schema),
+                    "kwargs": {"method": method},
+                    "schema": schema_json,
                 },
             )
-        except Exception:
-            llm = self.bind_tools([schema], tool_choice=tool_choice)
+        else:
+            tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
+            if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
+                parser = PydanticToolsParser(tools=[schema], first_tool_only=True)
+            else:
+                parser = JsonOutputKeyToolsParser(
+                    key_name=tool_name, first_tool_only=True
+                )
+            tool_choice = tool_name if self._supports_tool_choice else None
+            try:
+                llm = self.bind_tools(
+                    [schema],
+                    tool_choice=tool_choice,
+                    ls_structured_output_format={
+                        "kwargs": {"method": "function_calling"},
+                        "schema": convert_to_openai_tool(schema),
+                    },
+                )
+            except Exception:
+                llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
