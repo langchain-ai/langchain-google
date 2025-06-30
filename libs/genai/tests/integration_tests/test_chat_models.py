@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Optional
+from typing import Dict, Generator, List, Literal, Optional
 
 import pytest
 from langchain_core.messages import (
@@ -277,9 +277,15 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     default thinking config"""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
 
-    result = llm.invoke(
-        "How many O's are in Google? Please tell me how you double checked the result",
-    )
+    input_message = {
+        "role": "user",
+        "content": (
+            "How many O's are in Google? Please tell me how you double checked the "
+            "result."
+        ),
+    }
+
+    result = llm.invoke([input_message])
 
     assert isinstance(result, AIMessage)
     content = result.content
@@ -294,6 +300,10 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
 
     assert result.usage_metadata is not None
     assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm.invoke([input_message, result, next_message])
 
 
 def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() -> None:
@@ -685,11 +695,17 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     _check_tool_call_args(arguments)
 
 
-# Test with model that supports tool choice (gemini 1.5) and one that doesn't
-# (gemini 1).
-@pytest.mark.parametrize("model_name", [_MODEL, "models/gemini-1.5-flash-latest"])
-def test_chat_google_genai_function_calling_with_structured_output(
+@pytest.mark.parametrize(
+    "model_name, method",
+    [
+        (_MODEL, None),
+        (_MODEL, "function_calling"),
+        (_MODEL, "json_mode"),
+    ],
+)
+def test_chat_google_genai_with_structured_output(
     model_name: str,
+    method: Optional[Literal["function_calling", "json_mode"]],
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -699,7 +715,7 @@ def test_chat_google_genai_function_calling_with_structured_output(
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     llm = ChatGoogleGenerativeAI(model=model_name, safety_settings=safety)
-    model = llm.with_structured_output(MyModel)
+    model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
     response = model.invoke([message])
@@ -716,6 +732,61 @@ def test_chat_google_genai_function_calling_with_structured_output(
     response = model.invoke([message])
     expected = {"name": "Erick", "age": 27}
     assert response == expected
+
+    if method is None:  # This won't work with json_schema as it expects an OpenAPI dict
+        model = llm.with_structured_output(
+            {
+                "name": "MyModel",
+                "description": "MyModel",
+                "parameters": MyModel.model_json_schema(),
+            },
+            method=method,
+        )
+        response = model.invoke([message])
+        assert response == {
+            "name": "Erick",
+            "age": 27,
+        }
+
+    model = llm.with_structured_output(
+        {
+            "title": "MyModel",
+            "description": "MyModel",
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"},
+            },
+            "required": ["name", "age"],
+        },
+        method=method,
+    )
+    response = model.invoke([message])
+    assert response == {
+        "name": "Erick",
+        "age": 27,
+    }
+
+
+def test_chat_google_genai_with_structured_output_nested_model() -> None:
+    class Argument(BaseModel):
+        description: str
+
+    class Reason(BaseModel):
+        strength: int
+        argument: list[Argument]
+
+    class Response(BaseModel):
+        response: str
+        reasons: list[Reason]
+
+    model = ChatGoogleGenerativeAI(model=_MODEL).with_structured_output(
+        Response, method="json_mode"
+    )
+
+    response = model.invoke("Why is Real Madrid better than Barcelona?")
+
+    assert isinstance(response, Response)
 
 
 def test_ainvoke_without_eventloop() -> None:
@@ -747,26 +818,39 @@ def test_search_builtin() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
         [{"google_search": {}}]
     )
-    query = "What is today's news?"
-    response = llm.invoke(query)
+    input_message = {
+        "role": "user",
+        "content": "What is today's news?",
+    }
+    response = llm.invoke([input_message])
     assert "grounding_metadata" in response.response_metadata
 
     # Test streaming
     full: Optional[BaseMessageChunk] = None
-    for chunk in llm.stream(query):
+    for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
     assert "grounding_metadata" in full.response_metadata
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Tell me more about that last story.",
+    }
+    _ = llm.invoke([input_message, full, next_message])
 
 
 def test_code_execution_builtin() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
         [{"code_execution": {}}]
     )
-    query = "What is 3^3?"
+    input_message = {
+        "role": "user",
+        "content": "What is 3^3?",
+    }
     with pytest.warns(match="executable_code"):
-        response = llm.invoke(query)
+        response = llm.invoke([input_message])
     content_blocks = [block for block in response.content if isinstance(block, dict)]
     expected_block_types = {"executable_code", "code_execution_result"}
     assert set(block.get("type") for block in content_blocks) == expected_block_types
@@ -774,10 +858,18 @@ def test_code_execution_builtin() -> None:
     # Test streaming
     full: Optional[BaseMessageChunk] = None
     with pytest.warns(match="executable_code"):
-        for chunk in llm.stream(query):
+        for chunk in llm.stream([input_message]):
             assert isinstance(chunk, AIMessageChunk)
             full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
     content_blocks = [block for block in full.content if isinstance(block, dict)]
     expected_block_types = {"executable_code", "code_execution_result"}
     assert set(block.get("type") for block in content_blocks) == expected_block_types
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Can you add some comments to the code?",
+    }
+    with pytest.warns(match="executable_code"):
+        _ = llm.invoke([input_message, full, next_message])
