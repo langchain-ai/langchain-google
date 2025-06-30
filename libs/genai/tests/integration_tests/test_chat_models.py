@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Optional
+from typing import Dict, Generator, List, Literal, Optional
 
 import pytest
 from langchain_core.messages import (
@@ -695,11 +695,17 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     _check_tool_call_args(arguments)
 
 
-# Test with model that supports tool choice (gemini 1.5) and one that doesn't
-# (gemini 1).
-@pytest.mark.parametrize("model_name", [_MODEL, "models/gemini-1.5-flash-latest"])
-def test_chat_google_genai_function_calling_with_structured_output(
+@pytest.mark.parametrize(
+    "model_name, method",
+    [
+        (_MODEL, None),
+        (_MODEL, "function_calling"),
+        (_MODEL, "json_mode"),
+    ],
+)
+def test_chat_google_genai_with_structured_output(
     model_name: str,
+    method: Optional[Literal["function_calling", "json_mode"]],
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -709,7 +715,7 @@ def test_chat_google_genai_function_calling_with_structured_output(
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     llm = ChatGoogleGenerativeAI(model=model_name, safety_settings=safety)
-    model = llm.with_structured_output(MyModel)
+    model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
     response = model.invoke([message])
@@ -726,6 +732,61 @@ def test_chat_google_genai_function_calling_with_structured_output(
     response = model.invoke([message])
     expected = {"name": "Erick", "age": 27}
     assert response == expected
+
+    if method is None:  # This won't work with json_schema as it expects an OpenAPI dict
+        model = llm.with_structured_output(
+            {
+                "name": "MyModel",
+                "description": "MyModel",
+                "parameters": MyModel.model_json_schema(),
+            },
+            method=method,
+        )
+        response = model.invoke([message])
+        assert response == {
+            "name": "Erick",
+            "age": 27,
+        }
+
+    model = llm.with_structured_output(
+        {
+            "title": "MyModel",
+            "description": "MyModel",
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"},
+            },
+            "required": ["name", "age"],
+        },
+        method=method,
+    )
+    response = model.invoke([message])
+    assert response == {
+        "name": "Erick",
+        "age": 27,
+    }
+
+
+def test_chat_google_genai_with_structured_output_nested_model() -> None:
+    class Argument(BaseModel):
+        description: str
+
+    class Reason(BaseModel):
+        strength: int
+        argument: list[Argument]
+
+    class Response(BaseModel):
+        response: str
+        reasons: list[Reason]
+
+    model = ChatGoogleGenerativeAI(model=_MODEL).with_structured_output(
+        Response, method="json_mode"
+    )
+
+    response = model.invoke("Why is Real Madrid better than Barcelona?")
+
+    assert isinstance(response, Response)
 
 
 def test_ainvoke_without_eventloop() -> None:

@@ -18,6 +18,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -73,6 +74,7 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
+from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
@@ -83,7 +85,11 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_pydantic_field_names
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import (
+    convert_to_json_schema,
+    convert_to_openai_tool,
+)
+from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from pydantic import (
     BaseModel,
@@ -92,6 +98,7 @@ from pydantic import (
     SecretStr,
     model_validator,
 )
+from pydantic.v1 import BaseModel as BaseModelV1
 from tenacity import (
     before_sleep_log,
     retry,
@@ -108,12 +115,14 @@ from langchain_google_genai._common import (
     get_client_info,
 )
 from langchain_google_genai._function_utils import (
+    _dict_to_gapic_schema,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _ToolConfigDict,
     _ToolDict,
     convert_to_genai_function_declarations,
     is_basemodel_subclass_safe,
+    replace_defs_in_schema,
     tool_to_dict,
 )
 from langchain_google_genai._image_utils import (
@@ -125,6 +134,7 @@ from . import _genai_extension as genaix
 
 logger = logging.getLogger(__name__)
 
+_allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
 _FunctionDeclarationType = Union[
     FunctionDeclaration,
@@ -211,7 +221,14 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         except Exception as e:
             raise e
 
-    return _chat_with_retry(**kwargs)
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if (request := kwargs.get("request"))
+        and hasattr(request, "model")
+        and "gemini" in request.model
+        else kwargs
+    )
+    return _chat_with_retry(**params)
 
 
 async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
@@ -244,7 +261,14 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         except Exception as e:
             raise e
 
-    return await _achat_with_retry(**kwargs)
+    params = (
+        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        if (request := kwargs.get("request"))
+        and hasattr(request, "model")
+        and "gemini" in request.model
+        else kwargs
+    )
+    return await _achat_with_retry(**params)
 
 
 def _is_lc_content_block(part: dict) -> bool:
@@ -1106,6 +1130,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Gemini does not support system messages; any unsupported messages will
     raise an error."""
 
+    response_mime_type: Optional[str] = None
+    """Optional. Output response mimetype of the generated candidate text. Only
+        supported in Gemini 1.5 and later models. Supported mimetype:
+            * "text/plain": (default) Text output.
+            * "application/json": JSON response in the candidates.
+            * "text/x.enum": Enum in plain text.
+       The model also needs to be prompted to output the appropriate response
+       type, otherwise the behavior is undefined. This is a preview feature.
+    """
+
+    response_schema: Optional[Dict[str, Any]] = None
+    """ Optional. Enforce an schema to the output.
+        The format of the dictionary should follow Open API schema.
+    """
+
     cached_content: Optional[str] = None
     """The name of the cached content used as context to serve the prediction. 
 
@@ -1313,6 +1352,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self,
         stop: Optional[List[str]],
         generation_config: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> GenerationConfig:
         gen_config = {
             k: v
@@ -1343,6 +1383,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         }
         if generation_config:
             gen_config = {**gen_config, **generation_config}
+
+        response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
+        if response_mime_type is not None:
+            gen_config["response_mime_type"] = response_mime_type
+
+        response_schema = kwargs.get("response_schema", self.response_schema)
+        if response_schema is not None:
+            allowed_mime_types = ("application/json", "text/x.enum")
+            if response_mime_type not in allowed_mime_types:
+                error_message = (
+                    "`response_schema` is only supported when "
+                    f"`response_mime_type` is set to one of {allowed_mime_types}"
+                )
+                raise ValueError(error_message)
+
+            gapic_response_schema = _dict_to_gapic_schema(response_schema)
+            if gapic_response_schema is not None:
+                gen_config["response_schema"] = gapic_response_schema
         return GenerationConfig(**gen_config)
 
     def _generate(
@@ -1370,6 +1428,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            **kwargs,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -1419,6 +1478,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            **kwargs,
         )
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
@@ -1453,6 +1513,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            **kwargs,
         )
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
@@ -1531,6 +1592,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 generation_config=generation_config,
                 cached_content=cached_content or self.cached_content,
                 tool_choice=tool_choice,
+                **kwargs,
             )
             prev_usage_metadata: UsageMetadata | None = None
             async for chunk in await _achat_with_retry(
@@ -1578,6 +1640,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
+        **kwargs: Any,
     ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
         if tool_choice and tool_config:
             raise ValueError(
@@ -1649,7 +1712,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_config=formatted_tool_config,
             safety_settings=formatted_safety_settings,
             generation_config=self._prepare_params(
-                stop, generation_config=generation_config
+                stop,
+                generation_config=generation_config,
+                **kwargs,
             ),
             cached_content=cached_content,
         )
@@ -1677,33 +1742,65 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def with_structured_output(
         self,
         schema: Union[Dict, Type[BaseModel]],
+        method: Optional[Literal["function_calling", "json_mode"]] = "function_calling",
         *,
         include_raw: bool = False,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
-        _ = kwargs.pop("method", None)
         _ = kwargs.pop("strict", None)
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
-        tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
-        if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
-            parser: OutputParserLike = PydanticToolsParser(
-                tools=[schema], first_tool_only=True
-            )
-        else:
-            parser = JsonOutputKeyToolsParser(key_name=tool_name, first_tool_only=True)
-        tool_choice = tool_name if self._supports_tool_choice else None
-        try:
-            llm = self.bind_tools(
-                [schema],
-                tool_choice=tool_choice,
+
+        parser: OutputParserLike
+
+        if method == "json_mode":
+            if isinstance(schema, type) and is_basemodel_subclass(schema):
+                if issubclass(schema, BaseModelV1):
+                    schema_json = schema.schema()
+                else:
+                    schema_json = schema.model_json_schema()
+                parser = PydanticOutputParser(pydantic_object=schema)
+            else:
+                if is_typeddict(schema):
+                    schema_json = convert_to_json_schema(schema)
+                elif isinstance(schema, dict):
+                    schema_json = schema
+                else:
+                    raise ValueError(f"Unsupported schema type {type(schema)}")
+                parser = JsonOutputParser()
+
+            # Resolve refs in schema because they are not supported
+            # by the Gemini API.
+            schema_json = replace_defs_in_schema(schema_json)
+
+            llm = self.bind(
+                response_mime_type="application/json",
+                response_schema=schema_json,
                 ls_structured_output_format={
-                    "kwargs": {"method": "function_calling"},
-                    "schema": convert_to_openai_tool(schema),
+                    "kwargs": {"method": method},
+                    "schema": schema_json,
                 },
             )
-        except Exception:
-            llm = self.bind_tools([schema], tool_choice=tool_choice)
+        else:
+            tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
+            if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
+                parser = PydanticToolsParser(tools=[schema], first_tool_only=True)
+            else:
+                parser = JsonOutputKeyToolsParser(
+                    key_name=tool_name, first_tool_only=True
+                )
+            tool_choice = tool_name if self._supports_tool_choice else None
+            try:
+                llm = self.bind_tools(
+                    [schema],
+                    tool_choice=tool_choice,
+                    ls_structured_output_format={
+                        "kwargs": {"method": "function_calling"},
+                        "schema": convert_to_openai_tool(schema),
+                    },
+                )
+            except Exception:
+                llm = self.bind_tools([schema], tool_choice=tool_choice)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
