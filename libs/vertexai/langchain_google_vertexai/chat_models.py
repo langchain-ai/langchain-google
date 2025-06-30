@@ -299,6 +299,9 @@ def _parse_chat_history_gemini(
                 proto_part.video_metadata = metadata
             return proto_part
 
+        if part["type"] == "thinking":
+            return Part(text=part["thinking"], thought=True)
+
         raise ValueError("Only text, image_url, and media types are supported!")
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
