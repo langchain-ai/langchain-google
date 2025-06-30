@@ -776,6 +776,50 @@ def test_model_kwargs() -> None:
     assert llm.model_kwargs == {"foo": "bar"}
 
 
+def test_rest_transport_async_client() -> None:
+    """Test that async_client returns None for REST transport."""
+    from unittest.mock import patch
+    
+    with patch(
+        "langchain_google_genai._genai_extension.build_generative_service"
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=SecretStr("fake_key"),  # type: ignore[call-arg]
+            transport="rest"
+        )
+    
+    # For REST transport, async_client should return None
+    assert llm.async_client is None
+    assert llm.transport == "rest"
+
+
+def test_grpc_transport_async_client() -> None:
+    """Test that async_client is created for gRPC transport when event loop is running."""
+    from unittest.mock import patch, MagicMock
+    
+    mock_async_client = MagicMock()
+    
+    with patch(
+        "langchain_google_genai._genai_extension.build_generative_service"
+    ), patch(
+        "langchain_google_genai._genai_extension.build_generative_async_service",
+        return_value=mock_async_client
+    ), patch(
+        "langchain_google_genai.chat_models._is_event_loop_running",
+        return_value=True
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=SecretStr("fake_key"),  # type: ignore[call-arg]
+            transport="grpc"
+        )
+    
+    # For gRPC transport with event loop running, async_client should be available
+    assert llm.async_client is mock_async_client
+    assert llm.transport == "grpc"
+
+
 @pytest.mark.parametrize(
     "raw_response, expected_grounding_metadata",
     [
