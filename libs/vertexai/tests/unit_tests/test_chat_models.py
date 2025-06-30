@@ -1316,12 +1316,13 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     }
 
 
-def test_reasoning_configuration() -> None:
+def test_thinking_configuration() -> None:
     input_message = HumanMessage("Query requiring reasoning.")
 
     # Test init params
     llm = ChatVertexAI(
         model="gemini-2.5-flash-preview-05-20",
+        location="moon-dark1",
         thinking_budget=100,
         include_thoughts=True,
     )
@@ -1330,7 +1331,7 @@ def test_reasoning_configuration() -> None:
     assert request.generation_config.thinking_config.include_thoughts is True
 
     # Test invocation params
-    llm = ChatVertexAI(model="gemini-2.5-flash-preview-05-20")
+    llm = ChatVertexAI(model="gemini-2.5-flash-preview-05-20", location="moon-dark1")
     request = llm._prepare_request_gemini(
         [input_message],
         thinking_budget=100,
