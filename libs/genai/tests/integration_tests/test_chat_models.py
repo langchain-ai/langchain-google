@@ -277,9 +277,15 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     default thinking config"""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
 
-    result = llm.invoke(
-        "How many O's are in Google? Please tell me how you double checked the result",
-    )
+    input_message = {
+        "role": "user",
+        "content": (
+            "How many O's are in Google? Please tell me how you double checked the "
+            "result."
+        ),
+    }
+
+    result = llm.invoke([input_message])
 
     assert isinstance(result, AIMessage)
     content = result.content
@@ -294,6 +300,10 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
 
     assert result.usage_metadata is not None
     assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm.invoke([input_message, result, next_message])
 
 
 def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() -> None:
@@ -764,9 +774,12 @@ def test_code_execution_builtin() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
         [{"code_execution": {}}]
     )
-    query = "What is 3^3?"
+    input_message = {
+        "role": "user",
+        "content": "What is 3^3?",
+    }
     with pytest.warns(match="executable_code"):
-        response = llm.invoke(query)
+        response = llm.invoke([input_message])
     content_blocks = [block for block in response.content if isinstance(block, dict)]
     expected_block_types = {"executable_code", "code_execution_result"}
     assert set(block.get("type") for block in content_blocks) == expected_block_types
@@ -774,10 +787,18 @@ def test_code_execution_builtin() -> None:
     # Test streaming
     full: Optional[BaseMessageChunk] = None
     with pytest.warns(match="executable_code"):
-        for chunk in llm.stream(query):
+        for chunk in llm.stream([input_message]):
             assert isinstance(chunk, AIMessageChunk)
             full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
     content_blocks = [block for block in full.content if isinstance(block, dict)]
     expected_block_types = {"executable_code", "code_execution_result"}
     assert set(block.get("type") for block in content_blocks) == expected_block_types
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Can you add some comments to the code?",
+    }
+    with pytest.warns(match="executable_code"):
+        _ = llm.invoke([input_message, full, next_message])
