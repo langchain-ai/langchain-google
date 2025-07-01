@@ -161,6 +161,7 @@ _allowed_params = [
     "labels",
     "audio_timestamp",
     "thinking_budget",
+    "include_thoughts",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
@@ -297,6 +298,9 @@ def _parse_chat_history_gemini(
                 metadata = VideoMetadata(part["video_metadata"])
                 proto_part.video_metadata = metadata
             return proto_part
+
+        if part["type"] == "thinking":
+            return Part(text=part["thinking"], thought=True)
 
         raise ValueError("Only text, image_url, and media types are supported!")
 
@@ -565,7 +569,21 @@ def _parse_response_candidate(
         except AttributeError:
             text = None
 
-        if text:
+        if part.thought:
+            thinking_message = {
+                "type": "thinking",
+                "thinking": part.text,
+            }
+            if not content:
+                content = [thinking_message]
+            elif isinstance(content, str):
+                content = [thinking_message, content]
+            elif isinstance(content, list):
+                content.append(thinking_message)
+            else:
+                raise Exception("Unexpected content type")
+
+        elif text:
             if not content:
                 content = text
             elif isinstance(content, str):
@@ -664,13 +682,13 @@ def _parse_response_candidate(
 
     if streaming:
         return AIMessageChunk(
-            content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+            content=content,
             additional_kwargs=additional_kwargs,
             tool_call_chunks=tool_call_chunks,
         )
 
     return AIMessage(
-        content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+        content=content,
         tool_calls=tool_calls,
         additional_kwargs=additional_kwargs,
         invalid_tool_calls=invalid_tool_calls,
@@ -1375,6 +1393,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if thinking_budget is not None:
             params["thinking_config"] = {"thinking_budget": thinking_budget}
         _ = params.pop("thinking_budget", None)
+
+        include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
+        if include_thoughts is not None:
+            if "thinking_config" not in params:
+                params["thinking_config"] = {}
+            params["thinking_config"]["include_thoughts"] = include_thoughts
+        _ = params.pop("include_thoughts", None)
 
         return params
 
