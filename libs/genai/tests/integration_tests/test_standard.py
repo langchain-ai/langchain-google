@@ -55,10 +55,6 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     def test_bind_runnables_as_tools(self, model: BaseChatModel) -> None:
         super().test_bind_runnables_as_tools(model)
 
-    @pytest.mark.xfail(reason=("investigate"))
-    def test_tool_calling_with_no_arguments(self, model: BaseChatModel) -> None:
-        super().test_tool_calling_with_no_arguments(model)
-
 
 class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property

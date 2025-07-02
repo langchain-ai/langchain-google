@@ -29,7 +29,6 @@ from typing import (
 )
 
 import proto  # type: ignore[import-untyped]
-from google.cloud.aiplatform import telemetry
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
@@ -89,17 +88,7 @@ from vertexai.generative_models._generative_models import (  # type: ignore
 )
 from vertexai.language_models import (  # type: ignore
     ChatMessage,
-    ChatModel,
-    ChatSession,
-    CodeChatModel,
-    CodeChatSession,
     InputOutputTextPair,
-)
-from vertexai.preview.language_models import (  # type: ignore
-    ChatModel as PreviewChatModel,
-)
-from vertexai.preview.language_models import (
-    CodeChatModel as PreviewCodeChatModel,
 )
 from google.cloud.aiplatform_v1.types import (
     Content as v1Content,
@@ -129,13 +118,12 @@ from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
     VideoMetadata,
 )
-from langchain_google_vertexai._base import _VertexAICommon, GoogleModelFamily
+from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
     _format_model_name,
-    is_gemini_model,
     replace_defs_in_schema,
     _strip_nullable_anyof,
 )
@@ -173,6 +161,7 @@ _allowed_params = [
     "labels",
     "audio_timestamp",
     "thinking_budget",
+    "include_thoughts",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
@@ -226,7 +215,6 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
 def _parse_chat_history_gemini(
     history: List[BaseMessage],
     imageBytesLoader: ImageBytesLoader,
-    convert_system_message_to_human: Optional[bool] = False,
     perform_literal_eval_on_string_raw_content: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
@@ -311,6 +299,9 @@ def _parse_chat_history_gemini(
                 proto_part.video_metadata = metadata
             return proto_part
 
+        if part["type"] == "thinking":
+            return Part(text=part["thinking"], thought=True)
+
         raise ValueError("Only text, image_url, and media types are supported!")
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
@@ -354,14 +345,6 @@ def _parse_chat_history_gemini(
         if isinstance(message, SystemMessage):
             prev_ai_message = None
             system_parts = _convert_to_parts(message)
-            if convert_system_message_to_human:
-                logger.warning(
-                    "gemini models released from April 2024 support"
-                    "SystemMessages natively. For best performances,"
-                    "when working with these models,"
-                    "set convert_system_message_to_human to False"
-                )
-                continue
             if system_instruction is not None:
                 system_instruction.parts.extend(system_parts)
             else:
@@ -586,7 +569,21 @@ def _parse_response_candidate(
         except AttributeError:
             text = None
 
-        if text:
+        if part.thought:
+            thinking_message = {
+                "type": "thinking",
+                "thinking": part.text,
+            }
+            if not content:
+                content = [thinking_message]
+            elif isinstance(content, str):
+                content = [thinking_message, content]
+            elif isinstance(content, list):
+                content.append(thinking_message)
+            else:
+                raise Exception("Unexpected content type")
+
+        elif text:
             if not content:
                 content = text
             elif isinstance(content, str):
@@ -685,13 +682,13 @@ def _parse_response_candidate(
 
     if streaming:
         return AIMessageChunk(
-            content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+            content=content,
             additional_kwargs=additional_kwargs,
             tool_call_chunks=tool_call_chunks,
         )
 
     return AIMessage(
-        content=cast(Union[str, List[Union[str, Dict[Any, Any]]]], content),
+        content=content,
         tool_calls=tool_calls,
         additional_kwargs=additional_kwargs,
         invalid_tool_calls=invalid_tool_calls,
@@ -717,11 +714,9 @@ def _completion_with_retry(
     def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
         return generation_method(**kwargs)
 
-    params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if kwargs.get("is_gemini")
-        else kwargs
-    )
+    params = {
+        k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service
+    }
     return _completion_with_retry_inner(
         generation_method,
         **params,
@@ -749,11 +744,9 @@ async def _acompletion_with_retry(
     ) -> Any:
         return await generation_method(**kwargs)
 
-    params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if kwargs.get("is_gemini")
-        else kwargs
-    )
+    params = {
+        k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service
+    }
     return await _completion_with_retry_inner(
         generation_method,
         **params,
@@ -1002,7 +995,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
                 setup: str = Field(description="The setup of the joke")
                 punchline: str = Field(description="The punchline to the joke")
-                rating: Optional[int] = Field(description="How funny the joke is, from 1 to 10")
+                rating: Optional[int] = Field(default=None, description="How funny the joke is, from 1 to 10")
 
             structured_llm = llm.with_structured_output(Joke)
             structured_llm.invoke("Tell me a joke about cats")
@@ -1231,13 +1224,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     """  # noqa: E501
 
-    model_name: str = Field(default="chat-bison-default", alias="model")
+    model_name: str = Field(alias="model")
     "Underlying model name."
     examples: Optional[List[BaseMessage]] = None
-    convert_system_message_to_human: bool = False
-    """[Deprecated] Since new Gemini models support setting a System Message,
-    setting this parameter to True is discouraged.
-    """
     response_mime_type: Optional[str] = None
     """Optional. Output response mimetype of the generated candidate text. Only
         supported in Gemini 1.5 and later models. Supported mimetype:
@@ -1353,17 +1342,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        safety_settings = self.safety_settings
-        tuned_model_name = self.tuned_model_name
-        self.model_family = GoogleModelFamily(self.model_name)
-
-        if self.model_name == "chat-bison-default":
-            logger.warning(
-                "Model_name will become a required arg for VertexAIEmbeddings "
-                "starting from Sep-01-2024. Currently the default is set to "
-                "chat-bison"
-            )
-            self.model_name = "chat-bison"
 
         if self.full_model_name is not None:
             pass
@@ -1380,43 +1358,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 project=cast(str, self.project),
             )
 
-        if safety_settings and not is_gemini_model(self.model_family):
-            raise ValueError("Safety settings are only supported for Gemini models")
-
-        if tuned_model_name:
-            generative_model_name = self.tuned_model_name
-        else:
-            generative_model_name = self.model_name
-
-        if not is_gemini_model(self.model_family):
-            logger.warning(
-                "Non-Gemini models are deprecated. "
-                "They will be removed starting Dec-01-2024. "
-            )
-            values = {
-                "project": self.project,
-                "location": self.location,
-                "credentials": self.credentials,
-                "api_transport": self.api_transport,
-                "api_endpoint": self.api_endpoint,
-                "default_metadata": self.default_metadata,
-            }
-            self._init_vertexai(values)
-            if self.model_family == GoogleModelFamily.CODEY:
-                model_cls = CodeChatModel
-                model_cls_preview = PreviewCodeChatModel
-            else:
-                model_cls = ChatModel
-                model_cls_preview = PreviewChatModel
-            self.client = model_cls.from_pretrained(generative_model_name)
-            self.client_preview = model_cls_preview.from_pretrained(
-                generative_model_name
-            )
         return self
-
-    @property
-    def _is_gemini_advanced(self) -> bool:
-        return self.model_family == GoogleModelFamily.GEMINI_ADVANCED
 
     def _prepare_params(
         self,
@@ -1451,6 +1393,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         if thinking_budget is not None:
             params["thinking_config"] = {"thinking_budget": thinking_budget}
         _ = params.pop("thinking_budget", None)
+
+        include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
+        if include_thoughts is not None:
+            if "thinking_config" not in params:
+                params["thinking_config"] = {}
+            params["thinking_config"]["include_thoughts"] = include_thoughts
+        _ = params.pop("include_thoughts", None)
 
         return params
 
@@ -1499,13 +1448,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 messages, stop=stop, run_manager=run_manager, **kwargs
             )
             return generate_from_stream(stream_iter)
-        if not self._is_gemini_model:
-            return self._generate_non_gemini(messages, stop=stop, **kwargs)
         return self._generate_gemini(
             messages=messages,
             stop=stop,
             run_manager=run_manager,
-            is_gemini=True,
             **kwargs,
         )
 
@@ -1764,7 +1710,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             request=self._prepare_request_gemini(
                 messages=messages, stop=stop, **kwargs
             ),
-            is_gemini=True,
             metadata=self.default_metadata,
             **kwargs,
         )
@@ -1772,23 +1717,20 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def get_num_tokens(self, text: str) -> int:
         """Get the number of tokens present in the text."""
-        if self._is_gemini_model:
-            # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
-            _, contents = _parse_chat_history_gemini(
-                [HumanMessage(content=text)],
-                self._image_bytes_loader_client,
-                perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
-            )
-            response = self.prediction_client.count_tokens(  # type: ignore[union-attr]
-                {
-                    "endpoint": self.full_model_name,
-                    "model": self.full_model_name,
-                    "contents": contents,
-                }
-            )
-            return response.total_tokens
-        else:
-            return self.client_preview.start_chat().count_tokens(text)
+        # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
+        _, contents = _parse_chat_history_gemini(
+            [HumanMessage(content=text)],
+            self._image_bytes_loader_client,
+            perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
+        )
+        response = self.prediction_client.count_tokens(  # type: ignore[union-attr]
+            {
+                "endpoint": self.full_model_name,
+                "model": self.full_model_name,
+                "contents": contents,
+            }
+        )
+        return response.total_tokens
 
     def _tools_gemini(
         self,
@@ -1813,45 +1755,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return _format_tool_config(cast(_ToolConfigDict, tool_config))
         return None
 
-    def _generate_non_gemini(
-        self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        **kwargs: Any,
-    ) -> ChatResult:
-        kwargs.pop("safety_settings", None)
-        params = self._prepare_params(stop=stop, stream=False, **kwargs)
-        question = _get_question(messages)
-        history = _parse_chat_history(messages[:-1])
-        examples = kwargs.get("examples") or self.examples
-        msg_params = {}
-        if "candidate_count" in params:
-            msg_params["candidate_count"] = params.pop("candidate_count")
-        if examples:
-            params["examples"] = _parse_examples(examples)
-        with telemetry.tool_context_manager(self._user_agent):
-            chat = self._start_chat(history, **params)
-            response = _completion_with_retry(
-                chat.send_message,
-                max_retries=self.max_retries,
-                message=question.content,
-                **msg_params,
-            )
-        usage_metadata = response.raw_prediction_response.metadata
-        lc_usage = _get_usage_metadata_non_gemini(usage_metadata)
-        generations = [
-            ChatGeneration(
-                message=AIMessage(content=candidate.text, usage_metadata=lc_usage),
-                generation_info=get_generation_info(
-                    candidate,
-                    self._is_gemini_model,
-                    usage_metadata=usage_metadata,
-                ),
-            )
-            for candidate in response.candidates
-        ]
-        return ChatResult(generations=generations)
-
     async def _agenerate(
         self,
         messages: List[BaseMessage],
@@ -1875,12 +1778,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             ValueError: if the last message in the list is not from human.
         """
         should_stream = stream is True or (stream is None and self.streaming)
-        if not self._is_gemini_model:
-            if should_stream:
-                logger.warning(
-                    "ChatVertexAI does not currently support async streaming."
-                )
-            return await self._agenerate_non_gemini(messages, stop=stop, **kwargs)
 
         if should_stream:
             stream_iter = self._astream(
@@ -1895,45 +1792,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs,
         )
 
-    async def _agenerate_non_gemini(
-        self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        **kwargs: Any,
-    ) -> ChatResult:
-        kwargs.pop("safety_settings", None)
-        params = self._prepare_params(stop=stop, stream=False, **kwargs)
-        question = _get_question(messages)
-        history = _parse_chat_history(messages[:-1])
-        examples = kwargs.get("examples") or self.examples
-        msg_params = {}
-        if "candidate_count" in params:
-            msg_params["candidate_count"] = params.pop("candidate_count")
-        if examples:
-            params["examples"] = _parse_examples(examples)
-        with telemetry.tool_context_manager(self._user_agent):
-            chat = self._start_chat(history, **params)
-            response = await _acompletion_with_retry(
-                chat.send_message_async,
-                message=question.content,
-                max_retries=self.max_retries,
-                **msg_params,
-            )
-        usage_metadata = response.raw_prediction_response.metadata
-        lc_usage = _get_usage_metadata_non_gemini(usage_metadata)
-        generations = [
-            ChatGeneration(
-                message=AIMessage(content=candidate.text, usage_metadata=lc_usage),
-                generation_info=get_generation_info(
-                    candidate,
-                    self._is_gemini_model,
-                    usage_metadata=usage_metadata,
-                ),
-            )
-            for candidate in response.candidates
-        ]
-        return ChatResult(generations=generations)
-
     def _stream(
         self,
         messages: List[BaseMessage],
@@ -1941,11 +1799,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        if not self._is_gemini_model:
-            yield from self._stream_non_gemini(
-                messages, stop=stop, run_manager=run_manager, **kwargs
-            )
-            return
         yield from self._stream_gemini(
             messages=messages, stop=stop, run_manager=run_manager, **kwargs
         )
@@ -1965,7 +1818,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             run_manager=run_manager,
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
-            is_gemini=True,
             metadata=self.default_metadata,
             **kwargs,
         )
@@ -1978,34 +1830,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 run_manager.on_llm_new_token(chunk.message.content)
             yield chunk
 
-    def _stream_non_gemini(
-        self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs: Any,
-    ) -> Iterator[ChatGenerationChunk]:
-        params = self._prepare_params(stop=stop, stream=True, **kwargs)
-        question = _get_question(messages)
-        history = _parse_chat_history(messages[:-1])
-        examples = kwargs.get("examples", None)
-        if examples:
-            params["examples"] = _parse_examples(examples)
-        with telemetry.tool_context_manager(self._user_agent):
-            chat = self._start_chat(history, **params)
-            responses = chat.send_message_streaming(question.content, **params)
-            for response in responses:
-                if run_manager:
-                    run_manager.on_llm_new_token(response.text)
-                yield ChatGenerationChunk(
-                    message=AIMessageChunk(content=response.text),
-                    generation_info=get_generation_info(
-                        response,
-                        self._is_gemini_model,
-                        usage_metadata=response.raw_prediction_response.metadata,
-                    ),
-                )
-
     async def _astream(
         self,
         messages: List[BaseMessage],
@@ -2014,12 +1838,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         # TODO: Update to properly support async streaming from gemini.
-        if not self._is_gemini_model:
-            async for chunk in super()._astream(
-                messages, stop=stop, run_manager=run_manager, **kwargs
-            ):
-                yield chunk
-            return
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
 
         response_iter = _acompletion_with_retry(
@@ -2028,7 +1846,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             run_manager=run_manager,
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
-            is_gemini=True,
             metadata=self.default_metadata,
             **kwargs,
         )
@@ -2096,7 +1913,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     answer: str
                     justification: str
 
-                llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
+                llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
                 structured_llm = llm.with_structured_output(AnswerWithJustification)
 
                 structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
@@ -2115,7 +1932,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     answer: str
                     justification: str
 
-                llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
+                llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
                 structured_llm = llm.with_structured_output(AnswerWithJustification, include_raw=True)
 
                 structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
@@ -2138,7 +1955,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     justification: str
 
                 dict_schema = convert_to_openai_function(AnswerWithJustification)
-                llm = ChatVertexAI(model_name="gemini-pro", temperature=0)
+                llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
                 structured_llm = llm.with_structured_output(dict_schema)
 
                 structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
@@ -2146,6 +1963,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 #     'answer': 'They weigh the same',
                 #     'justification': 'Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume and density of the two substances differ.'
                 # }
+
+        Example: Pydantic schema, streaming:
+            .. code-block:: python
+
+                from pydantic import BaseModel, Field
+                from langchain_google_vertexai import ChatVertexAI
+
+                class Explanation(BaseModel):
+                    '''A topic explanation with examples.'''
+                    description: str = Field(description="A brief description of the topic.")
+                    examples: str = Field(description="Two examples related to the topic.")
+
+                llm = ChatVertexAI(model_name="gemini-2.0-flash", temperature=0)
+                structured_llm = llm.with_structured_output(Explanation, method="json_mode")
+
+                for chunk in structured_llm.stream("Tell me about transformer models"):
+                    print(chunk)
+                    print('-------------------------')
+                # -> description='Transformer models are a type of neural network architecture that have revolutionized the field of natural language processing (NLP) and are also increasingly used in computer vision and other domains. They rely on the self-attention mechanism to weigh the importance of different parts of the input data, allowing them to effectively capture long-range dependencies. Unlike recurrent neural networks (RNNs), transformers can process the entire input sequence in parallel, leading to significantly faster training times. Key components of transformer models include: the self-attention mechanism (calculates attention weights between different parts of the input), multi-head attention (performs self-attention multiple times with different learned parameters), positional encoding (adds information about the position of tokens in the input sequence), feedforward networks (applies a non-linear transformation to each position), and encoder-decoder structure (used for sequence-to-sequence tasks).' examples='1. BERT (Bidirectional Encoder Representations from Transformers): A pre-trained transformer'
+                #    -------------------------
+                #    description='Transformer models are a type of neural network architecture that have revolutionized the field of natural language processing (NLP) and are also increasingly used in computer vision and other domains. They rely on the self-attention mechanism to weigh the importance of different parts of the input data, allowing them to effectively capture long-range dependencies. Unlike recurrent neural networks (RNNs), transformers can process the entire input sequence in parallel, leading to significantly faster training times. Key components of transformer models include: the self-attention mechanism (calculates attention weights between different parts of the input), multi-head attention (performs self-attention multiple times with different learned parameters), positional encoding (adds information about the position of tokens in the input sequence), feedforward networks (applies a non-linear transformation to each position), and encoder-decoder structure (used for sequence-to-sequence tasks).' examples='1. BERT (Bidirectional Encoder Representations from Transformers): A pre-trained transformer model that can be fine-tuned for various NLP tasks like text classification, question answering, and named entity recognition. 2. GPT (Generative Pre-trained Transformer): A language model that uses transformers to generate coherent and contextually relevant text. GPT models are used in chatbots, content creation, and code generation.'
+                #    -------------------------
 
         """  # noqa: E501
 
@@ -2196,7 +2035,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
             else:
                 raise ValueError(f"Unsupported schema type {type(schema)}")
-            tool_choice = tool_name if self._is_gemini_advanced else None
+            tool_choice = tool_name
 
             try:
                 llm = self.bind_tools(
@@ -2258,16 +2097,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             pass
         return self.bind(tools=formatted_tools, **kwargs)
 
-    def _start_chat(
-        self, history: _ChatHistory, **kwargs: Any
-    ) -> Union[ChatSession, CodeChatSession]:
-        if self.model_family == GoogleModelFamily.CODEY:
-            return self.client.start_chat(
-                context=history.context, message_history=history.history, **kwargs
-            )
-        else:
-            return self.client.start_chat(message_history=history.history, **kwargs)
-
     def _gemini_response_to_chat_result(
         self, response: GenerationResponse
     ) -> ChatResult:
@@ -2277,7 +2106,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         logprobs = self.logprobs if isinstance(self.logprobs, (int, bool)) else False
         for candidate in response.candidates:
             info = get_generation_info(
-                candidate, is_gemini=True, usage_metadata=usage, logprobs=logprobs
+                candidate, usage_metadata=usage, logprobs=logprobs
             )
             message = _parse_response_candidate(candidate)
             message.response_metadata["model_name"] = self.model_name
@@ -2332,7 +2161,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(
                 top_candidate,
-                is_gemini=True,
                 usage_metadata={},
             )
             # add model name if final chunk
@@ -2375,21 +2203,6 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
                 total_tokens=total_tokens,
                 input_token_details={"cache_read": cache_read_tokens},
             )
-
-
-def _get_usage_metadata_non_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
-    """Get UsageMetadata from raw response metadata."""
-    token_usage = raw_metadata.get("tokenMetadata", {})
-    input_tokens = token_usage.get("inputTokenCount", {}).get("totalTokens", 0)
-    output_tokens = token_usage.get("outputTokenCount", {}).get("totalTokens", 0)
-    if input_tokens == 0 and output_tokens == 0:
-        return None
-    else:
-        return UsageMetadata(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
-        )
 
 
 def _get_tool_name(tool: _ToolType) -> str:

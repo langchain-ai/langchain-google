@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -213,54 +213,6 @@ def test_parse_examples_failes_wrong_sequence() -> None:
     )
 
 
-@dataclass
-class StubTextChatResponse:
-    """Stub text-chat response from VertexAI for testing."""
-
-    text: str
-
-
-@pytest.mark.parametrize("stop", [None, "stop1"])
-def test_vertexai_args_passed(stop: Optional[str]) -> None:
-    response_text = "Goodbye"
-    user_prompt = "Hello"
-    prompt_params: Dict[str, Any] = {
-        "max_output_tokens": 1,
-        "temperature": 10000.0,
-        "top_k": 10,
-        "top_p": 0.5,
-    }
-
-    # Mock the library to ensure the args are passed correctly
-    with patch("vertexai._model_garden._model_garden_models._from_pretrained") as mg:
-        mock_response = MagicMock()
-        mock_response.candidates = [StubTextChatResponse(text=response_text)]
-        mock_chat = MagicMock()
-        mock_send_message = MagicMock(return_value=mock_response)
-        mock_chat.send_message = mock_send_message
-
-        mock_model = MagicMock()
-        mock_start_chat = MagicMock(return_value=mock_chat)
-        mock_model.start_chat = mock_start_chat
-        mg.return_value = mock_model
-
-        model = ChatVertexAI(**prompt_params, project="test-proj")
-        message = HumanMessage(content=user_prompt)
-        if stop:
-            response = model([message], stop=[stop])
-        else:
-            response = model([message])
-
-        assert response.content == response_text
-        mock_send_message.assert_called_once_with(
-            message=user_prompt, candidate_count=1
-        )
-        expected_stop_sequence = [stop] if stop else None
-        mock_start_chat.assert_called_once_with(
-            message_history=[], **prompt_params, stop_sequences=expected_stop_sequence
-        )
-
-
 def test_parse_chat_history_correct() -> None:
     text_context = (
         "My name is Peter. You are my personal assistant. My "
@@ -306,27 +258,6 @@ def test_parse_history_gemini() -> None:
     assert history[1].role == "model"
     assert history[1].parts[0].text == text_answer1
     assert system_instructions and system_instructions.parts[0].text == system_input
-
-
-def test_parse_history_gemini_converted_message() -> None:
-    system_input = "You're supposed to answer math questions."
-    text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
-    system_message = SystemMessage(content=system_input)
-    message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    messages = [system_message, message1, message2, message3]
-    image_bytes_loader = ImageBytesLoader()
-    _, history = _parse_chat_history_gemini(
-        messages, image_bytes_loader, convert_system_message_to_human=True
-    )
-    assert len(history) == 3
-    assert history[0].role == "user"
-    assert history[0].parts[0].text == system_input
-    assert history[0].parts[1].text == text_question1
-    assert history[1].role == "model"
-    assert history[1].parts[0].text == text_answer1
 
 
 def test_parse_history_gemini_function_empty_list() -> None:
@@ -652,34 +583,6 @@ def test_parse_history_gemini_multi(
     for result, expected in zip(result_history, expected_history):
         assert result == expected
     assert sm == expected_sm
-
-
-def test_default_params_palm() -> None:
-    user_prompt = "Hello"
-
-    with patch("vertexai._model_garden._model_garden_models._from_pretrained") as mg:
-        mock_response = MagicMock()
-        mock_response.candidates = [StubTextChatResponse(text="Goodbye")]
-        mock_chat = MagicMock()
-        mock_send_message = MagicMock(return_value=mock_response)
-        mock_chat.send_message = mock_send_message
-
-        mock_model = MagicMock()
-        mock_start_chat = MagicMock(return_value=mock_chat)
-        mock_model.start_chat = mock_start_chat
-        mg.return_value = mock_model
-
-        model = ChatVertexAI(model_name="text-bison@001")
-        message = HumanMessage(content=user_prompt)
-        _ = model([message])
-        mock_start_chat.assert_called_once_with(
-            message_history=[],
-            max_output_tokens=128,
-            top_k=40,
-            top_p=0.95,
-            stop_sequences=None,
-            temperature=0.0,
-        )
 
 
 def test_default_params_gemini() -> None:
@@ -1037,6 +940,7 @@ def test_parser_multiple_tools():
 def test_generation_config_gemini() -> None:
     model = ChatVertexAI(
         model_name="gemini-pro",
+        project="test-project",
         temperature=0.2,
         top_k=3,
         frequency_penalty=0.2,
@@ -1282,28 +1186,6 @@ def test_init_client_with_custom_model_kwargs() -> None:
     assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
 
 
-def test_model_kwargs_chat_vertex() -> None:
-    """Test we can transfer unknown params to model_kwargs."""
-    llm = ChatVertexAI(
-        model="my-model",
-        convert_system_message_to_human=True,
-        model_kwargs={"foo": "bar"},
-    )
-    assert llm.model_name == "my-model"
-    assert llm.convert_system_message_to_human is True
-    assert llm.model_kwargs == {"foo": "bar"}
-
-    with pytest.warns(match="transferred to model_kwargs"):
-        llm = ChatVertexAI(
-            model="my-model",
-            convert_system_message_to_human=True,
-            foo="bar",
-        )
-    assert llm.model_name == "my-model"
-    assert llm.convert_system_message_to_human is True
-    assert llm.model_kwargs == {"foo": "bar"}
-
-
 def test_anthropic_format_output() -> None:
     """Test format output handles different content structures correctly."""
 
@@ -1432,3 +1314,28 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
         "cache_creation_input_tokens": 1,
         "cache_read_input_tokens": 1,
     }
+
+
+def test_thinking_configuration() -> None:
+    input_message = HumanMessage("Query requiring reasoning.")
+
+    # Test init params
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash-preview-05-20",
+        project="test-project",
+        thinking_budget=100,
+        include_thoughts=True,
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert request.generation_config.thinking_config.thinking_budget == 100
+    assert request.generation_config.thinking_config.include_thoughts is True
+
+    # Test invocation params
+    llm = ChatVertexAI(model="gemini-2.5-flash-preview-05-20", project="test-project")
+    request = llm._prepare_request_gemini(
+        [input_message],
+        thinking_budget=100,
+        include_thoughts=True,
+    )
+    assert request.generation_config.thinking_config.thinking_budget == 100
+    assert request.generation_config.thinking_config.include_thoughts is True
