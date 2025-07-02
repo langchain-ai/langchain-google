@@ -72,7 +72,7 @@ from langchain_core.messages import (
     ToolMessage,
     is_data_content_block,
 )
-from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
@@ -716,35 +716,43 @@ def _response_to_result(
     """Converts a PaLM API response into a LangChain ChatResult."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
 
-    # previous usage metadata needs to be subtracted because gemini api returns
-    # already-accumulated token counts with each chunk
-    prev_input_tokens = prev_usage["input_tokens"] if prev_usage else 0
-    prev_output_tokens = prev_usage["output_tokens"] if prev_usage else 0
-    prev_total_tokens = prev_usage["total_tokens"] if prev_usage else 0
-
     # Get usage metadata
     try:
         input_tokens = response.usage_metadata.prompt_token_count
-        output_tokens = response.usage_metadata.candidates_token_count
-        total_tokens = response.usage_metadata.total_token_count
         thought_tokens = response.usage_metadata.thoughts_token_count
+        output_tokens = response.usage_metadata.candidates_token_count + thought_tokens
+        total_tokens = response.usage_metadata.total_token_count
         cache_read_tokens = response.usage_metadata.cached_content_token_count
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
             if thought_tokens > 0:
-                lc_usage = UsageMetadata(
-                    input_tokens=input_tokens - prev_input_tokens,
-                    output_tokens=output_tokens - prev_output_tokens,
-                    total_tokens=total_tokens - prev_total_tokens,
+                cumulative_usage = UsageMetadata(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
                     input_token_details={"cache_read": cache_read_tokens},
                     output_token_details={"reasoning": thought_tokens},
                 )
             else:
-                lc_usage = UsageMetadata(
-                    input_tokens=input_tokens - prev_input_tokens,
-                    output_tokens=output_tokens - prev_output_tokens,
-                    total_tokens=total_tokens - prev_total_tokens,
+                cumulative_usage = UsageMetadata(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
                     input_token_details={"cache_read": cache_read_tokens},
                 )
+            # previous usage metadata needs to be subtracted because gemini api returns
+            # already-accumulated token counts with each chunk
+            lc_usage = subtract_usage(cumulative_usage, prev_usage)
+            if prev_usage and cumulative_usage["input_tokens"] < prev_usage.get(
+                "input_tokens", 0
+            ):
+                # Gemini 1.5 and 2.0 return a lower cumulative count of prompt tokens
+                # in the final chunk. We take this count to be ground truth because
+                # it's consistent with the reported total tokens. So we need to
+                # ensure this chunk compensates (the subtract_usage funcction floors
+                # at zero).
+                lc_usage["input_tokens"] = cumulative_usage[
+                    "input_tokens"
+                ] - prev_usage.get("input_tokens", 0)
         else:
             lc_usage = None
     except AttributeError:
@@ -1522,7 +1530,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             metadata=self.default_metadata,
         )
 
-        prev_usage_metadata: UsageMetadata | None = None
+        prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
         for chunk in response:
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
@@ -1530,21 +1538,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen = cast(ChatGenerationChunk, _chat_result.generations[0])
             message = cast(AIMessageChunk, gen.message)
 
-            curr_usage_metadata: UsageMetadata | dict[str, int] = (
-                message.usage_metadata or {}
-            )
-
             prev_usage_metadata = (
                 message.usage_metadata
                 if prev_usage_metadata is None
-                else UsageMetadata(
-                    input_tokens=prev_usage_metadata.get("input_tokens", 0)
-                    + curr_usage_metadata.get("input_tokens", 0),
-                    output_tokens=prev_usage_metadata.get("output_tokens", 0)
-                    + curr_usage_metadata.get("output_tokens", 0),
-                    total_tokens=prev_usage_metadata.get("total_tokens", 0)
-                    + curr_usage_metadata.get("total_tokens", 0),
-                )
+                else add_usage(prev_usage_metadata, message.usage_metadata)
             )
 
             if run_manager:
@@ -1594,7 +1591,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tool_choice=tool_choice,
                 **kwargs,
             )
-            prev_usage_metadata: UsageMetadata | None = None
+            prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
             async for chunk in await _achat_with_retry(
                 request=request,
                 generation_method=self.async_client.stream_generate_content,
@@ -1607,21 +1604,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 gen = cast(ChatGenerationChunk, _chat_result.generations[0])
                 message = cast(AIMessageChunk, gen.message)
 
-                curr_usage_metadata: UsageMetadata | dict[str, int] = (
-                    message.usage_metadata or {}
-                )
-
                 prev_usage_metadata = (
                     message.usage_metadata
                     if prev_usage_metadata is None
-                    else UsageMetadata(
-                        input_tokens=prev_usage_metadata.get("input_tokens", 0)
-                        + curr_usage_metadata.get("input_tokens", 0),
-                        output_tokens=prev_usage_metadata.get("output_tokens", 0)
-                        + curr_usage_metadata.get("output_tokens", 0),
-                        total_tokens=prev_usage_metadata.get("total_tokens", 0)
-                        + curr_usage_metadata.get("total_tokens", 0),
-                    )
+                    else add_usage(prev_usage_metadata, message.usage_metadata)
                 )
 
                 if run_manager:
