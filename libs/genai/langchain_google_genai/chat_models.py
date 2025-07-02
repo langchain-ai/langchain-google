@@ -742,6 +742,17 @@ def _response_to_result(
             # previous usage metadata needs to be subtracted because gemini api returns
             # already-accumulated token counts with each chunk
             lc_usage = subtract_usage(cumulative_usage, prev_usage)
+            if prev_usage and cumulative_usage["input_tokens"] < prev_usage.get(
+                "input_tokens", 0
+            ):
+                # Gemini 1.5 and 2.0 return a lower cumulative count of prompt tokens
+                # in the final chunk. We take this count to be ground truth because
+                # it's consistent with the reported total tokens. So we need to
+                # ensure this chunk compensates (the subtract_usage funcction floors
+                # at zero).
+                lc_usage["input_tokens"] = cumulative_usage[
+                    "input_tokens"
+                ] - prev_usage.get("input_tokens", 0)
         else:
             lc_usage = None
     except AttributeError:

@@ -21,8 +21,9 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-2.0-flash-001",
+            "model": "models/gemini-2.5-flash",
             "rate_limiter": rate_limiter,
+            "thinking_budget": 0,
         }
 
     @property
@@ -63,6 +64,12 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         self, model: BaseChatModel, my_adder_tool: BaseTool
     ) -> None:
         super().test_tool_message_histories_list_content(model, my_adder_tool)
+
+    @pytest.mark.xfail(
+        reason="Investigate: prompt_token_count inconsistent in final chunk."
+    )
+    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
+        super().test_usage_metadata_streaming(model)
 
     @property
     def supported_usage_metadata_details(
