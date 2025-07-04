@@ -260,6 +260,22 @@ def test_parse_history_gemini() -> None:
     assert system_instructions and system_instructions.parts[0].text == system_input
 
 
+def test_parse_history_gemini_number() -> None:
+    system_input = "You're supposed to answer math questions."
+    text_question1 = "54321.1"
+    system_message = SystemMessage(content=system_input)
+    message1 = HumanMessage(content=text_question1)
+    messages = [system_message, message1]
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader, perform_literal_eval_on_string_raw_content=True
+    )
+    assert len(history) == 1
+    assert history[0].role == "user"
+    assert history[0].parts[0].text == text_question1
+    assert system_instructions and system_instructions.parts[0].text == system_input
+
+
 def test_parse_history_gemini_function_empty_list() -> None:
     system_input = "You're supposed to answer math questions."
     text_question1 = "Solve the following equation. x^2+16=0"
