@@ -235,6 +235,10 @@ class _VertexAICommon(_VertexAIBase):
     thinking_budget: Optional[int] = Field(
         default=None, description="Indicates the thinking budget in tokens."
     )
+    include_thoughts: Optional[bool] = Field(
+        default=None,
+        description="Indicates whether to include thoughts in the response.",
+    )
     audio_timestamp: Optional[bool] = Field(
         default=None,
         description="Enable timestamp understanding of audio-only files",

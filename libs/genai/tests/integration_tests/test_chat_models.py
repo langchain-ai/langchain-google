@@ -63,15 +63,9 @@ def _check_usage_metadata(message: AIMessage) -> None:
     assert message.usage_metadata["input_tokens"] > 0
     assert message.usage_metadata["output_tokens"] > 0
     assert message.usage_metadata["total_tokens"] > 0
-    if "output_token_details" in message.usage_metadata:
-        thought_tokens = message.usage_metadata["output_token_details"]["reasoning"]
-    else:
-        thought_tokens = 0
 
     assert (
-        message.usage_metadata["input_tokens"]
-        + message.usage_metadata["output_tokens"]
-        + thought_tokens
+        message.usage_metadata["input_tokens"] + message.usage_metadata["output_tokens"]
     ) == message.usage_metadata["total_tokens"]
 
 
