@@ -1435,7 +1435,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             messages: The history of the conversation as a list of messages. Code chat
                 does not support context.
             stop: The list of stop words (optional).
-            run_manager: The ``CallbackManager`` for LLM run, it's not used at the moment.
+            run_manager: The ``CallbackManager`` for LLM run, it's not used at the
+                moment.
             stream: Whether to use the streaming endpoint.
 
         Returns:
