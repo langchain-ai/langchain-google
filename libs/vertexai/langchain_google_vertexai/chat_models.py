@@ -759,19 +759,20 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     Setup:
         You must either:
             - Have credentials configured for your environment (gcloud, workload identity, etc...)
-            - Store the path to a service account JSON file as the GOOGLE_APPLICATION_CREDENTIALS environment variable
+            - Store the path to a service account JSON file as the ``GOOGLE_APPLICATION_CREDENTIALS`` environment variable
 
-        This codebase uses the google.auth library which first looks for the application
+        This codebase uses the ``google.auth`` library which first looks for the application
         credentials variable mentioned above, and then looks for system-level auth.
 
-        For more information, see:
-        https://cloud.google.com/docs/authentication/application-default-credentials#GAC
-        and https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth.
+        **More information:**
+
+        - `Credential types <https://cloud.google.com/docs/authentication/application-default-credentials#GAC>`__
+        - ``google.auth`` `API reference <https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth>`__
 
     Key init args — completion params:
         model: str
-            Name of ChatVertexAI model to use. e.g. "gemini-2.0-flash-001",
-            "gemini-2.5-pro", etc.
+            Name of ChatVertexAI model to use. e.g. ``'gemini-2.0-flash-001'``,
+            ``'gemini-2.5-pro'``, etc.
         temperature: Optional[float]
             Sampling temperature.
         seed: Optional[int]
@@ -788,10 +789,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             Max number of retries.
         wait_exponential_kwargs: Optional[dict[str, float]]
             Optional dictionary with parameters for wait_exponential:
-            - multiplier: Initial wait time multiplier (default: 1.0)
-            - min: Minimum wait time in seconds (default: 4.0)
-            - max: Maximum wait time in seconds (default: 10.0)
-            - exp_base: Exponent base to use (default: 2.0)
+            - multiplier: Initial wait time multiplier (default: ``1.0``)
+            - min: Minimum wait time in seconds (default: ``4.0``)
+            - max: Maximum wait time in seconds (default: ``10.0``)
+            - exp_base: Exponent base to use (default: ``2.0``)
         credentials: Optional[google.auth.credentials.Credentials]
             The default custom credentials to use when making API calls. If not
             provided, credentials will be ascertained from the environment.
@@ -801,7 +802,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             The default location to use when making API calls.
         request_parallelism: int = 5
             The amount of parallelism allowed for requests issued to VertexAI models.
-            Default is 5.
+            (default: ``5``)
         base_url: Optional[str]
             Base URL for API requests.
 
@@ -875,7 +876,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Context Caching:
         Context caching allows you to store and reuse content (e.g., PDFs, images) for faster processing.
-        The `cached_content` parameter accepts a cache name created via the Google Generative AI API with Vertex AI.
+        The ``cached_content`` parameter accepts a cache name created via the Google Generative AI API with Vertex AI.
         Below is an example of caching content from GCS and querying it.
 
         Example:
@@ -1055,7 +1056,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.' # codespell:ignore brunch
 
     Video input:
-        **NOTE**: Currently only supported for ``gemini-...-vision`` models.
+
+        .. note::
+            Currently only supported for ``gemini-...-vision`` models.
 
         .. code-block:: python
 
@@ -1230,9 +1233,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     response_mime_type: Optional[str] = None
     """Optional. Output response mimetype of the generated candidate text. Only
         supported in Gemini 1.5 and later models. Supported mimetype:
-            * "text/plain": (default) Text output.
-            * "application/json": JSON response in the candidates.
-            * "text/x.enum": Enum in plain text.
+            * ``'text/plain'``: (default) Text output.
+            * ``'application/json'``: JSON response in the candidates.
+            * ``'text/x.enum'``: Enum in plain text.
        The model also needs to be prompted to output the appropriate response
        type, otherwise the behavior is undefined. This is a preview feature.
     """
@@ -1253,7 +1256,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     If False, don't return logprobs. If True, return logprobs for top candidate.
     If int, return logprobs for top ``logprobs`` candidates.
 
-    **NOTE**: As of 10.28.24 this is only supported for gemini-1.5-flash models.
+    .. note::
+        As of 2024-10-28 this is only supported for gemini-1.5-flash models.
 
     .. versionadded: 2.0.6
     """
@@ -1267,10 +1271,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     wait_exponential_kwargs: Optional[dict[str, float]] = None
     """Optional dictionary with parameters for wait_exponential:
-        - multiplier: Initial wait time multiplier (default: 1.0)
-        - min: Minimum wait time in seconds (default: 4.0)
-        - max: Maximum wait time in seconds (default: 10.0)
-        - exp_base: Exponent base to use (default: 2.0)
+        - multiplier: Initial wait time multiplier (default: ``1.0``)
+        - min: Minimum wait time in seconds (default: ``4.0``)
+        - max: Maximum wait time in seconds (default: ``10.0``)
+        - exp_base: Exponent base to use (default: ``2.0``)
     """
 
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
@@ -1298,8 +1302,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
                 )
                 logger.warning(
-                    f"Unexpected argument '{arg}' "
-                    f"provided to ChatVertexAI.{suggestion}"
+                    f"Unexpected argument '{arg}' provided to ChatVertexAI.{suggestion}"
                 )
         super().__init__(**kwargs)
 
@@ -1434,7 +1437,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             messages: The history of the conversation as a list of messages. Code chat
                 does not support context.
             stop: The list of stop words (optional).
-            run_manager: The CallbackManager for LLM run, it's not used at the moment.
+            run_manager: The ``CallbackManager`` for LLM run, it's not used at the
+                moment.
             stream: Whether to use the streaming endpoint.
 
         Returns:
@@ -1463,9 +1467,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         logprobs: int | bool = False,
         **kwargs: Any,
     ) -> Union[GenerationConfig, v1GenerationConfig]:
-        """Prepares GenerationConfig part of the request.
+        """Prepares ``GenerationConfig`` part of the request.
 
-        https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#generationconfig
+        `More info <https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#generationconfig>`__
         """
         if logprobs and isinstance(logprobs, bool):
             kwargs["response_logprobs"] = logprobs
@@ -1495,9 +1499,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def _safety_settings_gemini(
         self, safety_settings: Optional[SafetySettingsType]
     ) -> Optional[Sequence[SafetySetting]]:
-        """Prepares SafetySetting part of the request.
+        """Prepares ``SafetySetting`` part of the request.
 
-        https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#safetysetting
+        `More info <https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#safetysetting>`__
         """
         if safety_settings is None:
             if self.safety_settings:
@@ -1716,8 +1720,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         return self._gemini_response_to_chat_result(response)
 
     def get_num_tokens(self, text: str) -> int:
-        """Get the number of tokens present in the text."""
-        # https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest
+        """Get the number of tokens present in the text.
+
+        `More info <https://cloud.google.com/vertex-ai/docs/reference/rpc/google.cloud.aiplatform.v1beta1#counttokensrequest>`__
+        """
         _, contents = _parse_chat_history_gemini(
             [HumanMessage(content=text)],
             self._image_bytes_loader_client,
@@ -1874,7 +1880,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             was provided then the output had the form
             ``[{"args": {}, "name": "schema_name"}]`` where the output was a list with
             a single dict and the "args" of the one dict corresponded to the schema.
-            As of `1.1.0` this has been fixed so that the schema (the value
+            As of ``1.1.0`` this has been fixed so that the schema (the value
             corresponding to the old "args" key) is returned directly.
 
         Args:
@@ -1882,25 +1888,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 then the model output will be an object of that class. If a dict then
                 the model output will be a dict. With a Pydantic class the returned
                 attributes will be validated, whereas with a dict they will not be. If
-                `method` is "function_calling" and `schema` is a dict, then the dict
+                ``method`` is ``'function_calling'`` and ``schema`` is a dict, then the dict
                 must match the OpenAI function-calling spec.
             include_raw: If False then only the parsed structured output is returned. If
                 an error occurs during model output parsing it will be raised. If True
                 then both the raw model response (a BaseMessage) and the parsed model
                 response will be returned. If an error occurs during output parsing it
                 will be caught and returned as well. The final output is always a dict
-                with keys "raw", "parsed", and "parsing_error".
-            method: If set to 'json_schema' it will use controlled genetration to
+                with keys ``'raw'``, ``'parsed'``, and ``'parsing_error'``.
+            method: If set to ``'json_schema'`` it will use controlled genetration to
                 generate the response rather than function calling. Does not work with
                 schemas with references or Pydantic models with self-references.
 
         Returns:
-            A Runnable that takes any ChatModel input. If include_raw is True then a
+            A Runnable that takes any ChatModel input. If ``'include_raw'`` is True then a
             dict with keys — raw: BaseMessage, parsed: Optional[_DictOrPydantic],
-            parsing_error: Optional[BaseException]. If include_raw is False then just
-            _DictOrPydantic is returned, where _DictOrPydantic depends on the schema.
-            If schema is a Pydantic class then _DictOrPydantic is the Pydantic class.
-            If schema is a dict then _DictOrPydantic is a dict.
+            parsing_error: Optional[BaseException]. If ``'include_raw'`` is False then just
+            ``_DictOrPydantic`` is returned, where ``_DictOrPydantic`` depends on the schema.
+            If schema is a Pydantic class then ``_DictOrPydantic`` is the Pydantic class.
+            If schema is a dict then ``_DictOrPydantic`` is a dict.
 
         Example: Pydantic schema, exclude raw:
             .. code-block:: python
