@@ -266,6 +266,8 @@ def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None
     assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
+# TODO: Parametrize this test to run on a certain output version (v1)
+# e.g. @pytest.mark.parametrize("output_version", ["v0", "responses/v1", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
     default thinking config"""
