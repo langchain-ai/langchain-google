@@ -166,6 +166,19 @@ _allowed_params = [
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
 
+_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
+    "__gemini_function_call_thought_signatures__"
+)
+
+
+def _bytes_to_base64(data: bytes) -> str:
+    return base64.b64encode(data).decode("utf-8")
+
+
+def _base64_to_bytes(input_str: str) -> bytes:
+    return base64.b64decode(input_str.encode("utf-8"))
+
+
 @dataclass
 class _ChatHistory:
     """Represents a context and a history of messages."""
@@ -378,8 +391,26 @@ def _parse_chat_history_gemini(
                 parts = _convert_to_parts(message)
 
             for tc in message.tool_calls:
+                thought_signature: Optional[bytes] = None
+                if tool_call_id := tc.get("id"):
+                    if tool_call_id in message.additional_kwargs.get(
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                    ):
+                        thought_signature = message.additional_kwargs[
+                            _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        ][tool_call_id]
+                        if isinstance(thought_signature, str):
+                            thought_signature = _base64_to_bytes(thought_signature)
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
-                parts.append(Part(function_call=function_call))
+                if thought_signature:
+                    parts.append(
+                        Part(
+                            function_call=function_call,
+                            thought_signature=thought_signature,
+                        )
+                    )
+                else:
+                    parts.append(Part(function_call=function_call))
 
             if len(vertex_messages):
                 prev_content = vertex_messages[-1]
@@ -604,13 +635,14 @@ def _parse_response_candidate(
             )
             additional_kwargs["function_call"] = function_call
 
+            tool_call_id = function_call.get("id", str(uuid.uuid4()))
             if streaming:
                 index = function_call.get("index")
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=function_call.get("id", str(uuid.uuid4())),
+                        id=tool_call_id,
                         index=int(index) if index else None,
                     )
                 )
@@ -625,7 +657,7 @@ def _parse_response_candidate(
                             create_tool_call(
                                 name=tool_call["name"],
                                 args=tool_call["args"],
-                                id=tool_call.get("id", str(uuid.uuid4())),
+                                id=tool_call.get("id", tool_call_id),
                             )
                             for tool_call in tool_calls_dicts
                         ]
@@ -635,10 +667,26 @@ def _parse_response_candidate(
                         invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
-                            id=function_call.get("id", str(uuid.uuid4())),
+                            id=tool_call_id,
                             error=str(e),
                         )
                     )
+
+            if hasattr(part, "thought_signature") and part.thought_signature:
+                # store dict of {tool_call_id: thought_signature}
+                if isinstance(part.thought_signature, bytes):
+                    thought_signature = _bytes_to_base64(part.thought_signature)
+                    if (
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        not in additional_kwargs
+                    ):
+                        additional_kwargs[
+                            _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        ] = {}
+                    additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY][
+                        tool_call_id
+                    ] = thought_signature
+
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_message = {
