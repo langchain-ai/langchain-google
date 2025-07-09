@@ -888,6 +888,34 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
 
 
 @pytest.mark.release
+def test_thought_signatures() -> None:
+    llm = ChatVertexAI(model="gemini-2.5-pro", include_thoughts=True)
+
+    def get_weather(location: str) -> str:
+        """Get the weather for a location."""
+        return "It's sunny."
+
+    llm_with_tools = llm.bind_tools([get_weather])
+
+    input_message = {
+        "role": "user",
+        # TODO: a query that does not generate tool calls (e.g., "Hello") will generate
+        # thought signatures on text message blocks. Support this when migrating to
+        # standard outputs.
+        "content": "What's the weather in London?",
+    }
+
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm_with_tools.invoke([input_message, full, next_message])
+
+
+@pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(
         model_name=_DEFAULT_THINKING_MODEL_NAME,
