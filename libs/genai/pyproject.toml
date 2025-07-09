@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-genai"
-version = "2.1.6"
+version = "2.1.7"
 description = "An integration package connecting Google's genai package and LangChain"
 authors = []
 readme = "README.md"
@@ -12,7 +12,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = "^0.3.66"
+langchain-core = "^0.3.68"
 google-ai-generativelanguage = "^0.6.18"
 pydantic = ">=2,<3"
 filetype = "^1.2.0"
@@ -29,7 +29,7 @@ pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
 pytest-retry = "^1.7.0"
 numpy = ">=1.26.2"
-langchain-tests = "0.3.19"
+langchain-tests = "0.3.20"
 
 [tool.codespell]
 ignore-words-list = "rouge"
@@ -58,7 +58,7 @@ ruff = "^0.1.5"
 
 [tool.poetry.group.typing.dependencies]
 mypy = "^1.10"
-types-requests = "^2.28.11.5"
+types-requests = "^2.31.0"
 types-google-cloud-ndb = "^2.2.0.1"
 types-protobuf = "^4.24.0.20240302"
 numpy = ">=1.26.2"
@@ -68,7 +68,7 @@ numpy = ">=1.26.2"
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-types-requests = "^2.31.0.10"
+types-requests = "^2.31.0"
 types-google-cloud-ndb = "^2.2.0.1"
 
 [tool.ruff.lint]
