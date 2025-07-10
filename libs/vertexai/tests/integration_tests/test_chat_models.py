@@ -889,6 +889,12 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
 
 @pytest.mark.release
 def test_thought_signatures() -> None:
+    """Test Gemini thought signatures.
+
+    Verifies that thought signature byte blobs flow correctly through the entire Gemini
+    to GAPIC to LangChain parsing and back into subsequent calls, without crashing or
+    losing type safety.
+    """
     llm = ChatVertexAI(model="gemini-2.5-pro", include_thoughts=True)
 
     def get_weather(location: str) -> str:

@@ -402,15 +402,16 @@ def _parse_chat_history_gemini(
                         if isinstance(thought_signature, str):
                             thought_signature = _base64_to_bytes(thought_signature)
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
-                if thought_signature:
-                    parts.append(
-                        Part(
-                            function_call=function_call,
-                            thought_signature=thought_signature,
-                        )
+                parts.append(
+                    Part(
+                        function_call=function_call,
+                        **(
+                            {"thought_signature": thought_signature}
+                            if thought_signature
+                            else {}
+                        ),
                     )
-                else:
-                    parts.append(Part(function_call=function_call))
+                )
 
             if len(vertex_messages):
                 prev_content = vertex_messages[-1]
@@ -672,7 +673,7 @@ def _parse_response_candidate(
                         )
                     )
 
-            if hasattr(part, "thought_signature") and part.thought_signature:
+            if getattr(part, "thought_signature", None):
                 # store dict of {tool_call_id: thought_signature}
                 if isinstance(part.thought_signature, bytes):
                     thought_signature = _bytes_to_base64(part.thought_signature)
