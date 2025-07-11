@@ -576,7 +576,8 @@ def _append_to_content(
 
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
-) -> Union[AIMessage, AIMessageChunk]:
+) -> AIMessage:
+    # Note that AIMessageChunk inherits from AIMessage which is why it isn't typed here
     content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs: Dict[str, Any] = {}
     tool_calls = []
@@ -786,9 +787,10 @@ def _response_to_result(
                 )
         except AttributeError:
             pass
-        message: Union[AIMessage, AIMessageChunk] = _parse_response_candidate(
-            candidate, streaming=stream
-        )
+        message: AIMessage = _parse_response_candidate(candidate, streaming=stream)
+
+        if output_version == "v1":
+            message = _convert_v0_to_v1(message, candidate)
 
         message.usage_metadata = lc_usage
         if stream:
@@ -801,7 +803,7 @@ def _response_to_result(
         else:
             generations.append(
                 ChatGeneration(
-                    message=cast(AIMessage, message),
+                    message=message,
                     generation_info=generation_info,
                 )
             )
