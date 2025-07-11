@@ -174,12 +174,12 @@ class TestCredentials(credentials.Credentials):
 
     @property
     def expired(self) -> bool:
-        """Returns `False`, test credentials never expire."""
+        """Returns ``False``, test credentials never expire."""
         return False
 
     @property
     def valid(self) -> bool:
-        """Returns `True`, test credentials are always valid."""
+        """Returns ``True``, test credentials are always valid."""
         return True
 
     def refresh(self, request: Any) -> None:
@@ -206,11 +206,11 @@ class TestCredentials(credentials.Credentials):
 def _get_credentials() -> Optional[credentials.Credentials]:
     """Returns credential from config if set or fake credentials for unit testing.
 
-    If _config.testing is True, a fake credential is returned.
+    If ``_config.testing`` is ``True``, a fake credential is returned.
     Otherwise, we are in a real environment and will use credentials if provided
-    or None is returned.
+    or ``None`` is returned.
 
-    If None is passed to the clients later on, the actual credentials will be
+    If ``None`` is passed to the clients later on, the actual credentials will be
     inferred by the rules specified in google.auth package.
     """
     if _config.testing:

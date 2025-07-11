@@ -39,20 +39,19 @@ Supported examples:
     "when making API calls. If not provided, credentials will be ascertained from "
     "the GOOGLE_API_KEY envvar"
     temperature: float = 0.7
-    """Run inference with this temperature. Must by in the closed interval
-       [0.0, 2.0]."""
+    """Run inference with this temperature. Must be within ``[0.0, 2.0]``."""
     top_p: Optional[float] = None
     """Decode using nucleus sampling: consider the smallest set of tokens whose
-       probability sum is at least top_p. Must be in the closed interval [0.0, 1.0]."""
+       probability sum is at least ``top_p``. Must be within ``[0.0, 1.0]``."""
     top_k: Optional[int] = None
-    """Decode using top-k sampling: consider the set of top_k most probable tokens.
+    """Decode using top-k sampling: consider the set of ``top_k`` most probable tokens.
        Must be positive."""
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     """Maximum number of tokens to include in a candidate. Must be greater than zero.
-       If unset, will default to 64."""
+       If unset, will default to ``64``."""
     n: int = 1
     """Number of chat completions to generate for each prompt. Note that the API may
-       not return the full n completions if duplicates are generated."""
+       not return the full ``n`` completions if duplicates are generated."""
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
 
@@ -94,6 +93,7 @@ Supported examples:
     
         For example: 
 
+        .. code-block:: python
             from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
@@ -102,7 +102,7 @@ Supported examples:
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             }
-            """  # noqa: E501
+    """  # noqa: E501
 
     @property
     def lc_secrets(self) -> Dict[str, str]:
@@ -149,7 +149,7 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
         module (Optional[str]):
             Optional. The module for a custom user agent header.
     Returns:
-        google.api_core.gapic_v1.client_info.ClientInfo
+        ``google.api_core.gapic_v1.client_info.ClientInfo``
     """
     client_library_version, user_agent = get_user_agent(module)
     return ClientInfo(
