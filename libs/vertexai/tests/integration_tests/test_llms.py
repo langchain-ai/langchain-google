@@ -3,9 +3,11 @@
 Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 """
+
 import json
 
 import pytest
+from google.cloud.aiplatform_v1beta1.types import Schema, Type
 from langchain_core.outputs import LLMResult
 from langchain_core.rate_limiters import InMemoryRateLimiter
 
@@ -118,3 +120,41 @@ def test_structured_output_schema_json():
     assert isinstance(parsed_response, list)
     assert len(parsed_response) > 0
     assert "recipe_name" in parsed_response[0]
+
+
+@pytest.mark.extended
+def test_structured_output_schema_json_with_openapi_schema_object():
+    model = VertexAI(
+        rate_limiter=rate_limiter,
+        model_name="gemini-2.0-flash-001",
+        response_mime_type="application/json",
+        response_schema=Schema(
+            type_=Type.ARRAY,
+            items=Schema(
+                type_=Type.OBJECT,
+                properties={
+                    "recipe_name": Schema(type_=Type.STRING),
+                    "level": Schema(type_=Type.ENUM, values=["easy", "medium", "hard"]),
+                },
+                required=["recipe_name", "level"],
+                property_ordering=["level", "recipe_name"],
+            ),
+            min_items=3,
+            max_items=4,
+        ),
+    )
+
+    response = model.invoke("List a few popular cookie recipes")
+
+    assert isinstance(response, str)
+    parsed_response = json.loads(response)
+    assert isinstance(parsed_response, list)
+    assert len(parsed_response) >= 3 and len(parsed_response) <= 4
+    for recipe in parsed_response:
+        assert isinstance(recipe, dict)
+        assert "recipe_name" in recipe
+        assert "level" in recipe
+        assert isinstance(recipe["recipe_name"], str)
+        assert recipe["level"] in ["easy", "medium", "hard"]
+        keys = list(recipe.keys())
+        assert keys.index("level") < keys.index("recipe_name")

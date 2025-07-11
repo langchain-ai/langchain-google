@@ -117,6 +117,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     Tool as GapicTool,
     ToolConfig as GapicToolConfig,
     VideoMetadata,
+    Schema,
 )
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._image_utils import ImageBytesLoader
@@ -1433,9 +1434,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     f"`response_mime_type` is set to one of {allowed_mime_types}"
                 )
                 raise ValueError(error_message)
-
-            gapic_response_schema = _convert_schema_dict_to_gapic(response_schema)
-            params["response_schema"] = gapic_response_schema
+            if isinstance(response_schema, Schema):
+                params["response_schema"] = response_schema
+            else:
+                gapic_response_schema = _convert_schema_dict_to_gapic(response_schema)
+                params["response_schema"] = gapic_response_schema
 
         audio_timestamp = kwargs.get("audio_timestamp", self.audio_timestamp)
         if audio_timestamp is not None:
@@ -1915,7 +1918,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     def with_structured_output(
         self,
-        schema: Union[Dict, Type[BaseModel], Type],
+        schema: Union[Dict, Type[BaseModel], Type, Schema],
         *,
         include_raw: bool = False,
         method: Optional[Literal["json_mode"]] = None,
@@ -2050,36 +2053,47 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         parser: OutputParserLike
 
         if method == "json_mode":
-            if isinstance(schema, type) and is_basemodel_subclass(schema):
-                if issubclass(schema, BaseModelV1):
-                    schema_json = schema.schema()
-                else:
-                    schema_json = schema.model_json_schema()
-                parser = PydanticOutputParser(pydantic_object=schema)
-            else:
-                if is_typeddict(schema):
-                    schema_json = convert_to_json_schema(schema)
-                elif isinstance(schema, dict):
-                    schema_json = schema
-                else:
-                    raise ValueError(f"Unsupported schema type {type(schema)}")
+            if isinstance(schema, Schema):
+                llm = self.bind(
+                    response_mime_type="application/json",
+                    response_schema=schema,
+                    ls_structured_output_format={
+                        "kwargs": {"method": method},
+                        "schema": schema,
+                    },
+                )
                 parser = JsonOutputParser()
+            else:
+                if isinstance(schema, type) and is_basemodel_subclass(schema):
+                    if issubclass(schema, BaseModelV1):
+                        schema_json = schema.schema()
+                    else:
+                        schema_json = schema.model_json_schema()
+                    parser = PydanticOutputParser(pydantic_object=schema)
+                else:
+                    if is_typeddict(schema):
+                        schema_json = convert_to_json_schema(schema)
+                    elif isinstance(schema, dict):
+                        schema_json = schema
+                    else:
+                        raise ValueError(f"Unsupported schema type {type(schema)}")
+                    parser = JsonOutputParser()
 
-            # Resolve refs in schema because they are not supported
-            # by the Gemini API.
-            schema_json = replace_defs_in_schema(schema_json)
+                # Resolve refs in schema because they are not supported
+                # by the Gemini API.
+                schema_json = replace_defs_in_schema(schema_json)
 
-            # API does not support anyOf.
-            schema_json = _strip_nullable_anyof(schema_json)
+                # API does not support anyOf.
+                schema_json = _strip_nullable_anyof(schema_json)
 
-            llm = self.bind(
-                response_mime_type="application/json",
-                response_schema=schema_json,
-                ls_structured_output_format={
-                    "kwargs": {"method": method},
-                    "schema": schema_json,
-                },
-            )
+                llm = self.bind(
+                    response_mime_type="application/json",
+                    response_schema=schema_json,
+                    ls_structured_output_format={
+                        "kwargs": {"method": method},
+                        "schema": schema_json,
+                    },
+                )
         else:
             tool_name = _get_tool_name(schema)
             if isinstance(schema, type) and is_basemodel_subclass(schema):
