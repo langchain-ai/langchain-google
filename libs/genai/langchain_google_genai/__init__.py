@@ -27,6 +27,7 @@ To install the package, use pip:
 After setting up your environment with the required API key, you can interact with the Google Gemini models.
 
 .. code-block:: python
+
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     llm = ChatGoogleGenerativeAI(model="gemini-pro")
@@ -37,6 +38,7 @@ After setting up your environment with the required API key, you can interact wi
 The package also supports generating text with Google's models.
 
 .. code-block:: python
+
     from langchain_google_genai import GoogleGenerativeAI
 
     llm = GoogleGenerativeAI(model="gemini-pro")
@@ -47,6 +49,7 @@ The package also supports generating text with Google's models.
 The package also supports creating embeddings with Google's models, useful for textual similarity and other NLP applications.
 
 .. code-block:: python
+
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
