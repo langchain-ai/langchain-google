@@ -475,11 +475,10 @@ def _get_ai_message_tool_messages_parts(
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
-    messages: List[Content] = []
-
     if convert_system_message_to_human:
         warnings.warn("Convert_system_message_to_human will be deprecated!")
 
+    messages: List[Content] = []
     system_instruction: Optional[Content] = None
 
     # Separate tool messages from other messages
@@ -497,7 +496,7 @@ def _parse_chat_history(
         # Otherwise, skip this branch and no system instruction will be created
         # (Ignores any stray SystemMessage that shows up later in the conversation)
         if isinstance(message, SystemMessage):
-            system_parts = _convert_to_parts(message.content)
+            system_parts = _convert_to_parts(message.content)  # type: ignore[arg-type]
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
@@ -539,6 +538,8 @@ def _parse_chat_history(
             role = "user"
             parts = _convert_to_parts(message.content)
             if i == 1 and convert_system_message_to_human and system_instruction:
+                # Remove system instruction as the first message, making it part of
+                # the human message content (and deleting the system_instruction).
                 parts = [p for p in system_instruction.parts] + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
@@ -575,7 +576,7 @@ def _append_to_content(
 
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
-) -> AIMessage:
+) -> Union[AIMessage, AIMessageChunk]:
     content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs: Dict[str, Any] = {}
     tool_calls = []
@@ -785,7 +786,10 @@ def _response_to_result(
                 )
         except AttributeError:
             pass
-        message = _parse_response_candidate(candidate, streaming=stream)
+        message: Union[AIMessage, AIMessageChunk] = _parse_response_candidate(
+            candidate, streaming=stream
+        )
+
         message.usage_metadata = lc_usage
         if stream:
             generations.append(
@@ -796,7 +800,10 @@ def _response_to_result(
             )
         else:
             generations.append(
-                ChatGeneration(message=message, generation_info=generation_info)
+                ChatGeneration(
+                    message=cast(AIMessage, message),
+                    generation_info=generation_info,
+                )
             )
     if not response.candidates:
         # Likely a "prompt feedback" violation (e.g., toxic input)
