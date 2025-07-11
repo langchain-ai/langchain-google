@@ -295,7 +295,7 @@ def _is_openai_image_block(block: dict) -> bool:
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts a list of LangChain messages into a Google parts."""
+    """Converts a message's content body into Google Parts."""
     parts = []
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
@@ -396,14 +396,12 @@ def _convert_to_parts(
                         f"image_url, and media types are supported."
                     )
             else:
-                # Yolo
                 logger.warning(
                     "Unrecognized message part format. Assuming it's a text part."
                 )
                 parts.append(Part(text=str(part)))
         else:
-            # TODO: Maybe some of Google's native stuff
-            # would hit this branch.
+            # TODO: Maybe some of Google's native stuff would hit this branch.
             raise ChatGoogleGenerativeAIError(
                 "Gemini only supports text and inline_data parts."
             )
@@ -483,19 +481,29 @@ def _parse_chat_history(
         warnings.warn("Convert_system_message_to_human will be deprecated!")
 
     system_instruction: Optional[Content] = None
+
+    # Separate tool messages from other messages
     messages_without_tool_messages = [
         message for message in input_messages if not isinstance(message, ToolMessage)
     ]
     tool_messages = [
         message for message in input_messages if isinstance(message, ToolMessage)
     ]
+
+    # Iterate through non-tool messages, performing conversion to Google Content
+    # (tool messages become nested parts of AIMessage -> Content)
     for i, message in enumerate(messages_without_tool_messages):
+        # Initialize only if the FIRST message is a SystemMessage
+        # Otherwise, skip this branch and no system instruction will be created
+        # (Ignores any stray SystemMessage that shows up later in the conversation)
         if isinstance(message, SystemMessage):
             system_parts = _convert_to_parts(message.content)
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
+                # Append to existing system instruction
                 system_instruction.parts.extend(system_parts)
+                # We're combining all system message content into one Content object
             else:
                 pass
             continue
@@ -1645,6 +1653,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
 
+        # Filter out any HumanMessage with empty content
+        # (e.g. `HumanMessage([""])`)
         filtered_messages = []
         for message in messages:
             if isinstance(message, HumanMessage) and not message.content:
@@ -1655,6 +1665,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 filtered_messages.append(message)
         messages = filtered_messages
 
+        # This is the core of the request preparation: parsing the chat history and
+        # converting it to the format expected by Google's API (List[Content]).
         system_instruction, history = _parse_chat_history(
             messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
@@ -1693,6 +1705,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 SafetySetting(category=c, threshold=t)
                 for c, t in safety_settings.items()
             ]
+
         request = GenerateContentRequest(
             model=self.model,
             contents=history,
