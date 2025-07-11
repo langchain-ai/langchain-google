@@ -722,6 +722,7 @@ def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: Optional[UsageMetadata] = None,
+    output_version: Literal["v0", "v1"] | None = "v0",
 ) -> ChatResult:
     """Converts a PaLM API response into a LangChain ChatResult."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
@@ -769,6 +770,7 @@ def _response_to_result(
         lc_usage = None
 
     generations: List[ChatGeneration] = []
+    # Note that a ChatGenerationChunk inherits from ChatGeneration
 
     for candidate in response.candidates:
         generation_info = {}
@@ -788,9 +790,6 @@ def _response_to_result(
         except AttributeError:
             pass
         message: AIMessage = _parse_response_candidate(candidate, streaming=stream)
-
-        if output_version == "v1":
-            message = _convert_v0_to_v1(message, candidate)
 
         message.usage_metadata = lc_usage
         if stream:
@@ -1463,7 +1462,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_method=self.client.generate_content,
             metadata=self.default_metadata,
         )
-        return _response_to_result(response)
+        return _response_to_result(response, output_version=self.output_version)
 
     async def _agenerate(
         self,
@@ -1513,7 +1512,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_method=self.async_client.generate_content,
             metadata=self.default_metadata,
         )
-        return _response_to_result(response)
+        return _response_to_result(response, output_version=self.output_version)
 
     def _stream(
         self,
@@ -1551,8 +1550,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
         for chunk in response:
-            _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
+            _chat_result: ChatResult = _response_to_result(
+                chunk,
+                stream=True,
+                prev_usage=prev_usage_metadata,
+                output_version=self.output_version,
             )
             gen = cast(ChatGenerationChunk, _chat_result.generations[0])
             message = cast(AIMessageChunk, gen.message)
@@ -1617,8 +1619,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 **kwargs,
                 metadata=self.default_metadata,
             ):
-                _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
+                _chat_result: ChatResult = _response_to_result(
+                    chunk,
+                    stream=True,
+                    prev_usage=prev_usage_metadata,
+                    output_version=self.output_version,
                 )
                 gen = cast(ChatGenerationChunk, _chat_result.generations[0])
                 message = cast(AIMessageChunk, gen.message)
