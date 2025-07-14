@@ -152,6 +152,12 @@ def _format_json_schema_to_gapic(
                 if required_fields and parent_key in required_fields:
                     required_fields.remove(parent_key)
                 continue
+            converted_schema["anyOf"] = [
+                _format_json_schema_to_gapic(
+                    anyOf_type, "anyOf", schema.get("required", [])
+                )
+                for anyOf_type in value
+            ]
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
