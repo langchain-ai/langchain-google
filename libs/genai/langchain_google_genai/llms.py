@@ -89,6 +89,15 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         """Get standard params for tracing."""
         ls_params = super()._get_ls_params(stop=stop, **kwargs)
         ls_params["ls_provider"] = "google_genai"
+
+        models_prefix = "models/"
+        ls_model_name = (
+            self.model[len(models_prefix) :]
+            if self.model and self.model.startswith(models_prefix)
+            else self.model
+        )
+        ls_params["ls_model_name"] = ls_model_name
+
         if ls_max_tokens := kwargs.get("max_output_tokens", self.max_output_tokens):
             ls_params["ls_max_tokens"] = ls_max_tokens
         return ls_params
