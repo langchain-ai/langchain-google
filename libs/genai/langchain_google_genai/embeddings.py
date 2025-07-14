@@ -97,6 +97,9 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             google_api_key = self.google_api_key
         client_info = get_client_info("GoogleGenerativeAIEmbeddings")
 
+        if not any(self.model.startswith(prefix) for prefix in ("models/")):
+            self.model = f"models/{self.model}"
+
         self.client = build_generative_service(
             credentials=self.credentials,
             api_key=google_api_key,

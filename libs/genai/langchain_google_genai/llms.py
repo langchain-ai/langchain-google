@@ -63,6 +63,9 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
 
+        if not any(self.model.startswith(prefix) for prefix in ("models/")):
+            self.model = f"models/{self.model}"
+
         self.client = ChatGoogleGenerativeAI(
             api_key=self.google_api_key,
             credentials=self.credentials,
