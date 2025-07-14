@@ -1232,9 +1232,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.top_k is not None and self.top_k <= 0:
             raise ValueError("top_k must be positive")
 
-        if not any(
-            self.model.startswith(prefix) for prefix in ("models/", "tunedModels/")
-        ):
+        if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
 
         additional_headers = self.additional_headers or {}

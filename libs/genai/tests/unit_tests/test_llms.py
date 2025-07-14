@@ -38,9 +38,9 @@ def test_tracing_params() -> None:
                 "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
             },  # Invalid arg
         )
-        assert llm.model == "gemini-pro"
+        assert llm.model == "models/gemini-pro"
         ls_params = llm._get_ls_params()
-        assert ls_params["ls_model_name"] == "gemini-pro"
+        assert ls_params.get("ls_model_name") == "gemini-pro"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
