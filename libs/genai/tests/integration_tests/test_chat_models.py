@@ -130,13 +130,20 @@ def test_chat_google_genai_invoke_with_image() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI."""
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
 
-    result = llm.invoke(
-        "Generate an image of a cat. Then, say meow!",
-        config=dict(tags=["meow"]),
-        generation_config=dict(
-            top_k=2, top_p=1, temperature=0.7, response_modalities=["TEXT", "IMAGE"]
-        ),
-    )
+    for _ in range(3):
+        result = llm.invoke(
+            "Generate an image of a cat. Then, say meow!",
+            config=dict(tags=["meow"]),
+            generation_config=dict(
+                top_k=2, top_p=1, temperature=0.7, response_modalities=["TEXT", "IMAGE"]
+            ),
+        )
+        if (
+            isinstance(result.content, list)
+            and len(result.content) > 0
+            and isinstance(result.content[0], dict)
+        ):
+            break
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, list)
     assert isinstance(result.content[0], dict)
@@ -155,11 +162,18 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
         response_modalities=[Modality.TEXT, Modality.IMAGE],  # type: ignore[list-item]
     )
 
-    result = llm.invoke(
-        "Generate an image of a cat. Then, say meow!",
-        config=dict(tags=["meow"]),
-        generation_config=dict(top_k=2, top_p=1, temperature=0.7),
-    )
+    for _ in range(3):
+        result = llm.invoke(
+            "Generate an image of a cat. Then, say meow!",
+            config=dict(tags=["meow"]),
+            generation_config=dict(top_k=2, top_p=1, temperature=0.7),
+        )
+        if (
+            isinstance(result.content, list)
+            and len(result.content) > 0
+            and isinstance(result.content[0], dict)
+        ):
+            break
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, list)
     assert isinstance(result.content[0], dict)
