@@ -17,9 +17,11 @@ _OUTPUT_DIMENSIONALITY = 768
         " model against the pickle rick?",
     ],
 )
+@pytest.mark.asyncio
 def test_embed_query_different_lengths(query: str) -> None:
     """Test embedding queries of different lengths."""
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
+    # Note: embed_query() is a sync method, but initialization needs the loop
     result = model.embed_query(query, output_dimensionality=_OUTPUT_DIMENSIONALITY)
     assert len(result) == 768
     assert isinstance(result, list)

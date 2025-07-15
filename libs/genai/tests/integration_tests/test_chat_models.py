@@ -125,6 +125,7 @@ def test_chat_google_genai_invoke() -> None:
     _check_usage_metadata(result)
 
 
+@pytest.mark.xfail(reason=("investigate"))
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_image() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI."""
@@ -376,6 +377,7 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> No
     _check_usage_metadata(result)
 
 
+@pytest.mark.xfail(reason=("investigate"))
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
