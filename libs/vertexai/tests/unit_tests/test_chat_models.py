@@ -1356,7 +1356,7 @@ def test_thinking_configuration() -> None:
 
     # Test init params
     llm = ChatVertexAI(
-        model="gemini-2.5-flash-preview-05-20",
+        model="gemini-2.5-flash",
         project="test-project",
         thinking_budget=100,
         include_thoughts=True,
@@ -1366,7 +1366,7 @@ def test_thinking_configuration() -> None:
     assert request.generation_config.thinking_config.include_thoughts is True
 
     # Test invocation params
-    llm = ChatVertexAI(model="gemini-2.5-flash-preview-05-20", project="test-project")
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
     request = llm._prepare_request_gemini(
         [input_message],
         thinking_budget=100,
@@ -1378,7 +1378,7 @@ def test_thinking_configuration() -> None:
 
 def test_thought_signature() -> None:
     llm = ChatVertexAI(
-        model="gemini-2.5-flash-preview-05-20",
+        model="gemini-2.5-flash",
         project="test-project",
         include_thoughts=True,
     )
