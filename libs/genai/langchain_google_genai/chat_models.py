@@ -131,6 +131,7 @@ from langchain_google_genai._image_utils import (
 )
 
 from . import _genai_extension as genaix
+from ._compat import _convert_v0_to_v1, _convert_v1_to_v0
 
 logger = logging.getLogger(__name__)
 
@@ -478,15 +479,30 @@ def _parse_chat_history(
     if convert_system_message_to_human:
         warnings.warn("Convert_system_message_to_human will be deprecated!")
 
+    # Translation layer to convert any v1 messages to v0 before processing.
+    # This is necessary because the rest of this function and its helpers
+    # expect the v0 message format.
+    processed_messages: list[BaseMessage] = []
+    for m in input_messages:
+        if (
+            isinstance(m, AIMessage)
+            and m.response_metadata.get("lc_message_version", "v0") == "v1"
+        ):
+            processed_messages.append(_convert_v1_to_v0(m))
+        else:
+            processed_messages.append(m)
+
     messages: List[Content] = []
     system_instruction: Optional[Content] = None
 
     # Separate tool messages from other messages
     messages_without_tool_messages = [
-        message for message in input_messages if not isinstance(message, ToolMessage)
+        message
+        for message in processed_messages
+        if not isinstance(message, ToolMessage)
     ]
     tool_messages = [
-        message for message in input_messages if isinstance(message, ToolMessage)
+        message for message in processed_messages if isinstance(message, ToolMessage)
     ]
 
     # Iterate through non-tool messages, performing conversion to Google Content
@@ -502,7 +518,7 @@ def _parse_chat_history(
             elif system_instruction is not None:
                 # Append to existing system instruction
                 system_instruction.parts.extend(system_parts)
-                # We're combining all system message content into one Content object
+                # We're combining all system message content into one Content object
             else:
                 pass
             continue
@@ -577,6 +593,31 @@ def _append_to_content(
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
+    """Take a response Candidate and convert it to a v0 AIMessage[Chunk].
+
+    A Candidate may have Content, which has a list of Parts and `role` field to
+    indicate the producer of the Content (either `'user'` or `'model'`).
+
+    Parts include the media content, and will only have one field, which represents the
+    type of content being conveyed. The types of Parts include:
+    - `text` (str) -- will contain `thought` content if `thought` = True
+    - `thought` (bool)
+    - `thought_signature` (bytes).
+    - `inline_data` (Blob)
+    - `file_data` (FileData)
+    - `video_metadata` (VideoMetadata).
+    - `function_call` (FunctionCall)
+    - `function_response` (FunctionResponse)
+    - `executable_code` (ExecutableCode)
+    - `code_execution_result` (CodeExecutionResult)
+
+    With regard to `thought_signature`, it is assumed to be returned alongside a
+    `thought` Part (meaning there will be at least two Parts in the Candidate Content).
+
+    Similar to `video_metadata`, it is assumed to be returned alongside a
+    `file_data` Part for a video (meaning there will be at least two Parts in the
+    Candidate Content if `video_metadata` is present).
+    """
     # Note that AIMessageChunk inherits from AIMessage which is why it isn't typed here
     content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs: Dict[str, Any] = {}
@@ -722,7 +763,7 @@ def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: Optional[UsageMetadata] = None,
-    output_version: Literal["v0", "v1"] | None = "v0",
+    output_version: Optional[Literal["v0", "v1"]] = "v0",
 ) -> ChatResult:
     """Converts a PaLM API response into a LangChain ChatResult."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
@@ -790,6 +831,13 @@ def _response_to_result(
         except AttributeError:
             pass
         message: AIMessage = _parse_response_candidate(candidate, streaming=stream)
+
+        if output_version == "v1":
+            message = _convert_v0_to_v1(message)
+
+        # Add a flag to simplify serializing AIMessages to Google Parts
+        # (e.g. in `_parse_chat_history()`)
+        message.response_metadata["lc_message_version"] = output_version
 
         message.usage_metadata = lc_usage
         if stream:
