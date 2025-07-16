@@ -19,43 +19,45 @@ from langchain_core.messages import (
     ToolCall,
 )
 from langchain_core.messages.content_blocks import (
-    ContentBlock,
-    NonStandardContentBlock,
-    ReasoningContentBlock,
-    TextContentBlock,
-    ToolCallContentBlock,
+    make_non_standard_content_block,
+    make_reasoning_block,
     make_text_block,
+    make_tool_call_block,
 )
 
 
 def _convert_v0_to_v1(message: AIMessage) -> AIMessage:
-    """
-    Converts a v0 AIMessage to one with the v1 ContentBlock structure.
+    """Converts a v0 AIMessage to one with the v1 ContentBlock structure (untyped).
 
-    This function processes the `content` field, `tool_calls`, `invalid_tool_calls`,
+    Processes the `content` field, `tool_calls`, `invalid_tool_calls`,
     and legacy `function_call` from `additional_kwargs`, converting them all into
     a unified list of ContentBlock dictionaries in the new `content` field.
+
+    These dictionaries can then be cast to specific ContentBlock types using the
+    `beta_content` property of AIMessage.
     """
-    new_content: List[ContentBlock] = []
+    new_content: list[dict] = []
     content = message.content
 
-    # 1. Process the original `content` field (strings and dicts)
+    # Process the original `content` field (strings and dicts)
+    # --------------------------------------------------------------------------
     if isinstance(content, str):
-        if content:  # Avoid adding empty text blocks
+        # Avoid adding empty text blocks
+        if content:
             new_content.append(make_text_block(content))
-            TextContentBlock(type="text", text="hello")
     elif isinstance(content, list):
         for item in content:
             if isinstance(item, str):
-                if item:  # Avoid adding empty text blocks
-                    # Use plain dict following ContentBlock schema for text
-                    new_content.append({"type": "text", "text": item})
+                if item:
+                    new_content.append(make_text_block(item))
             elif isinstance(item, dict):
                 block_type = item.get("type")
-                # Map known dictionary types to specific ContentBlocks where possible
+                # Map known dictionary types to specific ContentBlocks when possible
                 if block_type == "thinking":
+                    # TODO: this can result in a ContentBlock with an empty reasoning
+                    # if the "thinking" key is not present -- need clarity on this
                     new_content.append(
-                        ReasoningContentBlock(reasoning=item.get("thinking", ""))
+                        make_reasoning_block(reasoning=item.get("thinking", ""))
                     )
                 # For other custom types, wrap them in a NonStandardContentBlock
                 # to preserve the data within the v1 structure.
@@ -64,14 +66,13 @@ def _convert_v0_to_v1(message: AIMessage) -> AIMessage:
                     "code_execution_result",
                     "image_url",
                 ):
-                    new_content.append(NonStandardContentBlock(value=item))
+                    new_content.append(make_non_standard_content_block(value=item))
                 else:
                     # Fallback for any other unexpected dicts
-                    new_content.append(NonStandardContentBlock(value=item))
+                    new_content.append(make_non_standard_content_block(value=item))
 
-    # 2. Process tool and function calls, converting them to ToolCallContentBlocks
+    # Process tool and function calls, converting them to ToolCallContentBlocks
     # --------------------------------------------------------------------------
-
     # Handle legacy `function_call` from older message formats
     if legacy_fc := message.additional_kwargs.get("function_call"):
         try:
@@ -83,34 +84,34 @@ def _convert_v0_to_v1(message: AIMessage) -> AIMessage:
             }
 
         new_content.append(
-            ToolCallContentBlock(
-                name=legacy_fc.get("name", ""),
+            make_tool_call_block(
+                # name=legacy_fc.get("name", ""),
                 args=fc_args,
-                id=f"tool_call_{uuid.uuid4()}",  # Legacy calls lack ID, so generate one
-            )
+                id=f"tool_call_{uuid.uuid4()}",  # Legacy calls lack ID,
+            )  # so generate one
         )
 
     # Handle standard `tool_calls`
     for tool_call in message.tool_calls:
         new_content.append(
-            ToolCallContentBlock(
-                name=tool_call.get("name", ""),
-                args=tool_call.get("args", {}),
-                id=tool_call.get("id"),
+            make_tool_call_block(
+                name=tool_call.name,
+                args=tool_call.args,
+                id=tool_call.id or f"tool_call_{uuid.uuid4()}",
             )
         )
 
     # Handle `invalid_tool_calls` by wrapping them to preserve the error info
     for invalid_tool_call in message.invalid_tool_calls:
         new_content.append(
-            NonStandardContentBlock(
+            make_non_standard_content_block(
                 value={
                     "type": "invalid_tool_call",
                     "name": invalid_tool_call.get("name"),
                     "args": invalid_tool_call.get("args"),
                     "id": invalid_tool_call.get("id"),
                     "error": invalid_tool_call.get("error"),
-                }
+                },
             )
         )
 
@@ -151,21 +152,29 @@ def _convert_v1_to_v0(message: AIMessage) -> AIMessage:
         elif block["type"] == "tool_call":
             # Find the full tool call from the message's list and rebuild
             # additional_kwargs["function_call"] for v0.
-            tc_id = block["id"]
+            tc_id = block["tool_call"]["id"]
             found = False
             for tc in message.tool_calls:
-                if tc["id"] == tc_id:
+                if tc.id == tc_id:
                     v0_tool_calls.append(tc)
                     v0_additional_kwargs["function_call"] = {
-                        "name": tc["name"],
-                        "arguments": json.dumps(tc["args"]),
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.args),
                     }
                     found = True
                     break
             if not found:
                 for itc in message.invalid_tool_calls:
-                    if itc["id"] == tc_id:
+                    # InvalidToolCall does not have an 'id' attribute directly,
+                    # it's part of the dictionary representation.
+                    # Assuming itc is a dict or has a dict-like structure for 'id'
+                    if isinstance(itc, dict) and itc.get("id") == tc_id:
                         v0_invalid_tool_calls.append(itc)
+                        found = True
+                        break
+                    # If itc is an InvalidToolCall object, access its attributes
+                    elif hasattr(itc, "id") and getattr(itc, "id") == tc_id:
+                        v0_invalid_tool_calls.append(itc.dict())  # Convert to dict
                         found = True
                         break
         elif block["type"] == "non_standard":
@@ -175,7 +184,14 @@ def _convert_v1_to_v0(message: AIMessage) -> AIMessage:
     if text_parts and not v0_content:
         v0_content = "\n".join(text_parts)
     else:
-        v0_content.extend(text_parts)
+        # Ensure v0_content is a list before extending
+        if isinstance(v0_content, str):
+            v0_content = [v0_content]
+        if isinstance(v0_content, list):  # Add this check to satisfy mypy
+            v0_content.extend(text_parts)
+        else:
+            # Fallback for unexpected types, should not happen with current typing
+            v0_content = text_parts
 
     return AIMessage(
         content=v0_content,
