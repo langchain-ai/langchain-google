@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,61 +6,11 @@ from google.api_core.exceptions import ClientError, GoogleAPICallError, InvalidA
 
 from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai._utils import (
-    GoogleModelFamily,
     _get_def_key_from_schema_path,
     _strip_nullable_anyof,
     get_user_agent,
     replace_defs_in_schema,
 )
-
-
-@pytest.mark.parametrize(
-    "srcs,exp",
-    [
-        (
-            [
-                "chat-bison@001",
-                "text-bison@002",
-                "medlm-medium",
-                "medlm-large",
-            ],
-            GoogleModelFamily.PALM,
-        ),
-        (
-            [
-                "code-bison@002",
-                "code-gecko@002",
-            ],
-            GoogleModelFamily.CODEY,
-        ),
-        (
-            [
-                "gemini-1.0-pro-001",
-                "gemini-1.0-pro-002",
-                "gemini-1.0-pro-vision-001",
-                "gemini-1.0-pro-vision",
-                "medlm-medium@latest",
-            ],
-            GoogleModelFamily.GEMINI,
-        ),
-        (
-            [
-                "gemini-1.5-flash-preview-0514",
-                "gemini-1.5-pro-preview-0514",
-                "gemini-1.5-pro-preview-0409",
-                "gemini-1.5-flash-001",
-                "gemini-1.5-pro-001",
-                "medlm-large-1.5-preview",
-                "medlm-large-1.5-001",
-            ],
-            GoogleModelFamily.GEMINI_ADVANCED,
-        ),
-    ],
-)
-def test_google_model_family(srcs: List[str], exp: GoogleModelFamily):
-    for src in srcs:
-        res = GoogleModelFamily(src)
-        assert res == exp
 
 
 def test_valid_schema_path():
