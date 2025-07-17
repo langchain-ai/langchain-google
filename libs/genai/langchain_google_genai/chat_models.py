@@ -31,7 +31,7 @@ from typing import (
 import filetype  # type: ignore[import]
 import google.api_core
 
-# TODO: remove ignore once the google package is published with types
+# TODO: remove ignore once the Google package is published with types
 import proto  # type: ignore[import]
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
@@ -295,7 +295,7 @@ def _is_openai_image_block(block: dict) -> bool:
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts a list of LangChain messages into a google parts."""
+    """Converts a list of LangChain messages into a Google parts."""
     parts = []
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
@@ -413,7 +413,7 @@ def _convert_to_parts(
 def _convert_tool_message_to_parts(
     message: ToolMessage | FunctionMessage, name: Optional[str] = None
 ) -> list[Part]:
-    """Converts a tool or function message to a google part."""
+    """Converts a tool or function message to a Google part."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
     name = message.name or name or message.additional_kwargs.get("name")
     response: Any
@@ -824,8 +824,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         To use, you must have either:
 
             1. The ``GOOGLE_API_KEY`` environment variable set with your API key, or
-            2. Pass your API key using the google_api_key kwarg
-            to the ChatGoogleGenerativeAI constructor.
+            2. Pass your API key using the ``google_api_key`` kwarg to the ChatGoogleGenerativeAI constructor.
 
         .. code-block:: python
 
@@ -893,8 +892,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     Context Caching:
         Context caching allows you to store and reuse content (e.g., PDFs, images) for faster processing.
-        The `cached_content` parameter accepts a cache name created via the Google Generative AI API.
-        Below are two examples: caching a single file directly and caching multiple files using `Part`.
+        The ``cached_content`` parameter accepts a cache name created via the Google Generative AI API.
+        Below are two examples: caching a single file directly and caching multiple files using ``Part``.
 
         Single File Example:
         This caches a single file and queries it.
@@ -1140,12 +1139,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     response_mime_type: Optional[str] = None
     """Optional. Output response mimetype of the generated candidate text. Only
-        supported in Gemini 1.5 and later models. Supported mimetype:
-            * "text/plain": (default) Text output.
-            * "application/json": JSON response in the candidates.
-            * "text/x.enum": Enum in plain text.
-       The model also needs to be prompted to output the appropriate response
-       type, otherwise the behavior is undefined. This is a preview feature.
+    supported in Gemini 1.5 and later models.
+    
+    Supported mimetype:
+        * ``'text/plain'``: (default) Text output.
+        * ``'application/json'``: JSON response in the candidates.
+        * ``'text/x.enum'``: Enum in plain text.
+    
+    The model also needs to be prompted to output the appropriate response
+    type, otherwise the behavior is undefined. This is a preview feature.
     """
 
     response_schema: Optional[Dict[str, Any]] = None
@@ -1230,9 +1232,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.top_k is not None and self.top_k <= 0:
             raise ValueError("top_k must be positive")
 
-        if not any(
-            self.model.startswith(prefix) for prefix in ("models/", "tunedModels/")
-        ):
+        if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
 
         additional_headers = self.additional_headers or {}
@@ -1328,7 +1328,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             else:
                 raise ValueError(
-                    "Tools are already defined." "code_execution tool can't be defined"
+                    "Tools are already defined.code_execution tool can't be defined"
                 )
 
         return super().invoke(input, config, stop=stop, **kwargs)
