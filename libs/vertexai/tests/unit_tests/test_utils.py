@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,60 +6,11 @@ from google.api_core.exceptions import ClientError, GoogleAPICallError, InvalidA
 
 from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai._utils import (
-    GoogleModelFamily,
     _get_def_key_from_schema_path,
+    _strip_nullable_anyof,
     get_user_agent,
     replace_defs_in_schema,
 )
-
-
-@pytest.mark.parametrize(
-    "srcs,exp",
-    [
-        (
-            [
-                "chat-bison@001",
-                "text-bison@002",
-                "medlm-medium",
-                "medlm-large",
-            ],
-            GoogleModelFamily.PALM,
-        ),
-        (
-            [
-                "code-bison@002",
-                "code-gecko@002",
-            ],
-            GoogleModelFamily.CODEY,
-        ),
-        (
-            [
-                "gemini-1.0-pro-001",
-                "gemini-1.0-pro-002",
-                "gemini-1.0-pro-vision-001",
-                "gemini-1.0-pro-vision",
-                "medlm-medium@latest",
-            ],
-            GoogleModelFamily.GEMINI,
-        ),
-        (
-            [
-                "gemini-1.5-flash-preview-0514",
-                "gemini-1.5-pro-preview-0514",
-                "gemini-1.5-pro-preview-0409",
-                "gemini-1.5-flash-001",
-                "gemini-1.5-pro-001",
-                "medlm-large-1.5-preview",
-                "medlm-large-1.5-001",
-            ],
-            GoogleModelFamily.GEMINI_ADVANCED,
-        ),
-    ],
-)
-def test_google_model_family(srcs: List[str], exp: GoogleModelFamily):
-    for src in srcs:
-        res = GoogleModelFamily(src)
-        assert res == exp
 
 
 def test_valid_schema_path():
@@ -210,3 +161,77 @@ def test_get_user_agent_without_telemetry_env_variable(
     client_lib_version, user_agent_str = get_user_agent(module="test-module")
     assert client_lib_version == "1.2.3-test-module"
     assert user_agent_str == "langchain-google-vertexai/1.2.3-test-module"
+
+
+def test_strip_nullable_anyof() -> None:
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "field1": {"type": "string"},
+            "field2": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"type": "integer"},
+                ]
+            },
+            "field3": {"type": "boolean"},
+        },
+        "required": ["field1", "field2", "field3"],
+    }
+    expected = {
+        "type": "object",
+        "properties": {
+            "field1": {"type": "string"},
+            "field2": {"type": "integer"},
+            "field3": {"type": "boolean"},
+        },
+        "required": ["field1", "field3"],
+    }
+    assert _strip_nullable_anyof(input_schema) == expected
+
+    # Nested schemas
+    input_schema = {
+        "properties": {
+            "fruits": {
+                "items": {
+                    "properties": {
+                        "name": {"title": "Name", "type": "string"},
+                        "color": {
+                            "anyOf": [{"type": "string"}, {"type": "null"}],
+                            "title": "Color",
+                        },
+                    },
+                    "required": ["name", "color"],
+                    "title": "Fruit",
+                    "type": "object",
+                },
+                "title": "Fruits",
+                "type": "array",
+            }
+        },
+        "required": ["fruits"],
+        "title": "FruitList",
+        "type": "object",
+    }
+
+    expected = {
+        "properties": {
+            "fruits": {
+                "items": {
+                    "properties": {
+                        "name": {"title": "Name", "type": "string"},
+                        "color": {"title": "Color", "type": "string"},
+                    },
+                    "required": ["name"],
+                    "title": "Fruit",
+                    "type": "object",
+                },
+                "title": "Fruits",
+                "type": "array",
+            }
+        },
+        "required": ["fruits"],
+        "title": "FruitList",
+        "type": "object",
+    }
+    assert _strip_nullable_anyof(input_schema) == expected

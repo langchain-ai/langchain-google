@@ -35,40 +35,46 @@ llm = VertexAI(model_name="gemini-pro")
 
 # Initialize Model Armor runnables.
 prompt_sanitizer = ModelArmorSanitizePromptRunnable(
-    client, template_name, fail_open=True
+    client, template_name, fail_open=True, return_findings=True
 )
 response_sanitizer = ModelArmorSanitizeResponseRunnable(
     client, template_name, fail_open=True
 )
 
-######### Custom runnable #########
 
+class SanitizedTextRunnable(Runnable):
+    """
+    A custom runnable that return sanitized text received from Model Armor with
+    SDP template or the original input.
 
-# Define your custom runnable here. In this example, the following runnable
-# replaces text in prompt_sanitizer runnable output.
-class ReplaceTextRunnable(Runnable):
-    def __init__(self, old_text: str, new_text: str):
-        self.old_text = old_text
-        self.new_text = new_text
+    TODO (Developer):
+    Update/Create runnable as per your requirements to use in chain.
+    """
 
     def invoke(
         self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Any:
-        return input.replace(self.old_text, self.new_text)
+        if isinstance(input, dict):
+            if input.get("findings"):
+                findings: Any = input.get("findings")
+                if findings.filter_results.get("sdp"):
+                    sanitized_text = findings.filter_results.get(
+                        "sdp"
+                    ).sdp_filter_result.deidentify_result.data.text
+                    return sanitized_text or input.get("prompt", input)
+            return input.get("prompt", input)
+        return input
 
 
-prompt_replacer = ReplaceTextRunnable("dangerous", "safe")
+prompt_replacer = SanitizedTextRunnable()
 
-######### Custom runnable #########
 
 # Define the chain sequence.
 chain: Runnable = RunnableSequence(
     prompt_sanitizer | prompt_replacer | llm | response_sanitizer
 )
 
-# TODO: add SDP accessibility message
-
 # Invoke chain with user prompt.
-user_prompt = "Tell me something dangerous."
+user_prompt = "get my email mail@support.com and my phone number 123-456-7890"
 result = chain.invoke(user_prompt)
 print("Final Output:", result)

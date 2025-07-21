@@ -1,5 +1,5 @@
 """
-Sample for direct invoke usage of Model Armor Runnables.
+Sample to create and invoke Model Armor Runnables independently.
 """
 
 from google.api_core.client_options import ClientOptions

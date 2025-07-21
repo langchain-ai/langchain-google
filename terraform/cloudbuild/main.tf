@@ -11,6 +11,7 @@ locals {
     "roles/secretmanager.secretAccessor",      #Secret Manager Secret Accessor
     "roles/serviceusage.serviceUsageConsumer", #Service Usage Consumer
     "roles/aiplatform.user",                   #Vertex AI User
+    "roles/modelarmor.admin"                   #Model Armor Admin
   ]
   cloudbuild_env_vars = merge(
     {
@@ -23,6 +24,13 @@ locals {
   )
   #TODO: multiline
   cloudbuild_config = "python -m pip install -q poetry==$${_POETRY_VERSION} --verbose && cd libs/$${_LIB} && poetry install -q --with test,test_integration  --all-extras && poetry run pytest --extended --release tests/integration_tests/"
+}
+
+resource "google_project_service" "model_armor_service" {
+  project = var.project_id
+  service = "modelarmor.googleapis.com"
+
+  disable_on_destroy = false
 }
 
 resource "google_cloudbuild_trigger" "cloudbuild_trigger" {
