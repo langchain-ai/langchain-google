@@ -64,7 +64,6 @@ class ModelArmorSanitizeBaseRunnable(Runnable):
                     the model armor sanitization findings.
         logger: Logger instance for logging events. if not provided,
             a default logger is created with INFO level.
-
     """
 
     def __init__(

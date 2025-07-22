@@ -1,6 +1,7 @@
+import pickle
 import uuid
 from typing import Any, Optional, Tuple
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from google.cloud.modelarmor_v1 import FilterMatchState, SanitizationResult
@@ -326,3 +327,41 @@ def test_extract_input_chat_message_and_prompt_template(
     assert "DummyObjectWithFormat" in runnable._extract_input(
         DummyObjectWithFormat("response")
     )
+
+
+def test_prompt_runnable_serialization(mock_client: MagicMock) -> None:
+    """
+    Test that the prompt runnable is serializable.
+    """
+    runnable = ModelArmorSanitizePromptRunnable(
+        client=mock_client,
+        template_id="test-template",
+    )
+    # Replace the mock client with None before pickling
+    runnable.client = None
+    with patch(
+        "langchain_google_community.model_armor.base_runnable.ModelArmorClient",
+        return_value=MagicMock(),
+    ):
+        pickled_runnable = pickle.dumps(runnable)
+        unpickled_runnable = pickle.loads(pickled_runnable)
+    assert isinstance(unpickled_runnable, ModelArmorSanitizePromptRunnable)
+
+
+def test_response_runnable_serialization(mock_client: MagicMock) -> None:
+    """
+    Test that the response runnable is serializable.
+    """
+    runnable = ModelArmorSanitizeResponseRunnable(
+        client=mock_client,
+        template_id="test-template",
+    )
+    # Replace the mock client with None before pickling
+    runnable.client = None
+    with patch(
+        "langchain_google_community.model_armor.base_runnable.ModelArmorClient",
+        return_value=MagicMock(),
+    ):
+        pickled_runnable = pickle.dumps(runnable)
+        unpickled_runnable = pickle.loads(pickled_runnable)
+    assert isinstance(unpickled_runnable, ModelArmorSanitizeResponseRunnable)
