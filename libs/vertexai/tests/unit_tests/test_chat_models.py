@@ -1,5 +1,6 @@
 """Test chat model integration."""
 
+import base64
 import json
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
     Candidate,
     Content,
     FunctionCall,
@@ -672,6 +674,98 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content=["Mike age is 30", "Arthur age is 30"],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        )
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    }
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(text="Here is an image:"),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/jpeg",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    "Here is an image:",
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/jpeg;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        ),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/gif",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/gif;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
                 additional_kwargs={},
             ),
         ),
