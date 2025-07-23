@@ -160,6 +160,7 @@ _allowed_params = [
     "logprobs",
     "labels",
     "audio_timestamp",
+    "response_modalities",
     "thinking_budget",
     "include_thoughts",
 ]
@@ -178,6 +179,22 @@ def _bytes_to_base64(data: bytes) -> str:
 def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
+
+def image_bytes_to_b64_string(
+    image_bytes: bytes, encoding: str = "ascii", image_format: str = "png"
+) -> str:
+    """Encodes image bytes into a b64 encoded string.
+
+    Args:
+        image_bytes: Bytes of the image.
+        encoding: Type of encoding in the string. ``'ascii'`` by default.
+        image_format: Format of the image. ``'png'`` by default.
+
+    Returns:
+        B64 image encoded string.
+    """
+    encoded_bytes = base64.b64encode(image_bytes).decode(encoding)
+    return f"data:image/{image_format};base64,{encoded_bytes}"
 
 @dataclass
 class _ChatHistory:
@@ -574,6 +591,25 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
     return question
 
 
+# Helper function to append content consistently
+def _append_to_content(
+    current_content: Union[str, List[Any], None], new_item: Any
+) -> Union[str, List[Any]]:
+    """Appends a new item to the content, handling different initial content types."""
+    if current_content is None and isinstance(new_item, str):
+        return new_item
+    elif current_content is None:
+        return [new_item]
+    elif isinstance(current_content, str):
+        return [current_content, new_item]
+    elif isinstance(current_content, list):
+        current_content.append(new_item)
+        return current_content
+    else:
+        # This case should ideally not be reached with proper type checking,
+        # but it catches any unexpected types that might slip through.
+        raise TypeError(f"Unexpected content type: {type(current_content)}")
+                                                         
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
@@ -598,34 +634,21 @@ def _parse_response_candidate(
     tool_call_chunks = []
 
     for part in response_candidate.content.parts:
+        text: Optional[str] = part.text
         try:
-            text: Optional[str] = part.text
+            if hasattr(part, "text") and part.text is not None:
+                text = part.text
         except AttributeError:
-            text = None
+            pass
 
         if part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
             }
-            if not content:
-                content = [thinking_message]
-            elif isinstance(content, str):
-                content = [thinking_message, content]
-            elif isinstance(content, list):
-                content.append(thinking_message)
-            else:
-                raise Exception("Unexpected content type")
-
-        elif text:
-            if not content:
-                content = text
-            elif isinstance(content, str):
-                content = [content, text]
-            elif isinstance(content, list):
-                content.append(text)
-            else:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, thinking_message)
+        elif text is not None and text:
+            content = _append_to_content(content, text)
 
         if part.function_call:
             # For backward compatibility we store a function call in additional_kwargs,
@@ -697,14 +720,7 @@ def _parse_response_candidate(
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
                 }
-                if not content:
-                    content = [code_message]
-                elif isinstance(content, str):
-                    content = [content, code_message]
-                elif isinstance(content, list):
-                    content.append(code_message)
-                else:
-                    raise Exception("Unexpected content type")
+                content = _append_to_content(content, code_message)
 
         if (
             hasattr(part, "code_execution_result")
@@ -718,15 +734,20 @@ def _parse_response_candidate(
                     "code_execution_result": part.code_execution_result.output,
                     "outcome": part.code_execution_result.outcome,
                 }
+                content = _append_to_content(content, execution_result)
+        
+        if part.inline_data.mime_type.startswith("image/"):
+            image_format = part.inline_data.mime_type[6:]
+            image_message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format=image_format
+                    )
+                },
+            }
+            content = _append_to_content(content, image_message)
 
-                if not content:
-                    content = [execution_result]
-                elif isinstance(content, str):
-                    content = [content, execution_result]
-                elif isinstance(content, list):
-                    content.append(execution_result)
-                else:
-                    raise Exception("Unexpected content type")
 
     if content is None:
         content = ""
@@ -1454,6 +1475,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 params["thinking_config"] = {}
             params["thinking_config"]["include_thoughts"] = include_thoughts
         _ = params.pop("include_thoughts", None)
+
+        response_modalities = kwargs.get("response_modalities", self.response_modalities)
+        if response_modalities is not None:
+            params["response_modalities"] = response_modalities
 
         return params
 

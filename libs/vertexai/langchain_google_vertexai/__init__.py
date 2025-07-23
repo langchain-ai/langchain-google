@@ -44,6 +44,7 @@ from langchain_google_vertexai._enums import (
     HarmBlockThreshold,
     HarmCategory,
     SafetySetting,
+    Modality,
 )
 from langchain_google_vertexai.chains import create_structured_runnable
 from langchain_google_vertexai.chat_models import ChatVertexAI
@@ -97,6 +98,7 @@ __all__ = [
     "GemmaVertexAIModelGarden",
     "HarmBlockThreshold",
     "HarmCategory",
+    "Modality",
     "PydanticFunctionsOutputParser",
     "SafetySetting",
     "Schema",
