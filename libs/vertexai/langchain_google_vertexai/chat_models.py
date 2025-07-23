@@ -196,6 +196,7 @@ def image_bytes_to_b64_string(
     encoded_bytes = base64.b64encode(image_bytes).decode(encoding)
     return f"data:image/{image_format};base64,{encoded_bytes}"
 
+
 @dataclass
 class _ChatHistory:
     """Represents a context and a history of messages."""
@@ -609,7 +610,8 @@ def _append_to_content(
         # This case should ideally not be reached with proper type checking,
         # but it catches any unexpected types that might slip through.
         raise TypeError(f"Unexpected content type: {type(current_content)}")
-                                                         
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
@@ -735,7 +737,7 @@ def _parse_response_candidate(
                     "outcome": part.code_execution_result.outcome,
                 }
                 content = _append_to_content(content, execution_result)
-        
+
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
             image_message = {
@@ -747,7 +749,6 @@ def _parse_response_candidate(
                 },
             }
             content = _append_to_content(content, image_message)
-
 
     if content is None:
         content = ""
@@ -1476,7 +1477,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             params["thinking_config"]["include_thoughts"] = include_thoughts
         _ = params.pop("include_thoughts", None)
 
-        response_modalities = kwargs.get("response_modalities", self.response_modalities)
+        response_modalities = kwargs.get(
+            "response_modalities", self.response_modalities
+        )
         if response_modalities is not None:
             params["response_modalities"] = response_modalities
 
