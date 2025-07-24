@@ -24,7 +24,7 @@ model_names_with_tools_support = [
 ]
 model_locations = {
     "meta/llama-4-maverick-17b-128e-instruct-maas": "us-east5",
-    "meta/llama-4-maverick-17b-16e-instruct-maas": "us-east5",
+    "meta/llama-4-scout-17b-16e-instruct-maas": "us-east5",
 }
 
 
