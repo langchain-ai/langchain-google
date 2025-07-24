@@ -22,12 +22,18 @@ model_names = _LLAMA_MODELS + _MISTRAL_MODELS
 model_names_with_tools_support = [
     "mistral-nemo@2407",
 ]
+model_locations = {
+    "meta/llama-4-maverick-17b-128e-instruct-maas": "us-east5",
+    "meta/llama-4-maverick-17b-16e-instruct-maas": "us-east5",
+}
 
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 def test_generate(model_name: str) -> None:
-    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
+    llm = get_vertex_maas_model(
+        model_name=model_name, location=model_locations.get(model_name, "us-central1")
+    )
     output = llm.invoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
     print(output)
@@ -36,7 +42,9 @@ def test_generate(model_name: str) -> None:
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 async def test_agenerate(model_name: str) -> None:
-    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
+    llm = get_vertex_maas_model(
+        model_name=model_name, location=model_locations.get(model_name, "us-central1")
+    )
     output = await llm.ainvoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
     print(output)
@@ -48,7 +56,9 @@ def test_stream(model_name: str) -> None:
     # streaming currently fails with mistral-nemo@2407
     if "stral" in model_name:
         return
-    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
+    llm = get_vertex_maas_model(
+        model_name=model_name, location=model_locations.get(model_name, "us-central1")
+    )
     output = llm.stream("What is the meaning of life?")
     for chunk in output:
         assert isinstance(chunk, AIMessageChunk)
@@ -60,7 +70,9 @@ async def test_astream(model_name: str) -> None:
     # streaming currently fails with mistral-nemo@2407
     if "stral" in model_name:
         return
-    llm = get_vertex_maas_model(model_name=model_name, location="us-central1")
+    llm = get_vertex_maas_model(
+        model_name=model_name, location=model_locations.get(model_name, "us-central1")
+    )
     output = llm.astream("What is the meaning of life?")
     async for chunk in output:
         assert isinstance(chunk, AIMessageChunk)
@@ -84,7 +96,7 @@ async def test_tools(model_name: str) -> None:
 
     llm = get_vertex_maas_model(
         model_name=model_name,
-        location="us-central1",
+        location=model_locations.get(model_name, "us-central1"),
         append_tools_to_system_message=True,
     )
     llm_with_search = llm.bind_tools(
