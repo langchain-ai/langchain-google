@@ -502,21 +502,26 @@ def _parse_chat_history(
         elif isinstance(message, AIMessage):
             role = "model"
             if message.tool_calls:
-                ai_message_parts = []
-                for tool_call in message.tool_calls:
-                    function_call = FunctionCall(
-                        {
-                            "name": tool_call["name"],
-                            "args": tool_call["args"],
-                        }
-                    )
-                    ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
                     tool_messages=tool_messages, ai_message=message
                 )
-                messages.append(Content(role=role, parts=ai_message_parts))
-                messages.append(Content(role="user", parts=tool_messages_parts))
-                continue
+                if tool_messages_parts:
+                    # Active tool call - create function call parts
+                    ai_message_parts = []
+                    for tool_call in message.tool_calls:
+                        function_call = FunctionCall(
+                            {
+                                "name": tool_call["name"],
+                                "args": tool_call["args"],
+                            }
+                        )
+                        ai_message_parts.append(Part(function_call=function_call))
+                    messages.append(Content(role=role, parts=ai_message_parts))
+                    messages.append(Content(role="user", parts=tool_messages_parts))
+                    continue
+                else:
+                    # Conversation history - strip tool_calls, use content only
+                    parts = _convert_to_parts(message.content or "I can help you with that.")
             elif raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
                     {
