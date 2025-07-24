@@ -60,6 +60,27 @@ The value of `image_url` can be:
 * An accessible Google Cloud Storage (GCS) file (e.g., `"gcs://path/to/file.png"`)
 * A base64 encoded image (e.g., `"data:image/png;base64,abcd124"`)
 
+### Multimodal Outputs
+
+Gemini supports image output. Example:
+
+```python
+from langchain_core.messages import HumanMessage
+from langchain_google_vertexai import ChatVertexAI, Modality
+
+llm = ChatVertexAI(model_name="gemini-2.0-flash-preview-image-generation",
+                   response_modalities = [Modality.TEXT, Modality.IMAGE])
+message = HumanMessage(
+    content=[
+        {
+            "type": "text",
+            "text": "Generate an image of a cat.",
+        },
+    ]
+)
+llm.invoke([message])
+```
+
 ## Embeddings
 
 Google Cloud embeddings models can be used as:

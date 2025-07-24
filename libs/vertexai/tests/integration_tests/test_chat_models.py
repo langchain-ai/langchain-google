@@ -39,11 +39,13 @@ from langchain_google_vertexai import (
     FunctionCallingConfig,
     HarmBlockThreshold,
     HarmCategory,
+    Modality,
     create_context_cache,
 )
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import (
+    _DEFAULT_IMAGE_GENERATION_MODEL_NAME,
     _DEFAULT_MODEL_NAME,
     _DEFAULT_THINKING_MODEL_NAME,
 )
@@ -815,6 +817,62 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     assert isinstance(result, AIMessage)
     assert "brown" in result.content
     assert len(result.tool_calls) == 0
+
+
+# Image Generation is knwown to be flaky.
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_image_output() -> None:
+    model = ChatVertexAI(
+        model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME,
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+    result = model.invoke("Generate an image of a cat. Then, say meow!")
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, list)
+
+    image_element = None
+    for item in result.content:
+        if isinstance(item, dict) and item.get("type") == "image_url":
+            image_element = item
+            break
+    assert image_element is not None, "Did not find the expected image content"
+
+    text_element = None
+    for item in result.content:
+        if isinstance(item, str):
+            text_element = item
+            break
+    assert text_element is not None, "Did not find the expected text content"
+
+
+# Image Generation is knwown to be flaky.
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME)
+    result = model.invoke(
+        "Generate an image of a cat. Then, say meow!",
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, list)
+
+    image_element = None
+    for item in result.content:
+        if isinstance(item, dict) and item.get("type") == "image_url":
+            image_element = item
+            break
+    assert image_element is not None, "Did not find the expected image content"
+
+    text_element = None
+    for item in result.content:
+        if isinstance(item, str):
+            text_element = item
+            break
+    assert text_element is not None, "Did not find the expected text content"
 
 
 # Marking the following 6 as flaky because it has been observed that gemini 2.5 models

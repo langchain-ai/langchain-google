@@ -40,7 +40,7 @@ _LLAMA_MODELS: List[str] = [
     "meta/llama-3.2-90b-vision-instruct-maas",
     "meta/llama-3.3-70b-instruct-maas",
     "meta/llama-4-maverick-17b-128e-instruct-maas",
-    "meta/llama-4-maverick-17b-16e-instruct-maas",
+    "meta/llama-4-scout-17b-16e-instruct-maas",
 ]
 
 
