@@ -119,7 +119,10 @@ from google.cloud.aiplatform_v1beta1.types import (
     VideoMetadata,
 )
 from langchain_google_vertexai._base import _VertexAICommon
-from langchain_google_vertexai._image_utils import ImageBytesLoader
+from langchain_google_vertexai._image_utils import (
+    ImageBytesLoader,
+    image_bytes_to_b64_string,
+)
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
@@ -749,6 +752,25 @@ def _parse_response_candidate(
                 },
             }
             content = _append_to_content(content, image_message)
+
+        if part.inline_data.mime_type.startswith("image/"):
+            image_format = part.inline_data.mime_type[6:]
+            image_message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format=image_format
+                    )
+                },
+            }
+            if not content:
+                content = [image_message]
+            elif isinstance(content, str):
+                content = [content, image_message]
+            elif isinstance(content, list):
+                content.append(image_message)
+            else:
+                raise Exception("Unexpected content type")
 
     if content is None:
         content = ""
