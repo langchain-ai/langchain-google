@@ -1906,7 +1906,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 response_chunk, prev_total_usage=total_lc_usage
             )
             if run_manager and isinstance(chunk.message.content, str):
-                run_manager.on_llm_new_token(chunk.message.content)
+                run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
 
     async def _astream(
@@ -1934,7 +1934,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 response_chunk, prev_total_usage=total_lc_usage
             )
             if run_manager and isinstance(chunk.message.content, str):
-                await run_manager.on_llm_new_token(chunk.message.content)
+                await run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
 
     def with_structured_output(
