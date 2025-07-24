@@ -183,23 +183,6 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
-def image_bytes_to_b64_string(
-    image_bytes: bytes, encoding: str = "ascii", image_format: str = "png"
-) -> str:
-    """Encodes image bytes into a b64 encoded string.
-
-    Args:
-        image_bytes: Bytes of the image.
-        encoding: Type of encoding in the string. ``'ascii'`` by default.
-        image_format: Format of the image. ``'png'`` by default.
-
-    Returns:
-        B64 image encoded string.
-    """
-    encoded_bytes = base64.b64encode(image_bytes).decode(encoding)
-    return f"data:image/{image_format};base64,{encoded_bytes}"
-
-
 @dataclass
 class _ChatHistory:
     """Represents a context and a history of messages."""
@@ -752,25 +735,6 @@ def _parse_response_candidate(
                 },
             }
             content = _append_to_content(content, image_message)
-
-        if part.inline_data.mime_type.startswith("image/"):
-            image_format = part.inline_data.mime_type[6:]
-            image_message = {
-                "type": "image_url",
-                "image_url": {
-                    "url": image_bytes_to_b64_string(
-                        part.inline_data.data, image_format=image_format
-                    )
-                },
-            }
-            if not content:
-                content = [image_message]
-            elif isinstance(content, str):
-                content = [content, image_message]
-            elif isinstance(content, list):
-                content.append(image_message)
-            else:
-                raise Exception("Unexpected content type")
 
     if content is None:
         content = ""
