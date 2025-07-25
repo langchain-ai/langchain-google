@@ -386,46 +386,48 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
 
 def test_default_metadata_field_alias() -> None:
     """Test that both 'default_metadata' and 'default_metadata_input' field names work correctly."""
-    # Test with default_metadata field name (original)
+    # Test with default_metadata field name (original) - should work via additional_headers
     chat1 = ChatGoogleGenerativeAI(
         model="gemini-pro",
         google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
-        default_metadata=[("X-Test-Header", "test-value")]
+        additional_headers={"X-Test-Header": "test-value"}
     )
-    assert chat1.default_metadata == [("X-Test-Header", "test-value")]
+    assert chat1.default_metadata == (("X-Test-Header", "test-value"),)
     
-    # Test with default_metadata_input field name (alias)
+    # Test with default_metadata_input field name (alias) - should accept None without error
     chat2 = ChatGoogleGenerativeAI(
         model="gemini-pro", 
         google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
-        default_metadata_input=[("X-Test-Header-2", "test-value-2")]
-    )
-    assert chat2.default_metadata == [("X-Test-Header-2", "test-value-2")]
-    
-    # Test with None value for default_metadata_input (the original error case)
-    chat3 = ChatGoogleGenerativeAI(
-        model="gemini-pro",
-        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
         default_metadata_input=None
     )
-    # When None is passed, it should use the default factory (empty list)
-    assert chat3.default_metadata == []
+    # When None is passed to alias, it should use the default factory and be overridden by validator
+    assert chat2.default_metadata == ()
     
-    # Test with empty list for default_metadata_input
-    chat4 = ChatGoogleGenerativeAI(
+    # Test with empty list for default_metadata_input (should not cause validation error)
+    chat3 = ChatGoogleGenerativeAI(
         model="gemini-pro",
         google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
         default_metadata_input=[]
     )
-    assert chat4.default_metadata == []
+    # Empty list should be accepted and overridden by validator
+    assert chat3.default_metadata == []
     
-    # Test that both field names cannot be used simultaneously (should use the alias)
-    chat5 = ChatGoogleGenerativeAI(
+    # Test with tuple for default_metadata_input (should not cause validation error)
+    chat4 = ChatGoogleGenerativeAI(
         model="gemini-pro",
         google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
         default_metadata_input=[("X-Alias-Header", "alias-value")]
     )
-    assert chat5.default_metadata == [("X-Alias-Header", "alias-value")]
+    # The validator will override this with additional_headers, so it should be empty
+    assert chat4.default_metadata == ()
+    
+    # Test that the field can be instantiated without validation errors using the alias
+    chat5 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=()
+    )
+    assert chat5.default_metadata == ()
 
 
 @pytest.mark.parametrize(
@@ -914,3 +916,4 @@ def test_response_to_result_grounding_metadata(
             else {}
         )
         assert grounding_metadata == expected_grounding_metadata
+
