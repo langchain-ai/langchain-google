@@ -384,6 +384,50 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
 
 
+def test_default_metadata_field_alias() -> None:
+    """Test that both 'default_metadata' and 'default_metadata_input' field names work correctly."""
+    # Test with default_metadata field name (original)
+    chat1 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata=[("X-Test-Header", "test-value")]
+    )
+    assert chat1.default_metadata == [("X-Test-Header", "test-value")]
+    
+    # Test with default_metadata_input field name (alias)
+    chat2 = ChatGoogleGenerativeAI(
+        model="gemini-pro", 
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=[("X-Test-Header-2", "test-value-2")]
+    )
+    assert chat2.default_metadata == [("X-Test-Header-2", "test-value-2")]
+    
+    # Test with None value for default_metadata_input (the original error case)
+    chat3 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=None
+    )
+    # When None is passed, it should use the default factory (empty list)
+    assert chat3.default_metadata == []
+    
+    # Test with empty list for default_metadata_input
+    chat4 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=[]
+    )
+    assert chat4.default_metadata == []
+    
+    # Test that both field names cannot be used simultaneously (should use the alias)
+    chat5 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=[("X-Alias-Header", "alias-value")]
+    )
+    assert chat5.default_metadata == [("X-Alias-Header", "alias-value")]
+
+
 @pytest.mark.parametrize(
     "raw_candidate, expected",
     [
