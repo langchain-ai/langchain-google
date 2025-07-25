@@ -385,18 +385,21 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
 
 
 def test_default_metadata_field_alias() -> None:
-    """Test that both 'default_metadata' and 'default_metadata_input' field names work correctly."""
-    # Test with default_metadata_input field name (alias) - should accept None without error
+    """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
+    # Test with default_metadata_input field name (alias) - should accept None without 
+    # error
     # This is the main issue: LangSmith Playground passes None to default_metadata_input
     chat1 = ChatGoogleGenerativeAI(
         model="gemini-pro", 
         google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
         default_metadata_input=None
     )
-    # When None is passed to alias, it should use the default factory and be overridden by validator
+    # When None is passed to alias, it should use the default factory and be overridden
+    # by validator
     assert chat1.default_metadata == ()
     
-    # Test with empty list for default_metadata_input (should not cause validation error)
+    # Test with empty list for default_metadata_input (should not cause validation
+    # error)
     chat2 = ChatGoogleGenerativeAI(
         model="gemini-pro",
         google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
