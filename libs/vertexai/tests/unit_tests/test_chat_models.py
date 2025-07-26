@@ -1,5 +1,6 @@
 """Test chat model integration."""
 
+import base64
 import json
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
     Candidate,
     Content,
     FunctionCall,
@@ -258,6 +260,22 @@ def test_parse_history_gemini() -> None:
     assert history[0].parts[0].text == text_question1
     assert history[1].role == "model"
     assert history[1].parts[0].text == text_answer1
+    assert system_instructions and system_instructions.parts[0].text == system_input
+
+
+def test_parse_history_gemini_number() -> None:
+    system_input = "You're supposed to answer math questions."
+    text_question1 = "54321.1"
+    system_message = SystemMessage(content=system_input)
+    message1 = HumanMessage(content=text_question1)
+    messages = [system_message, message1]
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader, perform_literal_eval_on_string_raw_content=True
+    )
+    assert len(history) == 1
+    assert history[0].role == "user"
+    assert history[0].parts[0].text == text_question1
     assert system_instructions and system_instructions.parts[0].text == system_input
 
 
@@ -656,6 +674,98 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content=["Mike age is 30", "Arthur age is 30"],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        )
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    }
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(text="Here is an image:"),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/jpeg",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    "Here is an image:",
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/jpeg;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        ),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/gif",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/gif;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
                 additional_kwargs={},
             ),
         ),
@@ -1356,7 +1466,7 @@ def test_thinking_configuration() -> None:
 
     # Test init params
     llm = ChatVertexAI(
-        model="gemini-2.5-flash-preview-05-20",
+        model="gemini-2.5-flash",
         project="test-project",
         thinking_budget=100,
         include_thoughts=True,
@@ -1366,7 +1476,7 @@ def test_thinking_configuration() -> None:
     assert request.generation_config.thinking_config.include_thoughts is True
 
     # Test invocation params
-    llm = ChatVertexAI(model="gemini-2.5-flash-preview-05-20", project="test-project")
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
     request = llm._prepare_request_gemini(
         [input_message],
         thinking_budget=100,
@@ -1378,7 +1488,7 @@ def test_thinking_configuration() -> None:
 
 def test_thought_signature() -> None:
     llm = ChatVertexAI(
-        model="gemini-2.5-flash-preview-05-20",
+        model="gemini-2.5-flash",
         project="test-project",
         include_thoughts=True,
     )
