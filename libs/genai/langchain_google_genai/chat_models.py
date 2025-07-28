@@ -835,7 +835,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-001")
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
             llm.invoke("Write me a ballad about LangChain")
 
     Invoke:
@@ -1045,7 +1045,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         .. code-block:: python
 
             from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
-            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
                 tools=[GenAITool(google_search={})],
