@@ -1,5 +1,6 @@
 """Test chat model integration."""
 
+import base64
 import json
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
     Candidate,
     Content,
     FunctionCall,
@@ -42,6 +44,7 @@ from langchain_google_vertexai._base import _get_prediction_client
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
+    _bytes_to_base64,
     _parse_chat_history,
     _parse_chat_history_gemini,
     _parse_examples,
@@ -257,6 +260,22 @@ def test_parse_history_gemini() -> None:
     assert history[0].parts[0].text == text_question1
     assert history[1].role == "model"
     assert history[1].parts[0].text == text_answer1
+    assert system_instructions and system_instructions.parts[0].text == system_input
+
+
+def test_parse_history_gemini_number() -> None:
+    system_input = "You're supposed to answer math questions."
+    text_question1 = "54321.1"
+    system_message = SystemMessage(content=system_input)
+    message1 = HumanMessage(content=text_question1)
+    messages = [system_message, message1]
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader, perform_literal_eval_on_string_raw_content=True
+    )
+    assert len(history) == 1
+    assert history[0].role == "user"
+    assert history[0].parts[0].text == text_question1
     assert system_instructions and system_instructions.parts[0].text == system_input
 
 
@@ -664,6 +683,98 @@ def test_default_params_gemini() -> None:
                     role="model",
                     parts=[
                         Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        )
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    }
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(text="Here is an image:"),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/jpeg",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    "Here is an image:",
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/jpeg;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        ),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/gif",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/gif;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
                             function_call=FunctionCall(
                                 name="Information",
                                 args={"name": "Ben"},
@@ -860,6 +971,40 @@ def test_default_params_gemini() -> None:
                         id="00000000-0000-0000-0000-00000000000",
                     ),
                 ],
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="my_tool",
+                                args={"param1": "value1", "param2": "value2"},
+                            ),
+                            thought_signature=b"decafe42",
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "type": "tool_call",
+                        "id": "00000000-0000-0000-0000-00000000000",
+                        "name": "my_tool",
+                        "args": {"param1": "value1", "param2": "value2"},
+                    }
+                ],
+                additional_kwargs={
+                    "__gemini_function_call_thought_signatures__": {
+                        "00000000-0000-0000-0000-00000000000": _bytes_to_base64(
+                            b"decafe42"
+                        )
+                    }
+                },
             ),
         ),
     ],
@@ -1325,7 +1470,7 @@ def test_thinking_configuration() -> None:
 
     # Test init params
     llm = ChatVertexAI(
-        model="gemini-2.5-flash-preview-05-20",
+        model="gemini-2.5-flash",
         project="test-project",
         thinking_budget=100,
         include_thoughts=True,
@@ -1335,7 +1480,7 @@ def test_thinking_configuration() -> None:
     assert request.generation_config.thinking_config.include_thoughts is True
 
     # Test invocation params
-    llm = ChatVertexAI(model="gemini-2.5-flash-preview-05-20", project="test-project")
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
     request = llm._prepare_request_gemini(
         [input_message],
         thinking_budget=100,
@@ -1343,3 +1488,61 @@ def test_thinking_configuration() -> None:
     )
     assert request.generation_config.thinking_config.thinking_budget == 100
     assert request.generation_config.thinking_config.include_thoughts is True
+
+
+def test_thought_signature() -> None:
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash",
+        project="test-project",
+        include_thoughts=True,
+    )
+    thought_signature_bytes = b"decafe42"
+    thought_signature_base64 = _bytes_to_base64(thought_signature_bytes)
+
+    history = [
+        HumanMessage("Query requiring reasoning."),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "type": "tool_call",
+                    "id": "abc123",
+                    "name": "my_tool",
+                    "args": {"param1": "value1", "param2": "value2"},
+                },
+            ],
+            additional_kwargs={
+                "__gemini_function_call_thought_signatures__": {
+                    "abc123": thought_signature_base64
+                }
+            },
+        ),
+        ToolMessage("result", tool_call_id="abc123"),
+    ]
+    request = llm._prepare_request_gemini(history)
+    assert request.contents == [
+        Content(role="user", parts=[Part(text="Query requiring reasoning.")]),
+        Content(
+            role="model",
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="my_tool",
+                        args={"param1": "value1", "param2": "value2"},
+                    ),
+                    thought_signature=thought_signature_bytes,
+                ),
+            ],
+        ),
+        Content(
+            role="function",
+            parts=[
+                Part(
+                    function_response=FunctionResponse(
+                        name="my_tool",
+                        response={"content": "result"},
+                    )
+                ),
+            ],
+        ),
+    ]

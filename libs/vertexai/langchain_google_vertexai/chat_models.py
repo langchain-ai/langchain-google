@@ -119,7 +119,10 @@ from google.cloud.aiplatform_v1beta1.types import (
     VideoMetadata,
 )
 from langchain_google_vertexai._base import _VertexAICommon
-from langchain_google_vertexai._image_utils import ImageBytesLoader
+from langchain_google_vertexai._image_utils import (
+    ImageBytesLoader,
+    image_bytes_to_b64_string,
+)
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
@@ -164,6 +167,19 @@ _allowed_params = [
     "include_thoughts",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
+
+
+_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
+    "__gemini_function_call_thought_signatures__"
+)
+
+
+def _bytes_to_base64(data: bytes) -> str:
+    return base64.b64encode(data).decode("utf-8")
+
+
+def _base64_to_bytes(input_str: str) -> bytes:
+    return base64.b64decode(input_str.encode("utf-8"))
 
 
 @dataclass
@@ -325,6 +341,8 @@ def _parse_chat_history_gemini(
         # error.
         if isinstance(raw_content, int):  # type: ignore
             raw_content = str(raw_content)  # type: ignore
+        if isinstance(raw_content, float):  # type: ignore
+            raw_content = str(raw_content)  # type: ignore
         if isinstance(raw_content, str):
             raw_content = [raw_content]
         result = []
@@ -378,8 +396,27 @@ def _parse_chat_history_gemini(
                 parts = _convert_to_parts(message)
 
             for tc in message.tool_calls:
+                thought_signature: Optional[bytes] = None
+                if tool_call_id := tc.get("id"):
+                    if tool_call_id in message.additional_kwargs.get(
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                    ):
+                        thought_signature = message.additional_kwargs[
+                            _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        ][tool_call_id]
+                        if isinstance(thought_signature, str):
+                            thought_signature = _base64_to_bytes(thought_signature)
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
-                parts.append(Part(function_call=function_call))
+                parts.append(
+                    Part(
+                        function_call=function_call,
+                        **(
+                            {"thought_signature": thought_signature}
+                            if thought_signature
+                            else {}
+                        ),
+                    )
+                )
 
             if len(vertex_messages):
                 prev_content = vertex_messages[-1]
@@ -604,13 +641,14 @@ def _parse_response_candidate(
             )
             additional_kwargs["function_call"] = function_call
 
+            tool_call_id = function_call.get("id", str(uuid.uuid4()))
             if streaming:
                 index = function_call.get("index")
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=function_call.get("id", str(uuid.uuid4())),
+                        id=tool_call_id,
                         index=int(index) if index else None,
                     )
                 )
@@ -625,7 +663,7 @@ def _parse_response_candidate(
                             create_tool_call(
                                 name=tool_call["name"],
                                 args=tool_call["args"],
-                                id=tool_call.get("id", str(uuid.uuid4())),
+                                id=tool_call.get("id", tool_call_id),
                             )
                             for tool_call in tool_calls_dicts
                         ]
@@ -635,10 +673,26 @@ def _parse_response_candidate(
                         invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
-                            id=function_call.get("id", str(uuid.uuid4())),
+                            id=tool_call_id,
                             error=str(e),
                         )
                     )
+
+            if getattr(part, "thought_signature", None):
+                # store dict of {tool_call_id: thought_signature}
+                if isinstance(part.thought_signature, bytes):
+                    thought_signature = _bytes_to_base64(part.thought_signature)
+                    if (
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        not in additional_kwargs
+                    ):
+                        additional_kwargs[
+                            _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        ] = {}
+                    additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY][
+                        tool_call_id
+                    ] = thought_signature
+
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_message = {
@@ -676,6 +730,25 @@ def _parse_response_candidate(
                     content.append(execution_result)
                 else:
                     raise Exception("Unexpected content type")
+
+        if part.inline_data.mime_type.startswith("image/"):
+            image_format = part.inline_data.mime_type[6:]
+            image_message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format=image_format
+                    )
+                },
+            }
+            if not content:
+                content = [image_message]
+            elif isinstance(content, str):
+                content = [content, image_message]
+            elif isinstance(content, list):
+                content.append(image_message)
+            else:
+                raise Exception("Unexpected content type")
 
     if content is None:
         content = ""
@@ -1289,7 +1362,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         # Get all valid field names, including aliases
         valid_fields = set()
-        for field_name, field_info in self.model_fields.items():
+        for field_name, field_info in type(self).model_fields.items():
             valid_fields.add(field_name)
             if hasattr(field_info, "alias") and field_info.alias is not None:
                 valid_fields.add(field_info.alias)
@@ -2082,7 +2155,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tools: A list of tool definitions to bind to this chat model.
                 Can be a pydantic model, callable, or BaseTool. Pydantic
                 models, callables, and BaseTools will be automatically converted to
-                their schema dictionary representation.
+                their schema dictionary representation. Tools with Union types in
+                their arguments are now supported and converted to `anyOf` schemas.
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """
