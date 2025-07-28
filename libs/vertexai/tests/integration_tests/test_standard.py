@@ -21,7 +21,7 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model_name": "gemini-2.0-flash-exp",
+            "model_name": "gemini-2.0-flash-001",
             "rate_limiter": rate_limiter,
             "temperature": 0,
             "api_transport": None,
@@ -29,6 +29,14 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
 
     @property
     def supports_image_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_image_urls(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_inputs(self) -> bool:
         return True
 
     @property
@@ -52,7 +60,7 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model_name": "gemini-1.5-pro-002",
+            "model_name": "gemini-2.5-pro",
             "rate_limiter": rate_limiter,
             "temperature": 0,
             "api_transport": None,
@@ -60,6 +68,14 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
 
     @property
     def supports_image_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_image_urls(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_inputs(self) -> bool:
         return True
 
     @property

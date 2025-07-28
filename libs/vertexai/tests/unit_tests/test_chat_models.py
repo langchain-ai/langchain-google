@@ -1,12 +1,14 @@
 """Test chat model integration."""
 
+import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
+    Blob,
     Candidate,
     Content,
     FunctionCall,
@@ -38,15 +40,24 @@ from vertexai.language_models import (  # type: ignore
     InputOutputTextPair,
 )
 
+from langchain_google_vertexai._base import _get_prediction_client
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
+    _bytes_to_base64,
     _parse_chat_history,
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
 )
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
+
+@pytest.fixture
+def clear_prediction_client_cache() -> None:
+    # Clear the prediction client cache so we can mock varied calls to
+    # PredictionServiceClient
+    _get_prediction_client.cache_clear()
 
 
 def test_init() -> None:
@@ -113,7 +124,7 @@ def test_init_client(model: str, location: str) -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -141,13 +152,15 @@ def test_init_client(model: str, location: str) -> None:
         ),
     ],
 )
-def test_model_name_presence_in_chat_results(model: str, location: str) -> None:
+def test_model_name_presence_in_chat_results(
+    model: str, location: str, clear_prediction_client_cache: Any
+) -> None:
     config = {"model": model, "location": location}
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -203,54 +216,6 @@ def test_parse_examples_failes_wrong_sequence() -> None:
     )
 
 
-@dataclass
-class StubTextChatResponse:
-    """Stub text-chat response from VertexAI for testing."""
-
-    text: str
-
-
-@pytest.mark.parametrize("stop", [None, "stop1"])
-def test_vertexai_args_passed(stop: Optional[str]) -> None:
-    response_text = "Goodbye"
-    user_prompt = "Hello"
-    prompt_params: Dict[str, Any] = {
-        "max_output_tokens": 1,
-        "temperature": 10000.0,
-        "top_k": 10,
-        "top_p": 0.5,
-    }
-
-    # Mock the library to ensure the args are passed correctly
-    with patch("vertexai._model_garden._model_garden_models._from_pretrained") as mg:
-        mock_response = MagicMock()
-        mock_response.candidates = [StubTextChatResponse(text=response_text)]
-        mock_chat = MagicMock()
-        mock_send_message = MagicMock(return_value=mock_response)
-        mock_chat.send_message = mock_send_message
-
-        mock_model = MagicMock()
-        mock_start_chat = MagicMock(return_value=mock_chat)
-        mock_model.start_chat = mock_start_chat
-        mg.return_value = mock_model
-
-        model = ChatVertexAI(**prompt_params, project="test-proj")
-        message = HumanMessage(content=user_prompt)
-        if stop:
-            response = model([message], stop=[stop])
-        else:
-            response = model([message])
-
-        assert response.content == response_text
-        mock_send_message.assert_called_once_with(
-            message=user_prompt, candidate_count=1
-        )
-        expected_stop_sequence = [stop] if stop else None
-        mock_start_chat.assert_called_once_with(
-            message_history=[], **prompt_params, stop_sequences=expected_stop_sequence
-        )
-
-
 def test_parse_chat_history_correct() -> None:
     text_context = (
         "My name is Peter. You are my personal assistant. My "
@@ -298,25 +263,70 @@ def test_parse_history_gemini() -> None:
     assert system_instructions and system_instructions.parts[0].text == system_input
 
 
-def test_parse_history_gemini_converted_message() -> None:
+def test_parse_history_gemini_number() -> None:
     system_input = "You're supposed to answer math questions."
-    text_question1, text_answer1 = "How much is 2+2?", "4"
-    text_question2 = "How much is 3+3?"
+    text_question1 = "54321.1"
     system_message = SystemMessage(content=system_input)
     message1 = HumanMessage(content=text_question1)
-    message2 = AIMessage(content=text_answer1)
-    message3 = HumanMessage(content=text_question2)
-    messages = [system_message, message1, message2, message3]
+    messages = [system_message, message1]
     image_bytes_loader = ImageBytesLoader()
-    _, history = _parse_chat_history_gemini(
-        messages, image_bytes_loader, convert_system_message_to_human=True
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader, perform_literal_eval_on_string_raw_content=True
+    )
+    assert len(history) == 1
+    assert history[0].role == "user"
+    assert history[0].parts[0].text == text_question1
+    assert system_instructions and system_instructions.parts[0].text == system_input
+
+
+def test_parse_history_gemini_function_empty_list() -> None:
+    system_input = "You're supposed to answer math questions."
+    text_question1 = "Solve the following equation. x^2+16=0"
+    fn_name_1 = "root"
+
+    tool_call_1 = create_tool_call(
+        name=fn_name_1,
+        id="1",
+        args={
+            "arg1": "-10",
+            "arg2": "10",
+        },
+    )
+
+    system_message = SystemMessage(content=system_input)
+    message1 = HumanMessage(content=text_question1)
+    message2 = AIMessage(
+        content="",
+        tool_calls=[
+            tool_call_1,
+        ],
+    )
+    message3 = ToolMessage(content=[], tool_call_id="1")
+    messages = [
+        system_message,
+        message1,
+        message2,
+        message3,
+    ]
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        messages, image_bytes_loader
     )
     assert len(history) == 3
+    assert system_instructions and system_instructions.parts[0].text == system_input
     assert history[0].role == "user"
-    assert history[0].parts[0].text == system_input
-    assert history[0].parts[1].text == text_question1
+    assert history[0].parts[0].text == text_question1
+
     assert history[1].role == "model"
-    assert history[1].parts[0].text == text_answer1
+    assert history[1].parts[0].function_call == FunctionCall(
+        name=tool_call_1["name"], args=tool_call_1["args"]
+    )
+
+    assert history[2].role == "function"
+    assert history[2].parts[0].function_response == FunctionResponse(
+        name=fn_name_1,
+        response={"content": ""},
+    )
 
 
 def test_parse_history_gemini_function() -> None:
@@ -594,38 +604,12 @@ def test_parse_history_gemini_multi(
     assert sm == expected_sm
 
 
-def test_default_params_palm() -> None:
-    user_prompt = "Hello"
-
-    with patch("vertexai._model_garden._model_garden_models._from_pretrained") as mg:
-        mock_response = MagicMock()
-        mock_response.candidates = [StubTextChatResponse(text="Goodbye")]
-        mock_chat = MagicMock()
-        mock_send_message = MagicMock(return_value=mock_response)
-        mock_chat.send_message = mock_send_message
-
-        mock_model = MagicMock()
-        mock_start_chat = MagicMock(return_value=mock_chat)
-        mock_model.start_chat = mock_start_chat
-        mg.return_value = mock_model
-
-        model = ChatVertexAI(model_name="text-bison@001")
-        message = HumanMessage(content=user_prompt)
-        _ = model([message])
-        mock_start_chat.assert_called_once_with(
-            message_history=[],
-            max_output_tokens=128,
-            top_k=40,
-            top_p=0.95,
-            stop_sequences=None,
-            temperature=0.0,
-        )
-
-
 def test_default_params_gemini() -> None:
     user_prompt = "Hello"
 
-    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
         response = GenerateContentResponse(
             candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
         )
@@ -690,6 +674,98 @@ def test_default_params_gemini() -> None:
             ),
             AIMessage(
                 content=["Mike age is 30", "Arthur age is 30"],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        )
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    }
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(text="Here is an image:"),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/jpeg",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    "Here is an image:",
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/jpeg;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
+                additional_kwargs={},
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/png",
+                            )
+                        ),
+                        Part(
+                            inline_data=Blob(
+                                data=base64.b64decode("Qk0eAAAAAABoAAMAQABAEAGAAP8A"),
+                                mime_type="image/gif",
+                            )
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/gif;base64,Qk0eAAAAAABoAAMAQABAEAGAAP8A"
+                        },
+                    },
+                ],
                 additional_kwargs={},
             ),
         ),
@@ -897,6 +973,40 @@ def test_default_params_gemini() -> None:
                 ],
             ),
         ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="my_tool",
+                                args={"param1": "value1", "param2": "value2"},
+                            ),
+                            thought_signature=b"decafe42",
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "type": "tool_call",
+                        "id": "00000000-0000-0000-0000-00000000000",
+                        "name": "my_tool",
+                        "args": {"param1": "value1", "param2": "value2"},
+                    }
+                ],
+                additional_kwargs={
+                    "__gemini_function_call_thought_signatures__": {
+                        "00000000-0000-0000-0000-00000000000": _bytes_to_base64(
+                            b"decafe42"
+                        )
+                    }
+                },
+            ),
+        ),
     ],
 )
 def test_parse_response_candidate(raw_candidate, expected) -> None:
@@ -930,7 +1040,9 @@ def test_parser_multiple_tools():
         arg1: int
         arg2: int
 
-    with patch("langchain_google_vertexai._base.v1beta1PredictionServiceClient") as mc:
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
         response = GenerateContentResponse(
             candidates=[
                 Candidate(
@@ -971,15 +1083,28 @@ def test_parser_multiple_tools():
 
 
 def test_generation_config_gemini() -> None:
-    model = ChatVertexAI(model_name="gemini-pro", temperature=0.2, top_k=3)
+    model = ChatVertexAI(
+        model_name="gemini-pro",
+        project="test-project",
+        temperature=0.2,
+        top_k=3,
+        frequency_penalty=0.2,
+        presence_penalty=0.6,
+    )
     generation_config = model._generation_config_gemini(
-        temperature=0.3, stop=["stop"], candidate_count=2
+        temperature=0.3,
+        stop=["stop"],
+        candidate_count=2,
+        frequency_penalty=0.9,
+        presence_penalty=0.8,
     )
     expected = GenerationConfig(
         stop_sequences=["stop"],
         temperature=0.3,
         top_k=3,
         candidate_count=2,
+        frequency_penalty=0.9,
+        presence_penalty=0.8,
     )
     assert generation_config == expected
 
@@ -1158,7 +1283,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -1171,7 +1296,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
         assert transport == "rest"
 
 
-def test_init_client_with_custom_base_url() -> None:
+def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
     config = {
         "model": "gemini-1.5-pro",
         "base_url": "https://example.com",
@@ -1181,7 +1306,7 @@ def test_init_client_with_custom_base_url() -> None:
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
     with patch(
-        "langchain_google_vertexai._base.v1beta1PredictionServiceClient"
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
         response = GenerateContentResponse(candidates=[])
         mock_prediction_service.return_value.generate_content.return_value = response
@@ -1334,3 +1459,86 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
         "cache_creation_input_tokens": 1,
         "cache_read_input_tokens": 1,
     }
+
+
+def test_thinking_configuration() -> None:
+    input_message = HumanMessage("Query requiring reasoning.")
+
+    # Test init params
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash",
+        project="test-project",
+        thinking_budget=100,
+        include_thoughts=True,
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert request.generation_config.thinking_config.thinking_budget == 100
+    assert request.generation_config.thinking_config.include_thoughts is True
+
+    # Test invocation params
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    request = llm._prepare_request_gemini(
+        [input_message],
+        thinking_budget=100,
+        include_thoughts=True,
+    )
+    assert request.generation_config.thinking_config.thinking_budget == 100
+    assert request.generation_config.thinking_config.include_thoughts is True
+
+
+def test_thought_signature() -> None:
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash",
+        project="test-project",
+        include_thoughts=True,
+    )
+    thought_signature_bytes = b"decafe42"
+    thought_signature_base64 = _bytes_to_base64(thought_signature_bytes)
+
+    history = [
+        HumanMessage("Query requiring reasoning."),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "type": "tool_call",
+                    "id": "abc123",
+                    "name": "my_tool",
+                    "args": {"param1": "value1", "param2": "value2"},
+                },
+            ],
+            additional_kwargs={
+                "__gemini_function_call_thought_signatures__": {
+                    "abc123": thought_signature_base64
+                }
+            },
+        ),
+        ToolMessage("result", tool_call_id="abc123"),
+    ]
+    request = llm._prepare_request_gemini(history)
+    assert request.contents == [
+        Content(role="user", parts=[Part(text="Query requiring reasoning.")]),
+        Content(
+            role="model",
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="my_tool",
+                        args={"param1": "value1", "param2": "value2"},
+                    ),
+                    thought_signature=thought_signature_bytes,
+                ),
+            ],
+        ),
+        Content(
+            role="function",
+            parts=[
+                Part(
+                    function_response=FunctionResponse(
+                        name="my_tool",
+                        response={"content": "result"},
+                    )
+                ),
+            ],
+        ),
+    ]

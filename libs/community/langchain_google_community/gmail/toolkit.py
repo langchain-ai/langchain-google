@@ -11,7 +11,7 @@ from langchain_google_community.gmail.get_message import GmailGetMessage
 from langchain_google_community.gmail.get_thread import GmailGetThread
 from langchain_google_community.gmail.search import GmailSearch
 from langchain_google_community.gmail.send_message import GmailSendMessage
-from langchain_google_community.gmail.utils import build_resource_service
+from langchain_google_community.gmail.utils import build_gmail_service
 
 if TYPE_CHECKING:
     # This is for linting and IDE typehints
@@ -40,7 +40,7 @@ class GmailToolkit(BaseToolkit):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    api_resource: Resource = Field(default_factory=build_resource_service)
+    api_resource: Resource = Field(default_factory=build_gmail_service)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

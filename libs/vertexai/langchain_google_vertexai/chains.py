@@ -25,8 +25,8 @@ def get_output_parser(
     """Get the appropriate function output parser given the user functions.
 
     Args:
-        functions: Sequence where element is a dictionary, a pydantic.BaseModel class,
-            or a Python function. If a dictionary is passed in, it is assumed to
+        functions: Sequence where element is a dictionary, a ``pydantic.BaseModel``
+            class, or a Python function. If a dictionary is passed in, it is assumed to
             already be a valid OpenAI function.
 
     Returns:
@@ -97,13 +97,12 @@ def create_structured_runnable(
     """Create a runnable sequence that uses OpenAI functions.
 
     Args:
-        function: Either a single pydantic.BaseModel class or a sequence
-            of pydantic.BaseModels classes.
-            For best results, pydantic.BaseModels
+        function: Either a single ``pydantic.BaseModel`` class or a sequence
+            of ``pydantic.BaseModels`` classes. For best results, ``pydantic.BaseModels``
             should have descriptions of the parameters.
         llm: Language model to use,
             assumed to support the Google Vertex function-calling API.
-        prompt: BasePromptTemplate to pass to the model.
+        prompt: ``BasePromptTemplate`` to pass to the model.
         use_extra_step: whether to make an extra step to parse output into a function
 
     Returns:

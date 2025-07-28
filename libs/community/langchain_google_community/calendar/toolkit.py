@@ -13,7 +13,7 @@ from langchain_google_community.calendar.get_calendars_info import GetCalendarsI
 from langchain_google_community.calendar.move_event import CalendarMoveEvent
 from langchain_google_community.calendar.search_events import CalendarSearchEvents
 from langchain_google_community.calendar.update_event import CalendarUpdateEvent
-from langchain_google_community.calendar.utils import build_resource_service
+from langchain_google_community.calendar.utils import build_calendar_service
 
 if TYPE_CHECKING:
     # This is for linting and IDE typehints
@@ -42,7 +42,7 @@ class CalendarToolkit(BaseToolkit):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    api_resource: Resource = Field(default_factory=build_resource_service)
+    api_resource: Resource = Field(default_factory=build_calendar_service)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-google-vertexai"
-version = "2.0.20"
+version = "2.0.27"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 readme = "README.md"
@@ -12,8 +12,8 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-langchain-core = ">=0.3.49,<0.4"
-google-cloud-aiplatform = "^1.85.0"
+langchain-core = ">=0.3.67,<0.4"
+google-cloud-aiplatform = "^1.97.0"
 google-cloud-storage = "^2.18.0"
 # optional dependencies
 anthropic = { extras = ["vertexai"], version = ">=0.35.0,<1", optional = true }
@@ -21,7 +21,10 @@ langchain-mistralai = { version = ">=0.2.0,<1", optional = true }
 httpx = "^0.28.0"
 httpx-sse = "^0.4.0"
 pydantic = "^2.9"
-validators = "^0.34.0"
+validators = ">=0.22.0,<1"
+bottleneck = "^1.4.2"
+numexpr = "^2.8.6"
+pyarrow = "^19.0.1"
 
 [tool.poetry.group.test]
 optional = true
@@ -36,22 +39,19 @@ pytest-mock = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watcher = "^0.3.4"
 pytest-asyncio = "^0.21.1"
-types-requests = "^2.31.0.20231231"
+types-requests = "^2.31.0"
 types-protobuf = "^4.24.0.4"
-numexpr = "^2.8.6"
-numpy = [
-  { version = "^1", python = "<3.12" },
-  { version = "^1.26.0", python = ">=3.12" },
-]
 google-api-python-client = "^2.117.0"
 langchain = "^0.3.7"
-langchain-tests = "0.3.17"
+langchain-tests = "0.3.20"
 anthropic = { extras = ["vertexai"], version = ">=0.35.0,<1" }
 validators = "^0.34.0"
 
 
 [tool.codespell]
 ignore-words-list = "rouge"
+
+
 
 [tool.poetry.group.codespell]
 optional = true
