@@ -8,16 +8,20 @@ This package enables seamless access to Google Gemini's chat, vision, embeddings
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Installation](#installation)
-- [Quickstart](#quickstart)
-- [Chat Models](#chat-models)
-  - [Multimodal Inputs](#multimodal-inputs)
-  - [Multimodal Outputs](#multimodal-outputs)
-  - [Multimodal Outputs in Chains](#multimodal-outputs-in-chains)
-  - [Thinking Support](#thinking-support)
-- [Embeddings](#embeddings)
-- [Semantic Retrieval (RAG)](#semantic-retrieval-rag)
+- [langchain-google-genai](#langchain-google-genai)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Installation](#installation)
+  - [Quickstart](#quickstart)
+  - [Chat Models](#chat-models)
+    - [Multimodal Inputs](#multimodal-inputs)
+    - [Multimodal Outputs](#multimodal-outputs)
+    - [Audio Output](#audio-output)
+    - [Multimodal Outputs in Chains](#multimodal-outputs-in-chains)
+    - [Thinking Support](#thinking-support)
+  - [Embeddings](#embeddings)
+  - [Semantic Retrieval (RAG)](#semantic-retrieval-rag)
+  - [Resources](#resources)
 
 ---
 
@@ -88,9 +92,9 @@ print(response.content)
 
 ✅ `image_url` can be:
 
-* A public image URL
-* A Google Cloud Storage path (`gcs://...`)
-* A base64-encoded image (e.g., `data:image/png;base64,...`)
+- A public image URL
+- A Google Cloud Storage path (`gcs://...`)
+- A base64-encoded image (e.g., `data:image/png;base64,...`)
 
 ---
 
@@ -187,7 +191,7 @@ You can use Gemini embeddings in LangChain:
 ```python
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 vector = embeddings.embed_query("hello, world!")
 print(vector)
 ```
@@ -228,11 +232,8 @@ print("Answerable probability:", response.answerable_probability)
 
 ---
 
-
 ## Resources
 
-* [LangChain Documentation](https://docs.langchain.com/)
-* [Google Generative AI SDK](https://googleapis.github.io/python-genai/)
-* [Gemini Model Documentation](https://ai.google.dev/)
-
-
+- [LangChain Documentation](https://docs.langchain.com/)
+- [Google Generative AI SDK](https://googleapis.github.io/python-genai/)
+- [Gemini Model Documentation](https://ai.google.dev/)
