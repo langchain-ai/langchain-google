@@ -6,7 +6,7 @@ import pytest
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import Annotated
 
 from langchain_google_genai._function_utils import (
@@ -17,6 +17,7 @@ from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
     _ToolConfigDict,
     convert_to_genai_function_declarations,
+    replace_defs_in_schema,
     tool_to_dict,
 )
 
@@ -827,3 +828,416 @@ def test_tool_with_doubly_nested_list_param() -> None:
     assert "description" in matrix_property
     assert "description" in items_level1
     assert "description" in items_level2
+
+
+def test_schema_no_defs() -> None:
+    schema = {"type": "integer"}
+    expected_schema = {"type": "integer"}
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_empty_defs() -> None:
+    schema = {"$defs": {}, "type": "integer"}
+    expected_schema = {"type": "integer"}
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_simple_ref_replacement() -> None:
+    schema = {
+        "$defs": {"MyDefinition": {"type": "string"}},
+        "property": {"$ref": "#/$defs/MyDefinition"},
+    }
+    expected_schema = {"property": {"type": "string"}}
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_nested_ref_replacement() -> None:
+    schema = {
+        "$defs": {
+            "MyDefinition": {
+                "type": "object",
+                "properties": {"name": {"$ref": "#/$defs/NameDefinition"}},
+            },
+            "NameDefinition": {"type": "string"},
+        },
+        "property": {"$ref": "#/$defs/MyDefinition"},
+    }
+    expected_schema = {
+        "property": {"type": "object", "properties": {"name": {"type": "string"}}}
+    }
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
+def test_schema_recursive_error_self_reference() -> None:
+    schema = {
+        "$defs": {
+            "Node": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "children": {"type": "array", "items": {"$ref": "#/$defs/Node"}},
+                },
+            }
+        },
+        "root": {"$ref": "#/$defs/Node"},
+    }
+    with pytest.raises(RecursionError):
+        _ = replace_defs_in_schema(schema)
+
+
+def test_tool_with_union_types() -> None:
+    """
+    Test that validates tools with Union types in function declarations
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper1(BaseModel):
+        """Test helper class 1."""
+
+        x: bool = False
+
+    class Helper2(BaseModel):
+        """Test helper class 2."""
+
+        y: str = "1"
+
+    class GetWeather(BaseModel):
+        """Get weather information."""
+
+        location: str = "New York, USA"
+        date: Union[Helper1, Helper2] = Helper1()
+
+    # Convert to OpenAI, then to GenAI, then to dict
+    oai_tool = convert_to_openai_tool(GetWeather)
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    date_property = properties.get("date")
+    assert isinstance(date_property, dict), "Expected a dict."
+
+    # Verify that 'any_of' is present in the date property
+    assert "any_of" in date_property, "Expected 'date' to have 'any_of' field."
+
+    any_of = date_property.get("any_of")
+    assert isinstance(any_of, list), "Expected 'any_of' to be a list."
+    assert len(any_of) == 2, "Expected 'any_of' to have 2 options."
+
+    # Check first option (Helper1)
+    helper1 = any_of[0]
+    assert isinstance(helper1, dict), "Expected first option to be a dict."
+    assert "properties" in helper1, "Expected first option to have properties."
+    assert "x" in helper1["properties"], "Expected first option to have 'x' property."
+    assert (
+        helper1["properties"]["x"]["type_"] == glm.Type.BOOLEAN
+    ), "Expected 'x' to be BOOLEAN."
+
+    # Check second option (Helper2)
+    helper2 = any_of[1]
+    assert isinstance(helper2, dict), "Expected second option to be a dict."
+    assert "properties" in helper2, "Expected second option to have properties."
+    assert "y" in helper2["properties"], "Expected second option to have 'y' property."
+    assert (
+        helper2["properties"]["y"]["type_"] == glm.Type.STRING
+    ), "Expected 'y' to be STRING."
+
+
+def test_tool_with_union_primitive_types() -> None:
+    """
+    Test that validates tools with Union types that include primitive types
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper(BaseModel):
+        """Test helper class."""
+
+        value: int = 42
+
+    class SearchQuery(BaseModel):
+        """Search query model with a union parameter."""
+
+        query: str = "default query"
+        filter: Union[str, Helper] = "default filter"
+
+    # Convert to OpenAI, then to GenAI, then to dict
+    oai_tool = convert_to_openai_tool(SearchQuery)
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    filter_property = properties.get("filter")
+    assert isinstance(filter_property, dict), "Expected a dict."
+
+    # Verify that 'any_of' is present in the filter property
+    assert "any_of" in filter_property, "Expected 'filter' to have 'any_of' field."
+
+    any_of = filter_property.get("any_of")
+    assert isinstance(any_of, list), "Expected 'any_of' to be a list."
+    assert len(any_of) == 2, "Expected 'any_of' to have 2 options."
+
+    # One option should be a string
+    string_option = next(
+        (opt for opt in any_of if opt.get("type_") == glm.Type.STRING), None
+    )
+    assert string_option is not None, "Expected one option to be a STRING."
+
+    # One option should be an object (Helper)
+    object_option = next(
+        (opt for opt in any_of if opt.get("type_") == glm.Type.OBJECT), None
+    )
+    assert object_option is not None, "Expected one option to be an OBJECT."
+    assert "properties" in object_option, "Expected object option to have properties."
+    assert (
+        "value" in object_option["properties"]
+    ), "Expected object option to have 'value' property."
+    assert (
+        object_option["properties"]["value"]["type_"] == 3
+    ), "Expected 'value' to be NUMBER or INTEGER."
+
+
+def test_tool_with_nested_union_types() -> None:
+    """
+    Test that validates tools with nested Union types are correctly converted
+    to nested 'anyOf' structures in the schema.
+    """
+
+    class Address(BaseModel):
+        """Address model."""
+
+        street: str = "123 Main St"
+        city: str = "Anytown"
+
+    class Contact(BaseModel):
+        """Contact model."""
+
+        email: str = "user@example.com"
+        phone: Optional[str] = None
+
+    class Person(BaseModel):
+        """Person model with complex nested unions."""
+
+        name: str
+        location: Union[str, Address] = "Unknown"
+        contacts: List[Union[str, Contact]] = []
+
+    # Convert to OpenAI, then to GenAI, then to dict
+    oai_tool = convert_to_openai_tool(Person)
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    parameters = fn_decl.get("parameters")
+    properties = parameters.get("properties")
+
+    assert "name" in properties, "Expected 'name' property to exist"
+    assert "location" in properties, "Expected 'location' property to exist"
+
+    # Check location property (direct Union)
+    location_property = properties.get("location")
+    assert "any_of" in location_property, "Expected 'location' to have 'any_of' field."
+    location_any_of = location_property.get("any_of")
+    assert len(location_any_of) == 2, "Expected 'location.any_of' to have 2 options."
+
+    # One option should be a string
+    string_option = next(
+        (opt for opt in location_any_of if opt.get("type_") == glm.Type.STRING), None
+    )
+    assert string_option is not None, "Expected one location option to be a STRING."
+
+    # One option should be an object (Address)
+    address_option = next(
+        (opt for opt in location_any_of if opt.get("type_") == glm.Type.OBJECT), None
+    )
+    assert address_option is not None, "Expected one location option to be an OBJECT."
+    assert "properties" in address_option, "Expected address option to have properties"
+    assert (
+        "city" in address_option["properties"]
+    ), "Expected Address to have 'city' property."
+
+
+def test_tool_invocation_with_union_types() -> None:
+    """
+    Test that validates tools with Union types can be correctly invoked
+    with either type from the union.
+    """
+
+    class Configuration(BaseModel):
+        """Configuration model."""
+
+        settings: Dict[str, str] = {}
+
+    @tool
+    def configure_service(service_name: str, config: Union[str, Configuration]) -> str:
+        """
+        Configure a service with either a configuration string or object.
+
+        Args:
+            service_name: The name of the service to configure
+            config: Either a config string or a Configuration object
+        """
+        return f"Configured {service_name}"
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(configure_service)
+
+    # Convert to GenAI
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+
+    # Get function declaration
+    function_declaration = genai_tool.function_declarations[0]
+
+    # Check parameters
+    parameters = function_declaration.parameters
+    assert parameters is not None, "Expected parameters to exist"
+    assert hasattr(parameters, "properties"), "Expected parameters to have properties"
+
+    # Check for config property
+    config_property = None
+    for prop_name, prop in parameters.properties.items():
+        if prop_name == "config":
+            config_property = prop
+            break
+
+    assert config_property is not None, "Expected 'config' property to exist"
+    assert hasattr(config_property, "any_of"), "Expected any_of attribute on config"
+    assert len(config_property.any_of) == 2, "Expected config.any_of to have 2 options"
+
+    # Check both variants of the Union type
+    type_variants = [option.type for option in config_property.any_of]
+    assert glm.Type.STRING in type_variants, "Expected STRING to be one of the variants"
+    assert glm.Type.OBJECT in type_variants, "Expected OBJECT to be one of the variants"
+
+    # Find the object variant
+    object_variant = None
+    for option in config_property.any_of:
+        if option.type == glm.Type.OBJECT:
+            object_variant = option
+            break
+
+    assert object_variant is not None, "Expected to find an object variant"
+    assert hasattr(object_variant, "properties"), "Expected object to have properties"
+
+    # Check for settings property
+    has_settings = False
+    for prop_name in object_variant.properties:
+        if prop_name == "settings":
+            has_settings = True
+            break
+
+    assert has_settings, "Expected object variant to have 'settings' property"
+
+
+def test_tool_field_union_types() -> None:
+    """
+    Test that validates Field with Union types in Pydantic models
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper1(BaseModel):
+        """Helper class 1."""
+
+        x: bool = False
+
+    class Helper2(BaseModel):
+        """Helper class 2."""
+
+        y: str = "1"
+
+    class GetWeather(BaseModel):
+        """
+        Get weather information for a location.
+        """
+
+        location: str = Field(
+            ..., description="The city and country, e.g. New York, USA"
+        )
+        date: Union[Helper1, Helper2] = Field(description="Test field")
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(GetWeather)
+
+    # Convert to GenAI
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    # Get function declaration
+    function_declarations = genai_tool_dict.get("function_declarations", [])
+    assert len(function_declarations) > 0, "Expected at least one function declaration"
+    fn_decl = function_declarations[0]
+
+    # Check the name and description
+    assert fn_decl.get("name") == "GetWeather", "Expected name to be 'GetWeather'"  # type: ignore
+    assert "Get weather information" in fn_decl.get("description", ""), (  # type: ignore
+        "Expected description to include weather information"
+    )
+
+    # Check parameters
+    parameters = fn_decl.get("parameters", {})  # type: ignore
+    properties = parameters.get("properties", {})
+
+    # Check location property
+    assert "location" in properties, "Expected location field in properties"
+    location_property = properties.get("location", {})
+    assert (
+        "description" in location_property
+    ), "Expected description field in location property"
+    assert (
+        location_property.get("description")
+        == "The city and country, e.g. New York, USA"
+    ), "Expected correct description for location"
+
+    # Check date property (the union type)
+    assert "date" in properties, "Expected date field in properties"
+    date_property = properties.get("date", {})
+    assert "any_of" in date_property, "Expected 'date' to have 'any_of' field"
+
+    any_of = date_property.get("any_of", [])
+    assert len(any_of) == 2, "Expected 'any_of' to have 2 options"
+
+    # Extract the titles of the models in the anyOf
+    model_titles = []
+    for option in any_of:
+        if "title" in option:
+            title = option.get("title")
+            if title is not None:
+                model_titles.append(title)
+
+    assert "Helper1" in model_titles, "Expected 'Helper1' to be in the anyOf options"
+    assert "Helper2" in model_titles, "Expected 'Helper2' to be in the anyOf options"
+
+    # Check that the required fields include both location and date
+    assert "required" in parameters, "Expected required field in parameters"
+    required_fields = parameters.get("required", [])
+    assert "location" in required_fields, "Expected 'location' to be required"
+    assert "date" in required_fields, "Expected 'date' to be required"

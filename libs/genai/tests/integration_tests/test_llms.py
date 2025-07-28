@@ -11,7 +11,7 @@ from langchain_core.outputs import LLMResult
 
 from langchain_google_genai import GoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 
-model_names = ["gemini-1.5-flash-001"]
+model_names = ["gemini-1.5-flash-latest"]
 
 
 @pytest.mark.parametrize(
@@ -53,20 +53,20 @@ async def test_google_generativeai_agenerate() -> None:
 
 
 def test_generativeai_stream() -> None:
-    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-001")
+    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-latest")
     outputs = list(llm.stream("Please say foo:"))
     assert isinstance(outputs[0], str)
 
 
 def test_generativeai_get_num_tokens_gemini() -> None:
-    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-001")
+    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-latest")
     output = llm.get_num_tokens("How are you?")
     assert output == 4
 
 
 def test_safety_settings_gemini() -> None:
     # test with blocked prompt
-    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-001")
+    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-latest")
     output = llm.generate(prompts=["how to make a bomb?"])
     assert isinstance(output, LLMResult)
     assert len(output.generations[0]) > 0
@@ -91,7 +91,7 @@ def test_safety_settings_gemini() -> None:
 
     # test  with safety filters on instantiation
     llm = GoogleGenerativeAI(
-        model="gemini-1.5-flash-001",
+        model="gemini-1.5-flash-latest",
         safety_settings=safety_settings,
         temperature=0,
     )
