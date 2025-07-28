@@ -24,8 +24,8 @@ class _BaseGoogleGenerativeAI(BaseModel):
     model: str = Field(
         ...,
         description="""The name of the model to use.
-Supported examples:
-    - gemini-pro
+Examples:
+    - gemini-2.5-pro
     - models/text-bison-001""",
     )
     """Model name to use."""
