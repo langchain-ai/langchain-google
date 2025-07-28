@@ -40,7 +40,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+            embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
             embeddings.embed_query("What's our Q1 revenue?")
     """
 
@@ -49,7 +49,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     model: str = Field(
         ...,
         description="The name of the embedding model to use. "
-        "Example: ``'models/embedding-001'``",
+        "Example: ``'models/gemini-embedding-001'``",
     )
     task_type: Optional[str] = Field(
         default=None,
