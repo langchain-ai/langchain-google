@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import re
 from concurrent.futures import Executor
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
 
 import vertexai  # type: ignore[import-untyped]
 from google.api_core.client_options import ClientOptions
@@ -33,21 +44,17 @@ from typing_extensions import Literal, Self
 from vertexai.generative_models._generative_models import (  # type: ignore
     SafetySettingsType,
 )
-from vertexai.language_models import (  # type: ignore[import-untyped]
-    TextGenerationModel,
-)
 
+from langchain_google_vertexai._client_utils import (
+    _get_async_prediction_client,
+    _get_client_options,
+    _get_prediction_client,
+)
 from langchain_google_vertexai._utils import (
-    GoogleModelFamily,
     get_client_info,
     get_user_agent,
-    is_gemini_model,
 )
 
-_PALM_DEFAULT_MAX_OUTPUT_TOKENS = TextGenerationModel._DEFAULT_MAX_OUTPUT_TOKENS
-_PALM_DEFAULT_TEMPERATURE = 0.0
-_PALM_DEFAULT_TOP_P = 0.95
-_PALM_DEFAULT_TOP_K = 40
 _DEFAULT_LOCATION = "us-central1"
 
 
@@ -122,10 +129,10 @@ class _VertexAIBase(BaseModel):
                 f"{'' if location == 'global' else location + '-'}"
                 f"{constants.PREDICTION_API_BASE_PATH}"
             )
-        client_options = ClientOptions(api_endpoint=api_endpoint)
-        if values.get("client_cert_source"):
-            client_options.client_cert_source = values["client_cert_source"]
-        values["client_options"] = client_options
+        values["client_options"] = _get_client_options(
+            api_endpoint=api_endpoint,
+            cert_source=values.get("client_cert_source"),
+        )
         additional_headers = values.get("additional_headers") or {}
         values["default_metadata"] = tuple(additional_headers.items())
         return values
@@ -145,16 +152,13 @@ class _VertexAIBase(BaseModel):
     ) -> Union[v1beta1PredictionServiceClient, v1PredictionServiceClient]:
         """Returns PredictionServiceClient."""
         if self.client is None:
-            client_kwargs: dict[str, Any] = {
-                "credentials": self.credentials,
-                "client_options": self.client_options,
-                "client_info": get_client_info(module=self._user_agent),
-                "transport": self.api_transport,
-            }
-            if self.endpoint_version == "v1":
-                self.client = v1PredictionServiceClient(**client_kwargs)
-            else:
-                self.client = v1beta1PredictionServiceClient(**client_kwargs)
+            self.client = _get_prediction_client(
+                endpoint_version=self.endpoint_version,
+                credentials=self.credentials,
+                client_options=self.client_options,
+                transport=self.api_transport,
+                user_agent=self._user_agent,
+            )
         return self.client
 
     @property
@@ -163,24 +167,12 @@ class _VertexAIBase(BaseModel):
     ) -> Union[v1PredictionServiceAsyncClient, v1beta1PredictionServiceAsyncClient]:
         """Returns PredictionServiceClient."""
         if self.async_client is None:
-            async_client_kwargs: dict[str, Any] = dict(
-                client_options=self.client_options,
-                client_info=get_client_info(module=self._user_agent),
+            self.async_client = _get_async_prediction_client(
+                endpoint_version=self.endpoint_version,
                 credentials=self.credentials,
+                client_options=cast(ClientOptions, self.client_options),
+                user_agent=self._user_agent,
             )
-
-            # async clients don't support "rest" transport
-            # https://github.com/googleapis/gapic-generator-python/issues/1962
-            async_client_kwargs["transport"] = "grpc_asyncio"
-
-            if self.endpoint_version == "v1":
-                self.async_client = v1PredictionServiceAsyncClient(
-                    **async_client_kwargs
-                )
-            else:
-                self.async_client = v1beta1PredictionServiceAsyncClient(
-                    **async_client_kwargs
-                )
         return self.async_client
 
     @property
@@ -222,7 +214,6 @@ class _VertexAICommon(_VertexAIBase):
     """Random seed for the generation."""
     streaming: bool = False
     """Whether to stream the results or not."""
-    model_family: Optional[GoogleModelFamily] = None  #: :meta private:
     safety_settings: Optional["SafetySettingsType"] = None
     """The default safety settings to use for all generations. 
     
@@ -240,20 +231,18 @@ class _VertexAICommon(_VertexAIBase):
             """  # noqa: E501
 
     tuned_model_name: Optional[str] = None
-    """The name of a tuned model. If tuned_model_name is passed
-    model_name will be used to determine the model family
-    """
+    """The name of a tuned model."""
     thinking_budget: Optional[int] = Field(
         default=None, description="Indicates the thinking budget in tokens."
+    )
+    include_thoughts: Optional[bool] = Field(
+        default=None,
+        description="Indicates whether to include thoughts in the response.",
     )
     audio_timestamp: Optional[bool] = Field(
         default=None,
         description="Enable timestamp understanding of audio-only files",
     )
-
-    @property
-    def _is_gemini_model(self) -> bool:
-        return is_gemini_model(self.model_family)  # type: ignore[arg-type]
 
     @property
     def _llm_type(self) -> str:
@@ -270,30 +259,15 @@ class _VertexAICommon(_VertexAIBase):
 
     @property
     def _default_params(self) -> Dict[str, Any]:
-        if self.model_family == GoogleModelFamily.GEMINI:
-            default_params: Dict[str, Any] = {}
-        elif self.model_family == GoogleModelFamily.GEMINI_ADVANCED:
-            default_params = {}
-        else:
-            default_params = {
-                "temperature": _PALM_DEFAULT_TEMPERATURE,
-                "max_output_tokens": _PALM_DEFAULT_MAX_OUTPUT_TOKENS,
-                "top_p": _PALM_DEFAULT_TOP_P,
-                "top_k": _PALM_DEFAULT_TOP_K,
-            }
+        default_params: Dict[str, Any] = {}
         params = {
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
             "candidate_count": self.n,
             "seed": self.seed,
+            "top_k": self.top_k,
+            "top_p": self.top_p,
         }
-        if not self.model_family == GoogleModelFamily.CODEY:
-            params.update(
-                {
-                    "top_k": self.top_k,
-                    "top_p": self.top_p,
-                }
-            )
         updated_params = {}
         for param_name, param_value in params.items():
             default_value = default_params.get(param_name)
