@@ -22,7 +22,7 @@ To install the package, use pip:
 .. code-block:: python
     pip install -U langchain-google-genai
 
-## Using Chat Models
+**Using Chat Models**
 
 After setting up your environment with the required API key, you can interact with the Google Gemini models.
 
@@ -33,7 +33,7 @@ After setting up your environment with the required API key, you can interact wi
     llm = ChatGoogleGenerativeAI(model="gemini-pro")
     llm.invoke("Sing a ballad of LangChain.")
 
-## Using LLMs
+**Using LLMs**
 
 The package also supports generating text with Google's models.
 
@@ -44,7 +44,7 @@ The package also supports generating text with Google's models.
     llm = GoogleGenerativeAI(model="gemini-pro")
     llm.invoke("Once upon a time, a library called LangChain")
 
-## Embedding Generation
+**Embedding Generation**
 
 The package also supports creating embeddings with Google's models, useful for textual similarity and other NLP applications.
 

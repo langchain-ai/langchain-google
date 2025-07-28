@@ -1232,9 +1232,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.top_k is not None and self.top_k <= 0:
             raise ValueError("top_k must be positive")
 
-        if not any(
-            self.model.startswith(prefix) for prefix in ("models/", "tunedModels/")
-        ):
+        if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
 
         additional_headers = self.additional_headers or {}
@@ -1818,7 +1816,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tools: A list of tool definitions to bind to this chat model.
                 Can be a pydantic model, callable, or BaseTool. Pydantic
                 models, callables, and BaseTools will be automatically converted to
-                their schema dictionary representation.
+                their schema dictionary representation. Tools with Union types in
+                their arguments are now supported and converted to `anyOf` schemas.
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """

@@ -120,7 +120,10 @@ from google.cloud.aiplatform_v1beta1.types import (
     Schema,
 )
 from langchain_google_vertexai._base import _VertexAICommon
-from langchain_google_vertexai._image_utils import ImageBytesLoader
+from langchain_google_vertexai._image_utils import (
+    ImageBytesLoader,
+    image_bytes_to_b64_string,
+)
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
@@ -338,6 +341,8 @@ def _parse_chat_history_gemini(
         # reachable due to typing, but mypy is wrong so we ignore the lint
         # error.
         if isinstance(raw_content, int):  # type: ignore
+            raw_content = str(raw_content)  # type: ignore
+        if isinstance(raw_content, float):  # type: ignore
             raw_content = str(raw_content)  # type: ignore
         if isinstance(raw_content, str):
             raw_content = [raw_content]
@@ -726,6 +731,25 @@ def _parse_response_candidate(
                     content.append(execution_result)
                 else:
                     raise Exception("Unexpected content type")
+
+        if part.inline_data.mime_type.startswith("image/"):
+            image_format = part.inline_data.mime_type[6:]
+            image_message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format=image_format
+                    )
+                },
+            }
+            if not content:
+                content = [image_message]
+            elif isinstance(content, str):
+                content = [content, image_message]
+            elif isinstance(content, list):
+                content.append(image_message)
+            else:
+                raise Exception("Unexpected content type")
 
     if content is None:
         content = ""
@@ -1339,7 +1363,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         # Get all valid field names, including aliases
         valid_fields = set()
-        for field_name, field_info in self.model_fields.items():
+        for field_name, field_info in type(self).model_fields.items():
             valid_fields.add(field_name)
             if hasattr(field_info, "alias") and field_info.alias is not None:
                 valid_fields.add(field_info.alias)
@@ -2145,7 +2169,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tools: A list of tool definitions to bind to this chat model.
                 Can be a pydantic model, callable, or BaseTool. Pydantic
                 models, callables, and BaseTools will be automatically converted to
-                their schema dictionary representation.
+                their schema dictionary representation. Tools with Union types in
+                their arguments are now supported and converted to `anyOf` schemas.
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """
