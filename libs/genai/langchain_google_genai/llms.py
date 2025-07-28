@@ -29,7 +29,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         .. code-block:: python
 
             from langchain_google_genai import GoogleGenerativeAI
-            llm = GoogleGenerativeAI(model="gemini-pro")
+            llm = GoogleGenerativeAI(model="gemini-2.5-pro")
     """
 
     client: Any = None  #: :meta private:

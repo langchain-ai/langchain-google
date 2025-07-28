@@ -21,7 +21,7 @@ def test_integration_initialization() -> None:
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         _ = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
+            model="models/gemini-embedding-001",
             google_api_key=SecretStr("..."),
         )
         mock_prediction_service.assert_called_once()
@@ -34,7 +34,7 @@ def test_integration_initialization() -> None:
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         _ = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
+            model="models/gemini-embedding-001",
             google_api_key=SecretStr("..."),
             task_type="retrieval_document",
         )
@@ -43,7 +43,7 @@ def test_integration_initialization() -> None:
 
 def test_api_key_is_string() -> None:
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
+        model="models/gemini-embedding-001",
         google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(embeddings.google_api_key, SecretStr)
@@ -51,7 +51,7 @@ def test_api_key_is_string() -> None:
 
 def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> None:
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
+        model="models/gemini-embedding-001",
         google_api_key=SecretStr("secret-api-key"),
     )
     print(embeddings.google_api_key, end="")  # noqa: T201
