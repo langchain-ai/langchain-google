@@ -7,6 +7,7 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
     NumericNamespace,
 )
 from google.oauth2.service_account import Credentials
+from langchain_core._api.deprecation import deprecated
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
@@ -30,7 +31,8 @@ class _BaseVertexAIVectorStore(VectorStore):
         self,
         searcher: Searcher,
         document_storage: DocumentStorage,
-        embbedings: Optional[Embeddings] = None,
+        embbedings: Optional[Embeddings] = None,  # Deprecated parameter
+        embeddings: Optional[Embeddings] = None,
     ) -> None:
         """Constructor.
 
@@ -38,15 +40,33 @@ class _BaseVertexAIVectorStore(VectorStore):
             searcher: Object in charge of searching and storing the index.
             document_storage: Object in charge of storing and retrieving documents.
             embbedings: Object in charge of transforming text to embbeddings.
+                Deprecated: Use 'embeddings' instead.
+            embeddings: Object in charge of transforming text to embeddings.
         """
         super().__init__()
         self._searcher = searcher
         self._document_storage = document_storage
-        self._embeddings = embbedings or self._get_default_embeddings()
+
+        # Add explicit warning when the misspelled parameter is used
+        if embbedings is not None:
+            warnings.warn(
+                message=(
+                    "The parameter `embbedings` is deprecated due to a spelling error. "
+                    "Please use `embeddings` instead. "
+                    "Support for `embbedings` will be removed in a future version."
+                ),
+                category=DeprecationWarning,
+            )
+        self._embeddings = embeddings or embbedings or self._get_default_embeddings()
 
     @property
+    @deprecated(since="0.1.0", removal="3.0.0", alternative="embeddings")
     def embbedings(self) -> Embeddings:
         """Returns the embeddings object."""
+        return self._embeddings
+
+    @property
+    def embeddings(self) -> Embeddings:
         return self._embeddings
 
     def similarity_search_with_score(  # type: ignore[override]
@@ -317,8 +337,8 @@ class _BaseVertexAIVectorStore(VectorStore):
             )
 
         documents = [
-            Document(page_content=text, metadata=metadata)
-            for text, metadata in zip(texts, metadatas)
+            Document(id=id_, page_content=text, metadata=metadata)
+            for id_, text, metadata in zip(ids, texts, metadatas)
         ]
 
         self._document_storage.mset(list(zip(ids, documents)))
@@ -359,14 +379,14 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         warnings.warn(
             message=(
-                "`TensorflowHubEmbeddings` as a default embbedings is deprecated."
-                " Will change to `VertexAIEmbbedings`. Please specify the embedding "
+                "`TensorflowHubEmbeddings` as a default embeddings is deprecated."
+                " Will change to `VertexAIEmbeddings`. Please specify the embedding "
                 "type in the constructor."
             ),
             category=DeprecationWarning,
         )
 
-        # TODO: Change to vertexai embbedingss
+        # TODO: Change to vertexai embeddings
         from langchain_community.embeddings import (  # type: ignore[import-not-found, unused-ignore]
             TensorflowHubEmbeddings,
         )
@@ -454,7 +474,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
                 staging_bucket=bucket,
                 stream_update=stream_update,
             ),
-            embbedings=embedding,
+            embeddings=embedding,
         )
 
 
@@ -550,5 +570,5 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
                 staging_bucket=bucket,
                 stream_update=stream_update,
             ),
-            embbedings=embedding,
+            embeddings=embedding,
         )

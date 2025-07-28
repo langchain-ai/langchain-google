@@ -21,23 +21,30 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-2.0-flash-001",
+            "model": "models/gemini-2.5-flash",
             "rate_limiter": rate_limiter,
+            "thinking_budget": 0,
         }
 
-    @pytest.mark.xfail(
-        reason="Likely a bug in genai: prompt_token_count inconsistent in final chunk."
-    )
-    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
-        super().test_usage_metadata_streaming(model)
+    @property
+    def supports_image_inputs(self) -> bool:
+        return True
 
-    @pytest.mark.xfail(reason="investigate")
-    def test_bind_runnables_as_tools(self, model: BaseChatModel) -> None:
-        super().test_bind_runnables_as_tools(model)
+    @property
+    def supports_image_urls(self) -> bool:
+        return True
 
-    @pytest.mark.xfail(reason=("investigate"))
-    def test_tool_calling_with_no_arguments(self, model: BaseChatModel) -> None:
-        super().test_tool_calling_with_no_arguments(model)
+    @property
+    def supports_image_tool_message(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_audio_inputs(self) -> bool:
+        return True
 
 
 class TestGeminiAIStandard(ChatModelIntegrationTests):
@@ -48,7 +55,7 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-1.5-pro-001",
+            "model": "models/gemini-1.5-pro-latest",
             "rate_limiter": rate_limiter,
         }
 
@@ -57,6 +64,12 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         self, model: BaseChatModel, my_adder_tool: BaseTool
     ) -> None:
         super().test_tool_message_histories_list_content(model, my_adder_tool)
+
+    @pytest.mark.xfail(
+        reason="Investigate: prompt_token_count inconsistent in final chunk."
+    )
+    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
+        super().test_usage_metadata_streaming(model)
 
     @property
     def supported_usage_metadata_details(
@@ -74,6 +87,3 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         ],
     ]:
         return {"invoke": [], "stream": []}
-
-
-# TODO: increase quota on gemini-1.5-pro-001 and test as well

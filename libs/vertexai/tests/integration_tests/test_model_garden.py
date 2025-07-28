@@ -143,6 +143,30 @@ def test_anthropic_stream() -> None:
 
 
 @pytest.mark.extended
+def test_anthropic_thinking_stream() -> None:
+    project = os.environ["PROJECT_ID"]
+    location = "us-east5"
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+        model_kwargs={
+            "thinking": {
+                "type": "enabled",
+                "budget_tokens": 1024,  # budget tokens >= 1024
+            },
+        },
+        max_tokens=2048,  # max_tokens must be greater than budget_tokens
+    )
+    question = (
+        "Hello, could you recommend a good movie for me to watch this evening, please?"
+    )
+    message = HumanMessage(content=question)
+    sync_response = model.stream([message], model="claude-3-7-sonnet@20250219")
+    for chunk in sync_response:
+        assert isinstance(chunk, AIMessageChunk)
+
+
+@pytest.mark.extended
 async def test_anthropic_async() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-central1"

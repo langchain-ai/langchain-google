@@ -252,8 +252,12 @@ def image_bytes_to_b64_string(
     Returns:
         B64 image encoded string.
     """
+    if image_format == "pdf":
+        image_type = "application"
+    else:
+        image_type = "image"
     encoded_bytes = base64.b64encode(image_bytes).decode(encoding)
-    return f"data:image/{image_format};base64,{encoded_bytes}"
+    return f"data:{image_type}/{image_format};base64,{encoded_bytes}"
 
 
 def create_text_content_part(message_str: str) -> Dict:
