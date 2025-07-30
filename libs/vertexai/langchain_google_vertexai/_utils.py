@@ -157,7 +157,10 @@ def get_generation_info(
                 "severity": rating.severity.name,
                 "severity_score": rating.severity_score,
             }
+            # Image generation models sometime return ratings that are not
+            # included in the proto.
             for rating in candidate.safety_ratings
+            if hasattr(rating.category, "name")
         ],
         "citation_metadata": (
             proto.Message.to_dict(candidate.citation_metadata)
