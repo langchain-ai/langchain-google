@@ -36,6 +36,7 @@ from google.cloud.aiplatform_v1beta1.services.prediction_service import (
 from google.cloud.aiplatform_v1beta1.services.prediction_service import (
     PredictionServiceClient as v1beta1PredictionServiceClient,
 )
+from google.cloud.aiplatform_v1beta1.types.content import Modality
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
@@ -232,6 +233,11 @@ class _VertexAICommon(_VertexAIBase):
 
     tuned_model_name: Optional[str] = None
     """The name of a tuned model."""
+
+    response_modalities: Optional[List[Modality]] = Field(
+        default=None, description=("A list of modalities of the response")
+    )
+
     thinking_budget: Optional[int] = Field(
         default=None, description="Indicates the thinking budget in tokens."
     )
