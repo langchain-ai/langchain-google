@@ -167,6 +167,9 @@ _allowed_params = [
     "thinking_budget",
     "include_thoughts",
 ]
+_allowed_beta_params = [
+    "media_resolution",
+]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
 
@@ -1463,6 +1466,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             params["thinking_config"]["include_thoughts"] = include_thoughts
         _ = params.pop("include_thoughts", None)
 
+        media_resolution = kwargs.get("media_resolution")
+        if media_resolution is not None:
+            params["media_resolution"] = media_resolution
         response_modalities = kwargs.get(
             "response_modalities", self.response_modalities
         )
@@ -1558,6 +1564,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 stop=stop,
                 stream=stream,
                 **{k: v for k, v in kwargs.items() if k in _allowed_params},
+                **{k: v for k, v in kwargs.items() if k in _allowed_beta_params},
             )
         )
 
