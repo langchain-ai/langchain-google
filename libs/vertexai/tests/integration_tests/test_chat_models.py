@@ -333,11 +333,10 @@ def test_multimodal_media_inline_base64_agent() -> None:
         tools=tools,
         prompt=prompt_template,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+    agent_executor = agents.AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=False,
-        stream_runnable=False,
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
@@ -1103,7 +1102,7 @@ def test_structured_output_schema_enum():
         """
         The film aims to educate and inform viewers about real-life subjects, events, or
         people. It offers a factual record of a particular topic by combining interviews
-        , historical footage and narration. The primary purpose of a film is to present 
+        , historical footage and narration. The primary purpose of a film is to present
         information and provide insights into various aspects of reality.
         """
     )
@@ -1118,14 +1117,14 @@ def test_structured_output_schema_enum():
 @pytest.mark.first
 def test_context_catching():
     system_instruction = """
-    
+
     You are an expert researcher. You always stick to the facts in the sources provided,
     and never make up new facts.
     
     If asked about it, the secret number is 747.
-    
+
     Now look at these research papers, and answer the following questions.
-    
+
     """
 
     cached_content = create_context_cache(
@@ -1191,9 +1190,8 @@ def test_context_catching_tools():
 
     You have a get_secret_number function available. Use this tool if someone asks
     for the secret number.
-        
     Now look at these research papers, and answer the following questions.
-        
+
     """
 
     cached_content = create_context_cache(
@@ -1238,9 +1236,7 @@ def test_context_catching_tools():
         tools=tools,
         prompt=prompt,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent, tools=tools, verbose=False, stream_runnable=False
-    )
+    agent_executor = agents.AgentExecutor(agent=agent, tools=tools, verbose=False)
     response = agent_executor.invoke({"input": "what is the secret number?"})
     assert isinstance(response["output"], str)
 
