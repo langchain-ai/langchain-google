@@ -152,6 +152,44 @@ def _format_message_anthropic(
                     if copy_attr in block:
                         new_block[copy_attr] = block[copy_attr]
 
+                if block["type"] == "image":
+                    if block["source_type"] == "url":
+                        if block["url"].startswith("data:"):
+                            # Data URI
+                            formatted_block = {
+                                "type": "image",
+                                "source": _format_image(block["url"], project),
+                            }
+                        else:
+                            formatted_block = {
+                                "type": "image",
+                                "source": {"type": "url", "url": block["url"]},
+                            }
+                    elif block["source_type"] == "base64":
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": block["mime_type"],
+                                "data": block["data"],
+                            },
+                        }
+                    elif block["source_type"] == "id":
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "file",
+                                "file_id": block["id"],
+                            },
+                        }
+                    else:
+                        raise ValueError(
+                            "Anthropic only supports 'url' and 'base64' source_type "
+                            "for image content blocks."
+                        )
+                    content.append(formatted_block)
+                    continue
+
                 if block["type"] == "text":
                     text: str = block.get("text", "")
                     # Only add non-empty strings for now as empty ones are not
