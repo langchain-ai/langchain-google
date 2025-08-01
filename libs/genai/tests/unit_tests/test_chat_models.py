@@ -331,6 +331,57 @@ def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> 
     _parse_chat_history([function_message], convert_system_message_to_human=True)
 
 
+def test_parse_aimessage_with_tool_calls_conversation_history() -> None:
+    """
+    Regression test for issue #1055: AIMessage with tool_calls in conversation history.
+
+    Ensures that AIMessage objects with tool_calls are properly handled when they
+    appear in conversation history (no corresponding ToolMessage responses).
+    This should not cause "GenerateContentRequest.contents[N].parts: contents.parts must not be empty" error.
+    """
+    # Test Case 1: AIMessage with empty content + tool_calls (original issue)
+    messages1 = [
+        HumanMessage(content="Hello"),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "test", "args": {}, "id": "1", "type": "tool_call"}],
+        ),
+    ]
+
+    system_instruction1, history1 = _parse_chat_history(messages1)
+
+    # Should have 2 messages: HumanMessage and AIMessage
+    assert len(history1) == 2
+
+    # AIMessage should be converted to text-only message with fallback content
+    ai_message1 = history1[1]
+    assert ai_message1.role == "model"
+    assert len(ai_message1.parts) == 1
+    assert hasattr(ai_message1.parts[0], "text")
+    assert ai_message1.parts[0].text == "I can help you with that."
+
+    # Test Case 2: AIMessage with non-empty content + tool_calls
+    messages2 = [
+        HumanMessage(content="Hello"),
+        AIMessage(
+            content="I'll help you",
+            tool_calls=[{"name": "test", "args": {}, "id": "1", "type": "tool_call"}],
+        ),
+    ]
+
+    system_instruction2, history2 = _parse_chat_history(messages2)
+
+    # Should have 2 messages: HumanMessage and AIMessage
+    assert len(history2) == 2
+
+    # AIMessage should be converted to text-only message preserving original content
+    ai_message2 = history2[1]
+    assert ai_message2.role == "model"
+    assert len(ai_message2.parts) == 1
+    assert hasattr(ai_message2.parts[0], "text")
+    assert ai_message2.parts[0].text == "I'll help you"
+
+
 @pytest.mark.parametrize(
     "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
 )
