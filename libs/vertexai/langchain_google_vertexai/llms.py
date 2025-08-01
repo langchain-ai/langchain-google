@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from difflib import get_close_matches
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union
 
+from google.cloud.aiplatform_v1beta1.types import Schema
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -38,7 +39,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
        The model also needs to be prompted to output the appropriate response
        type, otherwise the behavior is undefined. This is a preview feature.
     """
-    response_schema: Optional[Dict[str, Any]] = None
+    response_schema: Optional[Union[Dict[str, Any], Schema]] = None
     """ Optional. Enforce an schema to the output.
         The format of the dictionary should follow Open API schema.
     """
@@ -65,7 +66,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
                     f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
                 )
                 logger.warning(
-                    f"Unexpected argument '{arg}' " f"provided to VertexAI.{suggestion}"
+                    f"Unexpected argument '{arg}' provided to VertexAI.{suggestion}"
                 )
         super().__init__(**kwargs)
 
