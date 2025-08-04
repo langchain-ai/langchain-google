@@ -124,6 +124,13 @@ def test_langchain_google_vertexai_text_model() -> None:
 
 
 @pytest.mark.release
+def test_langchain_google_vertexai_text_gemini_model() -> None:
+    embeddings_model = VertexAIEmbeddings(model_name="gemini-embedding-001")
+    assert isinstance(embeddings_model.client, TextEmbeddingModel)
+    assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
+
+
+@pytest.mark.release
 def test_langchain_google_vertexai_multimodal_model() -> None:
     embeddings_model = VertexAIEmbeddings(model_name="multimodalembedding@001")
     assert isinstance(embeddings_model.client, MultiModalEmbeddingModel)
@@ -133,7 +140,11 @@ def test_langchain_google_vertexai_multimodal_model() -> None:
 @pytest.mark.release
 @pytest.mark.parametrize(
     "model_name, embeddings_dim",
-    [("text-embedding-004", 768), ("text-multilingual-embedding-002", 768)],
+    [
+        ("text-embedding-004", 768),
+        ("text-multilingual-embedding-002", 768),
+        ("gemini-embedding-001", 3072),
+    ],
 )
 def test_langchain_google_vertexai_embedding_with_output_dimensionality(
     model_name: str, embeddings_dim: int
@@ -142,6 +153,7 @@ def test_langchain_google_vertexai_embedding_with_output_dimensionality(
     output = model.embed(
         texts=["foo bar"],
         dimensions=embeddings_dim,
+        batch_size=1,
     )
     assert len(output) == 1
     for embedding in output:

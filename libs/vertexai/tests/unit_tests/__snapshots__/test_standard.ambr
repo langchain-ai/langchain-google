@@ -1,5 +1,5 @@
 # serializer version: 1
-# name: TestGemini_15_AIStandard.test_serdes[serialized]
+# name: TestGemini_AIStandard.test_serdes[serialized]
   dict({
     'id': list([
       'langchain',
@@ -14,12 +14,11 @@
       'location': 'us-central1',
       'max_output_tokens': 100,
       'max_retries': 2,
-      'model_family': '2',
       'model_kwargs': dict({
         'api_key': 'test',
         'timeout': 60,
       }),
-      'model_name': 'gemini-1.5-pro-001',
+      'model_name': 'gemini-2.5-pro',
       'n': 1,
       'perform_literal_eval_on_string_raw_content': True,
       'project': 'test-proj',

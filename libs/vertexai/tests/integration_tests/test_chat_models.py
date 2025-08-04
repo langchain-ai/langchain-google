@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import os
+import re
 from typing import List, Literal, Optional, cast
 
 import pytest
@@ -28,7 +29,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.runnables import RunnableSerializable
+from langchain_core.runnables import ConfigurableField, RunnableSerializable
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -38,11 +39,13 @@ from langchain_google_vertexai import (
     FunctionCallingConfig,
     HarmBlockThreshold,
     HarmCategory,
+    Modality,
     create_context_cache,
 )
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import (
+    _DEFAULT_IMAGE_GENERATION_MODEL_NAME,
     _DEFAULT_MODEL_NAME,
     _DEFAULT_THINKING_MODEL_NAME,
 )
@@ -147,12 +150,11 @@ def test_vertexai_stream() -> None:
         if chunk.response_metadata.get("model_name"):
             chunks_with_model_name += 1
         full = chunk if full is None else full + chunk
-    if model._is_gemini_model:
-        if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
-            pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
-        assert isinstance(full, AIMessageChunk)
-        _check_usage_metadata(full)
-        assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
+    if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
+        pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
+    assert isinstance(full, AIMessageChunk)
+    _check_usage_metadata(full)
+    assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
 
 
 @pytest.mark.release
@@ -200,8 +202,7 @@ def test_multimodal() -> None:
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
-    # Test streaming with gemini-1.5-pro
-    llm = ChatVertexAI(model_name="gemini-1.5-pro", rate_limiter=rate_limiter)
+    llm = ChatVertexAI(model_name="gemini-2.5-pro", rate_limiter=rate_limiter)
     for chunk in llm.stream([message]):
         assert isinstance(chunk, AIMessageChunk)
 
@@ -332,14 +333,40 @@ def test_multimodal_media_inline_base64_agent() -> None:
         tools=tools,
         prompt=prompt_template,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+    agent_executor = agents.AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=False,
-        stream_runnable=False,
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
+
+
+def test_audio_timestamp():
+    storage_client = storage.Client()
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+
+    file_uri = (
+        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
+    )
+    mime_type = "audio/mp3"
+    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
+    media_message = {
+        "type": "media",
+        "data": media_base64,
+        "mime_type": mime_type,
+    }
+    instruction = """
+    Transcribe the video.
+    """
+    text_message = {"type": "text", "text": instruction}
+
+    message = HumanMessage(content=[media_message, text_message])
+    output = llm.invoke([message], audio_timestamp=True)
+
+    assert isinstance(output.content, str)
+    assert re.search(r"^\d+:\d+", output.content)
 
 
 def test_parse_history_gemini_multimodal_FC():
@@ -441,6 +468,38 @@ def test_vertexai_single_call_with_no_system_messages() -> None:
 
 
 @pytest.mark.release
+def test_vertexai_single_call_previous_blocked_response() -> None:
+    """If a previous call was blocked, the AIMessage will have empty content which
+    should be ignored."""
+
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    text_question2 = "How much is 3+3?"
+    # Previous blocked response included in history. This can happen with a LangGraph
+    # ReAct agent.
+    message1 = AIMessage(
+        content="",
+        response_metadata={
+            "is_blocked": True,
+            "safety_ratings": [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "probability_label": "MEDIUM",
+                    "probability_score": 0.33039191365242004,
+                    "blocked": True,
+                    "severity": "HARM_SEVERITY_MEDIUM",
+                    "severity_score": 0.2782268822193146,
+                },
+            ],
+            "finish_reason": "SAFETY",
+        },
+    )
+    message2 = HumanMessage(content=text_question2)
+    response = model([message1, message2])
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+
+@pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_get_num_tokens_from_messages(model_name: str) -> None:
     model = ChatVertexAI(
@@ -533,7 +592,8 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     assert len(gathered.tool_call_chunks) == 1
     tool_call_chunk = gathered.tool_call_chunks[0]
     assert tool_call_chunk["name"] == "my_tool"
-    assert tool_call_chunk["args"] == '{"age": 27.0, "name": "Erick"}'
+    assert tool_call_chunk["args"]
+    assert json.loads(tool_call_chunk["args"]) == {"age": 27.0, "name": "Erick"}
 
 
 @pytest.mark.release
@@ -758,34 +818,170 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     assert len(result.tool_calls) == 0
 
 
+# Image Generation is knwown to be flaky.
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_image_output() -> None:
+    model = ChatVertexAI(
+        model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME,
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+    result = model.invoke("Generate an image of a cat. Then, say meow!")
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, list)
+
+    image_element = None
+    for item in result.content:
+        if isinstance(item, dict) and item.get("type") == "image_url":
+            image_element = item
+            break
+    assert image_element is not None, "Did not find the expected image content"
+
+    text_element = None
+    for item in result.content:
+        if isinstance(item, str):
+            text_element = item
+            break
+    assert text_element is not None, "Did not find the expected text content"
+
+
+# Image Generation is knwown to be flaky.
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME)
+    result = model.invoke(
+        "Generate an image of a cat. Then, say meow!",
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, list)
+
+    image_element = None
+    for item in result.content:
+        if isinstance(item, dict) and item.get("type") == "image_url":
+            image_element = item
+            break
+    assert image_element is not None, "Did not find the expected image content"
+
+    text_element = None
+    for item in result.content:
+        if isinstance(item, str):
+            text_element = item
+            break
+    assert text_element is not None, "Did not find the expected text content"
+
+
+# Marking the following 6 as flaky because it has been observed that gemini 2.5 models
+# don't always think before they answer even when thinking is turned on.
+
+
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
-    response = model.invoke([HumanMessage("How many O's are in Google?")])
+    response = model.invoke("How many O's are in Google? Think before you answer.")
     assert isinstance(response, AIMessage)
+    assert response.usage_metadata is not None
+    assert response.usage_metadata["output_token_details"]["reasoning"] > 0
     assert (
-        response.usage_metadata["total_tokens"]  # type: ignore
-        > response.usage_metadata["input_tokens"]  # type: ignore
-        + response.usage_metadata["output_tokens"]  # type: ignore
+        response.usage_metadata["total_tokens"]
+        > response.usage_metadata["input_tokens"]
+        + response.usage_metadata["output_tokens"]
     )
 
 
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
-    response = model.invoke([HumanMessage("How many O's are in Google?")])
+    response = model.invoke("How many O's are in Google? Think before you answer.")
     assert isinstance(response, AIMessage)
+    assert response.usage_metadata is not None
+    assert response.usage_metadata["output_token_details"]["reasoning"] > 0
+    assert response.usage_metadata["output_token_details"]["reasoning"] <= 100
     assert (
-        response.usage_metadata["total_tokens"]  # type: ignore
-        > response.usage_metadata["input_tokens"]  # type: ignore
-        + response.usage_metadata["output_tokens"]  # type: ignore
+        response.usage_metadata["total_tokens"]
+        > response.usage_metadata["input_tokens"]
+        + response.usage_metadata["output_tokens"]
     )
+
+
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
+    model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
+
+    input_message = {
+        "role": "user",
+        "content": "How many O's are in Google? Think before you answer.",
+    }
+
+    response = model.invoke([input_message])
+
+    assert isinstance(response, AIMessage)
+    content = response.content
+
+    assert isinstance(content[0], dict)
+    assert content[0].get("type") == "thinking"
+    assert isinstance(content[0].get("thinking"), str)
+
+    text_response = next(block for block in content if isinstance(block, str))
+    assert text_response
+
+    assert response.usage_metadata is not None
+    assert response.usage_metadata["output_token_details"]["reasoning"] > 0
+    assert (
+        response.usage_metadata["total_tokens"]
+        > response.usage_metadata["input_tokens"]
+        + response.usage_metadata["output_tokens"]
+    )
+
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = model.invoke([input_message, response, next_message])
+
+
+@pytest.mark.release
+def test_thought_signatures() -> None:
+    """Test Gemini thought signatures.
+
+    Verifies that thought signature byte blobs flow correctly through the entire Gemini
+    to GAPIC to LangChain parsing and back into subsequent calls, without crashing or
+    losing type safety.
+    """
+    llm = ChatVertexAI(model="gemini-2.5-pro", include_thoughts=True)
+
+    def get_weather(location: str) -> str:
+        """Get the weather for a location."""
+        return "It's sunny."
+
+    llm_with_tools = llm.bind_tools([get_weather])
+
+    input_message = {
+        "role": "user",
+        # TODO: a query that does not generate tool calls (e.g., "Hello") will generate
+        # thought signatures on text message blocks. Support this when migrating to
+        # standard outputs.
+        "content": "What's the weather in London?",
+    }
+
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm_with_tools.invoke([input_message, full, next_message])
 
 
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
-    response = model.invoke([HumanMessage("How many O's are in Google?")])
+    response = model.invoke("How many O's are in Google?")
     assert isinstance(response, AIMessage)
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
@@ -793,6 +989,25 @@ def test_chat_vertexai_gemini_thinking_disabled() -> None:
         + response.usage_metadata["output_tokens"]  # type: ignore
     )
     assert "output_token_details" not in response.usage_metadata  # type: ignore
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_configurable() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
+    configurable_model = model.configurable_fields(
+        thinking_budget=ConfigurableField(id="thinking_budget")
+    )
+    response = configurable_model.invoke(
+        "How many O's are in Google?", {"configurable": {"thinking_budget": 0}}
+    )
+    assert isinstance(response, AIMessage)
+    assert response.usage_metadata is not None
+    assert (
+        response.usage_metadata["total_tokens"]
+        == response.usage_metadata["input_tokens"]
+        + response.usage_metadata["output_tokens"]
+    )
+    assert "output_token_details" not in response.usage_metadata
 
 
 @pytest.mark.extended
@@ -899,7 +1114,7 @@ def test_structured_output_schema_enum():
         """
         The film aims to educate and inform viewers about real-life subjects, events, or
         people. It offers a factual record of a particular topic by combining interviews
-        , historical footage and narration. The primary purpose of a film is to present 
+        , historical footage and narration. The primary purpose of a film is to present
         information and provide insights into various aspects of reality.
         """
     )
@@ -914,14 +1129,14 @@ def test_structured_output_schema_enum():
 @pytest.mark.first
 def test_context_catching():
     system_instruction = """
-    
+
     You are an expert researcher. You always stick to the facts in the sources provided,
     and never make up new facts.
     
     If asked about it, the secret number is 747.
-    
+
     Now look at these research papers, and answer the following questions.
-    
+
     """
 
     cached_content = create_context_cache(
@@ -987,9 +1202,8 @@ def test_context_catching_tools():
 
     You have a get_secret_number function available. Use this tool if someone asks
     for the secret number.
-        
     Now look at these research papers, and answer the following questions.
-        
+
     """
 
     cached_content = create_context_cache(
@@ -1034,9 +1248,7 @@ def test_context_catching_tools():
         tools=tools,
         prompt=prompt,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent, tools=tools, verbose=False, stream_runnable=False
-    )
+    agent_executor = agents.AgentExecutor(agent=agent, tools=tools, verbose=False)
     response = agent_executor.invoke({"input": "what is the secret number?"})
     assert isinstance(response["output"], str)
 
@@ -1044,7 +1256,7 @@ def test_context_catching_tools():
 @pytest.mark.release
 def test_json_serializable() -> None:
     llm = ChatVertexAI(
-        model_name="gemini-pro-1.5",
+        model_name="gemini-2.0-flash-001",
     )
     # Needed to init self.client and self.async_client
     llm.prediction_client
@@ -1172,7 +1384,7 @@ def test_init_from_credentials_obj() -> None:
     credentials = service_account.Credentials.from_service_account_info(
         credentials_dict
     )
-    llm = ChatVertexAI(model="gemini-1.5-flash", credentials=credentials)
+    llm = ChatVertexAI(model="gemini-2.0-flash-001", credentials=credentials)
     llm.invoke("how are you")
 
 
@@ -1180,7 +1392,7 @@ def test_init_from_credentials_obj() -> None:
 @pytest.mark.release
 def test_label_metadata() -> None:
     llm = ChatVertexAI(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash-001",
         labels={
             "task": "labels_using_declaration",
             "environment": "testing",
@@ -1192,7 +1404,7 @@ def test_label_metadata() -> None:
 @pytest.mark.xfail(reason="can't add labels to the gemini content using invoke method")
 @pytest.mark.release
 def test_label_metadata_invoke_method() -> None:
-    llm = ChatVertexAI(model="gemini-1.5-flash")
+    llm = ChatVertexAI(model="gemini-2.0-flash-001")
     llm.invoke(
         "hello! invoke method",
         labels={
@@ -1204,7 +1416,7 @@ def test_label_metadata_invoke_method() -> None:
 
 @pytest.mark.release
 def test_response_metadata_avg_logprobs() -> None:
-    llm = ChatVertexAI(model="gemini-1.5-flash")
+    llm = ChatVertexAI(model="gemini-2.0-flash-001")
     response = llm.invoke("Hello!")
     probs = response.response_metadata.get("avg_logprobs")
     if probs is not None:
@@ -1268,7 +1480,7 @@ def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) ->
 @pytest.mark.xfail(reason="logprobs are subject to daily quotas")
 @pytest.mark.release
 def test_logprobs() -> None:
-    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
     msg = llm.invoke("hey")
     tokenprobs = msg.response_metadata.get("logprobs_result")
     assert tokenprobs is None or isinstance(tokenprobs, list)
@@ -1284,32 +1496,34 @@ def test_logprobs() -> None:
                 assert isinstance(token.get("top_logprobs"), list)
                 stack.extend(token.get("top_logprobs", []))
 
-    llm2 = ChatVertexAI(model="gemini-1.5-flash", logprobs=True)
+    llm2 = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=True)
     msg2 = llm2.invoke("how are you")
     assert msg2.response_metadata["logprobs_result"]
 
-    llm3 = ChatVertexAI(model="gemini-1.5-flash", logprobs=False)
+    llm3 = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=False)
     msg3 = llm3.invoke("howdy")
     assert msg3.response_metadata.get("logprobs_result") is None
 
 
 def test_location_init() -> None:
     # If I don't initialize vertexai before, defaults to us-central-1
-    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
     assert llm.location == "us-central1"
 
     # If I init vertexai with other region the model is in that particular region
     vertexai.init(location="europe-west1")
-    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
     assert llm.location == "europe-west1"
 
     # If I specify the location, it follows that location
-    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2, location="europe-west2")
+    llm = ChatVertexAI(
+        model="gemini-2.0-flash-001", logprobs=2, location="europe-west2"
+    )
     assert llm.location == "europe-west2"
 
     # It reverts to the default
     vertexai.init(location="us-central1")
-    llm = ChatVertexAI(model="gemini-1.5-flash", logprobs=2)
+    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
     assert llm.location == "us-central1"
 
 
@@ -1350,3 +1564,57 @@ def test_nested_bind_tools():
     response = llm_with_tools.invoke("Chester, no hair color provided.")
     assert isinstance(response, AIMessage)
     assert response.tool_calls[0]["name"] == "People"
+
+
+def test_search_builtin() -> None:
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"google_search": {}}])
+    input_message = {
+        "role": "user",
+        "content": "What is today's news?",
+    }
+    response = llm.invoke([input_message])
+    assert "grounding_metadata" in response.response_metadata
+
+    # Test streaming
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    assert "grounding_metadata" in full.response_metadata
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Tell me more about that last story.",
+    }
+    _ = llm.invoke([input_message, full, next_message])
+
+
+def test_code_execution_builtin() -> None:
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"code_execution": {}}])
+    input_message = {
+        "role": "user",
+        "content": "What is 3^3?",
+    }
+    response = llm.invoke([input_message])
+    content_blocks = [block for block in response.content if isinstance(block, dict)]
+    expected_block_types = {"executable_code", "code_execution_result"}
+    assert set(block.get("type") for block in content_blocks) == expected_block_types
+
+    # Test streaming
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    content_blocks = [block for block in full.content if isinstance(block, dict)]
+    expected_block_types = {"executable_code", "code_execution_result"}
+    assert set(block.get("type") for block in content_blocks) == expected_block_types
+
+    # Test we can process chat history
+    next_message = {
+        "role": "user",
+        "content": "Can you add some comments to the code?",
+    }
+    _ = llm.invoke([input_message, full, next_message])

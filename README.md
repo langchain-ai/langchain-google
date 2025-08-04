@@ -1,13 +1,9 @@
 # 🦜️🔗 LangChain Google
 
-
-
-
 # Welcome Contributors
 
 Hi there! Thank you for even being interested in contributing to LangChain-Google.
 As an open-source project in a rapidly developing field, we are extremely open to contributions, whether they involve new features, improved infrastructure, better documentation, or bug fixes.
-
 
 # Contribute Code
 
@@ -21,6 +17,7 @@ Pull requests cannot land without passing the formatting, linting, and testing c
 [Formatting and Linting](#formatting-and-linting) for how to run these checks locally.
 
 It's essential that we maintain great documentation and testing. If you:
+
 - Fix a bug
   - Add a relevant unit or integration test when possible. These live in `tests/unit_tests` and `tests/integration_tests`.
 - Make an improvement
@@ -45,6 +42,7 @@ tell Poetry to use the virtualenv python environment (`poetry config virtualenvs
 ## Different packages
 
 This repository contains three packages with Google integrations with LangChain:
+
 - [langchain-google-genai](https://pypi.org/project/langchain-google-genai/) implements integrations of Google [Generative AI](https://ai.google.dev/) models.
 - [langchain-google-vertexai](https://pypi.org/project/langchain-google-vertexai/) implements integrations of Google Cloud [Generative AI on Vertex AI](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/overview)
 - [langchain-google-community](https://pypi.org/project/langchain-google-community/) implements integrations for Google products that are not part of `langchain-google-vertexai` or `langchain-google-genai` packages
@@ -73,10 +71,10 @@ Here's the structure visualized as a tree:
 
 The root directory also contains the following files:
 
-* `pyproject.toml`: Dependencies for building docs and linting docs, cookbook.
-* `Makefile`: A file that contains shortcuts for building, linting and docs and cookbook.
+- `pyproject.toml`: Dependencies for building and linting the docs and cookbook.
+- `Makefile`: A file that contains shortcuts for building and linting the docs and cookbook.
 
-There are other files in the root directory level, but their presence should be self-explanatory. Feel free to browse around!
+There are other files in the root directory level, but their presence should be self-explanatory.
 
 ## Local Development Dependencies
 
@@ -98,7 +96,9 @@ If you are still seeing this bug on v1.6.1+, you may also try disabling "modern 
 (`poetry config installer.modern-installation false`) and re-installing requirements.
 See [this `debugpy` issue](https://github.com/microsoft/debugpy/issues/1246) for more details.
 
-## Code Formatting
+## Formatting and Linting
+
+### Formatting
 
 Formatting for this project is done via [ruff](https://docs.astral.sh/ruff/rules/).
 
@@ -117,7 +117,7 @@ make format_diff
 
 This is especially useful when you have made changes to a subset of the project and want to ensure your changes are properly formatted without affecting the rest of the codebase.
 
-## Linting
+### Linting
 
 Linting for this project is done via a combination of [ruff](https://docs.astral.sh/ruff/rules/) and [mypy](http://mypy-lang.org/).
 
@@ -144,7 +144,7 @@ This can be very helpful when you've made changes to only certain parts of the p
 
 We recognize linting can be annoying - if you do not want to do it, please contact a project maintainer, and they can help you with it. We do not want this to be a blocker for good code getting contributed.
 
-## Spellcheck
+### Spellcheck
 
 Spellchecking for this project is done via [codespell](https://github.com/codespell-project/codespell).
 Note that `codespell` finds common typos, so it could have false-positive (correctly spelled but rarely used) and false-negatives (not finding misspelled) words.
@@ -184,7 +184,7 @@ any side effects (no warnings, no errors, no exceptions).
 
 To introduce the dependency to a library, please do the following:
 
-1. Open extended_testing_deps.txt and add the dependency
+1. Open `extended_testing_deps.txt` and add the dependency
 2. Add a unit test that the very least attempts to import the new code. Ideally, the unit
 test makes use of lightweight fixtures to test the logic of the code.
 3. Please use the `@pytest.mark.requires(package_name)` decorator for any unit tests that require the dependency.
@@ -257,9 +257,10 @@ make integration_tests
 We annotate integration tests to separate those tests which heavily rely on GCP infrastructure. Especially for running those tests we have created a separate GCP project with all necessary infrastructure parts provisioned. To run the extended integration tests locally you will need to provision a GCP project and pass its configuration via env variables.
 
 Test annotations:
+
 1. Tests without annotations will be executed on every run of the integration tests pipeline.
-2. Tests with release annotation ( @pytest.mark.release ) will be run with the release pipeline.
-3. Tests with extended annotation ( @pytest.mark.extended ) will be run on each PR.
+2. Tests with release annotation ( `@pytest.mark.release` ) will be run with the release pipeline.
+3. Tests with extended annotation ( `@pytest.mark.extended` ) will be run on each PR.
 
 ### Prepare
 
@@ -270,16 +271,16 @@ their specifications and requirements.
 To run some integration tests, you will need GCP project configured.
 The configuration of the GCP project required for integration testing is stored in the [terraform folder]() within each library.
 
-### Prepare environment variables for local testing:
+### Prepare environment variables for local testing
 
-- copy `tests/integration_tests/.env.example` to `tests/integration_tests/.env`
-- set variables in `tests/integration_tests/.env` file, e.g `OPENAI_API_KEY`
+- Copy `tests/integration_tests/.env.example` to `tests/integration_tests/.env`
+- Set variables in `tests/integration_tests/.env` file, e.g `GOOGLE_API_KEY`
 
 Additionally, it's important to note that some integration tests may require certain
 environment variables to be set, such as `PROJECT_ID`. Be sure to set any required
 environment variables before running the tests to ensure they run correctly.
 
-### Run some tests with coverage:
+### Run some tests with coverage
 
 ```bash
 pytest tests/integration_tests/.py --cov=langchain --cov-report=html
@@ -303,4 +304,4 @@ To get a report of current coverage, run the following:
 make coverage
 ```
 
-For detailed information on how to contribute, see [LangChain contribution guide](https://python.langchain.com/docs/contributing/).
+For more detailed information on how to contribute, see [LangChain contribution guide](https://python.langchain.com/docs/contributing/).
