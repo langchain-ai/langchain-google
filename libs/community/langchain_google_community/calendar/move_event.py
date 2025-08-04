@@ -12,7 +12,7 @@ class MoveEventSchema(BaseModel):
     """Input for CalendarMoveEvent."""
 
     event_id: str = Field(..., description="The event ID to move.")
-    origin_calenddar_id: str = Field(..., description="The origin calendar ID.")
+    origin_calendar_id: str = Field(..., description="The origin calendar ID.")
     destination_calendar_id: str = Field(
         ..., description="The destination calendar ID."
     )
