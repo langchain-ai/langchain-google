@@ -32,7 +32,7 @@ from pytest import CaptureFixture
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     _chat_with_retry,
-    _convert_tool_message_to_part,
+    _convert_tool_message_to_parts,
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
