@@ -999,6 +999,7 @@ def test_chat_vertexai_gemini_thinking_configurable() -> None:
     )
     response = configurable_model.invoke(
         "How many O's are in Google?", {"configurable": {"thinking_budget": 0}}
+    )
     assert isinstance(response, AIMessage)
     assert response.usage_metadata is not None
     assert (
