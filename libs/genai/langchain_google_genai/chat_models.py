@@ -1683,7 +1683,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             if run_manager:
-                run_manager.on_llm_new_token(gen.text)
+                run_manager.on_llm_new_token(gen.text, chunk=gen)
             yield gen
 
     async def _astream(
@@ -1749,7 +1749,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
 
                 if run_manager:
-                    await run_manager.on_llm_new_token(gen.text)
+                    await run_manager.on_llm_new_token(gen.text, chunk=gen)
                 yield gen
 
     def _prepare_request(

@@ -29,7 +29,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.runnables import RunnableSerializable
+from langchain_core.runnables import ConfigurableField, RunnableSerializable
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -333,11 +333,10 @@ def test_multimodal_media_inline_base64_agent() -> None:
         tools=tools,
         prompt=prompt_template,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+    agent_executor = agents.AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=False,
-        stream_runnable=False,
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
@@ -981,13 +980,25 @@ def test_thought_signatures() -> None:
 
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
-    model = ChatVertexAI(
-        model_name=_DEFAULT_THINKING_MODEL_NAME,
-        thinking_budget=200,  # Test we override with runtime kwarg
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
+    response = model.invoke("How many O's are in Google?")
+    assert isinstance(response, AIMessage)
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        == response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
     )
-    response = model.invoke(
-        [HumanMessage("How many O's are in Google?")],
-        thinking_budget=0,  # Disable thinking
+    assert "output_token_details" not in response.usage_metadata  # type: ignore
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_configurable() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
+    configurable_model = model.configurable_fields(
+        thinking_budget=ConfigurableField(id="thinking_budget")
+    )
+    response = configurable_model.invoke(
+        "How many O's are in Google?", {"configurable": {"thinking_budget": 0}}
     )
     assert isinstance(response, AIMessage)
     assert response.usage_metadata is not None
@@ -1103,7 +1114,7 @@ def test_structured_output_schema_enum():
         """
         The film aims to educate and inform viewers about real-life subjects, events, or
         people. It offers a factual record of a particular topic by combining interviews
-        , historical footage and narration. The primary purpose of a film is to present 
+        , historical footage and narration. The primary purpose of a film is to present
         information and provide insights into various aspects of reality.
         """
     )
@@ -1118,14 +1129,14 @@ def test_structured_output_schema_enum():
 @pytest.mark.first
 def test_context_catching():
     system_instruction = """
-    
+
     You are an expert researcher. You always stick to the facts in the sources provided,
     and never make up new facts.
     
     If asked about it, the secret number is 747.
-    
+
     Now look at these research papers, and answer the following questions.
-    
+
     """
 
     cached_content = create_context_cache(
@@ -1191,9 +1202,8 @@ def test_context_catching_tools():
 
     You have a get_secret_number function available. Use this tool if someone asks
     for the secret number.
-        
     Now look at these research papers, and answer the following questions.
-        
+
     """
 
     cached_content = create_context_cache(
@@ -1238,9 +1248,7 @@ def test_context_catching_tools():
         tools=tools,
         prompt=prompt,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent, tools=tools, verbose=False, stream_runnable=False
-    )
+    agent_executor = agents.AgentExecutor(agent=agent, tools=tools, verbose=False)
     response = agent_executor.invoke({"input": "what is the secret number?"})
     assert isinstance(response["output"], str)
 
