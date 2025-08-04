@@ -1098,6 +1098,144 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting fair weather. The lush green grass and trees indicate a warm and possibly slightly breezy day. There are no signs of rain or storms.'
 
+    PDF input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            pdf_bytes = open("/path/to/your/test.pdf", 'rb').read()
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the document in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"application/pdf",
+                        "data": pdf_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance.'
+
+    Video input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            video_bytes = open("/path/to/your/video.mp4", 'rb').read()
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe what's in this video in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type": "video/mp4",
+                        "data": video_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner.'
+
+        You can also pass YouTube URLs directly:
+
+        .. code-block:: python
+
+            from langchain_core.messages import HumanMessage
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize the video in 3 sentences."},
+                    {
+                        "type": "media",
+                        "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                        "mime_type": "video/mp4",
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+
+    Audio input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            audio_bytes = open("/path/to/your/audio.mp3", 'rb').read()
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize this audio in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"audio/mp3",
+                        "data": audio_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "In this episode of the Made by Google podcast, Stephen Johnson and Simon Tokumine discuss NotebookLM, a tool designed to help users understand complex material in various modalities, with a focus on its unexpected uses, the development of audio overviews, and the implementation of new features like mind maps and source discovery."
+
+    File upload (URI-based):
+        You can also upload files to Google's servers and reference them by URI.
+        This works for PDFs, images, videos, and audio files.
+
+        .. code-block:: python
+
+            import time
+            from google import genai
+            from langchain_core.messages import HumanMessage
+
+            client = genai.Client()
+
+            myfile = client.files.upload(file="/path/to/your/sample.pdf")
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = client.files.get(name=myfile.name)
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "What is in the document?"},
+                    {
+                        "type": "media",
+                        "file_uri": myfile.uri,
+                        "mime_type": "application/pdf",
+                    },
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "This research paper assesses and mitigates multi-turn jailbreak vulnerabilities in large language models using the Crescendo attack study, evaluating attack success rates and mitigation strategies like prompt hardening and LLM-as-guardrail."
+
     Token usage:
         .. code-block:: python
 
