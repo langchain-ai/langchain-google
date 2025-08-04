@@ -1203,7 +1203,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "In this episode of the Made by Google podcast, Stephen Johnson and Simon Tokumine discuss NotebookLM, a tool designed to help users understand complex material in various modalities, with a focus on its unexpected uses, the development of audio overviews, and the implementation of new features like mind maps and source discovery."
 
     File upload (URI-based):
-        You can also upload files to Google's servers and reference them by URI. 
+        You can also upload files to Google's servers and reference them by URI.
         This works for PDFs, images, videos, and audio files.
 
         .. code-block:: python
