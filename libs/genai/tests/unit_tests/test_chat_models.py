@@ -16,6 +16,7 @@ from google.genai.types import (
     HttpOptions,
     Part,
 )
+from google.api_core.exceptions import ResourceExhausted
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
@@ -30,6 +31,7 @@ from pydantic_core._pydantic_core import ValidationError
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
+    _chat_with_retry,
     _convert_tool_message_to_parts,
     _parse_chat_history,
     _parse_response_candidate,
@@ -750,6 +752,25 @@ def test_model_kwargs(mock_client: Mock) -> None:
         assert llm.model == "models/my-model"
         assert llm.convert_system_message_to_human is True
         assert llm.model_kwargs == {"foo": "bar"}
+
+
+def test_retry_decorator_with_custom_parameters() -> None:
+    # Mock the generation method
+    mock_generation_method = Mock()
+    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")
+
+    # Call the function with custom retry parameters
+    with pytest.raises(ResourceExhausted):
+        _chat_with_retry(
+            generation_method=mock_generation_method,
+            max_retries=3,
+            wait_exponential_multiplier=1.5,
+            wait_exponential_min=2.0,
+            wait_exponential_max=30.0,
+        )
+
+    # Verify that the retry mechanism used the custom parameters
+    assert mock_generation_method.call_count == 3
 
 
 @pytest.mark.parametrize(

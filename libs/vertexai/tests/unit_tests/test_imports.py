@@ -15,6 +15,7 @@ EXPECTED_ALL = [
     "GemmaVertexAIModelGarden",
     "HarmBlockThreshold",
     "HarmCategory",
+    "Modality",
     "PydanticFunctionsOutputParser",
     "SafetySetting",
     "Schema",

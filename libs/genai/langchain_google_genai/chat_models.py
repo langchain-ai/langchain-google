@@ -156,7 +156,12 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """
 
 
-def _create_retry_decorator() -> Callable[[Any], Any]:
+def _create_retry_decorator(
+    max_retries: int = 6,
+    wait_exponential_multiplier: float = 2.0,
+    wait_exponential_min: float = 1.0,
+    wait_exponential_max: float = 60.0,
+) -> Callable[[Any], Any]:
     """
     Creates and returns a preconfigured tenacity retry decorator.
 
@@ -168,15 +173,14 @@ def _create_retry_decorator() -> Callable[[Any], Any]:
         Callable[[Any], Any]: A retry decorator configured for handling specific
         Google API exceptions.
     """
-    multiplier = 2
-    min_seconds = 1
-    max_seconds = 60
-    max_retries = 2
-
     return retry(
         reraise=True,
         stop=stop_after_attempt(max_retries),
-        wait=wait_exponential(multiplier=multiplier, min=min_seconds, max=max_seconds),
+        wait=wait_exponential(
+            multiplier=wait_exponential_multiplier,
+            min=wait_exponential_min,
+            max=wait_exponential_max,
+        ),
         retry=(retry_if_exception_type(ServerError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
@@ -197,7 +201,12 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     Returns:
         Any: The result from the chat generation method.
     """
-    retry_decorator = _create_retry_decorator()
+    retry_decorator = _create_retry_decorator(
+        max_retries=kwargs.get("max_retries", 6),
+        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
+        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
+        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
+    )
 
     @retry_decorator
     def _chat_with_retry(**kwargs: Any) -> Any:
@@ -205,17 +214,18 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             return generation_method(**kwargs)
         # Do not retry for these errors.
         except ClientError as e:
-            raise ChatGoogleGenerativeAIError(
-                f"Invalid argument provided to Gemini: {e}"
-            ) from e
-        except Exception as e:
-            if "location is not supported" in e.message:
+            # Check for location not supported error
+            if hasattr(e, "message") and "location is not supported" in str(e.message):
                 error_msg = (
                     "Your location is not supported by google-generativeai "
                     "at the moment. Try to use ChatVertexAI LLM from "
                     "langchain_google_vertexai."
                 )
                 raise ValueError(error_msg)
+            raise ChatGoogleGenerativeAIError(
+                f"Invalid argument provided to Gemini: {e}"
+            ) from e
+        except Exception as e:
             raise e
 
     params = (
@@ -831,7 +841,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-001")
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
             llm.invoke("Write me a ballad about LangChain")
 
     Invoke:
@@ -1041,7 +1051,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         .. code-block:: python
 
             from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
-            llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
                 tools=[GenAITool(google_search={})],
@@ -1098,6 +1108,144 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         .. code-block:: python
 
             'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting fair weather. The lush green grass and trees indicate a warm and possibly slightly breezy day. There are no signs of rain or storms.'
+
+    PDF input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            pdf_bytes = open("/path/to/your/test.pdf", 'rb').read()
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the document in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"application/pdf",
+                        "data": pdf_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance.'
+
+    Video input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            video_bytes = open("/path/to/your/video.mp4", 'rb').read()
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe what's in this video in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type": "video/mp4",
+                        "data": video_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner.'
+
+        You can also pass YouTube URLs directly:
+
+        .. code-block:: python
+
+            from langchain_core.messages import HumanMessage
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize the video in 3 sentences."},
+                    {
+                        "type": "media",
+                        "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                        "mime_type": "video/mp4",
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+
+    Audio input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            audio_bytes = open("/path/to/your/audio.mp3", 'rb').read()
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize this audio in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"audio/mp3",
+                        "data": audio_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "In this episode of the Made by Google podcast, Stephen Johnson and Simon Tokumine discuss NotebookLM, a tool designed to help users understand complex material in various modalities, with a focus on its unexpected uses, the development of audio overviews, and the implementation of new features like mind maps and source discovery."
+
+    File upload (URI-based):
+        You can also upload files to Google's servers and reference them by URI.
+        This works for PDFs, images, videos, and audio files.
+
+        .. code-block:: python
+
+            import time
+            from google import genai
+            from langchain_core.messages import HumanMessage
+
+            client = genai.Client()
+
+            myfile = client.files.upload(file="/path/to/your/sample.pdf")
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = client.files.get(name=myfile.name)
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "What is in the document?"},
+                    {
+                        "type": "media",
+                        "file_uri": myfile.uri,
+                        "mime_type": "application/pdf",
+                    },
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "This research paper assesses and mitigates multi-turn jailbreak vulnerabilities in large language models using the Crescendo attack study, evaluating attack success rates and mitigation strategies like prompt hardening and LLM-as-guardrail."
 
     Token usage:
         .. code-block:: python
@@ -1519,7 +1667,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             if run_manager:
-                run_manager.on_llm_new_token(gen.text)
+                run_manager.on_llm_new_token(gen.text, chunk=gen)
             yield gen
 
     async def _astream(
@@ -1569,7 +1717,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             if run_manager:
-                await run_manager.on_llm_new_token(gen.text)
+                await run_manager.on_llm_new_token(gen.text, chunk=gen)
             yield gen
 
     def _prepare_request(
