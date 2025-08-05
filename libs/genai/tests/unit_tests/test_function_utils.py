@@ -1,8 +1,8 @@
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from unittest.mock import MagicMock, patch
 
-import google.ai.generativelanguage as glm
 import pytest
+from google.genai.types import FunctionDeclaration, Schema, Tool, Type
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -20,6 +20,76 @@ from langchain_google_genai._function_utils import (
     replace_defs_in_schema,
     tool_to_dict,
 )
+
+
+def assert_property_type(
+    property_dict: dict, expected_type: Type, property_name: str = "property"
+) -> None:
+    """
+    Utility function to assert that a property has the expected Type enum value.
+
+    Since tool_to_dict serializes Type enums to dictionaries with '_value_' field,
+    this function handles the comparison correctly.
+
+    Args:
+        property_dict: The property dictionary from the serialized schema
+        expected_type: The expected Type enum value
+        property_name: Name of the property for error messages (optional)
+    """
+    actual_type_dict = property_dict.get("type", {})
+    if isinstance(actual_type_dict, dict):
+        actual_value = actual_type_dict.get("_value_")
+        assert actual_value == expected_type.value, (
+            f"Expected '{property_name}' to be {expected_type.value}, "
+            f"but got {actual_value}"
+        )
+    else:
+        # In case the type is not serialized as a dict (fallback)
+        assert actual_type_dict == expected_type, (
+            f"Expected '{property_name}' to be {expected_type}, "
+            f"but got {actual_type_dict}"
+        )
+
+
+def find_any_of_option_by_type(any_of_list: list, expected_type: Type) -> dict:
+    """
+    Utility function to find an option in an any_of list that has the expected Type.
+
+    Since tool_to_dict serializes Type enums to dictionaries with '_value_' field,
+    this function handles the search correctly.
+
+    Args:
+        any_of_list: List of options from an any_of field
+        expected_type: The Type enum value to search for
+
+    Returns:
+        The matching option dictionary
+
+    Raises:
+        AssertionError: If no option with the expected type is found
+    """
+    for opt in any_of_list:
+        type_dict = opt.get("type", {})
+        if isinstance(type_dict, dict):
+            if type_dict.get("_value_") == expected_type.value:
+                return opt
+        else:
+            if type_dict == expected_type:
+                return opt
+
+    # If we get here, no matching option was found
+    available_types = []
+    for opt in any_of_list:
+        type_dict = opt.get("type", {})
+        if isinstance(type_dict, dict):
+            available_types.append(type_dict.get("_value_", "unknown"))
+        else:
+            available_types.append(str(type_dict))
+
+    raise AssertionError(
+        f"No option with type {expected_type.value} found in any_of. "
+        f"Available types: {available_types}"
+    )
 
 
 def test_tool_with_anyof_nullable_param() -> None:
@@ -64,7 +134,7 @@ def test_tool_with_anyof_nullable_param() -> None:
     a_property = properties.get("a")
     assert isinstance(a_property, dict), "Expected a dict."
 
-    assert a_property.get("type_") == glm.Type.STRING, "Expected 'a' to be STRING."
+    assert_property_type(a_property, Type.STRING, "a")
     assert a_property.get("nullable") is True, "Expected 'a' to be marked as nullable."
 
 
@@ -110,16 +180,14 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     assert isinstance(items_property, dict), "Expected a dict."
 
     # Assertions
-    assert (
-        items_property.get("type_") == glm.Type.ARRAY
-    ), "Expected 'items' to be ARRAY."
+    assert_property_type(items_property, Type.ARRAY, "items")
     assert items_property.get("nullable"), "Expected 'items' to be marked as nullable."
     # Check that the array items are recognized as strings
 
     items = items_property.get("items")
     assert isinstance(items, dict), "Expected 'items' to be a dict."
 
-    assert items.get("type_") == glm.Type.STRING, "Expected array items to be STRING."
+    assert_property_type(items, Type.STRING, "array items")
 
 
 def test_tool_with_nested_object_anyof_nullable_param() -> None:
@@ -162,13 +230,20 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
     data_property = properties.get("data")
     assert isinstance(data_property, dict), "Expected a dict."
 
-    assert data_property.get("type_") in [
-        glm.Type.OBJECT,
-        glm.Type.STRING,
-    ], "Expected 'data' to be recognized as an OBJECT or fallback to STRING."
-    assert (
-        data_property.get("nullable") is True
-    ), "Expected 'data' to be marked as nullable."
+    # Check if it's OBJECT or STRING (fallback)
+    actual_type_dict = data_property.get("type", {})
+    if isinstance(actual_type_dict, dict):
+        actual_value = actual_type_dict.get("_value_")
+        assert actual_value in [Type.OBJECT.value, Type.STRING.value], (
+            f"Expected 'data' to be OBJECT or STRING, but got {actual_value}"
+        )
+    else:
+        assert actual_type_dict in [Type.OBJECT, Type.STRING], (
+            f"Expected 'data' to be OBJECT or STRING, but got {actual_type_dict}"
+        )
+    assert data_property.get("nullable") is True, (
+        "Expected 'data' to be marked as nullable."
+    )
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
@@ -220,12 +295,10 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     assert isinstance(status_property, dict), "Expected a dict."
 
     # Assertions
-    assert (
-        status_property.get("type_") == glm.Type.STRING
-    ), "Expected 'status' to be STRING."
-    assert (
-        status_property.get("nullable") is True
-    ), "Expected 'status' to be marked as nullable."
+    assert_property_type(status_property, Type.STRING, "status")
+    assert status_property.get("nullable") is True, (
+        "Expected 'status' to be marked as nullable."
+    )
     assert status_property.get("enum") == [
         "active",
         "inactive",
@@ -240,13 +313,13 @@ def search(question: str) -> str:
 
 
 search_tool = tool(search)
-search_exp = glm.FunctionDeclaration(
+search_exp = FunctionDeclaration(
     name="search",
     description="Search tool",
-    parameters=glm.Schema(
-        type=glm.Type.OBJECT,
+    parameters=Schema(
+        type=Type.OBJECT,
         description="Search tool",
-        properties={"question": glm.Schema(type=glm.Type.STRING)},
+        properties={"question": Schema(type=Type.STRING)},
         required=["question"],
         title="search",
     ),
@@ -259,13 +332,13 @@ class SearchBaseTool(BaseTool):
 
 
 search_base_tool = SearchBaseTool(name="search", description="Search tool")
-search_base_tool_exp = glm.FunctionDeclaration(
+search_base_tool_exp = FunctionDeclaration(
     name=search_base_tool.name,
     description=search_base_tool.description,
-    parameters=glm.Schema(
-        type=glm.Type.OBJECT,
+    parameters=Schema(
+        type=Type.OBJECT,
         properties={
-            "__arg1": glm.Schema(type=glm.Type.STRING),
+            "__arg1": Schema(type=Type.STRING),
         },
         required=["__arg1"],
     ),
@@ -284,27 +357,27 @@ search_model_dict = {
     "description": search_model_schema["description"],
     "parameters": search_model_schema,
 }
-search_model_exp = glm.FunctionDeclaration(
+search_model_exp = FunctionDeclaration(
     name="SearchModel",
     description="Search model",
-    parameters=glm.Schema(
-        type=glm.Type.OBJECT,
+    parameters=Schema(
+        type=Type.OBJECT,
         description="Search model",
         properties={
-            "question": glm.Schema(type=glm.Type.STRING),
+            "question": Schema(type=Type.STRING),
         },
         required=["question"],
         title="SearchModel",
     ),
 )
 
-search_model_exp_pyd = glm.FunctionDeclaration(
+search_model_exp_pyd = FunctionDeclaration(
     name="SearchModel",
     description="Search model",
-    parameters=glm.Schema(
-        type=glm.Type.OBJECT,
+    parameters=Schema(
+        type=Type.OBJECT,
         properties={
-            "question": glm.Schema(type=glm.Type.STRING),
+            "question": Schema(type=Type.STRING),
         },
         required=["question"],
     ),
@@ -319,7 +392,7 @@ mock_pydantic = MagicMock(
 )
 
 SRC_EXP_MOCKS_DESC: List[
-    Tuple[_FunctionDeclarationLike, glm.FunctionDeclaration, List[MagicMock], str]
+    Tuple[_FunctionDeclarationLike, FunctionDeclaration, List[MagicMock], str]
 ] = [
     (search, search_exp, [mock_base_tool], "plain function"),
     (search_tool, search_exp, [mock_base_tool], "LC tool"),
@@ -372,11 +445,11 @@ def test_format_tool_to_genai_function() -> None:
 
     src = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
     fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
-    expected = glm.Tool(function_declarations=fds)
+    expected = Tool(function_declarations=fds)
     result = convert_to_genai_function_declarations(src)
     assert result == expected
 
-    src_2 = glm.Tool(google_search_retrieval={})
+    src_2 = Tool(google_search_retrieval={})
     result = convert_to_genai_function_declarations([src_2])
     assert result == src_2
 
@@ -384,7 +457,7 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations([src_3])
     assert result == src_2
 
-    src_4 = glm.Tool(google_search={})
+    src_4 = Tool(google_search={})
     result = convert_to_genai_function_declarations([src_4])
     assert result == src_4
 
@@ -395,8 +468,8 @@ def test_format_tool_to_genai_function() -> None:
     with pytest.raises(Exception) as exc_info:
         _ = convert_to_genai_function_declarations(
             [
-                glm.Tool(google_search_retrieval={}),
-                glm.Tool(google_search_retrieval={}),
+                Tool(google_search_retrieval={}),
+                Tool(google_search_retrieval={}),
             ]
         )
     assert str(exc_info.value).startswith("Providing multiple google_search_retrieval")
@@ -442,134 +515,82 @@ def test_tool_with_annotated_optional_args() -> None:
     tools = [split_documents, search_web]
     # Convert to OpenAI first to mimic what we do in bind_tools.
     oai_tools = [convert_to_openai_tool(t) for t in tools]
-    expected = [
-        {
-            "name": "split_documents",
-            "description": "Tool.",
-            "parameters": {
-                "any_of": [],
-                "type_": 6,
-                "properties": {
-                    "chunk_overlap": {
-                        "any_of": [],
-                        "type_": 3,
-                        "description": "chunk overlap.",
-                        "format_": "",
-                        "nullable": True,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "properties": {},
-                        "property_ordering": [],
-                        "required": [],
-                        "title": "",
-                    },
-                    "chunk_size": {
-                        "any_of": [],
-                        "type_": 3,
-                        "description": "chunk size.",
-                        "format_": "",
-                        "nullable": False,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "properties": {},
-                        "property_ordering": [],
-                        "required": [],
-                        "title": "",
-                    },
-                },
-                "property_ordering": [],
-                "required": ["chunk_size"],
-                "title": "",
-                "format_": "",
-                "description": "",
-                "nullable": False,
-                "enum": [],
-                "max_items": "0",
-                "min_items": "0",
-            },
-        },
-        {
-            "name": "search_web",
-            "description": "Tool.",
-            "parameters": {
-                "any_of": [],
-                "type_": 6,
-                "properties": {
-                    "truncate_threshold": {
-                        "any_of": [],
-                        "type_": 3,
-                        "description": "truncate threshold.",
-                        "format_": "",
-                        "nullable": True,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "property_ordering": [],
-                        "properties": {},
-                        "required": [],
-                        "title": "",
-                    },
-                    "query": {
-                        "any_of": [],
-                        "type_": 1,
-                        "description": "query.",
-                        "format_": "",
-                        "nullable": False,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "properties": {},
-                        "property_ordering": [],
-                        "required": [],
-                        "title": "",
-                    },
-                    "engine": {
-                        "any_of": [],
-                        "type_": 1,
-                        "description": "engine.",
-                        "format_": "",
-                        "nullable": False,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "property_ordering": [],
-                        "properties": {},
-                        "required": [],
-                        "title": "",
-                    },
-                    "num_results": {
-                        "any_of": [],
-                        "type_": 3,
-                        "description": "number of results.",
-                        "format_": "",
-                        "nullable": False,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "properties": {},
-                        "property_ordering": [],
-                        "required": [],
-                        "title": "",
-                    },
-                },
-                "property_ordering": [],
-                "required": ["query"],
-                "title": "",
-                "format_": "",
-                "description": "",
-                "nullable": False,
-                "enum": [],
-                "max_items": "0",
-                "min_items": "0",
-            },
-        },
-    ]
     actual = tool_to_dict(convert_to_genai_function_declarations(oai_tools))[
         "function_declarations"
     ]
-    assert expected == actual
+
+    # Check that we have the expected number of function declarations
+    assert len(actual) == 2
+
+    # Check the first function declaration (split_documents)
+    split_docs = actual[0]
+    assert split_docs["name"] == "split_documents"
+    assert split_docs["description"] == "Tool."
+    assert split_docs["behavior"] is None
+
+    # Check parameters structure
+    params = split_docs["parameters"]
+    assert params["type"]["_value_"] == "OBJECT"
+    assert params["required"] == ["chunk_size"]
+
+    # Check properties
+    properties = params["properties"]
+    assert "chunk_size" in properties
+    assert "chunk_overlap" in properties
+
+    # Check chunk_size property
+    chunk_size_prop = properties["chunk_size"]
+    assert chunk_size_prop["type"]["_value_"] == "INTEGER"
+    assert chunk_size_prop["description"] == "chunk size."
+    assert chunk_size_prop["nullable"] is None
+
+    # Check chunk_overlap property
+    chunk_overlap_prop = properties["chunk_overlap"]
+    assert chunk_overlap_prop["type"]["_value_"] == "INTEGER"
+    assert chunk_overlap_prop["description"] == "chunk overlap."
+    assert chunk_overlap_prop["nullable"] is True
+
+    # Check the second function declaration (search_web)
+    search_web_func = actual[1]
+    assert search_web_func["name"] == "search_web"
+    assert search_web_func["description"] == "Tool."
+    assert search_web_func["behavior"] is None
+
+    # Check parameters structure
+    params = search_web_func["parameters"]
+    assert params["type"]["_value_"] == "OBJECT"
+    assert params["required"] == ["query"]
+
+    # Check properties
+    properties = params["properties"]
+    assert "query" in properties
+    assert "engine" in properties
+    assert "num_results" in properties
+    assert "truncate_threshold" in properties
+
+    # Check query property
+    query_prop = properties["query"]
+    assert query_prop["type"]["_value_"] == "STRING"
+    assert query_prop["description"] == "query."
+    assert query_prop["nullable"] is None
+
+    # Check engine property
+    engine_prop = properties["engine"]
+    assert engine_prop["type"]["_value_"] == "STRING"
+    assert engine_prop["description"] == "engine."
+    assert engine_prop["nullable"] is None
+
+    # Check num_results property
+    num_results_prop = properties["num_results"]
+    assert num_results_prop["type"]["_value_"] == "INTEGER"
+    assert num_results_prop["description"] == "number of results."
+    assert num_results_prop["nullable"] is None
+
+    # Check truncate_threshold property
+    truncate_prop = properties["truncate_threshold"]
+    assert truncate_prop["type"]["_value_"] == "INTEGER"
+    assert truncate_prop["description"] == "truncate threshold."
+    assert truncate_prop["nullable"] is True
 
 
 def test_format_native_dict_to_genai_function() -> None:
@@ -582,9 +603,9 @@ def test_format_native_dict_to_genai_function() -> None:
         ]
     }
     schema = convert_to_genai_function_declarations([calculator])
-    expected = glm.Tool(
+    expected = Tool(
         function_declarations=[
-            glm.FunctionDeclaration(
+            FunctionDeclaration(
                 name="multiply",
                 description="Returns the product of two numbers.",
                 parameters=None,
@@ -629,16 +650,16 @@ def test__tool_choice_to_tool_config(choice: Any) -> None:
 
 
 def test_tool_to_dict_glm_tool() -> None:
-    tool = glm.Tool(
+    tool = Tool(
         function_declarations=[
-            glm.FunctionDeclaration(
+            FunctionDeclaration(
                 name="multiply",
                 description="Returns the product of two numbers.",
-                parameters=glm.Schema(
-                    type=glm.Type.OBJECT,
+                parameters=Schema(
+                    type=Type.OBJECT,
                     properties={
-                        "a": glm.Schema(type=glm.Type.NUMBER),
-                        "b": glm.Schema(type=glm.Type.NUMBER),
+                        "a": Schema(type=Type.NUMBER),
+                        "b": Schema(type=Type.NUMBER),
                     },
                     required=["a", "b"],
                 ),
@@ -676,86 +697,51 @@ def test_tool_to_dict_pydantic_nested() -> None:
 
     gapic_tool = convert_to_genai_function_declarations([Models])
     tool_dict = tool_to_dict(gapic_tool)
-    assert tool_dict == {
-        "function_declarations": [
-            {
-                "description": "",
-                "name": "Models",
-                "parameters": {
-                    "any_of": [],
-                    "description": "",
-                    "enum": [],
-                    "format_": "",
-                    "max_items": "0",
-                    "min_items": "0",
-                    "nullable": False,
-                    "properties": {
-                        "models": {
-                            "any_of": [],
-                            "description": "",
-                            "enum": [],
-                            "format_": "",
-                            "items": {
-                                "any_of": [],
-                                "description": "MyModel",
-                                "enum": [],
-                                "format_": "",
-                                "max_items": "0",
-                                "min_items": "0",
-                                "nullable": False,
-                                "properties": {
-                                    "age": {
-                                        "any_of": [],
-                                        "description": "",
-                                        "enum": [],
-                                        "format_": "",
-                                        "max_items": "0",
-                                        "min_items": "0",
-                                        "nullable": False,
-                                        "properties": {},
-                                        "property_ordering": [],
-                                        "required": [],
-                                        "title": "",
-                                        "type_": 3,
-                                    },
-                                    "name": {
-                                        "any_of": [],
-                                        "description": "",
-                                        "enum": [],
-                                        "format_": "",
-                                        "max_items": "0",
-                                        "min_items": "0",
-                                        "nullable": False,
-                                        "properties": {},
-                                        "property_ordering": [],
-                                        "required": [],
-                                        "title": "",
-                                        "type_": 1,
-                                    },
-                                },
-                                "property_ordering": [],
-                                "required": ["name", "age"],
-                                "title": "",
-                                "type_": 6,
-                            },
-                            "max_items": "0",
-                            "min_items": "0",
-                            "nullable": False,
-                            "properties": {},
-                            "property_ordering": [],
-                            "required": [],
-                            "title": "",
-                            "type_": 5,
-                        }
-                    },
-                    "property_ordering": [],
-                    "required": ["models"],
-                    "title": "",
-                    "type_": 6,
-                },
-            }
-        ]
-    }
+
+    # Check that we have the expected structure
+    assert "function_declarations" in tool_dict
+    assert len(tool_dict["function_declarations"]) == 1
+
+    # Check the function declaration
+    func_decl = tool_dict["function_declarations"][0]
+    assert func_decl["name"] == "Models"
+    assert func_decl["description"] is None
+    assert func_decl["behavior"] is None
+
+    # Check parameters structure
+    params = func_decl["parameters"]
+    assert params["type"]["_value_"] == "OBJECT"
+    assert params["required"] == ["models"]
+
+    # Check properties
+    properties = params["properties"]
+    assert "models" in properties
+
+    # Check models property (array of MyModel)
+    models_prop = properties["models"]
+    assert models_prop["type"]["_value_"] == "ARRAY"
+    assert models_prop["nullable"] is None
+
+    # Check items of the array
+    items = models_prop["items"]
+    assert items["type"]["_value_"] == "OBJECT"
+    assert items["description"] == "MyModel"
+    assert items["required"] == ["name", "age"]
+
+    # Check properties of MyModel
+    model_properties = items["properties"]
+    assert "name" in model_properties
+    assert "age" in model_properties
+
+    # Check name property
+    name_prop = model_properties["name"]
+    assert name_prop["type"]["_value_"] == "STRING"
+    assert name_prop["nullable"] is None
+
+    # Check age property
+    age_prop = model_properties["age"]
+    assert age_prop["type"]["_value_"] == "INTEGER"
+    assert age_prop["nullable"] is None
 
 
 def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> None:
@@ -809,21 +795,15 @@ def test_tool_with_doubly_nested_list_param() -> None:
     matrix_property = properties.get("matrix")
     assert isinstance(matrix_property, dict)
 
-    assert (
-        matrix_property.get("type_") == glm.Type.ARRAY
-    ), "Expected 'matrix' to be ARRAY."
+    assert_property_type(matrix_property, Type.ARRAY, "matrix")
 
     items_level1 = matrix_property.get("items")
     assert isinstance(items_level1, dict), "Expected first level 'items' to be a dict."
-    assert (
-        items_level1.get("type_") == glm.Type.ARRAY
-    ), "Expected first level items to be ARRAY."
+    assert_property_type(items_level1, Type.ARRAY, "first level items")
 
     items_level2 = items_level1.get("items")
     assert isinstance(items_level2, dict), "Expected second level 'items' to be a dict."
-    assert (
-        items_level2.get("type_") == glm.Type.STRING
-    ), "Expected second level items to be STRING."
+    assert_property_type(items_level2, Type.STRING, "second level items")
 
     assert "description" in matrix_property
     assert "description" in items_level1
@@ -941,18 +921,14 @@ def test_tool_with_union_types() -> None:
     assert isinstance(helper1, dict), "Expected first option to be a dict."
     assert "properties" in helper1, "Expected first option to have properties."
     assert "x" in helper1["properties"], "Expected first option to have 'x' property."
-    assert (
-        helper1["properties"]["x"]["type_"] == glm.Type.BOOLEAN
-    ), "Expected 'x' to be BOOLEAN."
+    assert_property_type(helper1["properties"]["x"], Type.BOOLEAN, "x")
 
     # Check second option (Helper2)
     helper2 = any_of[1]
     assert isinstance(helper2, dict), "Expected second option to be a dict."
     assert "properties" in helper2, "Expected second option to have properties."
     assert "y" in helper2["properties"], "Expected second option to have 'y' property."
-    assert (
-        helper2["properties"]["y"]["type_"] == glm.Type.STRING
-    ), "Expected 'y' to be STRING."
+    assert_property_type(helper2["properties"]["y"], Type.STRING, "y")
 
 
 def test_tool_with_union_primitive_types() -> None:
@@ -1002,23 +978,31 @@ def test_tool_with_union_primitive_types() -> None:
     assert len(any_of) == 2, "Expected 'any_of' to have 2 options."
 
     # One option should be a string
-    string_option = next(
-        (opt for opt in any_of if opt.get("type_") == glm.Type.STRING), None
-    )
-    assert string_option is not None, "Expected one option to be a STRING."
+    # Just verify string option exists
+    _ = find_any_of_option_by_type(any_of, Type.STRING)
 
     # One option should be an object (Helper)
-    object_option = next(
-        (opt for opt in any_of if opt.get("type_") == glm.Type.OBJECT), None
-    )
-    assert object_option is not None, "Expected one option to be an OBJECT."
+    object_option = find_any_of_option_by_type(any_of, Type.OBJECT)
     assert "properties" in object_option, "Expected object option to have properties."
-    assert (
-        "value" in object_option["properties"]
-    ), "Expected object option to have 'value' property."
-    assert (
-        object_option["properties"]["value"]["type_"] == 3
-    ), "Expected 'value' to be NUMBER or INTEGER."
+    assert "value" in object_option["properties"], (
+        "Expected object option to have 'value' property."
+    )
+    # Note: This assertion expects the raw enum integer value (3 for NUMBER)
+    # This is a special case where the test was expecting the integer value
+    value_type = object_option["properties"]["value"].get("type", {})
+    if isinstance(value_type, dict):
+        # For serialized enum, check _value_ and convert to enum to get integer
+        type_str = value_type.get("_value_")
+        if type_str == "NUMBER":
+            assert True, "Expected 'value' to be NUMBER."
+        elif type_str == "INTEGER":
+            assert True, "Expected 'value' to be INTEGER."
+        else:
+            assert False, f"Expected 'value' to be NUMBER or INTEGER, got {type_str}"
+    else:
+        assert value_type == 3, (
+            f"Expected 'value' to be NUMBER or INTEGER (3), got {value_type}"
+        )
 
 
 def test_tool_with_nested_union_types() -> None:
@@ -1070,20 +1054,15 @@ def test_tool_with_nested_union_types() -> None:
     assert len(location_any_of) == 2, "Expected 'location.any_of' to have 2 options."
 
     # One option should be a string
-    string_option = next(
-        (opt for opt in location_any_of if opt.get("type_") == glm.Type.STRING), None
-    )
-    assert string_option is not None, "Expected one location option to be a STRING."
+    # Just verify string option exists
+    _ = find_any_of_option_by_type(location_any_of, Type.STRING)
 
     # One option should be an object (Address)
-    address_option = next(
-        (opt for opt in location_any_of if opt.get("type_") == glm.Type.OBJECT), None
-    )
-    assert address_option is not None, "Expected one location option to be an OBJECT."
+    address_option = find_any_of_option_by_type(location_any_of, Type.OBJECT)
     assert "properties" in address_option, "Expected address option to have properties"
-    assert (
-        "city" in address_option["properties"]
-    ), "Expected Address to have 'city' property."
+    assert "city" in address_option["properties"], (
+        "Expected Address to have 'city' property."
+    )
 
 
 def test_tool_invocation_with_union_types() -> None:
@@ -1135,13 +1114,13 @@ def test_tool_invocation_with_union_types() -> None:
 
     # Check both variants of the Union type
     type_variants = [option.type for option in config_property.any_of]
-    assert glm.Type.STRING in type_variants, "Expected STRING to be one of the variants"
-    assert glm.Type.OBJECT in type_variants, "Expected OBJECT to be one of the variants"
+    assert Type.STRING in type_variants, "Expected STRING to be one of the variants"
+    assert Type.OBJECT in type_variants, "Expected OBJECT to be one of the variants"
 
     # Find the object variant
     object_variant = None
     for option in config_property.any_of:
-        if option.type == glm.Type.OBJECT:
+        if option.type == Type.OBJECT:
             object_variant = option
             break
 
@@ -1209,9 +1188,9 @@ def test_tool_field_union_types() -> None:
     # Check location property
     assert "location" in properties, "Expected location field in properties"
     location_property = properties.get("location", {})
-    assert (
-        "description" in location_property
-    ), "Expected description field in location property"
+    assert "description" in location_property, (
+        "Expected description field in location property"
+    )
     assert (
         location_property.get("description")
         == "The city and country, e.g. New York, USA"

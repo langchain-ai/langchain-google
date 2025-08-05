@@ -1,12 +1,17 @@
 import os
 from importlib import metadata
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
 from pydantic import BaseModel, Field, SecretStr
 
-from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai._enums import (
+    HarmBlockThreshold,
+    HarmCategory,
+    Modality,
+    SafetySetting,
+)
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
@@ -158,6 +163,4 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     )
 
 
-class SafetySettingDict(TypedDict):
-    category: HarmCategory
-    threshold: HarmBlockThreshold
+SafetySettingDict = SafetySetting

@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import filetype  # type: ignore[import]
 import requests
-from google.ai.generativelanguage_v1beta.types import Part
+from google.genai.types import Part
 
 
 class Route(Enum):

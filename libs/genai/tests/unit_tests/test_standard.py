@@ -13,14 +13,14 @@ class TestGeminiAIStandard(ChatModelUnitTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model": "models/gemini-1.0-pro-001"}
+        return {"model": "models/gemini-1.0-pro-001", "google_api_key": "test_api_key"}
 
     @property
     def init_from_env_params(self) -> Tuple[dict, dict, dict]:
         return (
-            {"GOOGLE_API_KEY": "api_key"},
+            {"GOOGLE_API_KEY": "test_api_key"},
             self.chat_model_params,
-            {"google_api_key": "api_key"},
+            {"google_api_key": "test_api_key"},
         )
 
 
@@ -31,12 +31,12 @@ class TestGemini_15_AIStandard(ChatModelUnitTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model": "models/gemini-1.5-pro-001"}
+        return {"model": "models/gemini-1.5-pro-001", "google_api_key": "test_api_key"}
 
     @property
     def init_from_env_params(self) -> Tuple[dict, dict, dict]:
         return (
-            {"GOOGLE_API_KEY": "api_key"},
+            {"GOOGLE_API_KEY": "test_api_key"},
             self.chat_model_params,
-            {"google_api_key": "api_key"},
+            {"google_api_key": "test_api_key"},
         )

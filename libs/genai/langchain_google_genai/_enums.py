@@ -1,7 +1,15 @@
-import google.ai.generativelanguage_v1beta as genai
+from google.genai.types import (
+    HarmBlockThreshold,
+    HarmCategory,
+    MediaModality,
+    Modality,
+    SafetySetting,
+)
 
-HarmBlockThreshold = genai.SafetySetting.HarmBlockThreshold
-HarmCategory = genai.HarmCategory
-Modality = genai.GenerationConfig.Modality
+HarmCategory = HarmCategory
+MediaModality = MediaModality
+SafetySetting = SafetySetting
+HarmBlockThreshold = HarmBlockThreshold
 
-__all__ = ["HarmBlockThreshold", "HarmCategory", "Modality"]
+
+__all__ = ["SafetySetting", "HarmCategory", "Modality"]

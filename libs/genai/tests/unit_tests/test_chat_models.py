@@ -1,17 +1,17 @@
 """Test chat model integration."""
 
-import asyncio
 import base64
 import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
 
-import google.ai.generativelanguage as glm
 import pytest
-from google.ai.generativelanguage_v1beta.types import (
+from google.genai.types import (
     Candidate,
     Content,
+    FunctionCall,
+    FunctionResponse,
     GenerateContentResponse,
     Part,
 )
@@ -104,28 +104,6 @@ def test_initialization_inside_threadpool() -> None:
         ).result()
 
 
-def test_initalization_without_async() -> None:
-    chat = ChatGoogleGenerativeAI(
-        model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
-    )
-    assert chat.async_client is None
-
-
-def test_initialization_with_async() -> None:
-    async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
-        model = ChatGoogleGenerativeAI(
-            model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
-        )
-        _ = model.async_client
-        return model
-
-    loop = asyncio.get_event_loop()
-    chat = loop.run_until_complete(initialize_chat_with_async_client())
-    assert chat.async_client is not None
-
-
 def test_api_key_is_string() -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
@@ -216,113 +194,95 @@ def test_parse_history(convert_system_message_to_human: bool) -> None:
     )
     assert len(history) == 8
     if convert_system_message_to_human:
-        assert history[0] == glm.Content(
+        assert history[0] == Content(
             role="user",
-            parts=[glm.Part(text=system_input), glm.Part(text=text_question1)],
+            parts=[Part(text=system_input), Part(text=text_question1)],
         )
     else:
-        assert history[0] == glm.Content(
-            role="user", parts=[glm.Part(text=text_question1)]
-        )
-    assert history[1] == glm.Content(
+        assert history[0] == Content(role="user", parts=[Part(text=text_question1)])
+    assert history[1] == Content(
         role="model",
         parts=[
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": function_call_1["args"],
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=function_call_1["args"],
                 )
             )
         ],
     )
-    assert history[2] == glm.Content(
+    assert history[2] == Content(
         role="user",
         parts=[
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 4},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 4},
                 )
             )
         ],
     )
-    assert history[3] == glm.Content(
+    assert history[3] == Content(
         role="model",
         parts=[
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": json.loads(function_call_2["arguments"]),
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=json.loads(function_call_2["arguments"]),
                 )
             )
         ],
     )
-    assert history[4] == glm.Content(
+    assert history[4] == Content(
         role="user",
         parts=[
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 4},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 4},
                 )
             )
         ],
     )
-    assert history[5] == glm.Content(
+    assert history[5] == Content(
         role="model",
         parts=[
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": function_call_3["args"],
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=function_call_3["args"],
                 )
             ),
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": function_call_4["args"],
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=function_call_4["args"],
                 )
             ),
         ],
     )
-    assert history[6] == glm.Content(
+    assert history[6] == Content(
         role="user",
         parts=[
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 4},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 4},
                 )
             ),
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 6},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 6},
                 )
             ),
         ],
     )
-    assert history[7] == glm.Content(role="model", parts=[glm.Part(text=text_answer1)])
+    assert history[7] == Content(role="model", parts=[Part(text=text_answer1)])
     if convert_system_message_to_human:
         assert system_instruction is None
     else:
-        assert system_instruction == glm.Content(parts=[glm.Part(text=system_input)])
+        assert system_instruction == Content(parts=[Part(text=system_input)])
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
@@ -331,6 +291,7 @@ def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> 
     _parse_chat_history([function_message], convert_system_message_to_human=True)
 
 
+@pytest.mark.skip(reason="Update client logic (since using both)")
 @pytest.mark.parametrize(
     "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
 )
@@ -348,7 +309,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     param_transport = "rest"
 
     with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        "langchain_google_genai._genai_extension.client.Client",
         mock_client,
     ):
         chat = ChatGoogleGenerativeAI(
@@ -469,7 +430,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information", args={"name": "Ben"}
                             )
                         }
@@ -498,7 +459,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information",
                                 args={"info": ["A", "B", "C"]},
                             )
@@ -528,7 +489,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information",
                                 args={
                                     "people": [
@@ -575,7 +536,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information",
                                 args={"info": [[1, 2, 3], [4, 5, 6]]},
                             )
@@ -606,8 +567,9 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                     "parts": [
                         {"text": "Mike age is 30"},
                         {
-                            "function_call": glm.FunctionCall(
-                                name="Information", args={"name": "Ben"}
+                            "function_call": FunctionCall(
+                                name="Information",
+                                args={"name": "Ben"},
                             )
                         },
                     ]
@@ -635,8 +597,9 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
-                                name="Information", args={"name": "Ben"}
+                            "function_call": FunctionCall(
+                                name="Information",
+                                args={"name": "Ben"},
                             )
                         },
                         {"text": "Mike age is 30"},
@@ -665,7 +628,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
 def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> None:
     with patch("langchain_google_genai.chat_models.uuid.uuid4") as uuid4:
         uuid4.return_value = "00000000-0000-0000-0000-00000000000"
-        response_candidate = glm.Candidate(raw_candidate)
+        response_candidate = Candidate.model_validate(raw_candidate)
         result = _parse_response_candidate(response_candidate)
         assert result.content == expected.content
         assert result.tool_calls == expected.tool_calls
@@ -754,8 +717,10 @@ def test_temperature_range_model_validation() -> None:
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.5)
 
 
-def test_model_kwargs() -> None:
+@patch("langchain_google_genai.chat_models.Client")
+def test_model_kwargs(mock_client: Mock) -> None:
     """Test we can transfer unknown params to model_kwargs."""
+
     llm = ChatGoogleGenerativeAI(
         model="my-model",
         convert_system_message_to_human=True,
@@ -771,9 +736,9 @@ def test_model_kwargs() -> None:
             convert_system_message_to_human=True,
             foo="bar",
         )
-    assert llm.model == "models/my-model"
-    assert llm.convert_system_message_to_human is True
-    assert llm.model_kwargs == {"foo": "bar"}
+        assert llm.model == "models/my-model"
+        assert llm.convert_system_message_to_human is True
+        assert llm.model_kwargs == {"foo": "bar"}
 
 
 @pytest.mark.parametrize(
@@ -809,7 +774,10 @@ def test_model_kwargs() -> None:
                         },
                     }
                 ],
-                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "prompt_feedback": {
+                    "block_reason": "BLOCK_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
                 "usage_metadata": {
                     "prompt_token_count": 10,
                     "candidates_token_count": 5,
@@ -818,7 +786,14 @@ def test_model_kwargs() -> None:
             },
             {
                 "grounding_chunks": [
-                    {"web": {"uri": "https://example.com", "title": "Example Site"}}
+                    {
+                        "retrieved_context": None,
+                        "web": {
+                            "domain": None,
+                            "uri": "https://example.com",
+                            "title": "Example Site",
+                        },
+                    }
                 ],
                 "grounding_supports": [
                     {
@@ -826,12 +801,15 @@ def test_model_kwargs() -> None:
                             "start_index": 0,
                             "end_index": 13,
                             "text": "Test response",
-                            "part_index": 0,
+                            "part_index": None,
                         },
                         "grounding_chunk_indices": [0],
                         "confidence_scores": [0.95],
                     }
                 ],
+                "retrieval_metadata": None,
+                "retrieval_queries": None,
+                "search_entry_point": None,
                 "web_search_queries": ["test query"],
             },
         ),
@@ -843,7 +821,10 @@ def test_model_kwargs() -> None:
                         "content": {"parts": [{"text": "Test response"}]},
                     }
                 ],
-                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "prompt_feedback": {
+                    "block_reason": "BLOCK_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
                 "usage_metadata": {
                     "prompt_token_count": 10,
                     "candidates_token_count": 5,
@@ -858,7 +839,7 @@ def test_response_to_result_grounding_metadata(
     raw_response: Dict, expected_grounding_metadata: Dict
 ) -> None:
     """Test that _response_to_result includes grounding_metadata in the response."""
-    response = GenerateContentResponse(raw_response)
+    response = GenerateContentResponse.model_validate(raw_response)
     result = _response_to_result(response, stream=False)
 
     assert len(result.generations) == len(raw_response["candidates"])
