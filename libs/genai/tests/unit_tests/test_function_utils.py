@@ -2,7 +2,15 @@ from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from unittest.mock import MagicMock, patch
 
 import pytest
-from google.genai.types import FunctionDeclaration, Schema, Tool, Type
+from google.genai.types import (
+    FunctionCallingConfig,
+    FunctionCallingConfigMode,
+    FunctionDeclaration,
+    Schema,
+    Tool,
+    ToolConfig,
+    Type,
+)
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -15,7 +23,6 @@ from langchain_google_genai._function_utils import (
     _format_dict_to_function_declaration,
     _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
-    _ToolConfigDict,
     convert_to_genai_function_declarations,
     replace_defs_in_schema,
     tool_to_dict,
@@ -639,11 +646,11 @@ def test_format_dict_to_genai_function() -> None:
 
 @pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
 def test__tool_choice_to_tool_config(choice: Any) -> None:
-    expected = _ToolConfigDict(
-        function_calling_config={
-            "mode": "ANY",
-            "allowed_function_names": ["foo"],
-        },
+    expected = ToolConfig(
+        function_calling_config=FunctionCallingConfig(
+            mode=FunctionCallingConfigMode.ANY,
+            allowed_function_names=["foo"],
+        ),
     )
     actual = _tool_choice_to_tool_config(choice, ["foo"])
     assert expected == actual

@@ -13,6 +13,7 @@ from google.genai.types import (
     FunctionCall,
     FunctionResponse,
     GenerateContentResponse,
+    HttpOptions,
     Part,
 )
 from langchain_core.load import dumps, loads
@@ -26,7 +27,6 @@ from langchain_core.messages import (
 from langchain_core.messages.tool import tool_call as create_tool_call
 from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
-from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
@@ -112,15 +112,26 @@ def test_api_key_is_string() -> None:
     assert isinstance(chat.google_api_key, SecretStr)
 
 
-def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> None:
+def test_base_url_set_in_constructor() -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
         google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        base_url="http://localhost:8000",
     )
-    print(chat.google_api_key, end="")  # noqa: T201
-    captured = capsys.readouterr()
+    assert chat.base_url == "http://localhost:8000"
 
-    assert captured.out == "**********"
+
+def test_base_url_passed_to_client() -> None:
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model="gemini-nano",
+            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+            base_url="http://localhost:8000",
+        )
+        mock_client.assert_called_once_with(
+            api_key="secret-api-key",
+            http_options=HttpOptions(base_url="http://localhost:8000"),
+        )
 
 
 @pytest.mark.parametrize("convert_system_message_to_human", [False, True])

@@ -6,7 +6,6 @@ import io
 import json
 import logging
 import mimetypes
-import os
 import uuid
 import warnings
 import wave
@@ -48,6 +47,7 @@ from google.genai.types import (
     GenerateContentConfig,
     GenerateContentResponse,
     GenerationConfig,
+    HttpOptions,
     Part,
     SafetySetting,
     ToolCodeExecution,
@@ -1243,14 +1243,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 google_api_key = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
-                if not google_api_key:
-                    google_api_key = os.getenv("GOOGLE_API_KEY")
+        http_options = HttpOptions(base_url=self.base_url)
         if google_api_key:
-            self.client = Client(api_key=google_api_key)
+            self.client = Client(api_key=google_api_key, http_options=http_options)
         else:
             project_id = getattr(self.credentials, "project_id", None)
             location = getattr(self.credentials, "location", "us-central1")
-            self.client = Client(vertexai=True, project=project_id, location=location)
+            self.client = Client(
+                vertexai=True,
+                project=project_id,
+                location=location,
+                http_options=http_options,
+            )
         return self
 
     @property
