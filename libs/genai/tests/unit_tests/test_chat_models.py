@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
 
 import pytest
+from google.api_core.exceptions import ResourceExhausted
 from google.genai.types import (
     Candidate,
     Content,
@@ -16,7 +17,6 @@ from google.genai.types import (
     HttpOptions,
     Part,
 )
-from google.api_core.exceptions import ResourceExhausted
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,

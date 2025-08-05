@@ -783,9 +783,9 @@ def _response_to_result(
         )
         try:
             if candidate.grounding_metadata:
-                generation_info["grounding_metadata"] = (
-                    candidate.grounding_metadata.model_dump()
-                )
+                generation_info[
+                    "grounding_metadata"
+                ] = candidate.grounding_metadata.model_dump()
         except AttributeError:
             pass
         message = _parse_response_candidate(candidate, streaming=stream)
