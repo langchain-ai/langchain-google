@@ -14,6 +14,7 @@ from google.genai.types import (
     FunctionCall,
     FunctionResponse,
     GenerateContentResponse,
+    GenerateContentResponseUsageMetadata,
     HttpOptions,
     Part,
 )
@@ -132,7 +133,7 @@ def test_base_url_passed_to_client() -> None:
         )
         mock_client.assert_called_once_with(
             api_key="secret-api-key",
-            http_options=HttpOptions(base_url="http://localhost:8000"),
+            http_options=HttpOptions(base_url="http://localhost:8000", headers={}),
         )
 
 
@@ -219,7 +220,7 @@ def test_parse_history(convert_system_message_to_human: bool) -> None:
             Part(
                 function_call=FunctionCall(
                     name="calculator",
-                    args=function_call_1["args"],
+                    args=function_call_1["args"],  # type: ignore[arg-type]
                 )
             )
         ],
@@ -263,13 +264,13 @@ def test_parse_history(convert_system_message_to_human: bool) -> None:
             Part(
                 function_call=FunctionCall(
                     name="calculator",
-                    args=function_call_3["args"],
+                    args=function_call_3["args"],  # type: ignore[arg-type]
                 )
             ),
             Part(
                 function_call=FunctionCall(
                     name="calculator",
-                    args=function_call_4["args"],
+                    args=function_call_4["args"],  # type: ignore[arg-type]
                 )
             ),
         ],
@@ -304,17 +305,23 @@ def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> 
     _parse_chat_history([function_message], convert_system_message_to_human=True)
 
 
-@pytest.mark.skip(reason="Update client logic (since using both)")
 @pytest.mark.parametrize(
     "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
 )
 def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     mock_client = Mock()
+    mock_models = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
     )
-    mock_client.return_value.generate_content = mock_generate_content
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
     api_endpoint = "http://127.0.0.1:8000/ai"
     param_api_key = "[secret]"
     param_secret_api_key = SecretStr(param_api_key)
@@ -322,14 +329,13 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     param_transport = "rest"
 
     with patch(
-        "langchain_google_genai._genai_extension.client.Client",
+        "langchain_google_genai.chat_models.Client",
         mock_client,
     ):
         chat = ChatGoogleGenerativeAI(
             model="gemini-pro",
             google_api_key=param_secret_api_key,  # type: ignore[call-arg]
-            client_options=param_client_options,
-            transport=param_transport,
+            base_url=api_endpoint,
             additional_headers=headers,
         )
 
@@ -346,16 +352,15 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     assert response.content == "test response"
 
     mock_client.assert_called_once_with(
-        transport=param_transport,
-        client_options=ANY,
-        client_info=ANY,
+        api_key=param_api_key,
+        http_options=ANY,
     )
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_key == param_api_key
-    assert call_client_options.api_endpoint == api_endpoint
-    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
-    assert "langchain-google-genai" in call_client_info.user_agent
-    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+    call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+    assert call_http_options.base_url == api_endpoint
+    if headers:
+        assert call_http_options.headers == headers
+    else:
+        assert call_http_options.headers == {}
 
 
 @pytest.mark.parametrize(
@@ -693,8 +698,38 @@ def test__convert_tool_message_to_parts__sets_tool_name(
     parts = _convert_tool_message_to_parts(tool_message)
     assert len(parts) == 1
     part = parts[0]
+    assert part.function_response is not None
     assert part.function_response.name == "tool_name"
     assert part.function_response.response == {"output": "test_content"}
+
+
+def test_supports_thinking() -> None:
+    """Test that _supports_thinking correctly identifies model capabilities."""
+    # Test models that don't support thinking
+    llm_image_gen = ChatGoogleGenerativeAI(
+        model="models/gemini-2.0-flash-preview-image-generation",
+        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+    )
+    assert not llm_image_gen._supports_thinking()
+
+    llm_tts = ChatGoogleGenerativeAI(
+        model="models/gemini-2.5-flash-preview-tts",
+        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+    )
+    assert not llm_tts._supports_thinking()
+
+    # Test models that do support thinking
+    llm_normal = ChatGoogleGenerativeAI(
+        model="models/gemini-2.5-flash",
+        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+    )
+    assert llm_normal._supports_thinking()
+
+    llm_15 = ChatGoogleGenerativeAI(
+        model="models/gemini-1.5-flash-latest",
+        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+    )
+    assert llm_15._supports_thinking()
 
 
 def test_temperature_range_pydantic_validation() -> None:

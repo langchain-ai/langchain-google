@@ -44,7 +44,7 @@ Examples:
     "when making API calls. If not provided, credentials will be ascertained from "
     "the GOOGLE_API_KEY envvar"
     base_url: Optional[str] = None
-    """The base URL to use for the API. If not provided, will default to the public API."""
+    """The base URL for the API. If not provided, will default to the public API."""
     temperature: float = 0.7
     """Run inference with this temperature. Must be within ``[0.0, 2.0]``."""
     top_p: Optional[float] = None

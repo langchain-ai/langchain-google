@@ -250,9 +250,9 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
             Type.OBJECT,
             Type.STRING,
         ], f"Expected 'data' to be OBJECT or STRING, but got {actual_type_dict}"
-    assert (
-        data_property.get("nullable") is True
-    ), "Expected 'data' to be marked as nullable."
+    assert data_property.get("nullable") is True, (
+        "Expected 'data' to be marked as nullable."
+    )
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
@@ -305,9 +305,9 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
 
     # Assertions
     assert_property_type(status_property, Type.STRING, "status")
-    assert (
-        status_property.get("nullable") is True
-    ), "Expected 'status' to be marked as nullable."
+    assert status_property.get("nullable") is True, (
+        "Expected 'status' to be marked as nullable."
+    )
     assert status_property.get("enum") == [
         "active",
         "inactive",
@@ -420,6 +420,8 @@ def test_format_tool_to_genai_function() -> None:
         return datetime.datetime.now().strftime("%Y-%m-%d")
 
     schema = convert_to_genai_function_declarations([get_datetime])
+    assert schema.function_declarations is not None
+    assert len(schema.function_declarations) > 0
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "get_datetime"
     assert function_declaration.description == "Gets the current datetime"
@@ -435,10 +437,13 @@ def test_format_tool_to_genai_function() -> None:
         """
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([sum_two_numbers])  # type: ignore
+    schema = convert_to_genai_function_declarations([sum_two_numbers])
+    assert schema.function_declarations is not None
+    assert len(schema.function_declarations) > 0
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "sum_two_numbers"
     assert function_declaration.parameters
+    assert function_declaration.parameters.required is not None
     assert len(function_declaration.parameters.required) == 2
 
     @tool
@@ -446,10 +451,13 @@ def test_format_tool_to_genai_function() -> None:
         """Some description"""
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([do_something_optional])  # type: ignore
+    schema = convert_to_genai_function_declarations([do_something_optional])
+    assert schema.function_declarations is not None
+    assert len(schema.function_declarations) > 0
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "do_something_optional"
     assert function_declaration.parameters
+    assert function_declaration.parameters.required is not None
     assert len(function_declaration.parameters.required) == 1
 
     src = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
@@ -458,7 +466,8 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations(src)
     assert result == expected
 
-    src_2 = Tool(google_search_retrieval={})
+    # Create Tool objects with proper typing
+    src_2 = Tool(google_search_retrieval={})  # type: ignore[arg-type]
     result = convert_to_genai_function_declarations([src_2])
     assert result == src_2
 
@@ -466,19 +475,19 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations([src_3])
     assert result == src_2
 
-    src_4 = Tool(google_search={})
+    src_4 = Tool(google_search={})  # type: ignore[arg-type]
     result = convert_to_genai_function_declarations([src_4])
     assert result == src_4
 
     with pytest.raises(ValueError) as exc_info1:
-        _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore
+        _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore[list-item]
     assert str(exc_info1.value).startswith("Unsupported tool")
 
     with pytest.raises(Exception) as exc_info:
         _ = convert_to_genai_function_declarations(
             [
-                Tool(google_search_retrieval={}),
-                Tool(google_search_retrieval={}),
+                Tool(google_search_retrieval={}),  # type: ignore[arg-type]
+                Tool(google_search_retrieval={}),  # type: ignore[arg-type]
             ]
         )
     assert str(exc_info.value).startswith("Providing multiple google_search_retrieval")
@@ -532,7 +541,9 @@ def test_tool_with_annotated_optional_args() -> None:
     assert len(actual) == 2
 
     # Check the first function declaration (split_documents)
+    assert len(actual) > 0
     split_docs = actual[0]
+    assert isinstance(split_docs, dict)
     assert split_docs["name"] == "split_documents"
     assert split_docs["description"] == "Tool."
     assert split_docs["behavior"] is None
@@ -560,7 +571,9 @@ def test_tool_with_annotated_optional_args() -> None:
     assert chunk_overlap_prop["nullable"] is True
 
     # Check the second function declaration (search_web)
+    assert len(actual) > 1
     search_web_func = actual[1]
+    assert isinstance(search_web_func, dict)
     assert search_web_func["name"] == "search_web"
     assert search_web_func["description"] == "Tool."
     assert search_web_func["behavior"] is None
@@ -640,6 +653,8 @@ def test_format_dict_to_genai_function() -> None:
         ]
     }
     schema = convert_to_genai_function_declarations([calculator])
+    assert schema.function_declarations is not None
+    assert len(schema.function_declarations) > 0
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "search"
     assert function_declaration.parameters
@@ -712,7 +727,10 @@ def test_tool_to_dict_pydantic_nested() -> None:
     assert len(tool_dict["function_declarations"]) == 1
 
     # Check the function declaration
+    assert "function_declarations" in tool_dict
+    assert len(tool_dict["function_declarations"]) > 0
     func_decl = tool_dict["function_declarations"][0]
+    assert isinstance(func_decl, dict)
     assert func_decl["name"] == "Models"
     assert func_decl["description"] is None
     assert func_decl["behavior"] is None
@@ -993,9 +1011,9 @@ def test_tool_with_union_primitive_types() -> None:
     # One option should be an object (Helper)
     object_option = find_any_of_option_by_type(any_of, Type.OBJECT)
     assert "properties" in object_option, "Expected object option to have properties."
-    assert (
-        "value" in object_option["properties"]
-    ), "Expected object option to have 'value' property."
+    assert "value" in object_option["properties"], (
+        "Expected object option to have 'value' property."
+    )
     # Note: This assertion expects the raw enum integer value (3 for NUMBER)
     # This is a special case where the test was expecting the integer value
     value_type = object_option["properties"]["value"].get("type", {})
@@ -1009,9 +1027,9 @@ def test_tool_with_union_primitive_types() -> None:
         else:
             assert False, f"Expected 'value' to be NUMBER or INTEGER, got {type_str}"
     else:
-        assert (
-            value_type == 3
-        ), f"Expected 'value' to be NUMBER or INTEGER (3), got {value_type}"
+        assert value_type == 3, (
+            f"Expected 'value' to be NUMBER or INTEGER (3), got {value_type}"
+        )
 
 
 def test_tool_with_nested_union_types() -> None:
@@ -1069,9 +1087,9 @@ def test_tool_with_nested_union_types() -> None:
     # One option should be an object (Address)
     address_option = find_any_of_option_by_type(location_any_of, Type.OBJECT)
     assert "properties" in address_option, "Expected address option to have properties"
-    assert (
-        "city" in address_option["properties"]
-    ), "Expected Address to have 'city' property."
+    assert "city" in address_option["properties"], (
+        "Expected Address to have 'city' property."
+    )
 
 
 def test_tool_invocation_with_union_types() -> None:
@@ -1103,6 +1121,8 @@ def test_tool_invocation_with_union_types() -> None:
     genai_tool = convert_to_genai_function_declarations([oai_tool])
 
     # Get function declaration
+    assert genai_tool.function_declarations is not None
+    assert len(genai_tool.function_declarations) > 0
     function_declaration = genai_tool.function_declarations[0]
 
     # Check parameters
@@ -1112,6 +1132,7 @@ def test_tool_invocation_with_union_types() -> None:
 
     # Check for config property
     config_property = None
+    assert parameters.properties is not None, "Expected properties to exist"
     for prop_name, prop in parameters.properties.items():
         if prop_name == "config":
             config_property = prop
@@ -1119,6 +1140,7 @@ def test_tool_invocation_with_union_types() -> None:
 
     assert config_property is not None, "Expected 'config' property to exist"
     assert hasattr(config_property, "any_of"), "Expected any_of attribute on config"
+    assert config_property.any_of is not None, "Expected any_of to not be None"
     assert len(config_property.any_of) == 2, "Expected config.any_of to have 2 options"
 
     # Check both variants of the Union type
@@ -1135,6 +1157,7 @@ def test_tool_invocation_with_union_types() -> None:
 
     assert object_variant is not None, "Expected to find an object variant"
     assert hasattr(object_variant, "properties"), "Expected object to have properties"
+    assert object_variant.properties is not None, "Expected properties to not be None"
 
     # Check for settings property
     has_settings = False
@@ -1183,23 +1206,24 @@ def test_tool_field_union_types() -> None:
     function_declarations = genai_tool_dict.get("function_declarations", [])
     assert len(function_declarations) > 0, "Expected at least one function declaration"
     fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected function declaration to be a dict"
 
     # Check the name and description
-    assert fn_decl.get("name") == "GetWeather", "Expected name to be 'GetWeather'"  # type: ignore
-    assert "Get weather information" in fn_decl.get("description", ""), (  # type: ignore
+    assert fn_decl.get("name") == "GetWeather", "Expected name to be 'GetWeather'"
+    assert "Get weather information" in fn_decl.get("description", ""), (
         "Expected description to include weather information"
     )
 
     # Check parameters
-    parameters = fn_decl.get("parameters", {})  # type: ignore
+    parameters = fn_decl.get("parameters", {})
     properties = parameters.get("properties", {})
 
     # Check location property
     assert "location" in properties, "Expected location field in properties"
     location_property = properties.get("location", {})
-    assert (
-        "description" in location_property
-    ), "Expected description field in location property"
+    assert "description" in location_property, (
+        "Expected description field in location property"
+    )
     assert (
         location_property.get("description")
         == "The city and country, e.g. New York, USA"

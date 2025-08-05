@@ -29,6 +29,7 @@ from typing import (
 )
 
 import filetype  # type: ignore[import]
+from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
 from google.genai.client import Client
 from google.genai.errors import (
     ClientError,
@@ -50,6 +51,7 @@ from google.genai.types import (
     HttpOptions,
     Part,
     SafetySetting,
+    ThinkingConfig,
     ToolCodeExecution,
     ToolConfig,
     VideoMetadata,
@@ -181,7 +183,11 @@ def _create_retry_decorator(
             min=wait_exponential_min,
             max=wait_exponential_max,
         ),
-        retry=(retry_if_exception_type(ServerError)),
+        retry=(
+            retry_if_exception_type(
+                (ServerError, ResourceExhausted, ServiceUnavailable)
+            )
+        ),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
 
@@ -330,7 +336,14 @@ def _convert_to_parts(
                                 mime_type = kind.mime
                         if mime_type:
                             inline_data["mime_type"] = mime_type
-                    parts.append(Part(inline_data=inline_data))
+                    parts.append(
+                        Part(
+                            inline_data=Blob(
+                                data=inline_data["data"],
+                                mime_type=inline_data["mime_type"],
+                            )
+                        )
+                    )
                 elif part["type"] == "image_url":
                     img_url = part["image_url"]
                     if isinstance(img_url, dict):
@@ -361,7 +374,7 @@ def _convert_to_parts(
                             f"Media part must have either data or file_uri: {part}"
                         )
                     if "video_metadata" in part:
-                        metadata = VideoMetadata(part["video_metadata"])
+                        metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
                 elif part["type"] == "executable_code":
@@ -500,7 +513,10 @@ def _parse_chat_history(
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
-                system_instruction.parts.extend(system_parts)
+                if system_instruction.parts is None:
+                    system_instruction.parts = system_parts
+                else:
+                    system_instruction.parts.extend(system_parts)
             else:
                 pass
             continue
@@ -532,7 +548,7 @@ def _parse_chat_history(
             role = "user"
             parts = _convert_to_parts(message.content)
             if i == 1 and convert_system_message_to_human and system_instruction:
-                parts = [p for p in system_instruction.parts] + parts
+                parts = [p for p in system_instruction.parts or []] + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
@@ -575,7 +591,8 @@ def _parse_response_candidate(
     invalid_tool_calls = []
     tool_call_chunks = []
 
-    for part in response_candidate.content.parts:
+    parts = response_candidate.content.parts or [] if response_candidate.content else []
+    for part in parts:
         text: Optional[str] = None
         try:
             if hasattr(part, "text") and part.text is not None:
@@ -617,7 +634,11 @@ def _parse_response_candidate(
                 content = _append_to_content(content, execution_result)
 
         if part.inline_data:
-            if part.inline_data.mime_type.startswith("audio/"):
+            if (
+                part.inline_data.mime_type
+                and part.inline_data.mime_type.startswith("audio/")
+                and part.inline_data.data
+            ):
                 buffer = io.BytesIO()
 
                 with wave.open(buffer, "wb") as wf:
@@ -629,7 +650,11 @@ def _parse_response_candidate(
 
                 additional_kwargs["audio"] = buffer.getvalue()
 
-            if part.inline_data.mime_type.startswith("image/"):
+            if (
+                part.inline_data.mime_type
+                and part.inline_data.mime_type.startswith("image/")
+                and part.inline_data.data
+            ):
                 image_format = part.inline_data.mime_type[6:]
                 image_message = {
                     "type": "image_url",
@@ -726,6 +751,8 @@ def _response_to_result(
 
     # Get usage metadata
     try:
+        if response.usage_metadata is None:
+            raise AttributeError("Usage metadata is None")
         input_tokens = response.usage_metadata.prompt_token_count or 0
         thought_tokens = response.usage_metadata.thoughts_token_count or 0
         output_tokens = (
@@ -770,12 +797,12 @@ def _response_to_result(
 
     generations: List[ChatGeneration] = []
 
-    for candidate in response.candidates:
-        generation_info = {}
+    for candidate in response.candidates or []:
+        generation_info: Dict[str, Any] = {}
         if candidate.finish_reason:
             generation_info["finish_reason"] = candidate.finish_reason.name
             # Add model_name in last chunk
-            generation_info["model_name"] = response.model_version
+            generation_info["model_name"] = response.model_version or ""
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings
@@ -783,9 +810,9 @@ def _response_to_result(
         )
         try:
             if candidate.grounding_metadata:
-                generation_info[
-                    "grounding_metadata"
-                ] = candidate.grounding_metadata.model_dump()
+                generation_info["grounding_metadata"] = (
+                    candidate.grounding_metadata.model_dump()
+                )
         except AttributeError:
             pass
         message = _parse_response_candidate(candidate, streaming=stream)
@@ -1184,7 +1211,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word "multimodal," and summarizes everything that was seen and heard.'
 
     Audio input:
         .. code-block:: python
@@ -1274,7 +1301,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     """  # noqa: E501
 
-    client: Client = Field(default=None, exclude=True)  #: :meta private:
+    client: Optional[Client] = Field(default=None, exclude=True)  #: :meta private:
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
     )  #: :meta private:
@@ -1391,7 +1418,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 google_api_key = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
-        http_options = HttpOptions(base_url=self.base_url)
+        http_options = HttpOptions(base_url=self.base_url, headers=additional_headers)
         if google_api_key:
             self.client = Client(api_key=google_api_key, http_options=http_options)
         else:
@@ -1478,13 +1505,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ls_params["ls_stop"] = ls_stop
         return ls_params
 
+    def _supports_thinking(self) -> bool:
+        """Check if the current model supports thinking capabilities."""
+        # Models that don't support thinking based on known patterns
+        non_thinking_models = [
+            "image-generation",  # Image generation models don't support thinking
+            "tts",  # Text-to-speech models don't support thinking
+        ]
+
+        model_name = self.model.lower()
+        return not any(pattern in model_name for pattern in non_thinking_models)
+
     def _prepare_params(
         self,
         stop: Optional[List[str]],
         generation_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> GenerationConfig:
-        gen_config = {
+        gen_config: Dict[str, Any] = {
             k: v
             for k, v in {
                 "candidate_count": self.n,
@@ -1506,7 +1544,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                         else {}
                     )
                 )
-                if self.thinking_budget is not None or self.include_thoughts is not None
+                if (
+                    self.thinking_budget is not None
+                    or self.include_thoughts is not None
+                )
+                and self._supports_thinking()
                 else None,
             }.items()
             if v is not None
@@ -1546,7 +1588,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gapic_response_schema = _dict_to_gapic_schema(response_schema)
             if gapic_response_schema is not None:
                 gen_config["response_schema"] = gapic_response_schema
-        return GenerationConfig(**gen_config)
+        return GenerationConfig.model_validate(gen_config)
 
     def _generate(
         self,
@@ -1563,6 +1605,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.client is None:
+            raise ValueError("Client not initialized.")
         request, api_params = self._prepare_request(
             messages,
             stop=stop,
@@ -1598,6 +1642,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.client is None:
+            raise ValueError("Client not initialized.")
         request, api_params = self._prepare_request(
             messages,
             stop=stop,
@@ -1633,6 +1679,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        if self.client is None:
+            raise ValueError("Client not initialized.")
         request, api_params = self._prepare_request(
             messages,
             stop=stop,
@@ -1645,7 +1693,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        response: GenerateContentResponse = _chat_with_retry(
+        response: Iterator[GenerateContentResponse] = _chat_with_retry(
             **api_params,
             generation_method=self.client.models.generate_content_stream,
             **kwargs,
@@ -1654,11 +1702,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
         for chunk in response:
-            _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
-            )
-            gen = cast(ChatGenerationChunk, _chat_result.generations[0])
-            message = cast(AIMessageChunk, gen.message)
+            if chunk:
+                _chat_result = _response_to_result(
+                    chunk, stream=True, prev_usage=prev_usage_metadata
+                )
+                gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+                message = cast(AIMessageChunk, gen.message)
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -1685,6 +1734,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        if self.client is None:
+            raise ValueError("Client not initialized.")
         request, api_params = self._prepare_request(
             messages,
             stop=stop,
@@ -1704,6 +1755,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
             metadata=self.default_metadata,
         ):
+            chunk = cast(GenerateContentResponse, chunk)
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
             )
@@ -1764,7 +1816,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             convert_system_message_to_human=self.convert_system_message_to_human,
         )
 
-        formatted_tool_config = None
+        formatted_tool_config: Optional[ToolConfig] = None
         if tool_choice:
             if not formatted_tools:
                 msg = (
@@ -1788,14 +1840,26 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             formatted_tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         elif tool_config:
-            formatted_tool_config = tool_config
+            if isinstance(tool_config, dict):
+                formatted_tool_config = ToolConfig.model_validate(tool_config)
+            else:
+                formatted_tool_config = tool_config
 
+        # Convert safety settings to list of SafetySetting objects
         formatted_safety_settings = []
         if safety_settings:
-            formatted_safety_settings = [
-                SafetySetting(category=c, threshold=t)
-                for c, t in safety_settings.items()
-            ]
+            if isinstance(safety_settings, dict):
+                # Handle dictionary format: {HarmCategory: HarmBlockThreshold}
+                formatted_safety_settings = [
+                    SafetySetting(category=category, threshold=threshold)
+                    for category, threshold in safety_settings.items()
+                ]
+            elif isinstance(safety_settings, list):
+                # Handle list format: [SafetySetting, ...]
+                formatted_safety_settings = safety_settings
+            else:
+                # Handle single SafetySetting object
+                formatted_safety_settings = [safety_settings]
 
         # Params from places
         params = self._prepare_params(
@@ -1806,13 +1870,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         # Convert into a GenerateContentConfig object while maintaining compatibility
         # with the old API
-        response_modalities = params.response_modalities
-        thinking_config = params.thinking_config
+        response_modalities = (
+            [m.value for m in params.response_modalities]
+            if params.response_modalities
+            else None
+        )
+
+        # Only create thinking_config if the model supports thinking and params.thinking_config is not None
+        thinking_config = None
+        if params.thinking_config is not None and self._supports_thinking():
+            thinking_config = ThinkingConfig(
+                include_thoughts=params.thinking_config.include_thoughts,
+                thinking_budget=params.thinking_config.thinking_budget,
+            )
+
         request = GenerateContentConfig(
-            tools=formatted_tools,
+            tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
             safety_settings=formatted_safety_settings,
-            response_modalities=response_modalities,
+            response_modalities=response_modalities if response_modalities else None,
             thinking_config=thinking_config,
             cached_content=cached_content,
             system_instruction=system_instruction,
@@ -1829,6 +1905,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return request, api_params
 
     def get_num_tokens(self, text: str) -> int:
+        if self.client is None:
+            raise ValueError("Client not initialized.")
         """Get the number of tokens present in the text.
 
         Useful for checking if an input will fit in a model's context window.
@@ -1842,7 +1920,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         result = self.client.models.count_tokens(
             model=self.model, contents=[Content(parts=[Part(text=text)])]
         )
-        return result.total_tokens
+        return result.total_tokens if result and result.total_tokens is not None else 0
 
     def with_structured_output(
         self,

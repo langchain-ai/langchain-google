@@ -158,17 +158,20 @@ def _dict_to_genai_schema(schema: Dict[str, Any]) -> Optional[types.Schema]:
         if "nullable" in formatted_schema:
             schema_dict["nullable"] = formatted_schema["nullable"]
 
-        return types.Schema(**schema_dict)
+        return types.Schema.model_validate(schema_dict)
     return None
 
 
 def _format_dict_to_function_declaration(
     tool: Union[FunctionDescription, Dict[str, Any]],
 ) -> types.FunctionDeclaration:
+    name = tool.get("name") or tool.get("title") or "MISSING_NAME"
+    description = tool.get("description") or None
+    parameters = _dict_to_genai_schema(tool.get("parameters", {}))
     return types.FunctionDeclaration(
-        name=tool.get("name") or tool.get("title") or "MISSING_NAME",
-        description=tool.get("description") or None,
-        parameters=_dict_to_genai_schema(tool.get("parameters", {})),
+        name=str(name),
+        description=description,
+        parameters=parameters,
     )
 
 
@@ -183,8 +186,8 @@ def convert_to_genai_function_declarations(
         )
         tools = [tools]
 
-    tool_dict = {}
-    function_declarations = []
+    tool_dict: Dict[str, Any] = {}
+    function_declarations: List[types.FunctionDeclaration] = []
 
     for tool in tools:
         if isinstance(tool, types.Tool):
