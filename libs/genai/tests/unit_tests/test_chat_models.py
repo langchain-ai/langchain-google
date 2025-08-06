@@ -16,7 +16,11 @@ from google.genai.types import (
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
     HttpOptions,
+    Language,
     Part,
+)
+from google.genai.types import (
+    Outcome as CodeExecutionResultOutcome,
 )
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
@@ -33,7 +37,9 @@ from pydantic_core._pydantic_core import ValidationError
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     _chat_with_retry,
+    _convert_to_parts,
     _convert_tool_message_to_parts,
+    _get_ai_message_tool_messages_parts,
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
@@ -842,7 +848,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
                     }
                 ],
                 "prompt_feedback": {
-                    "block_reason": "BLOCK_REASON_UNSPECIFIED",
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
                     "safety_ratings": [],
                 },
                 "usage_metadata": {
@@ -889,7 +895,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
                     }
                 ],
                 "prompt_feedback": {
-                    "block_reason": "BLOCK_REASON_UNSPECIFIED",
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
                     "safety_ratings": [],
                 },
                 "usage_metadata": {
@@ -918,3 +924,631 @@ def test_response_to_result_grounding_metadata(
             else {}
         )
         assert grounding_metadata == expected_grounding_metadata
+
+
+def test_convert_to_parts_text_only() -> None:
+    """Test _convert_to_parts with text content."""
+    # Test single string
+    result = _convert_to_parts("Hello, world!")
+    assert len(result) == 1
+    assert result[0].text == "Hello, world!"
+    assert result[0].inline_data is None
+
+    # Test list of strings
+    result = _convert_to_parts(["Hello", "world", "!"])
+    assert len(result) == 3
+    assert result[0].text == "Hello"
+    assert result[1].text == "world"
+    assert result[2].text == "!"
+
+
+def test_convert_to_parts_text_content_block() -> None:
+    """Test _convert_to_parts with text content blocks."""
+    content = [{"type": "text", "text": "Hello, world!"}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].text == "Hello, world!"
+
+
+def test_convert_to_parts_image_url() -> None:
+    """Test _convert_to_parts with image_url content blocks."""
+    content = [
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+            },
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "image/jpeg"
+
+
+def test_convert_to_parts_image_url_string() -> None:
+    """Test _convert_to_parts with image_url as string."""
+    content = [
+        {
+            "type": "image_url",
+            "image_url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "image/jpeg"
+
+
+def test_convert_to_parts_file_data_url() -> None:
+    """Test _convert_to_parts with file data URL."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "url",
+            "url": "https://example.com/image.jpg",
+            "mime_type": "image/jpeg",
+        }
+    ]
+    with patch("langchain_google_genai.chat_models.ImageBytesLoader") as mock_loader:
+        mock_loader_instance = Mock()
+        mock_loader_instance._bytes_from_url.return_value = b"fake_image_data"
+        mock_loader.return_value = mock_loader_instance
+
+        result = _convert_to_parts(content)
+        assert len(result) == 1
+        assert result[0].inline_data is not None
+        assert result[0].inline_data.mime_type == "image/jpeg"
+        assert result[0].inline_data.data == b"fake_image_data"
+
+
+def test_convert_to_parts_file_data_base64() -> None:
+    """Test _convert_to_parts with file data base64."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "base64",
+            "data": "SGVsbG8gV29ybGQ=",  # "Hello World" in base64
+            "mime_type": "text/plain",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "text/plain"
+    assert result[0].inline_data.data == b"Hello World"
+
+
+def test_convert_to_parts_file_data_auto_mime_type() -> None:
+    """Test _convert_to_parts with auto-detected mime type."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "base64",
+            "data": "SGVsbG8gV29ybGQ=",
+            # No mime_type specified, should be auto-detected
+        }
+    ]
+    with patch("langchain_google_genai.chat_models.mimetypes.guess_type") as mock_guess:
+        mock_guess.return_value = ("text/plain", None)
+        result = _convert_to_parts(content)
+        assert len(result) == 1
+        assert result[0].inline_data is not None
+        assert result[0].inline_data.mime_type == "text/plain"
+
+
+def test_convert_to_parts_media_with_data() -> None:
+    """Test _convert_to_parts with media type containing data."""
+    content = [{"type": "media", "mime_type": "video/mp4", "data": b"fake_video_data"}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "video/mp4"
+    assert result[0].inline_data.data == b"fake_video_data"
+
+
+def test_convert_to_parts_media_with_file_uri() -> None:
+    """Test _convert_to_parts with media type containing file_uri."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "application/pdf",
+            "file_uri": "gs://bucket/file.pdf",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.mime_type == "application/pdf"
+    assert result[0].file_data.file_uri == "gs://bucket/file.pdf"
+
+
+def test_convert_to_parts_media_with_video_metadata() -> None:
+    """Test _convert_to_parts with media type containing video metadata."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+            "video_metadata": {"start_offset": "10s", "end_offset": "20s"},
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].video_metadata is not None
+    assert result[0].video_metadata.start_offset == "10s"
+    assert result[0].video_metadata.end_offset == "20s"
+
+
+def test_convert_to_parts_executable_code() -> None:
+    """Test _convert_to_parts with executable code."""
+    content = [
+        {
+            "type": "executable_code",
+            "language": "python",
+            "executable_code": "print('Hello, World!')",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].executable_code is not None
+    assert result[0].executable_code.language == Language.PYTHON
+    assert result[0].executable_code.code == "print('Hello, World!')"
+
+
+def test_convert_to_parts_code_execution_result() -> None:
+    """Test _convert_to_parts with code execution result."""
+    content = [
+        {
+            "type": "code_execution_result",
+            "code_execution_result": "Hello, World!",
+            "outcome": CodeExecutionResultOutcome.OUTCOME_OK,
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].code_execution_result is not None
+    assert result[0].code_execution_result.output == "Hello, World!"
+    assert (
+        result[0].code_execution_result.outcome == CodeExecutionResultOutcome.OUTCOME_OK
+    )
+
+
+def test_convert_to_parts_code_execution_result_backward_compatibility() -> None:
+    """Test _convert_to_parts with code execution result without outcome (backward compatibility)."""
+    content = [
+        {
+            "type": "code_execution_result",
+            "code_execution_result": "Hello, World!",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].code_execution_result is not None
+    assert result[0].code_execution_result.output == "Hello, World!"
+    assert (
+        result[0].code_execution_result.outcome == CodeExecutionResultOutcome.OUTCOME_OK
+    )
+
+
+def test_convert_to_parts_thinking() -> None:
+    """Test _convert_to_parts with thinking content."""
+    content = [{"type": "thinking", "thinking": "I need to think about this..."}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].text == "I need to think about this..."
+    assert result[0].thought is True
+
+
+def test_convert_to_parts_mixed_content() -> None:
+    """Test _convert_to_parts with mixed content types."""
+    content = [
+        {"type": "text", "text": "Hello"},
+        {"type": "text", "text": "World"},
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+            },
+        },
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 3
+    assert result[0].text == "Hello"
+    assert result[1].text == "World"
+    assert result[2].inline_data is not None
+
+
+def test_convert_to_parts_invalid_type() -> None:
+    """Test _convert_to_parts with invalid source_type."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "invalid",
+            "data": "some_data",
+        }
+    ]
+    with pytest.raises(ValueError, match="Unrecognized message part type: file"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_invalid_source_type() -> None:
+    """Test _convert_to_parts with invalid source_type."""
+    content = [
+        {
+            "type": "media",
+            "source_type": "invalid",
+            "data": "some_data",
+            "mime_type": "text/plain",
+        }
+    ]
+    with pytest.raises(ValueError, match="Data should be valid base64"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_invalid_image_url_format() -> None:
+    """Test _convert_to_parts with invalid image_url format."""
+    content = [{"type": "image_url", "image_url": {"invalid_key": "value"}}]
+    with pytest.raises(ValueError, match="Unrecognized message image format"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_missing_mime_type_in_media() -> None:
+    """Test _convert_to_parts with missing mime_type in media."""
+    content = [
+        {
+            "type": "media",
+            "file_uri": "gs://bucket/file.pdf",
+            # Missing mime_type
+        }
+    ]
+    with pytest.raises(ValueError, match="Missing mime_type in media part"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_media_missing_data_and_file_uri() -> None:
+    """Test _convert_to_parts with media missing both data and file_uri."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "application/pdf",
+            # Missing both data and file_uri
+        }
+    ]
+    with pytest.raises(
+        ValueError, match="Media part must have either data or file_uri"
+    ):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_missing_executable_code_keys() -> None:
+    """Test _convert_to_parts with missing keys in executable_code."""
+    content = [
+        {
+            "type": "executable_code",
+            "language": "python",
+            # Missing executable_code key
+        }
+    ]
+    with pytest.raises(
+        ValueError, match="Executable code part must have 'code' and 'language'"
+    ):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_missing_code_execution_result_key() -> None:
+    """Test _convert_to_parts with missing code_execution_result key."""
+    content = [
+        {
+            "type": "code_execution_result"
+            # Missing code_execution_result key
+        }
+    ]
+    with pytest.raises(
+        ValueError, match="Code execution result part must have 'code_execution_result'"
+    ):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_unrecognized_type() -> None:
+    """Test _convert_to_parts with unrecognized type."""
+    content = [{"type": "unrecognized_type", "data": "some_data"}]
+    with pytest.raises(ValueError, match="Unrecognized message part type"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_non_dict_mapping() -> None:
+    """Test _convert_to_parts with non-dict mapping."""
+    content = [123]  # Not a string or dict
+    with pytest.raises(
+        Exception, match="Gemini only supports text and inline_data parts"
+    ):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_unrecognized_format_warning() -> None:
+    """Test _convert_to_parts with unrecognized format triggers warning."""
+    content = [{"some_key": "some_value"}]  # Not a recognized format
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        result = _convert_to_parts(content)
+        mock_warning.assert_called_once()
+        assert "Unrecognized message part format" in mock_warning.call_args[0][0]
+        assert len(result) == 1
+        assert result[0].text == "{'some_key': 'some_value'}"
+
+
+def test_convert_tool_message_to_parts_string_content() -> None:
+    """Test _convert_tool_message_to_parts with string content."""
+    message = ToolMessage(name="test_tool", content="test_result", tool_call_id="123")
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {"output": "test_result"}
+
+
+def test_convert_tool_message_to_parts_json_content() -> None:
+    """Test _convert_tool_message_to_parts with JSON string content."""
+    message = ToolMessage(
+        name="test_tool",
+        content='{"result": "success", "data": [1, 2, 3]}',
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {
+        "result": "success",
+        "data": [1, 2, 3],
+    }
+
+
+def test_convert_tool_message_to_parts_dict_content() -> None:
+    """Test _convert_tool_message_to_parts with dict content."""
+    message = ToolMessage(
+        name="test_tool",
+        content={"result": "success", "data": [1, 2, 3]},
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {
+        "output": str({"result": "success", "data": [1, 2, 3]})
+    }
+
+
+def test_convert_tool_message_to_parts_list_content_with_media() -> None:
+    """Test _convert_tool_message_to_parts with list content containing media."""
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            "Text response",
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+                },
+            },
+        ],
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 2
+    # First part should be the media (image)
+    assert result[0].inline_data is not None
+    # Second part should be the function response
+    assert result[1].function_response is not None
+    assert result[1].function_response.name == "test_tool"
+    assert result[1].function_response.response == {"output": [str("Text response")]}
+
+
+def test_convert_tool_message_to_parts_with_name_parameter() -> None:
+    """Test _convert_tool_message_to_parts with explicit name parameter."""
+    message = ToolMessage(
+        content="test_result",
+        tool_call_id="123",
+        # No name in message
+    )
+    result = _convert_tool_message_to_parts(message, name="explicit_tool_name")
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "explicit_tool_name"
+
+
+def test_convert_tool_message_to_parts_legacy_name_in_kwargs() -> None:
+    """Test _convert_tool_message_to_parts with legacy name in additional_kwargs."""
+    message = ToolMessage(
+        content="test_result",
+        tool_call_id="123",
+        additional_kwargs={"name": "legacy_tool_name"},
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "legacy_tool_name"
+
+
+def test_convert_tool_message_to_parts_function_message() -> None:
+    """Test _convert_tool_message_to_parts with FunctionMessage."""
+    message = FunctionMessage(name="test_function", content="function_result")
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_function"
+    assert result[0].function_response.response == {"output": "function_result"}
+
+
+def test_convert_tool_message_to_parts_invalid_json_fallback() -> None:
+    """Test _convert_tool_message_to_parts with invalid JSON falls back to string."""
+    message = ToolMessage(
+        name="test_tool",
+        content='{"invalid": json}',  # Invalid JSON
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.response == {"output": '{"invalid": json}'}
+
+
+def test_get_ai_message_tool_messages_parts_basic() -> None:
+    """Test _get_ai_message_tool_messages_parts with basic tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {"id": "call_2", "name": "tool_2", "args": {"arg2": "value2"}},
+        ],
+    )
+
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1"),
+        ToolMessage(name="tool_2", content="result_2", tool_call_id="call_2"),
+    ]
+
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 2
+
+    # Check first tool response
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "tool_1"
+    assert result[0].function_response.response == {"output": "result_1"}
+
+    # Check second tool response
+    assert result[1].function_response is not None
+    assert result[1].function_response.name == "tool_2"
+    assert result[1].function_response.response == {"output": "result_2"}
+
+
+def test_get_ai_message_tool_messages_parts_partial_matches() -> None:
+    """Test _get_ai_message_tool_messages_parts with partial tool message matches."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {"id": "call_2", "name": "tool_2", "args": {"arg2": "value2"}},
+        ],
+    )
+
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1"),
+        # Missing tool_2 response
+    ]
+
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 1
+
+    # Only tool_1 response should be included
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "tool_1"
+    assert result[0].function_response.response == {"output": "result_1"}
+
+
+def test_get_ai_message_tool_messages_parts_no_matches() -> None:
+    """Test _get_ai_message_tool_messages_parts with no matching tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[{"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}}],
+    )
+
+    tool_messages = [
+        ToolMessage(name="tool_2", content="result_2", tool_call_id="call_2"),
+        ToolMessage(name="tool_3", content="result_3", tool_call_id="call_3"),
+    ]
+
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 0
+
+
+def test_get_ai_message_tool_messages_parts_empty_tool_calls() -> None:
+    """Test _get_ai_message_tool_messages_parts with empty tool calls."""
+    ai_message = AIMessage(content="No tool calls")
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1")
+    ]
+
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 0
+
+
+def test_get_ai_message_tool_messages_parts_empty_tool_messages() -> None:
+    """Test _get_ai_message_tool_messages_parts with empty tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[{"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}}],
+    )
+
+    result = _get_ai_message_tool_messages_parts([], ai_message)
+    assert len(result) == 0
+
+
+def test_get_ai_message_tool_messages_parts_duplicate_tool_calls() -> None:
+    """Test _get_ai_message_tool_messages_parts handles duplicate tool call IDs correctly."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {
+                "id": "call_1",
+                "name": "tool_1",
+                "args": {"arg1": "value1"},
+            },  # Duplicate ID
+        ],
+    )
+
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1")
+    ]
+
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 1  # Should only process the first match
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "tool_1"
+
+
+def test_get_ai_message_tool_messages_parts_order_preserved() -> None:
+    """Test _get_ai_message_tool_messages_parts preserves order of tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {"id": "call_2", "name": "tool_2", "args": {"arg2": "value2"}},
+        ],
+    )
+
+    tool_messages = [
+        ToolMessage(name="tool_2", content="result_2", tool_call_id="call_2"),
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1"),
+    ]
+
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 2
+
+    # Order should be preserved based on tool_messages order, not tool_calls order
+    assert result[0].function_response.name == "tool_2"
+    assert result[1].function_response.name == "tool_1"
+
+
+def test_get_ai_message_tool_messages_parts_with_name_from_tool_call() -> None:
+    """Test _get_ai_message_tool_messages_parts uses name from tool call when available."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_from_call", "args": {"arg1": "value1"}}
+        ],
+    )
+
+    tool_messages = [
+        ToolMessage(content="result_1", tool_call_id="call_1")  # No name in message
+    ]
+
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert (
+        result[0].function_response.name == "tool_from_call"
+    )  # Should use name from tool call

@@ -1,4 +1,5 @@
 from google.genai.types import (
+    BlockedReason,
     HarmBlockThreshold,
     HarmCategory,
     MediaModality,
@@ -10,6 +11,7 @@ HarmCategory = HarmCategory
 MediaModality = MediaModality
 SafetySetting = SafetySetting
 HarmBlockThreshold = HarmBlockThreshold
+BlockedReason = BlockedReason
 
 
-__all__ = ["SafetySetting", "HarmCategory", "Modality"]
+__all__ = ["SafetySetting", "HarmCategory", "Modality", "BlockedReason"]

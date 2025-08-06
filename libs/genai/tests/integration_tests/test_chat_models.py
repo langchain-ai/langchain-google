@@ -5,6 +5,7 @@ import json
 from typing import Dict, Generator, List, Literal, Optional
 
 import pytest
+from google.genai.types import Tool as GoogleTool
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -850,6 +851,16 @@ def test_search_builtin() -> None:
         "content": "Tell me more about that last story.",
     }
     _ = llm.invoke([input_message, full, next_message])
+
+
+def test_search_with_googletool() -> None:
+    """Test using GoogleTool with Google Search."""
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001")
+    resp = llm.invoke(
+        "When is the next total solar eclipse in US?",
+        tools=[GoogleTool(google_search={})],
+    )
+    assert "grounding_metadata" in resp.response_metadata
 
 
 def test_code_execution_builtin() -> None:

@@ -28,7 +28,6 @@ from typing import (
     cast,
 )
 
-import filetype  # type: ignore[import]
 from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
 from google.genai.client import Client
 from google.genai.errors import (
@@ -55,6 +54,9 @@ from google.genai.types import (
     ToolCodeExecution,
     ToolConfig,
     VideoMetadata,
+)
+from google.genai.types import (
+    Outcome as CodeExecutionResultOutcome,
 )
 from google.genai.types import Tool as GoogleTool
 from langchain_core.callbacks.manager import (
@@ -135,10 +137,10 @@ _allowed_params_prediction_service = [
     "model",
     "contents",
     "config",
-    "request",
-    "timeout",
-    # "metadata",
-    "labels",
+    # "request",
+    # "timeout",
+    # "metadata", # TODO: Add this back in
+    # "labels",
 ]
 
 _FunctionDeclarationType = Union[
@@ -220,17 +222,9 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             return generation_method(**kwargs)
         # Do not retry for these errors.
         except ClientError as e:
-            # Check for location not supported error
-            if hasattr(e, "message") and "location is not supported" in str(e.message):
-                error_msg = (
-                    "Your location is not supported by google-generativeai "
-                    "at the moment. Try to use ChatVertexAI LLM from "
-                    "langchain_google_vertexai."
-                )
-                raise ValueError(error_msg)
-            raise ChatGoogleGenerativeAIError(
-                f"Invalid argument provided to Gemini: {e}"
-            ) from e
+            if e.status == "INVALID_ARGUMENT":
+                raise ChatGoogleGenerativeAIError(f"Invalid argument: {e}") from e
+            raise e
         except Exception as e:
             raise e
 
@@ -265,11 +259,8 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             return await generation_method(**kwargs)
         except ClientError as e:
             # Do not retry for these errors.
-            # TODO: Check if this is the equivalent of InvalidArgument
             if e.status == "INVALID_ARGUMENT":
-                raise ChatGoogleGenerativeAIError(
-                    f"Invalid argument provided to Gemini: {e}"
-                ) from e
+                raise ChatGoogleGenerativeAIError(f"Invalid argument: {e}") from e
             raise e
         except Exception as e:
             raise e
@@ -324,23 +315,15 @@ def _convert_to_parts(
                         bytes_ = base64.b64decode(part["data"])
                     else:
                         raise ValueError("source_type must be url or base64.")
-                    inline_data: dict = {"data": bytes_}
-                    if "mime_type" in part:
-                        inline_data["mime_type"] = part["mime_type"]
-                    else:
+                    mime_type = part.get("mime_type")
+                    if not mime_type:
                         source = cast(str, part.get("url") or part.get("data"))
                         mime_type, _ = mimetypes.guess_type(source)
-                        if not mime_type:
-                            kind = filetype.guess(bytes_)
-                            if kind:
-                                mime_type = kind.mime
-                        if mime_type:
-                            inline_data["mime_type"] = mime_type
                     parts.append(
                         Part(
                             inline_data=Blob(
-                                data=inline_data["data"],
-                                mime_type=inline_data["mime_type"],
+                                data=bytes_,
+                                mime_type=mime_type,
                             )
                         )
                     )
@@ -399,10 +382,12 @@ def _convert_to_parts(
                         outcome = part["outcome"]
                     else:
                         # Backward compatibility
-                        outcome = 1  # Default to success if not specified
+                        # Default to success if not specified
+                        outcome = CodeExecutionResultOutcome.OUTCOME_OK
                     code_execution_result_part = Part(
                         code_execution_result=CodeExecutionResult(
-                            output=part["code_execution_result"], outcome=outcome
+                            output=part["code_execution_result"],
+                            outcome=outcome,
                         )
                     )
                     parts.append(code_execution_result_part)
@@ -592,6 +577,7 @@ def _parse_response_candidate(
     tool_call_chunks = []
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
+
     for part in parts:
         text: Optional[str] = None
         try:
@@ -611,7 +597,6 @@ def _parse_response_candidate(
             content = _append_to_content(content, thinking_message)
         elif text is not None and text:
             content = _append_to_content(content, text)
-
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_message = {
@@ -633,12 +618,8 @@ def _parse_response_candidate(
                 }
                 content = _append_to_content(content, execution_result)
 
-        if part.inline_data:
-            if (
-                part.inline_data.mime_type
-                and part.inline_data.mime_type.startswith("audio/")
-                and part.inline_data.data
-            ):
+        if part.inline_data and part.inline_data.data and part.inline_data.mime_type:
+            if part.inline_data.mime_type.startswith("audio/"):
                 buffer = io.BytesIO()
 
                 with wave.open(buffer, "wb") as wf:
@@ -650,11 +631,7 @@ def _parse_response_candidate(
 
                 additional_kwargs["audio"] = buffer.getvalue()
 
-            if (
-                part.inline_data.mime_type
-                and part.inline_data.mime_type.startswith("image/")
-                and part.inline_data.data
-            ):
+            if part.inline_data.mime_type.startswith("image/"):
                 image_format = part.inline_data.mime_type[6:]
                 image_message = {
                     "type": "image_url",
@@ -669,7 +646,6 @@ def _parse_response_candidate(
         if part.function_call:
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
-            print(part.function_call)
             function_call_args_dict = part.function_call.model_dump()["args"]
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
@@ -1077,11 +1053,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Use Search with Gemini 2:
         .. code-block:: python
 
-            from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+            from google.genai.types import Tool as GoogleTool
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
-                tools=[GenAITool(google_search={})],
+                tools=[GoogleTool(google_search={})],
             )
 
     Structured output:
@@ -1522,73 +1498,305 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> GenerationConfig:
-        gen_config: Dict[str, Any] = {
-            k: v
-            for k, v in {
-                "candidate_count": self.n,
-                "temperature": self.temperature,
-                "stop_sequences": stop,
-                "max_output_tokens": self.max_output_tokens,
-                "top_k": self.top_k,
-                "top_p": self.top_p,
-                "response_modalities": self.response_modalities,
-                "thinking_config": (
-                    (
-                        {"thinking_budget": self.thinking_budget}
-                        if self.thinking_budget is not None
-                        else {}
-                    )
-                    | (
-                        {"include_thoughts": self.include_thoughts}
-                        if self.include_thoughts is not None
-                        else {}
-                    )
-                )
-                if (
-                    self.thinking_budget is not None
-                    or self.include_thoughts is not None
-                )
-                and self._supports_thinking()
-                else None,
-            }.items()
-            if v is not None
-        }
+        """Prepare generation parameters with common configuration logic."""
+        gen_config = self._build_base_generation_config(stop, **kwargs)
+
         if generation_config:
-            # Convert string response_modalities to Modality enums if needed
-            processed_config = dict(generation_config)
-            if "response_modalities" in processed_config:
-                modalities = processed_config["response_modalities"]
-                if isinstance(modalities, list) and modalities:
-                    if isinstance(modalities[0], str):
-                        # Convert strings to Modality enums
-                        from langchain_google_genai import Modality
+            gen_config = self._merge_generation_config(gen_config, generation_config)
 
-                        try:
-                            processed_config["response_modalities"] = [
-                                getattr(Modality, modality) for modality in modalities
-                            ]
-                        except AttributeError as e:
-                            raise ValueError(f"Invalid response modality: {e}") from e
-            gen_config = {**gen_config, **processed_config}
+        # Handle response-specific parameters
+        gen_config = self._add_response_parameters(gen_config, **kwargs)
 
+        return GenerationConfig.model_validate(gen_config)
+
+    def _build_base_generation_config(
+        self, stop: Optional[List[str]], **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Build the base generation configuration from instance attributes."""
+        config = {
+            "candidate_count": self.n,
+            "temperature": self.temperature,
+            "stop_sequences": stop,
+            "max_output_tokens": self.max_output_tokens,
+            "top_k": self.top_k,
+            "top_p": self.top_p,
+            "response_modalities": self.response_modalities,
+        }
+
+        # Add thinking config if supported
+        thinking_config = self._build_thinking_config()
+        if thinking_config is not None:
+            config["thinking_config"] = thinking_config
+
+        return {k: v for k, v in config.items() if v is not None}
+
+    def _build_thinking_config(self) -> Optional[Dict[str, Any]]:
+        """Build thinking configuration if supported by the model."""
+        if not (self.thinking_budget is not None or self.include_thoughts is not None):
+            return None
+
+        if not self._supports_thinking():
+            return None
+
+        config = {}
+        if self.thinking_budget is not None:
+            config["thinking_budget"] = self.thinking_budget
+        if self.include_thoughts is not None:
+            config["include_thoughts"] = self.include_thoughts
+
+        return config
+
+    def _merge_generation_config(
+        self, base_config: Dict[str, Any], generation_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Merge user-provided generation config with base config."""
+        processed_config = dict(generation_config)
+
+        # Convert string response_modalities to Modality enums if needed
+        if "response_modalities" in processed_config:
+            modalities = processed_config["response_modalities"]
+            if (
+                isinstance(modalities, list)
+                and modalities
+                and isinstance(modalities[0], str)
+            ):
+                from langchain_google_genai import Modality
+
+                try:
+                    processed_config["response_modalities"] = [
+                        getattr(Modality, modality) for modality in modalities
+                    ]
+                except AttributeError as e:
+                    raise ValueError(f"Invalid response modality: {e}") from e
+
+        return {**base_config, **processed_config}
+
+    def _add_response_parameters(
+        self, gen_config: Dict[str, Any], **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Add response-specific parameters to generation config."""
+        # Handle response mime type
         response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
         if response_mime_type is not None:
             gen_config["response_mime_type"] = response_mime_type
 
+        # Handle response schema
         response_schema = kwargs.get("response_schema", self.response_schema)
         if response_schema is not None:
-            allowed_mime_types = ("application/json", "text/x.enum")
-            if response_mime_type not in allowed_mime_types:
-                error_message = (
-                    "`response_schema` is only supported when "
-                    f"`response_mime_type` is set to one of {allowed_mime_types}"
-                )
-                raise ValueError(error_message)
+            self._validate_and_add_response_schema(
+                gen_config, response_schema, response_mime_type
+            )
 
-            gapic_response_schema = _dict_to_gapic_schema(response_schema)
-            if gapic_response_schema is not None:
-                gen_config["response_schema"] = gapic_response_schema
-        return GenerationConfig.model_validate(gen_config)
+        return gen_config
+
+    def _validate_and_add_response_schema(
+        self,
+        gen_config: Dict[str, Any],
+        response_schema: Dict[str, Any],
+        response_mime_type: Optional[str],
+    ) -> None:
+        """Validate and add response schema to generation config."""
+        allowed_mime_types = ("application/json", "text/x.enum")
+        if response_mime_type not in allowed_mime_types:
+            error_message = (
+                "`response_schema` is only supported when "
+                f"`response_mime_type` is set to one of {allowed_mime_types}"
+            )
+            raise ValueError(error_message)
+
+        gapic_response_schema = _dict_to_gapic_schema(response_schema)
+        if gapic_response_schema is not None:
+            gen_config["response_schema"] = gapic_response_schema
+
+    def _prepare_request(
+        self,
+        messages: List[BaseMessage],
+        *,
+        stop: Optional[List[str]] = None,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
+        safety_settings: Optional[SafetySettingDict] = None,
+        tool_config: Optional[Union[Dict, ToolConfig]] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        generation_config: Optional[Dict[str, Any]] = None,
+        cached_content: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[GenerateContentConfig, Dict[str, Any]]:
+        """Prepare the request configuration for the API call."""
+        # Validate tool configuration
+        if tool_choice and tool_config:
+            raise ValueError(
+                "Must specify at most one of tool_choice and tool_config, received "
+                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
+            )
+
+        # Process tools and functions
+        formatted_tools = self._format_tools(tools, functions)
+
+        # Filter and parse messages
+        filtered_messages = self._filter_messages(messages)
+        system_instruction, history = _parse_chat_history(
+            filtered_messages,
+            convert_system_message_to_human=self.convert_system_message_to_human,
+        )
+
+        # Process tool configuration
+        formatted_tool_config = self._process_tool_config(
+            tool_choice, tool_config, formatted_tools
+        )
+
+        # Process safety settings
+        formatted_safety_settings = self._format_safety_settings(safety_settings)
+
+        # Get generation parameters
+        params = self._prepare_params(
+            stop, generation_config=generation_config, **kwargs
+        )
+
+        # Build request configuration
+        request = self._build_request_config(
+            formatted_tools,
+            formatted_tool_config,
+            formatted_safety_settings,
+            params,
+            cached_content,
+            system_instruction,
+            stop,
+            **kwargs,
+        )
+
+        # Return config and additional params needed for API call
+        api_params = {"model": self.model, "contents": history, "config": request}
+        return request, api_params
+
+    def _format_tools(
+        self,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
+    ) -> Optional[List]:
+        """Format tools and functions for the API."""
+        code_execution_tool = GoogleTool(code_execution=ToolCodeExecution())
+
+        if tools == [code_execution_tool]:
+            return tools
+        elif tools:
+            return [convert_to_genai_function_declarations(tools)]
+        elif functions:
+            return [convert_to_genai_function_declarations(functions)]
+        return None
+
+    def _filter_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
+        """Filter out messages with empty content."""
+        filtered_messages = []
+        for message in messages:
+            if isinstance(message, HumanMessage) and not message.content:
+                warnings.warn(
+                    "HumanMessage with empty content was removed to prevent API error"
+                )
+            else:
+                filtered_messages.append(message)
+        return filtered_messages
+
+    def _process_tool_config(
+        self,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]],
+        tool_config: Optional[Union[Dict, ToolConfig]],
+        formatted_tools: Optional[List],
+    ) -> Optional[ToolConfig]:
+        """Process tool configuration and choice."""
+        if tool_choice:
+            if not formatted_tools:
+                msg = (
+                    f"Received {tool_choice=} but no {formatted_tools=}. 'tool_choice' "
+                    "can only be specified if 'tools' is specified."
+                )
+                raise ValueError(msg)
+
+            all_names = self._extract_tool_names(formatted_tools)
+            return _tool_choice_to_tool_config(tool_choice, all_names)
+        elif tool_config:
+            if isinstance(tool_config, dict):
+                return ToolConfig.model_validate(tool_config)
+            return tool_config
+        return None
+
+    def _extract_tool_names(self, formatted_tools: List) -> List[str]:
+        """Extract tool names from formatted tools."""
+        all_names = []
+        for t in formatted_tools:
+            if hasattr(t, "function_declarations"):
+                t_with_declarations = cast(Any, t)
+                all_names.extend(
+                    f.name for f in t_with_declarations.function_declarations
+                )
+            elif isinstance(t, GoogleTool) and hasattr(t, "code_execution"):
+                continue
+            else:
+                raise TypeError(
+                    f"Tool {t} doesn't have function_declarations attribute"
+                )
+        return all_names
+
+    def _format_safety_settings(
+        self, safety_settings: Optional[SafetySettingDict]
+    ) -> List[SafetySetting]:
+        """Format safety settings for the API."""
+        if not safety_settings:
+            return []
+
+        if isinstance(safety_settings, dict):
+            # Handle dictionary format: {HarmCategory: HarmBlockThreshold}
+            return [
+                SafetySetting(category=category, threshold=threshold)
+                for category, threshold in safety_settings.items()
+            ]
+        elif isinstance(safety_settings, list):
+            # Handle list format: [SafetySetting, ...]
+            return safety_settings
+        else:
+            # Handle single SafetySetting object
+            return [safety_settings]
+
+    def _build_request_config(
+        self,
+        formatted_tools: Optional[List],
+        formatted_tool_config: Optional[ToolConfig],
+        formatted_safety_settings: List[SafetySetting],
+        params: GenerationConfig,
+        cached_content: Optional[str],
+        system_instruction: Optional[Content],
+        stop: Optional[List[str]],
+        **kwargs: Any,
+    ) -> GenerateContentConfig:
+        """Build the final request configuration."""
+        # Convert response modalities
+        response_modalities = (
+            [m.value for m in params.response_modalities]
+            if params.response_modalities
+            else None
+        )
+
+        # Create thinking config if supported
+        thinking_config = None
+        if params.thinking_config is not None and self._supports_thinking():
+            thinking_config = ThinkingConfig(
+                include_thoughts=params.thinking_config.include_thoughts,
+                thinking_budget=params.thinking_config.thinking_budget,
+            )
+
+        request = GenerateContentConfig(
+            tools=list(formatted_tools) if formatted_tools else None,
+            tool_config=formatted_tool_config,
+            safety_settings=formatted_safety_settings,
+            response_modalities=response_modalities if response_modalities else None,
+            thinking_config=thinking_config,
+            cached_content=cached_content,
+            system_instruction=system_instruction,
+            stop_sequences=stop,
+            **kwargs,
+        )
+
+        return request
 
     def _generate(
         self,
@@ -1771,138 +1979,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             if run_manager:
                 await run_manager.on_llm_new_token(gen.text, chunk=gen)
             yield gen
-
-    def _prepare_request(
-        self,
-        messages: List[BaseMessage],
-        *,
-        stop: Optional[List[str]] = None,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, ToolConfig]] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        **kwargs: Any,
-    ) -> Tuple[GenerateContentConfig, Dict[str, Any]]:
-        if tool_choice and tool_config:
-            raise ValueError(
-                "Must specify at most one of tool_choice and tool_config, received "
-                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
-            )
-
-        formatted_tools = None
-        code_execution_tool = GoogleTool(code_execution=ToolCodeExecution())
-        if tools == [code_execution_tool]:
-            formatted_tools = tools
-        elif tools:
-            formatted_tools = [convert_to_genai_function_declarations(tools)]
-        elif functions:
-            formatted_tools = [convert_to_genai_function_declarations(functions)]
-
-        filtered_messages = []
-        for message in messages:
-            if isinstance(message, HumanMessage) and not message.content:
-                warnings.warn(
-                    "HumanMessage with empty content was removed to prevent API error"
-                )
-            else:
-                filtered_messages.append(message)
-        messages = filtered_messages
-
-        system_instruction, history = _parse_chat_history(
-            messages,
-            convert_system_message_to_human=self.convert_system_message_to_human,
-        )
-
-        formatted_tool_config: Optional[ToolConfig] = None
-        if tool_choice:
-            if not formatted_tools:
-                msg = (
-                    f"Received {tool_choice=} but no {tools=}. 'tool_choice' can only "
-                    f"be specified if 'tools' is specified."
-                )
-                raise ValueError(msg)
-            all_names: List[str] = []
-            for t in formatted_tools:
-                if hasattr(t, "function_declarations"):
-                    t_with_declarations = cast(Any, t)
-                    all_names.extend(
-                        f.name for f in t_with_declarations.function_declarations
-                    )
-                elif isinstance(t, GoogleTool) and hasattr(t, "code_execution"):
-                    continue
-                else:
-                    raise TypeError(
-                        f"Tool {t} doesn't have function_declarations attribute"
-                    )
-
-            formatted_tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
-        elif tool_config:
-            if isinstance(tool_config, dict):
-                formatted_tool_config = ToolConfig.model_validate(tool_config)
-            else:
-                formatted_tool_config = tool_config
-
-        # Convert safety settings to list of SafetySetting objects
-        formatted_safety_settings = []
-        if safety_settings:
-            if isinstance(safety_settings, dict):
-                # Handle dictionary format: {HarmCategory: HarmBlockThreshold}
-                formatted_safety_settings = [
-                    SafetySetting(category=category, threshold=threshold)
-                    for category, threshold in safety_settings.items()
-                ]
-            elif isinstance(safety_settings, list):
-                # Handle list format: [SafetySetting, ...]
-                formatted_safety_settings = safety_settings
-            else:
-                # Handle single SafetySetting object
-                formatted_safety_settings = [safety_settings]
-
-        # Params from places
-        params = self._prepare_params(
-            stop,
-            generation_config=generation_config,
-            **kwargs,
-        )
-
-        # Convert into a GenerateContentConfig object while maintaining compatibility
-        # with the old API
-        response_modalities = (
-            [m.value for m in params.response_modalities]
-            if params.response_modalities
-            else None
-        )
-
-        # Only create thinking_config if the model supports thinking and params.thinking_config is not None
-        thinking_config = None
-        if params.thinking_config is not None and self._supports_thinking():
-            thinking_config = ThinkingConfig(
-                include_thoughts=params.thinking_config.include_thoughts,
-                thinking_budget=params.thinking_config.thinking_budget,
-            )
-
-        request = GenerateContentConfig(
-            tools=list(formatted_tools) if formatted_tools else None,
-            tool_config=formatted_tool_config,
-            safety_settings=formatted_safety_settings,
-            response_modalities=response_modalities if response_modalities else None,
-            thinking_config=thinking_config,
-            cached_content=cached_content,
-            system_instruction=system_instruction,
-            stop_sequences=stop,
-            **kwargs,
-        )
-
-        # Add system instruction if present
-        if system_instruction and request:
-            request.system_instruction = system_instruction
-
-        # Return config and additional params needed for API call
-        api_params = {"model": self.model, "contents": history, "config": request}
-        return request, api_params
 
     def get_num_tokens(self, text: str) -> int:
         if self.client is None:
