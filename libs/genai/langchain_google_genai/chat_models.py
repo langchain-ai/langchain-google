@@ -133,14 +133,17 @@ from langchain_google_genai._image_utils import (
 
 logger = logging.getLogger(__name__)
 
-_allowed_params_prediction_service = [
+_allowed_params_prediction_service_gapi = [
+    "request",
+    "timeout",
+    "metadata",
+    "labels",
+]
+
+_allowed_params_prediction_service_genai = [
     "model",
     "contents",
     "config",
-    # "request",
-    # "timeout",
-    # "metadata", # TODO: Add this back in
-    # "labels",
 ]
 
 _FunctionDeclarationType = Union[
@@ -216,6 +219,10 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
     )
 
+    allowed_params = kwargs.get(
+        "allowed_params", _allowed_params_prediction_service_gapi
+    )
+
     @retry_decorator
     def _chat_with_retry(**kwargs: Any) -> Any:
         try:
@@ -229,7 +236,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise e
 
     params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        {k: v for k, v in kwargs.items() if k in allowed_params}
         if (model := kwargs.get("model")) and "gemini" in model
         else kwargs
     )
@@ -251,7 +258,16 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     Returns:
         Any: The result from the chat generation method.
     """
-    retry_decorator = _create_retry_decorator()
+    retry_decorator = _create_retry_decorator(
+        max_retries=kwargs.get("max_retries", 6),
+        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
+        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
+        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
+    )
+
+    allowed_params = kwargs.get(
+        "allowed_params", _allowed_params_prediction_service_gapi
+    )
 
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
@@ -266,7 +282,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise e
 
     params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
+        {k: v for k, v in kwargs.items() if k in allowed_params}
         if (model := kwargs.get("model")) and "gemini" in model
         else kwargs
     )
@@ -786,9 +802,9 @@ def _response_to_result(
         )
         try:
             if candidate.grounding_metadata:
-                generation_info["grounding_metadata"] = (
-                    candidate.grounding_metadata.model_dump()
-                )
+                generation_info[
+                    "grounding_metadata"
+                ] = candidate.grounding_metadata.model_dump()
         except AttributeError:
             pass
         message = _parse_response_candidate(candidate, streaming=stream)
@@ -1513,7 +1529,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self, stop: Optional[List[str]], **kwargs: Any
     ) -> Dict[str, Any]:
         """Build the base generation configuration from instance attributes."""
-        config = {
+        config: Dict[str, Any] = {
             "candidate_count": self.n,
             "temperature": self.temperature,
             "stop_sequences": stop,
@@ -1678,7 +1694,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         code_execution_tool = GoogleTool(code_execution=ToolCodeExecution())
 
         if tools == [code_execution_tool]:
-            return tools
+            return list(tools)
         elif tools:
             return [convert_to_genai_function_declarations(tools)]
         elif functions:
@@ -1722,7 +1738,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _extract_tool_names(self, formatted_tools: List) -> List[str]:
         """Extract tool names from formatted tools."""
-        all_names = []
+        all_names: List[str] = []
         for t in formatted_tools:
             if hasattr(t, "function_declarations"):
                 t_with_declarations = cast(Any, t)
@@ -1831,6 +1847,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **api_params,
             **kwargs,
             generation_method=self.client.models.generate_content,
+            allowed_params=_allowed_params_prediction_service_genai,
             metadata=self.default_metadata,
         )
         return _response_to_result(response)
@@ -1868,6 +1885,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **api_params,
             **kwargs,
             generation_method=self.client.aio.models.generate_content,
+            allowed_params=_allowed_params_prediction_service_genai,
             metadata=self.default_metadata,
         )
         return _response_to_result(response)
@@ -1904,6 +1922,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         response: Iterator[GenerateContentResponse] = _chat_with_retry(
             **api_params,
             generation_method=self.client.models.generate_content_stream,
+            allowed_params=_allowed_params_prediction_service_genai,
             **kwargs,
             metadata=self.default_metadata,
         )
@@ -1960,6 +1979,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         async for chunk in await _achat_with_retry(
             **api_params,
             generation_method=self.client.aio.models.generate_content_stream,
+            allowed_params=_allowed_params_prediction_service_genai,
             **kwargs,
             metadata=self.default_metadata,
         ):

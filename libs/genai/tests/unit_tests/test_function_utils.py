@@ -250,9 +250,9 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
             Type.OBJECT,
             Type.STRING,
         ], f"Expected 'data' to be OBJECT or STRING, but got {actual_type_dict}"
-    assert data_property.get("nullable") is True, (
-        "Expected 'data' to be marked as nullable."
-    )
+    assert (
+        data_property.get("nullable") is True
+    ), "Expected 'data' to be marked as nullable."
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
@@ -305,9 +305,9 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
 
     # Assertions
     assert_property_type(status_property, Type.STRING, "status")
-    assert status_property.get("nullable") is True, (
-        "Expected 'status' to be marked as nullable."
-    )
+    assert (
+        status_property.get("nullable") is True
+    ), "Expected 'status' to be marked as nullable."
     assert status_property.get("enum") == [
         "active",
         "inactive",
@@ -1011,9 +1011,9 @@ def test_tool_with_union_primitive_types() -> None:
     # One option should be an object (Helper)
     object_option = find_any_of_option_by_type(any_of, Type.OBJECT)
     assert "properties" in object_option, "Expected object option to have properties."
-    assert "value" in object_option["properties"], (
-        "Expected object option to have 'value' property."
-    )
+    assert (
+        "value" in object_option["properties"]
+    ), "Expected object option to have 'value' property."
     # Note: This assertion expects the raw enum integer value (3 for NUMBER)
     # This is a special case where the test was expecting the integer value
     value_type = object_option["properties"]["value"].get("type", {})
@@ -1027,9 +1027,9 @@ def test_tool_with_union_primitive_types() -> None:
         else:
             assert False, f"Expected 'value' to be NUMBER or INTEGER, got {type_str}"
     else:
-        assert value_type == 3, (
-            f"Expected 'value' to be NUMBER or INTEGER (3), got {value_type}"
-        )
+        assert (
+            value_type == 3
+        ), f"Expected 'value' to be NUMBER or INTEGER (3), got {value_type}"
 
 
 def test_tool_with_nested_union_types() -> None:
@@ -1087,9 +1087,9 @@ def test_tool_with_nested_union_types() -> None:
     # One option should be an object (Address)
     address_option = find_any_of_option_by_type(location_any_of, Type.OBJECT)
     assert "properties" in address_option, "Expected address option to have properties"
-    assert "city" in address_option["properties"], (
-        "Expected Address to have 'city' property."
-    )
+    assert (
+        "city" in address_option["properties"]
+    ), "Expected Address to have 'city' property."
 
 
 def test_tool_invocation_with_union_types() -> None:
@@ -1210,9 +1210,9 @@ def test_tool_field_union_types() -> None:
 
     # Check the name and description
     assert fn_decl.get("name") == "GetWeather", "Expected name to be 'GetWeather'"
-    assert "Get weather information" in fn_decl.get("description", ""), (
-        "Expected description to include weather information"
-    )
+    assert "Get weather information" in fn_decl.get(
+        "description", ""
+    ), "Expected description to include weather information"
 
     # Check parameters
     parameters = fn_decl.get("parameters", {})
@@ -1221,9 +1221,9 @@ def test_tool_field_union_types() -> None:
     # Check location property
     assert "location" in properties, "Expected location field in properties"
     location_property = properties.get("location", {})
-    assert "description" in location_property, (
-        "Expected description field in location property"
-    )
+    assert (
+        "description" in location_property
+    ), "Expected description field in location property"
     assert (
         location_property.get("description")
         == "The city and country, e.g. New York, USA"

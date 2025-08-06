@@ -828,7 +828,7 @@ def test_astream_without_eventloop() -> None:
 
 def test_search_builtin() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
-        [{"google_search": {}}]
+        [{"google_search": {}}]  # type: ignore[arg-type]
     )
     input_message = {
         "role": "user",
@@ -858,14 +858,14 @@ def test_search_with_googletool() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001")
     resp = llm.invoke(
         "When is the next total solar eclipse in US?",
-        tools=[GoogleTool(google_search={})],
+        tools=[GoogleTool(google_search={})],  # type: ignore[arg-type]
     )
     assert "grounding_metadata" in resp.response_metadata
 
 
 def test_code_execution_builtin() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
-        [{"code_execution": {}}]
+        [{"code_execution": {}}]  # type: ignore[arg-type]
     )
     input_message = {
         "role": "user",

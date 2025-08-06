@@ -3,7 +3,7 @@
 import base64
 import json
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
 
 import pytest
@@ -44,6 +44,8 @@ from langchain_google_genai.chat_models import (
     _parse_response_candidate,
     _response_to_result,
 )
+
+SMALL_VIEWABLE_BASE64_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII="  # noqa: E501
 
 
 def test_integration_initialization() -> None:
@@ -331,13 +333,8 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     api_endpoint = "http://127.0.0.1:8000/ai"
     param_api_key = "[secret]"
     param_secret_api_key = SecretStr(param_api_key)
-    param_client_options = {"api_endpoint": api_endpoint}
-    param_transport = "rest"
 
-    with patch(
-        "langchain_google_genai.chat_models.Client",
-        mock_client,
-    ):
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
         chat = ChatGoogleGenerativeAI(
             model="gemini-pro",
             google_api_key=param_secret_api_key,  # type: ignore[call-arg]
@@ -952,32 +949,20 @@ def test_convert_to_parts_text_content_block() -> None:
 
 def test_convert_to_parts_image_url() -> None:
     """Test _convert_to_parts with image_url content blocks."""
-    content = [
-        {
-            "type": "image_url",
-            "image_url": {
-                "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
-            },
-        }
-    ]
+    content = [{"type": "image_url", "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE}}]
     result = _convert_to_parts(content)
     assert len(result) == 1
     assert result[0].inline_data is not None
-    assert result[0].inline_data.mime_type == "image/jpeg"
+    assert result[0].inline_data.mime_type == "image/png"
 
 
 def test_convert_to_parts_image_url_string() -> None:
     """Test _convert_to_parts with image_url as string."""
-    content = [
-        {
-            "type": "image_url",
-            "image_url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=",
-        }
-    ]
+    content = [{"type": "image_url", "image_url": SMALL_VIEWABLE_BASE64_IMAGE}]
     result = _convert_to_parts(content)
     assert len(result) == 1
     assert result[0].inline_data is not None
-    assert result[0].inline_data.mime_type == "image/jpeg"
+    assert result[0].inline_data.mime_type == "image/png"
 
 
 def test_convert_to_parts_file_data_url() -> None:
@@ -1116,7 +1101,7 @@ def test_convert_to_parts_code_execution_result() -> None:
 
 
 def test_convert_to_parts_code_execution_result_backward_compatibility() -> None:
-    """Test _convert_to_parts with code execution result without outcome (backward compatibility)."""
+    """Test _convert_to_parts with code execution result without outcome (compat)."""
     content = [
         {
             "type": "code_execution_result",
@@ -1143,15 +1128,10 @@ def test_convert_to_parts_thinking() -> None:
 
 def test_convert_to_parts_mixed_content() -> None:
     """Test _convert_to_parts with mixed content types."""
-    content = [
+    content: List[Dict[str, Any]] = [
         {"type": "text", "text": "Hello"},
         {"type": "text", "text": "World"},
-        {
-            "type": "image_url",
-            "image_url": {
-                "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
-            },
-        },
+        {"type": "image_url", "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE}},
     ]
     result = _convert_to_parts(content)
     assert len(result) == 3
@@ -1264,7 +1244,7 @@ def test_convert_to_parts_non_dict_mapping() -> None:
     with pytest.raises(
         Exception, match="Gemini only supports text and inline_data parts"
     ):
-        _convert_to_parts(content)
+        _convert_to_parts(content)  # type: ignore[arg-type]
 
 
 def test_convert_to_parts_unrecognized_format_warning() -> None:
@@ -1309,7 +1289,7 @@ def test_convert_tool_message_to_parts_dict_content() -> None:
     """Test _convert_tool_message_to_parts with dict content."""
     message = ToolMessage(
         name="test_tool",
-        content={"result": "success", "data": [1, 2, 3]},
+        content={"result": "success", "data": [1, 2, 3]},  # type: ignore[arg-type]
         tool_call_id="123",
     )
     result = _convert_tool_message_to_parts(message)
@@ -1327,12 +1307,7 @@ def test_convert_tool_message_to_parts_list_content_with_media() -> None:
         name="test_tool",
         content=[
             "Text response",
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
-                },
-            },
+            {"type": "image_url", "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE}},
         ],
         tool_call_id="123",
     )
@@ -1487,7 +1462,7 @@ def test_get_ai_message_tool_messages_parts_empty_tool_messages() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_duplicate_tool_calls() -> None:
-    """Test _get_ai_message_tool_messages_parts handles duplicate tool call IDs correctly."""
+    """Test _get_ai_message_tool_messages_parts handles duplicate tool call IDs."""
     ai_message = AIMessage(
         content="",
         tool_calls=[
@@ -1529,12 +1504,14 @@ def test_get_ai_message_tool_messages_parts_order_preserved() -> None:
     assert len(result) == 2
 
     # Order should be preserved based on tool_messages order, not tool_calls order
+    assert result[0].function_response is not None
     assert result[0].function_response.name == "tool_2"
+    assert result[1].function_response is not None
     assert result[1].function_response.name == "tool_1"
 
 
 def test_get_ai_message_tool_messages_parts_with_name_from_tool_call() -> None:
-    """Test _get_ai_message_tool_messages_parts uses name from tool call when available."""
+    """Test _get_ai_message_tool_messages_parts uses name from tool call"""
     ai_message = AIMessage(
         content="",
         tool_calls=[
