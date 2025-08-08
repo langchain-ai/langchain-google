@@ -125,8 +125,6 @@ class GoogleSearchAPIWrapper(BaseModel):
         results = self._google_search_results(
             query, num=num_results, **(search_params or {})
         )
-        if len(results) == 0:
-            return [{"Result": "No good Google Search Result was found"}]
         for result in results:
             metadata_result = {
                 "title": result["title"],
