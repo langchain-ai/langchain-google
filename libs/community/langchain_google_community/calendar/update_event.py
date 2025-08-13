@@ -2,12 +2,12 @@
 
 import re
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Type, Union
 from uuid import uuid4
 
 from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
+from zoneinfo import ZoneInfo
 
 from langchain_google_community.calendar.base import CalendarBaseTool
 from langchain_google_community.calendar.utils import is_all_day_event
@@ -140,11 +140,15 @@ class CalendarUpdateEvent(CalendarBaseTool):  # type: ignore[override, override]
                     start_dt = datetime.strptime(start_datetime, datetime_format)
                     end_dt = datetime.strptime(end_datetime, datetime_format)
                     event["start"] = {
-                        "dateTime": start_dt.replace(tzinfo=ZoneInfo(timezone)).isoformat(),
+                        "dateTime": start_dt.replace(
+                            tzinfo=ZoneInfo(timezone)
+                        ).isoformat(),
                         "timeZone": timezone,
                     }
                     event["end"] = {
-                        "dateTime": end_dt.replace(tzinfo=ZoneInfo(timezone)).isoformat(),
+                        "dateTime": end_dt.replace(
+                            tzinfo=ZoneInfo(timezone)
+                        ).isoformat(),
                         "timeZone": timezone,
                     }
         except ValueError as error:
