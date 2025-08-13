@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Type, Union
 from uuid import uuid4
 
@@ -139,11 +140,11 @@ class CalendarUpdateEvent(CalendarBaseTool):  # type: ignore[override, override]
                     start_dt = datetime.strptime(start_datetime, datetime_format)
                     end_dt = datetime.strptime(end_datetime, datetime_format)
                     event["start"] = {
-                        "dateTime": start_dt.astimezone().isoformat(),
+                        "dateTime": start_dt.replace(tzinfo=ZoneInfo(timezone)).isoformat(),
                         "timeZone": timezone,
                     }
                     event["end"] = {
-                        "dateTime": end_dt.astimezone().isoformat(),
+                        "dateTime": end_dt.replace(tzinfo=ZoneInfo(timezone)).isoformat(),
                         "timeZone": timezone,
                     }
         except ValueError as error:

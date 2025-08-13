@@ -118,12 +118,12 @@ class CalendarSearchEvents(CalendarBaseTool):  # type: ignore[override, override
                 calendar_tz = ZoneInfo(tz_name) if tz_name else None
                 time_min = (
                     datetime.strptime(min_datetime, "%Y-%m-%d %H:%M:%S")
-                    .astimezone(calendar_tz)
+                    .replace(tzinfo=calendar_tz)
                     .isoformat()
                 )
                 time_max = (
                     datetime.strptime(max_datetime, "%Y-%m-%d %H:%M:%S")
-                    .astimezone(calendar_tz)
+                    .replace(tzinfo=calendar_tz)
                     .isoformat()
                 )
                 events_result = (

@@ -104,3 +104,96 @@ def test_create_event_with_conference_data() -> None:
     result = tool.run(tool_input)
     assert tool.args_schema is not None
     assert result.startswith("Event created:")
+
+
+def test_create_event_timezone_handling() -> None:
+    """Test that create_event properly handles timezone in API payload."""
+    mock_api_resource = MagicMock()
+    tool = CalendarCreateEvent.model_construct(api_resource=mock_api_resource)
+    
+    tool_input = {
+        "summary": "Event summary",
+        "start_datetime": "2025-07-11 14:00:00",
+        "end_datetime": "2025-07-11 15:30:00",
+        "timezone": "Asia/Tokyo",
+    }
+    
+    result = tool.run(tool_input)
+    
+    # API呼び出しの引数を検証
+    call_args = mock_api_resource.events().insert.call_args
+    body = call_args[1]['body']  # keyword arguments
+    
+    # タイムゾーンが正しく設定されているか確認
+    assert body['start']['timeZone'] == 'Asia/Tokyo'
+    assert body['end']['timeZone'] == 'Asia/Tokyo'
+    assert '+09:00' in body['start']['dateTime']  # Asia/TokyoはUTC+9
+    assert '+09:00' in body['end']['dateTime']
+    
+    assert tool.args_schema is not None
+    assert result.startswith("Event created:")
+
+
+def test_search_events_timezone_handling() -> None:
+    """Test that search_events properly handles timezone in API call."""
+    from langchain_google_community.calendar.search_events import CalendarSearchEvents
+    
+    mock_api_resource = MagicMock()
+    tool = CalendarSearchEvents.model_construct(api_resource=mock_api_resource)
+    
+    mock_api_resource.events().list().execute.return_value = {"items": []}
+    
+    tool_input = {
+        "calendars_info": '[{"id": "primary", "timeZone": "Asia/Tokyo"}]',
+        "min_datetime": "2025-07-11 14:00:00",
+        "max_datetime": "2025-07-11 15:30:00",
+    }
+    
+    result = tool.run(tool_input)
+    
+    # API呼び出しの引数を検証
+    call_args = mock_api_resource.events().list.call_args
+    assert '+09:00' in call_args[1]['timeMin']  # Asia/TokyoはUTC+9
+    assert '+09:00' in call_args[1]['timeMax']
+    
+    assert tool.args_schema is not None
+    assert isinstance(result, list)
+
+
+def test_update_event_timezone_handling() -> None:
+    """Test that update_event properly handles timezone in API payload."""
+    from langchain_google_community.calendar.update_event import CalendarUpdateEvent
+    
+    mock_api_resource = MagicMock()
+    tool = CalendarUpdateEvent.model_construct(api_resource=mock_api_resource)
+    
+    # Mock existing event
+    mock_event = {
+        "start": {"timeZone": "UTC"},
+        "end": {"timeZone": "UTC"}
+    }
+    mock_api_resource.events().get().execute.return_value = mock_event
+    mock_api_resource.events().update().execute.return_value = {"htmlLink": "test"}
+    
+    tool_input = {
+        "event_id": "test_event_id",
+        "summary": "Updated Event",
+        "start_datetime": "2025-07-11 14:00:00",
+        "end_datetime": "2025-07-11 15:30:00",
+        "timezone": "Europe/London",
+    }
+    
+    result = tool.run(tool_input)
+    
+    # API呼び出しの引数を検証
+    call_args = mock_api_resource.events().update.call_args
+    body = call_args[1]['body']
+    
+    # タイムゾーンが正しく更新されているか確認
+    assert body['start']['timeZone'] == 'Europe/London'
+    assert body['end']['timeZone'] == 'Europe/London'
+    assert '+01:00' in body['start']['dateTime']  # Europe/LondonはUTC+1
+    assert '+01:00' in body['end']['dateTime']
+    
+    assert tool.args_schema is not None
+    assert result.startswith("Event updated:")
