@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Literal
 
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
@@ -1241,3 +1241,34 @@ def test_tool_field_union_types() -> None:
     required_fields = parameters.get("required", [])
     assert "location" in required_fields, "Expected 'location' to be required"
     assert "date" in required_fields, "Expected 'date' to be required"
+
+
+def test_tool_field_enum_array() -> None:
+    class ToolInfo(BaseModel):
+        kind: List[Literal["foo", "bar"]]
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(ToolInfo)
+
+    # Convert to GenAI
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    # Get function declaration
+    function_declarations = genai_tool_dict.get("function_declarations", [])
+    assert len(function_declarations) > 0, "Expected at least one function declaration"
+    fn_decl = function_declarations[0]
+
+    # Check parameters
+    parameters = fn_decl.get("parameters", {})  # type: ignore
+    properties = parameters.get("properties", {})
+
+    # Check location property
+    assert "kind" in properties
+    kind_property = properties["kind"]
+    assert kind_property["type_"] == glm.Type.ARRAY
+
+    assert "items" in kind_property
+    items_property = kind_property["items"]
+    assert items_property["type_"] == glm.Type.STRING
+    assert items_property["enum"] == ["foo", "bar"]
