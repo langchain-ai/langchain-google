@@ -283,36 +283,31 @@ def _format_base_tool_to_function_declaration(
     )
 
 
-def _convert_pydantic_to_genai_function(
-    pydantic_model: Type[BaseModel],
-    tool_name: Optional[str] = None,
-    tool_description: Optional[str] = None,
-) -> gapic.FunctionDeclaration:
-    if issubclass(pydantic_model, BaseModel):
-        schema = pydantic_model.model_json_schema()
-    elif issubclass(pydantic_model, BaseModelV1):
-        schema = pydantic_model.schema()
-    else:
-        raise NotImplementedError(
-            f"pydantic_model must be a Pydantic BaseModel, got {pydantic_model}"
-        )
-    schema = dereference_refs(schema)
-    schema.pop("definitions", None)
-    function_declaration = gapic.FunctionDeclaration(
-        name=tool_name if tool_name else schema.get("title"),
-        description=tool_description if tool_description else schema.get("description"),
-        parameters={
-            "properties": _get_properties_from_schema_any(
-                schema.get("properties")
-            ),  # TODO: use _dict_to_gapic_schema() if possible
-            # "items": _get_items_from_schema_any(
-            #     schema
-            # ),  # TODO: fix it https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling?hl#schema
-            "required": schema.get("required", []),
-            "type_": TYPE_ENUM[schema["type"]],
-        },
-    )
-    return function_declaration
+def _convert_pydantic_to_genai_function(model: BaseModel, function_name: str = None) -> dict:
+    """
+    Converts a Pydantic BaseModel into a dictionary representing a Gemini function tool.
+
+    Args:
+        model: The Pydantic BaseModel defining the function's parameters.
+        function_name: Optional. The name of the function. If not provided,
+                       the Pydantic model's class name will be used (converted to snake_case).
+
+    Returns:
+        A dictionary formatted as a Gemini function tool.
+    """
+    if function_name is None:
+        # Convert CamelCase Pydantic model name to snake_case function name
+        function_name = ''.join(['_' + i.lower() if i.isupper() else i for i in model.__name__]).lstrip('_')
+
+    return {
+        "function_declarations": [
+            {
+                "name": function_name,
+                "description": model.__doc__.strip() if model.__doc__ else "",
+                "parameters": model.model_json_schema(),
+            }
+        ]
+    }
 
 
 def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
