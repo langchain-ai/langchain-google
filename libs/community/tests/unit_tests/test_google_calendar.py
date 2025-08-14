@@ -120,14 +120,14 @@ def test_create_event_timezone_handling() -> None:
 
     result = tool.run(tool_input)
 
-    # API呼び出しの引数を検証
+    # Verify API call arguments
     call_args = mock_api_resource.events().insert.call_args
     body = call_args[1]["body"]  # keyword arguments
 
-    # タイムゾーンが正しく設定されているか確認
+    # Check if timezone is correctly set
     assert body["start"]["timeZone"] == "Asia/Tokyo"
     assert body["end"]["timeZone"] == "Asia/Tokyo"
-    assert "+09:00" in body["start"]["dateTime"]  # Asia/TokyoはUTC+9
+    assert "+09:00" in body["start"]["dateTime"]  # Asia/Tokyo is UTC+9
     assert "+09:00" in body["end"]["dateTime"]
 
     assert tool.args_schema is not None
@@ -151,9 +151,9 @@ def test_search_events_timezone_handling() -> None:
 
     result = tool.run(tool_input)
 
-    # API呼び出しの引数を検証
+    # Verify API call arguments
     call_args = mock_api_resource.events().list.call_args
-    assert "+09:00" in call_args[1]["timeMin"]  # Asia/TokyoはUTC+9
+    assert "+09:00" in call_args[1]["timeMin"]  # Asia/Tokyo is UTC+9
     assert "+09:00" in call_args[1]["timeMax"]
 
     assert tool.args_schema is not None
@@ -182,14 +182,14 @@ def test_update_event_timezone_handling() -> None:
 
     result = tool.run(tool_input)
 
-    # API呼び出しの引数を検証
+    # Verify API call arguments
     call_args = mock_api_resource.events().update.call_args
     body = call_args[1]["body"]
 
-    # タイムゾーンが正しく更新されているか確認
+    # Check if timezone is correctly updated
     assert body["start"]["timeZone"] == "Europe/London"
     assert body["end"]["timeZone"] == "Europe/London"
-    assert "+01:00" in body["start"]["dateTime"]  # Europe/LondonはUTC+1
+    assert "+01:00" in body["start"]["dateTime"]  # Europe/London is UTC+1
     assert "+01:00" in body["end"]["dateTime"]
 
     assert tool.args_schema is not None
