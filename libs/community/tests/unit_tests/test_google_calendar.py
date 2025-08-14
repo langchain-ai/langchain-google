@@ -127,8 +127,11 @@ def test_create_event_timezone_handling() -> None:
     # Check if timezone is correctly set
     assert body["start"]["timeZone"] == "Asia/Tokyo"
     assert body["end"]["timeZone"] == "Asia/Tokyo"
-    assert "+09:00" in body["start"]["dateTime"]  # Asia/Tokyo is UTC+9
-    assert "+09:00" in body["end"]["dateTime"]
+
+    # Check if datetime is preserved (not converted)
+    # Should be 14:00 JST, not converted to different time
+    assert "2025-07-11T14:00:00+09:00" == body["start"]["dateTime"]
+    assert "2025-07-11T15:30:00+09:00" == body["end"]["dateTime"]
 
     assert tool.args_schema is not None
     assert result.startswith("Event created:")
@@ -153,8 +156,11 @@ def test_search_events_timezone_handling() -> None:
 
     # Verify API call arguments
     call_args = mock_api_resource.events().list.call_args
-    assert "+09:00" in call_args[1]["timeMin"]  # Asia/Tokyo is UTC+9
-    assert "+09:00" in call_args[1]["timeMax"]
+
+    # Check if datetime is preserved with correct timezone
+    # Should be 14:00 JST, not converted to different time
+    assert call_args[1]["timeMin"] == "2025-07-11T14:00:00+09:00"
+    assert call_args[1]["timeMax"] == "2025-07-11T15:30:00+09:00"
 
     assert tool.args_schema is not None
     assert isinstance(result, list)
@@ -189,8 +195,11 @@ def test_update_event_timezone_handling() -> None:
     # Check if timezone is correctly updated
     assert body["start"]["timeZone"] == "Europe/London"
     assert body["end"]["timeZone"] == "Europe/London"
-    assert "+01:00" in body["start"]["dateTime"]  # Europe/London is UTC+1
-    assert "+01:00" in body["end"]["dateTime"]
+
+    # Check if datetime is preserved (not converted)
+    # Should be 14:00 London time, not converted from system timezone
+    assert body["start"]["dateTime"] == "2025-07-11T14:00:00+01:00"
+    assert body["end"]["dateTime"] == "2025-07-11T15:30:00+01:00"
 
     assert tool.args_schema is not None
     assert result.startswith("Event updated:")
