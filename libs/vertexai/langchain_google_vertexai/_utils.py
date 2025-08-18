@@ -169,7 +169,7 @@ def get_generation_info(
         ),
         "usage_metadata": usage_metadata,
         "finish_reason": (
-            candidate.finish_reason.name if candidate.finish_reason else None
+            candidate.finish_reason.name if candidate.finish_reason and hasattr(candidate.finish_reason, "name") else None
         ),
         "finish_message": (
             candidate.finish_message if candidate.finish_message else None
