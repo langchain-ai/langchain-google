@@ -1,12 +1,17 @@
 import os
 from importlib import metadata
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
 from pydantic import BaseModel, Field, SecretStr
 
-from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai._enums import (
+    HarmBlockThreshold,
+    HarmCategory,
+    Modality,
+    SafetySetting,
+)
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
@@ -38,6 +43,8 @@ Examples:
     "The default custom credentials (google.auth.credentials.Credentials) to use "
     "when making API calls. If not provided, credentials will be ascertained from "
     "the GOOGLE_API_KEY envvar"
+    base_url: Optional[str] = None
+    """The base URL for the API. If not provided, will default to the public API."""
     temperature: float = 0.7
     """Run inference with this temperature. Must be within ``[0.0, 2.0]``."""
     top_p: Optional[float] = None
@@ -158,6 +165,4 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     )
 
 
-class SafetySettingDict(TypedDict):
-    category: HarmCategory
-    threshold: HarmBlockThreshold
+SafetySettingDict = SafetySetting

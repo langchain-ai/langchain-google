@@ -6,7 +6,6 @@ import io
 import json
 import logging
 import mimetypes
-import time
 import uuid
 import warnings
 import wave
@@ -29,18 +28,15 @@ from typing import (
     cast,
 )
 
-import filetype  # type: ignore[import]
-import google.api_core
-
-# TODO: remove ignore once the Google package is published with types
-import proto  # type: ignore[import]
-from google.ai.generativelanguage_v1beta import (
-    GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
+from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
+from google.genai.client import Client
+from google.genai.errors import (
+    ClientError,
+    ServerError,
 )
-from google.ai.generativelanguage_v1beta.types import (
+from google.genai.types import (
     Blob,
     Candidate,
-    CodeExecution,
     CodeExecutionResult,
     Content,
     ExecutableCode,
@@ -48,15 +44,21 @@ from google.ai.generativelanguage_v1beta.types import (
     FunctionCall,
     FunctionDeclaration,
     FunctionResponse,
-    GenerateContentRequest,
+    GenerateContentConfig,
     GenerateContentResponse,
     GenerationConfig,
+    HttpOptions,
     Part,
     SafetySetting,
+    ThinkingConfig,
+    ToolCodeExecution,
     ToolConfig,
     VideoMetadata,
 )
-from google.ai.generativelanguage_v1beta.types import Tool as GoogleTool
+from google.genai.types import (
+    Outcome as CodeExecutionResultOutcome,
+)
+from google.genai.types import Tool as GoogleTool
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -113,13 +115,11 @@ from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
-    get_client_info,
 )
 from langchain_google_genai._function_utils import (
     _dict_to_gapic_schema,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
-    _ToolConfigDict,
     _ToolDict,
     convert_to_genai_function_declarations,
     is_basemodel_subclass_safe,
@@ -131,11 +131,20 @@ from langchain_google_genai._image_utils import (
     image_bytes_to_b64_string,
 )
 
-from . import _genai_extension as genaix
-
 logger = logging.getLogger(__name__)
 
-_allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
+_allowed_params_prediction_service_gapi = [
+    "request",
+    "timeout",
+    "metadata",
+    "labels",
+]
+
+_allowed_params_prediction_service_genai = [
+    "model",
+    "contents",
+    "config",
+]
 
 _FunctionDeclarationType = Union[
     FunctionDeclaration,
@@ -180,9 +189,9 @@ def _create_retry_decorator(
             max=wait_exponential_max,
         ),
         retry=(
-            retry_if_exception_type(google.api_core.exceptions.ResourceExhausted)
-            | retry_if_exception_type(google.api_core.exceptions.ServiceUnavailable)
-            | retry_if_exception_type(google.api_core.exceptions.GoogleAPIError)
+            retry_if_exception_type(
+                (ServerError, ResourceExhausted, ServiceUnavailable)
+            )
         ),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
@@ -210,38 +219,25 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
     )
 
+    allowed_params = kwargs.get(
+        "allowed_params", _allowed_params_prediction_service_gapi
+    )
+
     @retry_decorator
     def _chat_with_retry(**kwargs: Any) -> Any:
         try:
             return generation_method(**kwargs)
-        except google.api_core.exceptions.FailedPrecondition as exc:
-            if "location is not supported" in exc.message:
-                error_msg = (
-                    "Your location is not supported by google-generativeai "
-                    "at the moment. Try to use ChatVertexAI LLM from "
-                    "langchain_google_vertexai."
-                )
-                raise ValueError(error_msg)
-
-        except google.api_core.exceptions.InvalidArgument as e:
-            raise ChatGoogleGenerativeAIError(
-                f"Invalid argument provided to Gemini: {e}"
-            ) from e
-        except google.api_core.exceptions.ResourceExhausted as e:
-            # Handle quota-exceeded error with recommended retry delay
-            if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
-                "wait_exponential_max", 60.0
-            ):
-                time.sleep(e.retry_after)
+        # Do not retry for these errors.
+        except ClientError as e:
+            if e.status == "INVALID_ARGUMENT":
+                raise ChatGoogleGenerativeAIError(f"Invalid argument: {e}") from e
             raise e
         except Exception as e:
             raise e
 
     params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if (request := kwargs.get("request"))
-        and hasattr(request, "model")
-        and "gemini" in request.model
+        {k: v for k, v in kwargs.items() if k in allowed_params}
+        if (model := kwargs.get("model")) and "gemini" in model
         else kwargs
     )
     return _chat_with_retry(**params)
@@ -262,26 +258,32 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     Returns:
         Any: The result from the chat generation method.
     """
-    retry_decorator = _create_retry_decorator()
-    from google.api_core.exceptions import InvalidArgument  # type: ignore
+    retry_decorator = _create_retry_decorator(
+        max_retries=kwargs.get("max_retries", 6),
+        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
+        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
+        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
+    )
+
+    allowed_params = kwargs.get(
+        "allowed_params", _allowed_params_prediction_service_gapi
+    )
 
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
         try:
             return await generation_method(**kwargs)
-        except InvalidArgument as e:
+        except ClientError as e:
             # Do not retry for these errors.
-            raise ChatGoogleGenerativeAIError(
-                f"Invalid argument provided to Gemini: {e}"
-            ) from e
+            if e.status == "INVALID_ARGUMENT":
+                raise ChatGoogleGenerativeAIError(f"Invalid argument: {e}") from e
+            raise e
         except Exception as e:
             raise e
 
     params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if (request := kwargs.get("request"))
-        and hasattr(request, "model")
-        and "gemini" in request.model
+        {k: v for k, v in kwargs.items() if k in allowed_params}
+        if (model := kwargs.get("model")) and "gemini" in model
         else kwargs
     )
     return await _achat_with_retry(**params)
@@ -329,19 +331,18 @@ def _convert_to_parts(
                         bytes_ = base64.b64decode(part["data"])
                     else:
                         raise ValueError("source_type must be url or base64.")
-                    inline_data: dict = {"data": bytes_}
-                    if "mime_type" in part:
-                        inline_data["mime_type"] = part["mime_type"]
-                    else:
+                    mime_type = part.get("mime_type")
+                    if not mime_type:
                         source = cast(str, part.get("url") or part.get("data"))
                         mime_type, _ = mimetypes.guess_type(source)
-                        if not mime_type:
-                            kind = filetype.guess(bytes_)
-                            if kind:
-                                mime_type = kind.mime
-                        if mime_type:
-                            inline_data["mime_type"] = mime_type
-                    parts.append(Part(inline_data=inline_data))
+                    parts.append(
+                        Part(
+                            inline_data=Blob(
+                                data=bytes_,
+                                mime_type=mime_type,
+                            )
+                        )
+                    )
                 elif part["type"] == "image_url":
                     img_url = part["image_url"]
                     if isinstance(img_url, dict):
@@ -372,7 +373,7 @@ def _convert_to_parts(
                             f"Media part must have either data or file_uri: {part}"
                         )
                     if "video_metadata" in part:
-                        metadata = VideoMetadata(part["video_metadata"])
+                        metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
                 elif part["type"] == "executable_code":
@@ -397,10 +398,12 @@ def _convert_to_parts(
                         outcome = part["outcome"]
                     else:
                         # Backward compatibility
-                        outcome = 1  # Default to success if not specified
+                        # Default to success if not specified
+                        outcome = CodeExecutionResultOutcome.OUTCOME_OK
                     code_execution_result_part = Part(
                         code_execution_result=CodeExecutionResult(
-                            output=part["code_execution_result"], outcome=outcome
+                            output=part["code_execution_result"],
+                            outcome=outcome,
                         )
                     )
                     parts.append(code_execution_result_part)
@@ -511,7 +514,10 @@ def _parse_chat_history(
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
-                system_instruction.parts.extend(system_parts)
+                if system_instruction.parts is None:
+                    system_instruction.parts = system_parts
+                else:
+                    system_instruction.parts.extend(system_parts)
             else:
                 pass
             continue
@@ -521,10 +527,8 @@ def _parse_chat_history(
                 ai_message_parts = []
                 for tool_call in message.tool_calls:
                     function_call = FunctionCall(
-                        {
-                            "name": tool_call["name"],
-                            "args": tool_call["args"],
-                        }
+                        name=tool_call["name"],
+                        args=tool_call["args"],
                     )
                     ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
@@ -535,10 +539,8 @@ def _parse_chat_history(
                 continue
             elif raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
-                    {
-                        "name": raw_function_call["name"],
-                        "args": json.loads(raw_function_call["arguments"]),
-                    }
+                    name=raw_function_call["name"],
+                    args=json.loads(raw_function_call["arguments"]),
                 )
                 parts = [Part(function_call=function_call)]
             else:
@@ -547,7 +549,7 @@ def _parse_chat_history(
             role = "user"
             parts = _convert_to_parts(message.content)
             if i == 1 and convert_system_message_to_human and system_instruction:
-                parts = [p for p in system_instruction.parts] + parts
+                parts = [p for p in system_instruction.parts or []] + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
@@ -590,7 +592,9 @@ def _parse_response_candidate(
     invalid_tool_calls = []
     tool_call_chunks = []
 
-    for part in response_candidate.content.parts:
+    parts = response_candidate.content.parts or [] if response_candidate.content else []
+
+    for part in parts:
         text: Optional[str] = None
         try:
             if hasattr(part, "text") and part.text is not None:
@@ -609,7 +613,6 @@ def _parse_response_candidate(
             content = _append_to_content(content, thinking_message)
         elif text is not None and text:
             content = _append_to_content(content, text)
-
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_message = {
@@ -631,34 +634,35 @@ def _parse_response_candidate(
                 }
                 content = _append_to_content(content, execution_result)
 
-        if part.inline_data.mime_type.startswith("audio/"):
-            buffer = io.BytesIO()
+        if part.inline_data and part.inline_data.data and part.inline_data.mime_type:
+            if part.inline_data.mime_type.startswith("audio/"):
+                buffer = io.BytesIO()
 
-            with wave.open(buffer, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                # TODO: Read Sample Rate from MIME content type.
-                wf.setframerate(24000)
-                wf.writeframes(part.inline_data.data)
+                with wave.open(buffer, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    # TODO: Read Sample Rate from MIME content type.
+                    wf.setframerate(24000)
+                    wf.writeframes(part.inline_data.data)
 
-            additional_kwargs["audio"] = buffer.getvalue()
+                additional_kwargs["audio"] = buffer.getvalue()
 
-        if part.inline_data.mime_type.startswith("image/"):
-            image_format = part.inline_data.mime_type[6:]
-            image_message = {
-                "type": "image_url",
-                "image_url": {
-                    "url": image_bytes_to_b64_string(
-                        part.inline_data.data, image_format=image_format
-                    )
-                },
-            }
-            content = _append_to_content(content, image_message)
+            if part.inline_data.mime_type.startswith("image/"):
+                image_format = part.inline_data.mime_type[6:]
+                image_message = {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_bytes_to_b64_string(
+                            part.inline_data.data, image_format=image_format
+                        )
+                    },
+                }
+                content = _append_to_content(content, image_message)
 
         if part.function_call:
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
-            function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            function_call_args_dict = part.function_call.model_dump()["args"]
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
@@ -698,6 +702,7 @@ def _parse_response_candidate(
                     )
     if content is None:
         content = ""
+
     if any(isinstance(item, dict) and "executable_code" in item for item in content):
         warnings.warn(
             """
@@ -729,16 +734,24 @@ def _response_to_result(
     stream: bool = False,
     prev_usage: Optional[UsageMetadata] = None,
 ) -> ChatResult:
-    """Converts a PaLM API response into a LangChain ChatResult."""
-    llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
+    """Converts a Google AI response into a LangChain ChatResult."""
+    llm_output = (
+        {"prompt_feedback": response.prompt_feedback.model_dump()}
+        if response.prompt_feedback
+        else {}
+    )
 
     # Get usage metadata
     try:
-        input_tokens = response.usage_metadata.prompt_token_count
-        thought_tokens = response.usage_metadata.thoughts_token_count
-        output_tokens = response.usage_metadata.candidates_token_count + thought_tokens
-        total_tokens = response.usage_metadata.total_token_count
-        cache_read_tokens = response.usage_metadata.cached_content_token_count
+        if response.usage_metadata is None:
+            raise AttributeError("Usage metadata is None")
+        input_tokens = response.usage_metadata.prompt_token_count or 0
+        thought_tokens = response.usage_metadata.thoughts_token_count or 0
+        output_tokens = (
+            response.usage_metadata.candidates_token_count or 0
+        ) + thought_tokens
+        total_tokens = response.usage_metadata.total_token_count or 0
+        cache_read_tokens = response.usage_metadata.cached_content_token_count or 0
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
             if thought_tokens > 0:
                 cumulative_usage = UsageMetadata(
@@ -776,21 +789,22 @@ def _response_to_result(
 
     generations: List[ChatGeneration] = []
 
-    for candidate in response.candidates:
-        generation_info = {}
+    for candidate in response.candidates or []:
+        generation_info: Dict[str, Any] = {}
         if candidate.finish_reason:
             generation_info["finish_reason"] = candidate.finish_reason.name
             # Add model_name in last chunk
-            generation_info["model_name"] = response.model_version
-        generation_info["safety_ratings"] = [
-            proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
-            for safety_rating in candidate.safety_ratings
-        ]
+            generation_info["model_name"] = response.model_version or ""
+        generation_info["safety_ratings"] = (
+            [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
+            if candidate.safety_ratings
+            else []
+        )
         try:
             if candidate.grounding_metadata:
-                generation_info["grounding_metadata"] = proto.Message.to_dict(
-                    candidate.grounding_metadata
-                )
+                generation_info[
+                    "grounding_metadata"
+                ] = candidate.grounding_metadata.model_dump()
         except AttributeError:
             pass
         message = _parse_response_candidate(candidate, streaming=stream)
@@ -1055,11 +1069,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Use Search with Gemini 2:
         .. code-block:: python
 
-            from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+            from google.genai.types import Tool as GoogleTool
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
             resp = llm.invoke(
                 "When is the next total solar eclipse in US?",
-                tools=[GenAITool(google_search={})],
+                tools=[GoogleTool(google_search={})],
             )
 
     Structured output:
@@ -1189,7 +1203,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word "multimodal," and summarizes everything that was seen and heard.'
 
     Audio input:
         .. code-block:: python
@@ -1279,8 +1293,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     """  # noqa: E501
 
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
-    async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
+    client: Optional[Client] = Field(default=None, exclude=True)  #: :meta private:
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
     )  #: :meta private:
@@ -1391,51 +1404,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
-        client_info = get_client_info(f"ChatGoogleGenerativeAI:{self.model}")
         google_api_key = None
         if not self.credentials:
             if isinstance(self.google_api_key, SecretStr):
                 google_api_key = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
-        transport: Optional[str] = self.transport
-        self.client = genaix.build_generative_service(
-            credentials=self.credentials,
-            api_key=google_api_key,
-            client_info=client_info,
-            client_options=self.client_options,
-            transport=transport,
-        )
-        self.async_client_running = None
-        return self
-
-    @property
-    def async_client(self) -> v1betaGenerativeServiceAsyncClient:
-        google_api_key = None
-        if not self.credentials:
-            if isinstance(self.google_api_key, SecretStr):
-                google_api_key = self.google_api_key.get_secret_value()
-            else:
-                google_api_key = self.google_api_key
-        # NOTE: genaix.build_generative_async_service requires
-        # a running event loop, which causes an error
-        # when initialized inside a ThreadPoolExecutor.
-        # this check ensures that async client is only initialized
-        # within an asyncio event loop to avoid the error
-        if not self.async_client_running and _is_event_loop_running():
-            # async clients don't support "rest" transport
-            # https://github.com/googleapis/gapic-generator-python/issues/1962
-            transport = self.transport
-            if transport == "rest":
-                transport = "grpc_asyncio"
-            self.async_client_running = genaix.build_generative_async_service(
-                credentials=self.credentials,
-                api_key=google_api_key,
-                client_info=get_client_info(f"ChatGoogleGenerativeAI:{self.model}"),
-                client_options=self.client_options,
-                transport=transport,
+        http_options = HttpOptions(base_url=self.base_url, headers=additional_headers)
+        if google_api_key:
+            self.client = Client(api_key=google_api_key, http_options=http_options)
+        else:
+            project_id = getattr(self.credentials, "project_id", None)
+            location = getattr(self.credentials, "location", "us-central1")
+            self.client = Client(
+                vertexai=True,
+                project=project_id,
+                location=location,
+                http_options=http_options,
             )
-        return self.async_client_running
+        return self
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:
@@ -1477,7 +1464,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     Current model: {self.model}"
                 )
             if "tools" not in kwargs:
-                code_execution_tool = GoogleTool(code_execution=CodeExecution())
+                code_execution_tool = GoogleTool(code_execution=ToolCodeExecution())
                 kwargs["tools"] = [code_execution_tool]
 
             else:
@@ -1510,60 +1497,322 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ls_params["ls_stop"] = ls_stop
         return ls_params
 
+    def _supports_thinking(self) -> bool:
+        """Check if the current model supports thinking capabilities."""
+        # Models that don't support thinking based on known patterns
+        non_thinking_models = [
+            "image-generation",  # Image generation models don't support thinking
+            "tts",  # Text-to-speech models don't support thinking
+        ]
+
+        model_name = self.model.lower()
+        return not any(pattern in model_name for pattern in non_thinking_models)
+
     def _prepare_params(
         self,
         stop: Optional[List[str]],
         generation_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> GenerationConfig:
-        gen_config = {
-            k: v
-            for k, v in {
-                "candidate_count": self.n,
-                "temperature": self.temperature,
-                "stop_sequences": stop,
-                "max_output_tokens": self.max_output_tokens,
-                "top_k": self.top_k,
-                "top_p": self.top_p,
-                "response_modalities": self.response_modalities,
-                "thinking_config": (
-                    (
-                        {"thinking_budget": self.thinking_budget}
-                        if self.thinking_budget is not None
-                        else {}
-                    )
-                    | (
-                        {"include_thoughts": self.include_thoughts}
-                        if self.include_thoughts is not None
-                        else {}
-                    )
-                )
-                if self.thinking_budget is not None or self.include_thoughts is not None
-                else None,
-            }.items()
-            if v is not None
-        }
-        if generation_config:
-            gen_config = {**gen_config, **generation_config}
+        """Prepare generation parameters with common configuration logic."""
+        gen_config = self._build_base_generation_config(stop, **kwargs)
 
+        if generation_config:
+            gen_config = self._merge_generation_config(gen_config, generation_config)
+
+        # Handle response-specific parameters
+        gen_config = self._add_response_parameters(gen_config, **kwargs)
+
+        return GenerationConfig.model_validate(gen_config)
+
+    def _build_base_generation_config(
+        self, stop: Optional[List[str]], **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Build the base generation configuration from instance attributes."""
+        config: Dict[str, Any] = {
+            "candidate_count": self.n,
+            "temperature": self.temperature,
+            "stop_sequences": stop,
+            "max_output_tokens": self.max_output_tokens,
+            "top_k": self.top_k,
+            "top_p": self.top_p,
+            "response_modalities": self.response_modalities,
+        }
+
+        # Add thinking config if supported
+        thinking_config = self._build_thinking_config()
+        if thinking_config is not None:
+            config["thinking_config"] = thinking_config
+
+        return {k: v for k, v in config.items() if v is not None}
+
+    def _build_thinking_config(self) -> Optional[Dict[str, Any]]:
+        """Build thinking configuration if supported by the model."""
+        if not (self.thinking_budget is not None or self.include_thoughts is not None):
+            return None
+
+        if not self._supports_thinking():
+            return None
+
+        config = {}
+        if self.thinking_budget is not None:
+            config["thinking_budget"] = self.thinking_budget
+        if self.include_thoughts is not None:
+            config["include_thoughts"] = self.include_thoughts
+
+        return config
+
+    def _merge_generation_config(
+        self, base_config: Dict[str, Any], generation_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Merge user-provided generation config with base config."""
+        processed_config = dict(generation_config)
+
+        # Convert string response_modalities to Modality enums if needed
+        if "response_modalities" in processed_config:
+            modalities = processed_config["response_modalities"]
+            if (
+                isinstance(modalities, list)
+                and modalities
+                and isinstance(modalities[0], str)
+            ):
+                from langchain_google_genai import Modality
+
+                try:
+                    processed_config["response_modalities"] = [
+                        getattr(Modality, modality) for modality in modalities
+                    ]
+                except AttributeError as e:
+                    raise ValueError(f"Invalid response modality: {e}") from e
+
+        return {**base_config, **processed_config}
+
+    def _add_response_parameters(
+        self, gen_config: Dict[str, Any], **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Add response-specific parameters to generation config."""
+        # Handle response mime type
         response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
         if response_mime_type is not None:
             gen_config["response_mime_type"] = response_mime_type
 
+        # Handle response schema
         response_schema = kwargs.get("response_schema", self.response_schema)
         if response_schema is not None:
-            allowed_mime_types = ("application/json", "text/x.enum")
-            if response_mime_type not in allowed_mime_types:
-                error_message = (
-                    "`response_schema` is only supported when "
-                    f"`response_mime_type` is set to one of {allowed_mime_types}"
-                )
-                raise ValueError(error_message)
+            self._validate_and_add_response_schema(
+                gen_config, response_schema, response_mime_type
+            )
 
-            gapic_response_schema = _dict_to_gapic_schema(response_schema)
-            if gapic_response_schema is not None:
-                gen_config["response_schema"] = gapic_response_schema
-        return GenerationConfig(**gen_config)
+        return gen_config
+
+    def _validate_and_add_response_schema(
+        self,
+        gen_config: Dict[str, Any],
+        response_schema: Dict[str, Any],
+        response_mime_type: Optional[str],
+    ) -> None:
+        """Validate and add response schema to generation config."""
+        allowed_mime_types = ("application/json", "text/x.enum")
+        if response_mime_type not in allowed_mime_types:
+            error_message = (
+                "`response_schema` is only supported when "
+                f"`response_mime_type` is set to one of {allowed_mime_types}"
+            )
+            raise ValueError(error_message)
+
+        gapic_response_schema = _dict_to_gapic_schema(response_schema)
+        if gapic_response_schema is not None:
+            gen_config["response_schema"] = gapic_response_schema
+
+    def _prepare_request(
+        self,
+        messages: List[BaseMessage],
+        *,
+        stop: Optional[List[str]] = None,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
+        safety_settings: Optional[SafetySettingDict] = None,
+        tool_config: Optional[Union[Dict, ToolConfig]] = None,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        generation_config: Optional[Dict[str, Any]] = None,
+        cached_content: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[GenerateContentConfig, Dict[str, Any]]:
+        """Prepare the request configuration for the API call."""
+        # Validate tool configuration
+        if tool_choice and tool_config:
+            raise ValueError(
+                "Must specify at most one of tool_choice and tool_config, received "
+                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
+            )
+
+        # Process tools and functions
+        formatted_tools = self._format_tools(tools, functions)
+
+        # Filter and parse messages
+        filtered_messages = self._filter_messages(messages)
+        system_instruction, history = _parse_chat_history(
+            filtered_messages,
+            convert_system_message_to_human=self.convert_system_message_to_human,
+        )
+
+        # Process tool configuration
+        formatted_tool_config = self._process_tool_config(
+            tool_choice, tool_config, formatted_tools
+        )
+
+        # Process safety settings
+        formatted_safety_settings = self._format_safety_settings(safety_settings)
+
+        # Get generation parameters
+        params = self._prepare_params(
+            stop, generation_config=generation_config, **kwargs
+        )
+
+        # Build request configuration
+        request = self._build_request_config(
+            formatted_tools,
+            formatted_tool_config,
+            formatted_safety_settings,
+            params,
+            cached_content,
+            system_instruction,
+            stop,
+            **kwargs,
+        )
+
+        # Return config and additional params needed for API call
+        api_params = {"model": self.model, "contents": history, "config": request}
+        return request, api_params
+
+    def _format_tools(
+        self,
+        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
+        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
+    ) -> Optional[List]:
+        """Format tools and functions for the API."""
+        code_execution_tool = GoogleTool(code_execution=ToolCodeExecution())
+
+        if tools == [code_execution_tool]:
+            return list(tools)
+        elif tools:
+            return [convert_to_genai_function_declarations(tools)]
+        elif functions:
+            return [convert_to_genai_function_declarations(functions)]
+        return None
+
+    def _filter_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
+        """Filter out messages with empty content."""
+        filtered_messages = []
+        for message in messages:
+            if isinstance(message, HumanMessage) and not message.content:
+                warnings.warn(
+                    "HumanMessage with empty content was removed to prevent API error"
+                )
+            else:
+                filtered_messages.append(message)
+        return filtered_messages
+
+    def _process_tool_config(
+        self,
+        tool_choice: Optional[Union[_ToolChoiceType, bool]],
+        tool_config: Optional[Union[Dict, ToolConfig]],
+        formatted_tools: Optional[List],
+    ) -> Optional[ToolConfig]:
+        """Process tool configuration and choice."""
+        if tool_choice:
+            if not formatted_tools:
+                msg = (
+                    f"Received {tool_choice=} but no {formatted_tools=}. 'tool_choice' "
+                    "can only be specified if 'tools' is specified."
+                )
+                raise ValueError(msg)
+
+            all_names = self._extract_tool_names(formatted_tools)
+            return _tool_choice_to_tool_config(tool_choice, all_names)
+        elif tool_config:
+            if isinstance(tool_config, dict):
+                return ToolConfig.model_validate(tool_config)
+            return tool_config
+        return None
+
+    def _extract_tool_names(self, formatted_tools: List) -> List[str]:
+        """Extract tool names from formatted tools."""
+        all_names: List[str] = []
+        for t in formatted_tools:
+            if hasattr(t, "function_declarations"):
+                t_with_declarations = cast(Any, t)
+                all_names.extend(
+                    f.name for f in t_with_declarations.function_declarations
+                )
+            elif isinstance(t, GoogleTool) and hasattr(t, "code_execution"):
+                continue
+            else:
+                raise TypeError(
+                    f"Tool {t} doesn't have function_declarations attribute"
+                )
+        return all_names
+
+    def _format_safety_settings(
+        self, safety_settings: Optional[SafetySettingDict]
+    ) -> List[SafetySetting]:
+        """Format safety settings for the API."""
+        if not safety_settings:
+            return []
+
+        if isinstance(safety_settings, dict):
+            # Handle dictionary format: {HarmCategory: HarmBlockThreshold}
+            return [
+                SafetySetting(category=category, threshold=threshold)
+                for category, threshold in safety_settings.items()
+            ]
+        elif isinstance(safety_settings, list):
+            # Handle list format: [SafetySetting, ...]
+            return safety_settings
+        else:
+            # Handle single SafetySetting object
+            return [safety_settings]
+
+    def _build_request_config(
+        self,
+        formatted_tools: Optional[List],
+        formatted_tool_config: Optional[ToolConfig],
+        formatted_safety_settings: List[SafetySetting],
+        params: GenerationConfig,
+        cached_content: Optional[str],
+        system_instruction: Optional[Content],
+        stop: Optional[List[str]],
+        **kwargs: Any,
+    ) -> GenerateContentConfig:
+        """Build the final request configuration."""
+        # Convert response modalities
+        response_modalities = (
+            [m.value for m in params.response_modalities]
+            if params.response_modalities
+            else None
+        )
+
+        # Create thinking config if supported
+        thinking_config = None
+        if params.thinking_config is not None and self._supports_thinking():
+            thinking_config = ThinkingConfig(
+                include_thoughts=params.thinking_config.include_thoughts,
+                thinking_budget=params.thinking_config.thinking_budget,
+            )
+
+        request = GenerateContentConfig(
+            tools=list(formatted_tools) if formatted_tools else None,
+            tool_config=formatted_tool_config,
+            safety_settings=formatted_safety_settings,
+            response_modalities=response_modalities if response_modalities else None,
+            thinking_config=thinking_config,
+            cached_content=cached_content,
+            system_instruction=system_instruction,
+            stop_sequences=stop,
+            **kwargs,
+        )
+
+        return request
 
     def _generate(
         self,
@@ -1574,13 +1823,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        tool_config: Optional[Union[Dict, ToolConfig]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        request = self._prepare_request(
+        if self.client is None:
+            raise ValueError("Client not initialized.")
+        request, api_params = self._prepare_request(
             messages,
             stop=stop,
             tools=tools,
@@ -1593,9 +1844,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
         )
         response: GenerateContentResponse = _chat_with_retry(
-            request=request,
+            **api_params,
             **kwargs,
-            generation_method=self.client.generate_content,
+            generation_method=self.client.models.generate_content,
+            allowed_params=_allowed_params_prediction_service_genai,
             metadata=self.default_metadata,
         )
         return _response_to_result(response)
@@ -1609,28 +1861,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        tool_config: Optional[Union[Dict, ToolConfig]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if not self.async_client:
-            updated_kwargs = {
-                **kwargs,
-                **{
-                    "tools": tools,
-                    "functions": functions,
-                    "safety_settings": safety_settings,
-                    "tool_config": tool_config,
-                    "generation_config": generation_config,
-                },
-            }
-            return await super()._agenerate(
-                messages, stop, run_manager, **updated_kwargs
-            )
-
-        request = self._prepare_request(
+        if self.client is None:
+            raise ValueError("Client not initialized.")
+        request, api_params = self._prepare_request(
             messages,
             stop=stop,
             tools=tools,
@@ -1643,9 +1882,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
         )
         response: GenerateContentResponse = await _achat_with_retry(
-            request=request,
+            **api_params,
             **kwargs,
-            generation_method=self.async_client.generate_content,
+            generation_method=self.client.aio.models.generate_content,
+            allowed_params=_allowed_params_prediction_service_genai,
             metadata=self.default_metadata,
         )
         return _response_to_result(response)
@@ -1659,13 +1899,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        tool_config: Optional[Union[Dict, ToolConfig]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        request = self._prepare_request(
+        if self.client is None:
+            raise ValueError("Client not initialized.")
+        request, api_params = self._prepare_request(
             messages,
             stop=stop,
             tools=tools,
@@ -1677,20 +1919,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        response: GenerateContentResponse = _chat_with_retry(
-            request=request,
-            generation_method=self.client.stream_generate_content,
+        response: Iterator[GenerateContentResponse] = _chat_with_retry(
+            **api_params,
+            generation_method=self.client.models.generate_content_stream,
+            allowed_params=_allowed_params_prediction_service_genai,
             **kwargs,
             metadata=self.default_metadata,
         )
 
         prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
         for chunk in response:
-            _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
-            )
-            gen = cast(ChatGenerationChunk, _chat_result.generations[0])
-            message = cast(AIMessageChunk, gen.message)
+            if chunk:
+                _chat_result = _response_to_result(
+                    chunk, stream=True, prev_usage=prev_usage_metadata
+                )
+                gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+                message = cast(AIMessageChunk, gen.message)
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -1711,159 +1955,54 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
         functions: Optional[Sequence[_FunctionDeclarationType]] = None,
         safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        tool_config: Optional[Union[Dict, ToolConfig]] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        if not self.async_client:
-            updated_kwargs = {
-                **kwargs,
-                **{
-                    "tools": tools,
-                    "functions": functions,
-                    "safety_settings": safety_settings,
-                    "tool_config": tool_config,
-                    "generation_config": generation_config,
-                },
-            }
-            async for value in super()._astream(
-                messages, stop, run_manager, **updated_kwargs
-            ):
-                yield value
-        else:
-            request = self._prepare_request(
-                messages,
-                stop=stop,
-                tools=tools,
-                functions=functions,
-                safety_settings=safety_settings,
-                tool_config=tool_config,
-                generation_config=generation_config,
-                cached_content=cached_content or self.cached_content,
-                tool_choice=tool_choice,
-                **kwargs,
-            )
-            prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
-            async for chunk in await _achat_with_retry(
-                request=request,
-                generation_method=self.async_client.stream_generate_content,
-                **kwargs,
-                metadata=self.default_metadata,
-            ):
-                _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
-                )
-                gen = cast(ChatGenerationChunk, _chat_result.generations[0])
-                message = cast(AIMessageChunk, gen.message)
-
-                prev_usage_metadata = (
-                    message.usage_metadata
-                    if prev_usage_metadata is None
-                    else add_usage(prev_usage_metadata, message.usage_metadata)
-                )
-
-                if run_manager:
-                    await run_manager.on_llm_new_token(gen.text, chunk=gen)
-                yield gen
-
-    def _prepare_request(
-        self,
-        messages: List[BaseMessage],
-        *,
-        stop: Optional[List[str]] = None,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        **kwargs: Any,
-    ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
-        if tool_choice and tool_config:
-            raise ValueError(
-                "Must specify at most one of tool_choice and tool_config, received "
-                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
-            )
-
-        formatted_tools = None
-        code_execution_tool = GoogleTool(code_execution=CodeExecution())
-        if tools == [code_execution_tool]:
-            formatted_tools = tools
-        elif tools:
-            formatted_tools = [convert_to_genai_function_declarations(tools)]
-        elif functions:
-            formatted_tools = [convert_to_genai_function_declarations(functions)]
-
-        filtered_messages = []
-        for message in messages:
-            if isinstance(message, HumanMessage) and not message.content:
-                warnings.warn(
-                    "HumanMessage with empty content was removed to prevent API error"
-                )
-            else:
-                filtered_messages.append(message)
-        messages = filtered_messages
-
-        system_instruction, history = _parse_chat_history(
+        if self.client is None:
+            raise ValueError("Client not initialized.")
+        request, api_params = self._prepare_request(
             messages,
-            convert_system_message_to_human=self.convert_system_message_to_human,
+            stop=stop,
+            tools=tools,
+            functions=functions,
+            safety_settings=safety_settings,
+            tool_config=tool_config,
+            generation_config=generation_config,
+            cached_content=cached_content or self.cached_content,
+            tool_choice=tool_choice,
+            **kwargs,
         )
-        if tool_choice:
-            if not formatted_tools:
-                msg = (
-                    f"Received {tool_choice=} but no {tools=}. 'tool_choice' can only "
-                    f"be specified if 'tools' is specified."
-                )
-                raise ValueError(msg)
-            all_names: List[str] = []
-            for t in formatted_tools:
-                if hasattr(t, "function_declarations"):
-                    t_with_declarations = cast(Any, t)
-                    all_names.extend(
-                        f.name for f in t_with_declarations.function_declarations
-                    )
-                elif isinstance(t, GoogleTool) and hasattr(t, "code_execution"):
-                    continue
-                else:
-                    raise TypeError(
-                        f"Tool {t} doesn't have function_declarations attribute"
-                    )
-
-            tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
-
-        formatted_tool_config = None
-        if tool_config:
-            formatted_tool_config = ToolConfig(
-                function_calling_config=tool_config["function_calling_config"]
+        prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
+        async for chunk in await _achat_with_retry(
+            **api_params,
+            generation_method=self.client.aio.models.generate_content_stream,
+            allowed_params=_allowed_params_prediction_service_genai,
+            **kwargs,
+            metadata=self.default_metadata,
+        ):
+            chunk = cast(GenerateContentResponse, chunk)
+            _chat_result = _response_to_result(
+                chunk, stream=True, prev_usage=prev_usage_metadata
             )
-        formatted_safety_settings = []
-        if safety_settings:
-            formatted_safety_settings = [
-                SafetySetting(category=c, threshold=t)
-                for c, t in safety_settings.items()
-            ]
-        request = GenerateContentRequest(
-            model=self.model,
-            contents=history,
-            tools=formatted_tools,
-            tool_config=formatted_tool_config,
-            safety_settings=formatted_safety_settings,
-            generation_config=self._prepare_params(
-                stop,
-                generation_config=generation_config,
-                **kwargs,
-            ),
-            cached_content=cached_content,
-        )
-        if system_instruction:
-            request.system_instruction = system_instruction
+            gen = cast(ChatGenerationChunk, _chat_result.generations[0])
+            message = cast(AIMessageChunk, gen.message)
 
-        return request
+            prev_usage_metadata = (
+                message.usage_metadata
+                if prev_usage_metadata is None
+                else add_usage(prev_usage_metadata, message.usage_metadata)
+            )
+
+            if run_manager:
+                await run_manager.on_llm_new_token(gen.text, chunk=gen)
+            yield gen
 
     def get_num_tokens(self, text: str) -> int:
+        if self.client is None:
+            raise ValueError("Client not initialized.")
         """Get the number of tokens present in the text.
 
         Useful for checking if an input will fit in a model's context window.
@@ -1874,10 +2013,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Returns:
             The integer number of tokens in the text.
         """
-        result = self.client.count_tokens(
+        result = self.client.models.count_tokens(
             model=self.model, contents=[Content(parts=[Part(text=text)])]
         )
-        return result.total_tokens
+        return result.total_tokens if result and result.total_tokens is not None else 0
 
     def with_structured_output(
         self,
@@ -1957,7 +2096,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tools: Sequence[
             dict[str, Any] | type | Callable[..., Any] | BaseTool | GoogleTool
         ],
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        tool_config: Optional[Union[Dict, ToolConfig]] = None,
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,

@@ -10,13 +10,19 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, MutableSequence, Optional
 
-import google.ai.generativelanguage as genai
 import langchain_core
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
 )
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceClient as v1betaGenerativeServiceClient,
+)
+from google.ai.generativelanguage_v1beta import types as old_genai
+from google.ai.generativelanguage_v1beta.services.generative_service import (
+    GenerativeServiceClient,
+)
+from google.ai.generativelanguage_v1beta.services.retriever_service import (
+    RetrieverServiceClient,
 )
 from google.api_core import client_options as client_options_lib
 from google.api_core import exceptions as gapi_exception
@@ -91,7 +97,7 @@ class Corpus:
         return name.corpus_id
 
     @classmethod
-    def from_corpus(cls, c: genai.Corpus) -> "Corpus":
+    def from_corpus(cls, c: old_genai.Corpus) -> "Corpus":
         return cls(
             name=c.name,
             display_name=c.display_name,
@@ -106,7 +112,7 @@ class Document:
     display_name: Optional[str]
     create_time: Optional[timestamp_pb2.Timestamp]
     update_time: Optional[timestamp_pb2.Timestamp]
-    custom_metadata: Optional[MutableSequence[genai.CustomMetadata]]
+    custom_metadata: Optional[MutableSequence[old_genai.CustomMetadata]]
 
     @property
     def corpus_id(self) -> str:
@@ -120,7 +126,7 @@ class Document:
         return name.document_id
 
     @classmethod
-    def from_document(cls, d: genai.Document) -> "Document":
+    def from_document(cls, d: old_genai.Document) -> "Document":
         return cls(
             name=d.name,
             display_name=d.display_name,
@@ -220,9 +226,9 @@ def _get_credentials() -> Optional[credentials.Credentials]:
     return None
 
 
-def build_semantic_retriever() -> genai.RetrieverServiceClient:
+def build_semantic_retriever() -> RetrieverServiceClient:
     credentials = _get_credentials()
-    return genai.RetrieverServiceClient(
+    return RetrieverServiceClient(
         credentials=credentials,
         client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),
         client_options=client_options_lib.ClientOptions(
@@ -295,10 +301,10 @@ def build_generative_async_service(
 
 def list_corpora(
     *,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Iterator[Corpus]:
     for corpus in client.list_corpora(
-        genai.ListCorporaRequest(page_size=_config.page_size)
+        old_genai.ListCorporaRequest(page_size=_config.page_size)
     ):
         yield Corpus.from_corpus(corpus)
 
@@ -306,11 +312,11 @@ def list_corpora(
 def get_corpus(
     *,
     corpus_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Optional[Corpus]:
     try:
         corpus = client.get_corpus(
-            genai.GetCorpusRequest(name=str(EntityName(corpus_id=corpus_id)))
+            old_genai.GetCorpusRequest(name=str(EntityName(corpus_id=corpus_id)))
         )
         return Corpus.from_corpus(corpus)
     except Exception as e:
@@ -325,7 +331,7 @@ def create_corpus(
     *,
     corpus_id: Optional[str] = None,
     display_name: Optional[str] = None,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Corpus:
     name: Optional[str]
     if corpus_id is not None:
@@ -336,8 +342,8 @@ def create_corpus(
     new_display_name = display_name or f"Untitled {datetime.datetime.now()}"
 
     new_corpus = client.create_corpus(
-        genai.CreateCorpusRequest(
-            corpus=genai.Corpus(name=name, display_name=new_display_name)
+        old_genai.CreateCorpusRequest(
+            corpus=old_genai.Corpus(name=name, display_name=new_display_name)
         )
     )
 
@@ -347,20 +353,22 @@ def create_corpus(
 def delete_corpus(
     *,
     corpus_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> None:
     client.delete_corpus(
-        genai.DeleteCorpusRequest(name=str(EntityName(corpus_id=corpus_id)), force=True)
+        old_genai.DeleteCorpusRequest(
+            name=str(EntityName(corpus_id=corpus_id)), force=True
+        )
     )
 
 
 def list_documents(
     *,
     corpus_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Iterator[Document]:
     for document in client.list_documents(
-        genai.ListDocumentsRequest(
+        old_genai.ListDocumentsRequest(
             parent=str(EntityName(corpus_id=corpus_id)), page_size=_DEFAULT_PAGE_SIZE
         )
     ):
@@ -371,11 +379,11 @@ def get_document(
     *,
     corpus_id: str,
     document_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Optional[Document]:
     try:
         document = client.get_document(
-            genai.GetDocumentRequest(
+            old_genai.GetDocumentRequest(
                 name=str(EntityName(corpus_id=corpus_id, document_id=document_id))
             )
         )
@@ -393,7 +401,7 @@ def create_document(
     document_id: Optional[str] = None,
     display_name: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Document:
     name: Optional[str]
     if document_id is not None:
@@ -405,9 +413,9 @@ def create_document(
     new_metadatas = _convert_to_metadata(metadata) if metadata else None
 
     new_document = client.create_document(
-        genai.CreateDocumentRequest(
+        old_genai.CreateDocumentRequest(
             parent=str(EntityName(corpus_id=corpus_id)),
-            document=genai.Document(
+            document=old_genai.Document(
                 name=name, display_name=new_display_name, custom_metadata=new_metadatas
             ),
         )
@@ -420,10 +428,10 @@ def delete_document(
     *,
     corpus_id: str,
     document_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> None:
     client.delete_document(
-        genai.DeleteDocumentRequest(
+        old_genai.DeleteDocumentRequest(
             name=str(EntityName(corpus_id=corpus_id, document_id=document_id)),
             force=True,
         )
@@ -436,8 +444,8 @@ def batch_create_chunk(
     document_id: str,
     texts: List[str],
     metadatas: Optional[List[Dict[str, Any]]] = None,
-    client: genai.RetrieverServiceClient,
-) -> List[genai.Chunk]:
+    client: RetrieverServiceClient,
+) -> List[old_genai.Chunk]:
     if metadatas is None:
         metadatas = [{} for _ in texts]
     if len(texts) != len(metadatas):
@@ -448,18 +456,18 @@ def batch_create_chunk(
 
     doc_name = str(EntityName(corpus_id=corpus_id, document_id=document_id))
 
-    created_chunks: List[genai.Chunk] = []
+    created_chunks: List[old_genai.Chunk] = []
 
-    batch_request = genai.BatchCreateChunksRequest(
+    batch_request = old_genai.BatchCreateChunksRequest(
         parent=doc_name,
         requests=[],
     )
     for text, metadata in zip(texts, metadatas):
         batch_request.requests.append(
-            genai.CreateChunkRequest(
+            old_genai.CreateChunkRequest(
                 parent=doc_name,
-                chunk=genai.Chunk(
-                    data=genai.ChunkData(string_value=text),
+                chunk=old_genai.Chunk(
+                    data=old_genai.ChunkData(string_value=text),
                     custom_metadata=_convert_to_metadata(metadata),
                 ),
             )
@@ -469,7 +477,7 @@ def batch_create_chunk(
             response = client.batch_create_chunks(batch_request)
             created_chunks.extend(list(response.chunks))
             # Prepare a new batch for next round.
-            batch_request = genai.BatchCreateChunksRequest(
+            batch_request = old_genai.BatchCreateChunksRequest(
                 parent=doc_name,
                 requests=[],
             )
@@ -487,10 +495,10 @@ def delete_chunk(
     corpus_id: str,
     document_id: str,
     chunk_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> None:
     client.delete_chunk(
-        genai.DeleteChunkRequest(
+        old_genai.DeleteChunkRequest(
             name=str(
                 EntityName(
                     corpus_id=corpus_id, document_id=document_id, chunk_id=chunk_id
@@ -506,10 +514,10 @@ def query_corpus(
     query: str,
     k: int = 4,
     filter: Optional[Dict[str, Any]] = None,
-    client: genai.RetrieverServiceClient,
-) -> List[genai.RelevantChunk]:
+    client: RetrieverServiceClient,
+) -> List[old_genai.RelevantChunk]:
     response = client.query_corpus(
-        genai.QueryCorpusRequest(
+        old_genai.QueryCorpusRequest(
             name=str(EntityName(corpus_id=corpus_id)),
             query=query,
             metadata_filters=_convert_filter(filter),
@@ -526,10 +534,10 @@ def query_document(
     query: str,
     k: int = 4,
     filter: Optional[Dict[str, Any]] = None,
-    client: genai.RetrieverServiceClient,
-) -> List[genai.RelevantChunk]:
+    client: RetrieverServiceClient,
+) -> List[old_genai.RelevantChunk]:
     response = client.query_document(
-        genai.QueryDocumentRequest(
+        old_genai.QueryDocumentRequest(
             name=str(EntityName(corpus_id=corpus_id, document_id=document_id)),
             query=query,
             metadata_filters=_convert_filter(filter),
@@ -554,9 +562,9 @@ class GroundedAnswer:
 
 @dataclass
 class GenerateAnswerError(Exception):
-    finish_reason: genai.Candidate.FinishReason
+    finish_reason: old_genai.Candidate.FinishReason
     finish_message: str
-    safety_ratings: MutableSequence[genai.SafetyRating]
+    safety_ratings: MutableSequence[old_genai.SafetyRating]
 
     def __str__(self) -> str:
         return (
@@ -570,28 +578,28 @@ def generate_answer(
     *,
     prompt: str,
     passages: List[str],
-    answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-    safety_settings: List[genai.SafetySetting] = [],
+    answer_style: int = old_genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
+    safety_settings: List[old_genai.SafetySetting] = [],
     temperature: Optional[float] = None,
-    client: genai.GenerativeServiceClient,
+    client: GenerativeServiceClient,
 ) -> GroundedAnswer:
     # TODO: Consider passing in the corpus ID instead of the actual
     # passages.
     response = client.generate_answer(
-        genai.GenerateAnswerRequest(
+        old_genai.GenerateAnswerRequest(
             contents=[
-                genai.Content(parts=[genai.Part(text=prompt)]),
+                old_genai.Content(parts=[old_genai.Part(text=prompt)]),
             ],
             model=_DEFAULT_GENERATE_SERVICE_MODEL,
             answer_style=answer_style,
             safety_settings=safety_settings,
             temperature=temperature,
-            inline_passages=genai.GroundingPassages(
+            inline_passages=old_genai.GroundingPassages(
                 passages=[
-                    genai.GroundingPassage(
+                    old_genai.GroundingPassage(
                         # IDs here takes alphanumeric only. No dashes allowed.
                         id=str(index),
-                        content=genai.Content(parts=[genai.Part(text=chunk)]),
+                        content=old_genai.Content(parts=[old_genai.Part(text=chunk)]),
                     )
                     for index, chunk in enumerate(passages)
                 ]
@@ -599,7 +607,7 @@ def generate_answer(
         )
     )
 
-    if response.answer.finish_reason != genai.Candidate.FinishReason.STOP:
+    if response.answer.finish_reason != old_genai.Candidate.FinishReason.STOP:
         finish_message = _get_finish_message(response.answer)
         raise GenerateAnswerError(
             finish_reason=response.answer.finish_reason,
@@ -624,11 +632,11 @@ def generate_answer(
 
 # TODO: Use candidate.finish_message when that field is launched.
 # For now, we derive this message from other existing fields.
-def _get_finish_message(candidate: genai.Candidate) -> str:
+def _get_finish_message(candidate: old_genai.Candidate) -> str:
     finish_messages: Dict[int, str] = {
-        genai.Candidate.FinishReason.MAX_TOKENS: "Maximum token in context window reached",  # noqa: E501
-        genai.Candidate.FinishReason.SAFETY: "Blocked because of safety",
-        genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
+        old_genai.Candidate.FinishReason.MAX_TOKENS: "Maximum token in context window reached",  # noqa: E501
+        old_genai.Candidate.FinishReason.SAFETY: "Blocked because of safety",
+        old_genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
     }
 
     finish_reason = candidate.finish_reason
@@ -638,13 +646,13 @@ def _get_finish_message(candidate: genai.Candidate) -> str:
     return finish_messages[finish_reason]
 
 
-def _convert_to_metadata(metadata: Dict[str, Any]) -> List[genai.CustomMetadata]:
-    cs: List[genai.CustomMetadata] = []
+def _convert_to_metadata(metadata: Dict[str, Any]) -> List[old_genai.CustomMetadata]:
+    cs: List[old_genai.CustomMetadata] = []
     for key, value in metadata.items():
         if isinstance(value, str):
-            c = genai.CustomMetadata(key=key, string_value=value)
+            c = old_genai.CustomMetadata(key=key, string_value=value)
         elif isinstance(value, (float, int)):
-            c = genai.CustomMetadata(key=key, numeric_value=value)
+            c = old_genai.CustomMetadata(key=key, numeric_value=value)
         else:
             raise ValueError(f"Metadata value {value} is not supported")
 
@@ -652,24 +660,24 @@ def _convert_to_metadata(metadata: Dict[str, Any]) -> List[genai.CustomMetadata]
     return cs
 
 
-def _convert_filter(fs: Optional[Dict[str, Any]]) -> List[genai.MetadataFilter]:
+def _convert_filter(fs: Optional[Dict[str, Any]]) -> List[old_genai.MetadataFilter]:
     if fs is None:
         return []
     assert isinstance(fs, dict)
 
-    filters: List[genai.MetadataFilter] = []
+    filters: List[old_genai.MetadataFilter] = []
     for key, value in fs.items():
         if isinstance(value, str):
-            condition = genai.Condition(
-                operation=genai.Condition.Operator.EQUAL, string_value=value
+            condition = old_genai.Condition(
+                operation=old_genai.Condition.Operator.EQUAL, string_value=value
             )
         elif isinstance(value, (float, int)):
-            condition = genai.Condition(
-                operation=genai.Condition.Operator.EQUAL, numeric_value=value
+            condition = old_genai.Condition(
+                operation=old_genai.Condition.Operator.EQUAL, numeric_value=value
             )
         else:
             raise ValueError(f"Filter value {value} is not supported")
 
-        filters.append(genai.MetadataFilter(key=key, conditions=[condition]))
+        filters.append(old_genai.MetadataFilter(key=key, conditions=[condition]))
 
     return filters
