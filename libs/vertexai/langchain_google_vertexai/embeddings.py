@@ -93,7 +93,7 @@ class GoogleEmbeddingModelVersion(str, Enum):
         if "textembedding-gecko@003" in value.lower():
             return GoogleEmbeddingModelVersion.EMBEDDINGS_DEC_2023
         if (
-            "text-embedding-004" in value.lower()
+            "gemini-embedding-001" in value.lower()
             or "text-multilingual-embedding-002" in value.lower()
             or "text-embedding-preview-0409" in value.lower()
             or "text-multilingual-embedding-preview-0409" in value.lower()
