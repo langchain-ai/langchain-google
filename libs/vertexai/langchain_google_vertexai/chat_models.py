@@ -1214,7 +1214,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word "multimodal," and summarizes everything that was seen and heard.'
 
         You can also point to GCS files.
 
@@ -1769,6 +1769,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     raw_part = proto.Message.to_dict(part)
                     _ = raw_part.pop("thought")
                     _ = raw_part.pop("thought_signature", None)
+                    
+                    # Fix for issue #1057: remove 'id' field from functionCall/functionResponse for v1 API compatibility
+                    if "function_call" in raw_part:
+                        fc = raw_part["function_call"]
+                        if isinstance(fc, dict) and "id" in fc:
+                            fc.pop("id")
+                    if "function_response" in raw_part:
+                        fr = raw_part["function_response"]
+                        if isinstance(fr, dict) and "id" in fr:
+                            fr.pop("id")
+                    
                     v1_parts.append(v1Part(**raw_part))
                 v1_contens.append(v1Content(role=content.role, parts=v1_parts))
             return v1_contens
