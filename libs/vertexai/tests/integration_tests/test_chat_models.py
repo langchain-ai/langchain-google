@@ -29,7 +29,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.runnables import RunnableSerializable
+from langchain_core.runnables import ConfigurableField, RunnableSerializable
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -39,11 +39,13 @@ from langchain_google_vertexai import (
     FunctionCallingConfig,
     HarmBlockThreshold,
     HarmCategory,
+    Modality,
     create_context_cache,
 )
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import _parse_chat_history_gemini
 from tests.integration_tests.conftest import (
+    _DEFAULT_IMAGE_GENERATION_MODEL_NAME,
     _DEFAULT_MODEL_NAME,
     _DEFAULT_THINKING_MODEL_NAME,
 )
@@ -331,11 +333,10 @@ def test_multimodal_media_inline_base64_agent() -> None:
         tools=tools,
         prompt=prompt_template,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+    agent_executor = agents.AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=False,
-        stream_runnable=False,
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
@@ -817,6 +818,62 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     assert len(result.tool_calls) == 0
 
 
+# Image Generation is knwown to be flaky.
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_image_output() -> None:
+    model = ChatVertexAI(
+        model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME,
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+    result = model.invoke("Generate an image of a cat. Then, say meow!")
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, list)
+
+    image_element = None
+    for item in result.content:
+        if isinstance(item, dict) and item.get("type") == "image_url":
+            image_element = item
+            break
+    assert image_element is not None, "Did not find the expected image content"
+
+    text_element = None
+    for item in result.content:
+        if isinstance(item, str):
+            text_element = item
+            break
+    assert text_element is not None, "Did not find the expected text content"
+
+
+# Image Generation is knwown to be flaky.
+@pytest.mark.flaky(retries=3)
+@pytest.mark.release
+def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME)
+    result = model.invoke(
+        "Generate an image of a cat. Then, say meow!",
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, list)
+
+    image_element = None
+    for item in result.content:
+        if isinstance(item, dict) and item.get("type") == "image_url":
+            image_element = item
+            break
+    assert image_element is not None, "Did not find the expected image content"
+
+    text_element = None
+    for item in result.content:
+        if isinstance(item, str):
+            text_element = item
+            break
+    assert text_element is not None, "Did not find the expected text content"
+
+
 # Marking the following 6 as flaky because it has been observed that gemini 2.5 models
 # don't always think before they answer even when thinking is turned on.
 
@@ -888,14 +945,60 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
 
 
 @pytest.mark.release
+def test_thought_signatures() -> None:
+    """Test Gemini thought signatures.
+
+    Verifies that thought signature byte blobs flow correctly through the entire Gemini
+    to GAPIC to LangChain parsing and back into subsequent calls, without crashing or
+    losing type safety.
+    """
+    llm = ChatVertexAI(model="gemini-2.5-pro", include_thoughts=True)
+
+    def get_weather(location: str) -> str:
+        """Get the weather for a location."""
+        return "It's sunny."
+
+    llm_with_tools = llm.bind_tools([get_weather])
+
+    input_message = {
+        "role": "user",
+        # TODO: a query that does not generate tool calls (e.g., "Hello") will generate
+        # thought signatures on text message blocks. Support this when migrating to
+        # standard outputs.
+        "content": "What's the weather in London?",
+    }
+
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm_with_tools.invoke([input_message, full, next_message])
+
+
+@pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
-    model = ChatVertexAI(
-        model_name=_DEFAULT_THINKING_MODEL_NAME,
-        thinking_budget=200,  # Test we override with runtime kwarg
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
+    response = model.invoke("How many O's are in Google?")
+    assert isinstance(response, AIMessage)
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        == response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
     )
-    response = model.invoke(
-        [HumanMessage("How many O's are in Google?")],
-        thinking_budget=0,  # Disable thinking
+    assert "output_token_details" not in response.usage_metadata  # type: ignore
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_configurable() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
+    configurable_model = model.configurable_fields(
+        thinking_budget=ConfigurableField(id="thinking_budget")
+    )
+    response = configurable_model.invoke(
+        "How many O's are in Google?", {"configurable": {"thinking_budget": 0}}
     )
     assert isinstance(response, AIMessage)
     assert response.usage_metadata is not None
@@ -1011,7 +1114,7 @@ def test_structured_output_schema_enum():
         """
         The film aims to educate and inform viewers about real-life subjects, events, or
         people. It offers a factual record of a particular topic by combining interviews
-        , historical footage and narration. The primary purpose of a film is to present 
+        , historical footage and narration. The primary purpose of a film is to present
         information and provide insights into various aspects of reality.
         """
     )
@@ -1026,14 +1129,14 @@ def test_structured_output_schema_enum():
 @pytest.mark.first
 def test_context_catching():
     system_instruction = """
-    
+
     You are an expert researcher. You always stick to the facts in the sources provided,
     and never make up new facts.
     
     If asked about it, the secret number is 747.
-    
+
     Now look at these research papers, and answer the following questions.
-    
+
     """
 
     cached_content = create_context_cache(
@@ -1099,9 +1202,8 @@ def test_context_catching_tools():
 
     You have a get_secret_number function available. Use this tool if someone asks
     for the secret number.
-        
     Now look at these research papers, and answer the following questions.
-        
+
     """
 
     cached_content = create_context_cache(
@@ -1146,9 +1248,7 @@ def test_context_catching_tools():
         tools=tools,
         prompt=prompt,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent, tools=tools, verbose=False, stream_runnable=False
-    )
+    agent_executor = agents.AgentExecutor(agent=agent, tools=tools, verbose=False)
     response = agent_executor.invoke({"input": "what is the secret number?"})
     assert isinstance(response["output"], str)
 

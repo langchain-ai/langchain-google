@@ -778,6 +778,65 @@ def test_format_messages_anthropic_with_mixed_messages():
                 },
             ],
         ),
+        (
+            [
+                AIMessage(
+                    content=[
+                        {"type": "text", "text": "Text content"},
+                        {
+                            "type": "image",
+                            "source_type": "url",
+                            "url": "https://example.com/image.png",
+                        },
+                        {
+                            "type": "image",
+                            "source_type": "url",
+                            "url": "data:image/png;base64,/9j/4AAQSk",
+                        },
+                        {
+                            "type": "image",
+                            "source_type": "base64",
+                            "mime_type": "image/png",
+                            "data": "/9j/4AAQSk",
+                        },
+                        {"type": "image", "source_type": "id", "id": "1"},
+                    ]
+                ),
+            ],
+            None,
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Text content"},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "url",
+                                "url": "https://example.com/image.png",
+                            },
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": "/9j/4AAQSk",
+                            },
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": "/9j/4AAQSk",
+                            },
+                        },
+                        {"type": "image", "source": {"type": "file", "file_id": "1"}},
+                    ],
+                }
+            ],
+        ),
     ],
 )
 def test_format_messages_anthropic(

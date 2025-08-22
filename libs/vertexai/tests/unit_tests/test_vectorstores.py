@@ -88,6 +88,20 @@ def test_add_texts_with_custom_ids(mocker):
         VectorStore.add_texts(texts=texts, ids=["Id1", "Id2", "Id2"])
 
 
+def test_add_texts_with_single_string():
+    """Test that a single string input is properly handled as one document."""
+    single_string = "This is a single string"
+
+    VectorStore = object.__new__(_BaseVertexAIVectorStore)
+    VectorStore._document_storage = MagicMock()
+    VectorStore._embeddings = MagicMock()
+    VectorStore._searcher = MagicMock()
+
+    VectorStore.add_texts(texts=single_string)
+
+    VectorStore._embeddings.embed_documents.assert_called_once_with([single_string])
+
+
 def test_add_texts_with_embeddings():
     texts = ["Text1", "Text2"]
     embeddings = [[0.1, 0.2, 1.0], [1.0, 0.0, 1.0]]

@@ -119,7 +119,10 @@ from google.cloud.aiplatform_v1beta1.types import (
     VideoMetadata,
 )
 from langchain_google_vertexai._base import _VertexAICommon
-from langchain_google_vertexai._image_utils import ImageBytesLoader
+from langchain_google_vertexai._image_utils import (
+    ImageBytesLoader,
+    image_bytes_to_b64_string,
+)
 from langchain_google_vertexai._utils import (
     create_retry_decorator,
     get_generation_info,
@@ -160,10 +163,27 @@ _allowed_params = [
     "logprobs",
     "labels",
     "audio_timestamp",
+    "response_modalities",
     "thinking_budget",
     "include_thoughts",
 ]
+_allowed_beta_params = [
+    "media_resolution",
+]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
+
+
+_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
+    "__gemini_function_call_thought_signatures__"
+)
+
+
+def _bytes_to_base64(data: bytes) -> str:
+    return base64.b64encode(data).decode("utf-8")
+
+
+def _base64_to_bytes(input_str: str) -> bytes:
+    return base64.b64decode(input_str.encode("utf-8"))
 
 
 @dataclass
@@ -325,6 +345,8 @@ def _parse_chat_history_gemini(
         # error.
         if isinstance(raw_content, int):  # type: ignore
             raw_content = str(raw_content)  # type: ignore
+        if isinstance(raw_content, float):  # type: ignore
+            raw_content = str(raw_content)  # type: ignore
         if isinstance(raw_content, str):
             raw_content = [raw_content]
         result = []
@@ -378,8 +400,27 @@ def _parse_chat_history_gemini(
                 parts = _convert_to_parts(message)
 
             for tc in message.tool_calls:
+                thought_signature: Optional[bytes] = None
+                if tool_call_id := tc.get("id"):
+                    if tool_call_id in message.additional_kwargs.get(
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                    ):
+                        thought_signature = message.additional_kwargs[
+                            _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        ][tool_call_id]
+                        if isinstance(thought_signature, str):
+                            thought_signature = _base64_to_bytes(thought_signature)
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
-                parts.append(Part(function_call=function_call))
+                parts.append(
+                    Part(
+                        function_call=function_call,
+                        **(
+                            {"thought_signature": thought_signature}
+                            if thought_signature
+                            else {}
+                        ),
+                    )
+                )
 
             if len(vertex_messages):
                 prev_content = vertex_messages[-1]
@@ -540,6 +581,26 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
     return question
 
 
+# Helper function to append content consistently
+def _append_to_content(
+    current_content: Union[str, List[Any], None], new_item: Any
+) -> Union[str, List[Any]]:
+    """Appends a new item to the content, handling different initial content types."""
+    if current_content is None and isinstance(new_item, str):
+        return new_item
+    elif current_content is None:
+        return [new_item]
+    elif isinstance(current_content, str):
+        return [current_content, new_item]
+    elif isinstance(current_content, list):
+        current_content.append(new_item)
+        return current_content
+    else:
+        # This case should ideally not be reached with proper type checking,
+        # but it catches any unexpected types that might slip through.
+        raise TypeError(f"Unexpected content type: {type(current_content)}")
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
@@ -564,34 +625,21 @@ def _parse_response_candidate(
     tool_call_chunks = []
 
     for part in response_candidate.content.parts:
+        text: Optional[str] = part.text
         try:
-            text: Optional[str] = part.text
+            if hasattr(part, "text") and part.text is not None:
+                text = part.text
         except AttributeError:
-            text = None
+            pass
 
         if part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
             }
-            if not content:
-                content = [thinking_message]
-            elif isinstance(content, str):
-                content = [thinking_message, content]
-            elif isinstance(content, list):
-                content.append(thinking_message)
-            else:
-                raise Exception("Unexpected content type")
-
-        elif text:
-            if not content:
-                content = text
-            elif isinstance(content, str):
-                content = [content, text]
-            elif isinstance(content, list):
-                content.append(text)
-            else:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, thinking_message)
+        elif text is not None and text:
+            content = _append_to_content(content, text)
 
         if part.function_call:
             # For backward compatibility we store a function call in additional_kwargs,
@@ -604,13 +652,14 @@ def _parse_response_candidate(
             )
             additional_kwargs["function_call"] = function_call
 
+            tool_call_id = function_call.get("id", str(uuid.uuid4()))
             if streaming:
                 index = function_call.get("index")
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=function_call.get("id", str(uuid.uuid4())),
+                        id=tool_call_id,
                         index=int(index) if index else None,
                     )
                 )
@@ -625,7 +674,7 @@ def _parse_response_candidate(
                             create_tool_call(
                                 name=tool_call["name"],
                                 args=tool_call["args"],
-                                id=tool_call.get("id", str(uuid.uuid4())),
+                                id=tool_call.get("id", tool_call_id),
                             )
                             for tool_call in tool_calls_dicts
                         ]
@@ -635,10 +684,26 @@ def _parse_response_candidate(
                         invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
-                            id=function_call.get("id", str(uuid.uuid4())),
+                            id=tool_call_id,
                             error=str(e),
                         )
                     )
+
+            if getattr(part, "thought_signature", None):
+                # store dict of {tool_call_id: thought_signature}
+                if isinstance(part.thought_signature, bytes):
+                    thought_signature = _bytes_to_base64(part.thought_signature)
+                    if (
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        not in additional_kwargs
+                    ):
+                        additional_kwargs[
+                            _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
+                        ] = {}
+                    additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY][
+                        tool_call_id
+                    ] = thought_signature
+
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_message = {
@@ -646,14 +711,7 @@ def _parse_response_candidate(
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
                 }
-                if not content:
-                    content = [code_message]
-                elif isinstance(content, str):
-                    content = [content, code_message]
-                elif isinstance(content, list):
-                    content.append(code_message)
-                else:
-                    raise Exception("Unexpected content type")
+                content = _append_to_content(content, code_message)
 
         if (
             hasattr(part, "code_execution_result")
@@ -667,15 +725,19 @@ def _parse_response_candidate(
                     "code_execution_result": part.code_execution_result.output,
                     "outcome": part.code_execution_result.outcome,
                 }
+                content = _append_to_content(content, execution_result)
 
-                if not content:
-                    content = [execution_result]
-                elif isinstance(content, str):
-                    content = [content, execution_result]
-                elif isinstance(content, list):
-                    content.append(execution_result)
-                else:
-                    raise Exception("Unexpected content type")
+        if part.inline_data.mime_type.startswith("image/"):
+            image_format = part.inline_data.mime_type[6:]
+            image_message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_bytes_to_b64_string(
+                        part.inline_data.data, image_format=image_format
+                    )
+                },
+            }
+            content = _append_to_content(content, image_message)
 
     if content is None:
         content = ""
@@ -1055,10 +1117,106 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.' # codespell:ignore brunch
 
-    Video input:
+    PDF input:
+        .. code-block:: python
 
-        .. note::
-            Currently only supported for ``gemini-...-vision`` models.
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            pdf_bytes = open("/path/to/your/test.pdf", 'rb').read()
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the document in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"application/pdf",
+                        "data": pdf_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance.'
+
+        You can also point to GCS files.
+
+        .. code-block:: python
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "describe the document in a sentence",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/generative-ai/pdf/1706.03762v7.pdf",
+                                "mime_type": "application/pdf",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+            'The article introduces Transformer, a new model architecture for sequence transduction based solely on attention mechanisms, outperforming previous models in machine translation tasks and demonstrating good generalization to English constituency parsing.'
+
+    Video input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            video_bytes = open("/path/to/your/video.mp4", 'rb').read()
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe what's in this video in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type": "video/mp4",
+                        "data": video_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner.'
+
+        You can also pass YouTube URLs directly:
+
+        .. code-block:: python
+
+            from langchain_core.messages import HumanMessage
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize the video in 3 sentences."},
+                    {
+                        "type": "media",
+                        "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                        "mime_type": "video/mp4",
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+
+        You can also point to GCS files.
 
         .. code-block:: python
 
@@ -1084,6 +1242,34 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
              'The video is about a new feature in Google Photos called "Zoomable Selfies". The feature allows users to take selfies with animals at the zoo. The video shows several examples of people taking selfies with animals, including a tiger, an elephant, and a sea otter. The video also shows how the feature works. Users simply need to open the Google Photos app and select the "Zoomable Selfies" option. Then, they need to choose an animal from the list of available animals. The app will then guide the user through the process of taking the selfie.'
 
     Audio input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            audio_bytes = open("/path/to/your/audio.mp3", 'rb').read()
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize this audio in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"audio/mp3",
+                        "data": audio_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "In this episode of the Made by Google podcast, Stephen Johnson and Simon Tokumine discuss NotebookLM, a tool designed to help users understand complex material in various modalities, with a focus on its unexpected uses, the development of audio overviews, and the implementation of new features like mind maps and source discovery."
+
+        You can also point to GCS files.
+
         .. code-block:: python
 
             from langchain_core.messages import HumanMessage
@@ -1289,7 +1475,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         # Get all valid field names, including aliases
         valid_fields = set()
-        for field_name, field_info in self.model_fields.items():
+        for field_name, field_info in type(self).model_fields.items():
             valid_fields.add(field_name)
             if hasattr(field_info, "alias") and field_info.alias is not None:
                 valid_fields.add(field_info.alias)
@@ -1404,6 +1590,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             params["thinking_config"]["include_thoughts"] = include_thoughts
         _ = params.pop("include_thoughts", None)
 
+        media_resolution = kwargs.get("media_resolution")
+        if media_resolution is not None:
+            params["media_resolution"] = media_resolution
+        response_modalities = kwargs.get(
+            "response_modalities", self.response_modalities
+        )
+        if response_modalities is not None:
+            params["response_modalities"] = response_modalities
+
         return params
 
     def _get_ls_params(
@@ -1493,6 +1688,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 stop=stop,
                 stream=stream,
                 **{k: v for k, v in kwargs.items() if k in _allowed_params},
+                **{k: v for k, v in kwargs.items() if k in _allowed_beta_params},
             )
         )
 
@@ -1833,7 +2029,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 response_chunk, prev_total_usage=total_lc_usage
             )
             if run_manager and isinstance(chunk.message.content, str):
-                run_manager.on_llm_new_token(chunk.message.content)
+                run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
 
     async def _astream(
@@ -1861,7 +2057,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 response_chunk, prev_total_usage=total_lc_usage
             )
             if run_manager and isinstance(chunk.message.content, str):
-                await run_manager.on_llm_new_token(chunk.message.content)
+                await run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
 
     def with_structured_output(
@@ -2082,7 +2278,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tools: A list of tool definitions to bind to this chat model.
                 Can be a pydantic model, callable, or BaseTool. Pydantic
                 models, callables, and BaseTools will be automatically converted to
-                their schema dictionary representation.
+                their schema dictionary representation. Tools with Union types in
+                their arguments are now supported and converted to `anyOf` schemas.
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """
