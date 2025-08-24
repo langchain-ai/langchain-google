@@ -132,6 +132,7 @@ from langchain_google_genai._image_utils import (
 )
 
 from . import _genai_extension as genaix
+from ._compat import _convert_v0_to_v1, _convert_v1_to_v0
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +312,7 @@ def _is_openai_image_block(block: dict) -> bool:
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts a list of LangChain messages into a Google parts."""
+    """Converts a message's content body into Google Parts."""
     parts = []
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
@@ -412,14 +413,12 @@ def _convert_to_parts(
                         f"image_url, and media types are supported."
                     )
             else:
-                # Yolo
                 logger.warning(
                     "Unrecognized message part format. Assuming it's a text part."
                 )
                 parts.append(Part(text=str(part)))
         else:
-            # TODO: Maybe some of Google's native stuff
-            # would hit this branch.
+            # TODO: Maybe some of Google's native stuff would hit this branch.
             raise ChatGoogleGenerativeAIError(
                 "Gemini only supports text and inline_data parts."
             )
@@ -493,25 +492,49 @@ def _get_ai_message_tool_messages_parts(
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
-    messages: List[Content] = []
-
     if convert_system_message_to_human:
         warnings.warn("Convert_system_message_to_human will be deprecated!")
 
+    # Translation layer to convert any v1 messages to v0 before processing.
+    # This is necessary because the rest of this function and its helpers
+    # expect the v0 message format.
+    processed_messages: list[BaseMessage] = []
+    for m in input_messages:
+        if (
+            isinstance(m, AIMessage)
+            and m.response_metadata.get("lc_message_version", "v0") == "v1"
+        ):
+            processed_messages.append(_convert_v1_to_v0(m))
+        else:
+            processed_messages.append(m)
+
+    messages: List[Content] = []
     system_instruction: Optional[Content] = None
+
+    # Separate tool messages from other messages
     messages_without_tool_messages = [
-        message for message in input_messages if not isinstance(message, ToolMessage)
+        message
+        for message in processed_messages
+        if not isinstance(message, ToolMessage)
     ]
     tool_messages = [
-        message for message in input_messages if isinstance(message, ToolMessage)
+        message for message in processed_messages if isinstance(message, ToolMessage)
     ]
+
+    # Iterate through non-tool messages, performing conversion to Google Content
+    # (tool messages become nested parts of AIMessage -> Content)
     for i, message in enumerate(messages_without_tool_messages):
+        # Initialize only if the FIRST message is a SystemMessage
+        # Otherwise, skip this branch and no system instruction will be created
+        # (Ignores any stray SystemMessage that shows up later in the conversation)
         if isinstance(message, SystemMessage):
-            system_parts = _convert_to_parts(message.content)
+            system_parts = _convert_to_parts(message.content)  # type: ignore[arg-type]
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
+                # Append to existing system instruction
                 system_instruction.parts.extend(system_parts)
+                # We're combining all system message content into one Content object
             else:
                 pass
             continue
@@ -547,6 +570,8 @@ def _parse_chat_history(
             role = "user"
             parts = _convert_to_parts(message.content)
             if i == 1 and convert_system_message_to_human and system_instruction:
+                # Remove system instruction as the first message, making it part of
+                # the human message content (and deleting the system_instruction).
                 parts = [p for p in system_instruction.parts] + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
@@ -584,6 +609,32 @@ def _append_to_content(
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
+    """Take a response Candidate and convert it to a v0 AIMessage[Chunk].
+
+    A Candidate may have Content, which has a list of Parts and `role` field to
+    indicate the producer of the Content (either `'user'` or `'model'`).
+
+    Parts include the media content, and will only have one field, which represents the
+    type of content being conveyed. The types of Parts include:
+    - `text` (str) -- will contain `thought` content if `thought` = True
+    - `thought` (bool)
+    - `thought_signature` (bytes).
+    - `inline_data` (Blob)
+    - `file_data` (FileData)
+    - `video_metadata` (VideoMetadata).
+    - `function_call` (FunctionCall)
+    - `function_response` (FunctionResponse)
+    - `executable_code` (ExecutableCode)
+    - `code_execution_result` (CodeExecutionResult)
+
+    With regard to `thought_signature`, it is assumed to be returned alongside a
+    `thought` Part (meaning there will be at least two Parts in the Candidate Content).
+
+    Similar to `video_metadata`, it is assumed to be returned alongside a
+    `file_data` Part for a video (meaning there will be at least two Parts in the
+    Candidate Content if `video_metadata` is present).
+    """
+    # Note that AIMessageChunk inherits from AIMessage which is why it isn't typed here
     content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs: Dict[str, Any] = {}
     tool_calls = []
@@ -728,6 +779,7 @@ def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: Optional[UsageMetadata] = None,
+    output_version: Optional[Literal["v0", "v1"]] = "v0",
 ) -> ChatResult:
     """Converts a PaLM API response into a LangChain ChatResult."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
@@ -775,6 +827,7 @@ def _response_to_result(
         lc_usage = None
 
     generations: List[ChatGeneration] = []
+    # Note that a ChatGenerationChunk inherits from ChatGeneration
 
     for candidate in response.candidates:
         generation_info = {}
@@ -793,7 +846,15 @@ def _response_to_result(
                 )
         except AttributeError:
             pass
-        message = _parse_response_candidate(candidate, streaming=stream)
+        message: AIMessage = _parse_response_candidate(candidate, streaming=stream)
+
+        if output_version == "v1":
+            message = _convert_v0_to_v1(message)
+
+        # Add a flag to simplify serializing AIMessages to Google Parts
+        # (e.g. in `_parse_chat_history()`)
+        message.response_metadata["lc_message_version"] = output_version
+
         message.usage_metadata = lc_usage
         if stream:
             generations.append(
@@ -804,7 +865,10 @@ def _response_to_result(
             )
         else:
             generations.append(
-                ChatGeneration(message=message, generation_info=generation_info)
+                ChatGeneration(
+                    message=message,
+                    generation_info=generation_info,
+                )
             )
     if not response.candidates:
         # Likely a "prompt feedback" violation (e.g., toxic input)
@@ -1598,7 +1662,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_method=self.client.generate_content,
             metadata=self.default_metadata,
         )
-        return _response_to_result(response)
+        return _response_to_result(response, output_version=self.output_version)
 
     async def _agenerate(
         self,
@@ -1648,7 +1712,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_method=self.async_client.generate_content,
             metadata=self.default_metadata,
         )
-        return _response_to_result(response)
+        return _response_to_result(response, output_version=self.output_version)
 
     def _stream(
         self,
@@ -1686,8 +1750,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
         for chunk in response:
-            _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
+            _chat_result: ChatResult = _response_to_result(
+                chunk,
+                stream=True,
+                prev_usage=prev_usage_metadata,
+                output_version=self.output_version,
             )
             gen = cast(ChatGenerationChunk, _chat_result.generations[0])
             message = cast(AIMessageChunk, gen.message)
@@ -1752,8 +1819,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 **kwargs,
                 metadata=self.default_metadata,
             ):
-                _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
+                _chat_result: ChatResult = _response_to_result(
+                    chunk,
+                    stream=True,
+                    prev_usage=prev_usage_metadata,
+                    output_version=self.output_version,
                 )
                 gen = cast(ChatGenerationChunk, _chat_result.generations[0])
                 message = cast(AIMessageChunk, gen.message)
@@ -1781,7 +1851,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         **kwargs: Any,
-    ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
+    ) -> GenerateContentRequest:
+        """Prepare the request for the Google Generative AI API.
+
+        Parameters:
+            messages: List of messages to send to the model.
+
+        Returns:
+            A GenerateContentRequest object ready to be sent to the API. Tuple with:
+            - The request
+            - Additional parameters that may be needed for the request
+        """
         if tool_choice and tool_config:
             raise ValueError(
                 "Must specify at most one of tool_choice and tool_config, received "
@@ -1797,6 +1877,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         elif functions:
             formatted_tools = [convert_to_genai_function_declarations(functions)]
 
+        # Filter out any HumanMessage with empty content
+        # (e.g. `HumanMessage([""])`)
         filtered_messages = []
         for message in messages:
             if isinstance(message, HumanMessage) and not message.content:
@@ -1807,6 +1889,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 filtered_messages.append(message)
         messages = filtered_messages
 
+        # This is the core of the request preparation: parsing the chat history and
+        # converting it to the format expected by Google's API (List[Content]).
         system_instruction, history = _parse_chat_history(
             messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
@@ -1845,6 +1929,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 SafetySetting(category=c, threshold=t)
                 for c, t in safety_settings.items()
             ]
+
         request = GenerateContentRequest(
             model=self.model,
             contents=history,
