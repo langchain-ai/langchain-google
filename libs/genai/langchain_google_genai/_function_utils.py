@@ -323,6 +323,7 @@ def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
 
 def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
     properties: Dict[str, Dict[str, Union[str, int, Dict, List]]] = {}
+    # Preserve description before any schema manipulation
     for k, v in schema.items():
         if not isinstance(k, str):
             logger.warning(f"Key '{k}' is not supported in schema, type={type(k)}")
@@ -331,6 +332,10 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
+
+        # Preserve description before any schema manipulation
+        original_description = v.get("description")
+
         if v.get("anyOf") and all(
             anyOf_type.get("type") != "null" for anyOf_type in v.get("anyOf", [])
         ):
@@ -354,7 +359,8 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
 
-        description = v.get("description")
+        # Prefer description from the filtered schema, fall back to original
+        description = v.get("description") or original_description
         if description and isinstance(description, str):
             properties_item["description"] = description
 
