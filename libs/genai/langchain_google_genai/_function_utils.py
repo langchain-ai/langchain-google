@@ -323,7 +323,6 @@ def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
 
 def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
     properties: Dict[str, Dict[str, Union[str, int, Dict, List]]] = {}
-    # Preserve description before any schema manipulation
     for k, v in schema.items():
         if not isinstance(k, str):
             logger.warning(f"Key '{k}' is not supported in schema, type={type(k)}")
