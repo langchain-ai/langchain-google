@@ -332,8 +332,10 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
 
-        # Preserve description before any schema manipulation
+        # Preserve description before and other schema properties before manipulation
         original_description = v.get("description")
+        original_enum = v.get("enum")
+        original_items = v.get("items")
 
         if v.get("anyOf") and all(
             anyOf_type.get("type") != "null" for anyOf_type in v.get("anyOf", [])
@@ -353,7 +355,15 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             if any_of_types and item_type_ in [glm.Type.ARRAY, glm.Type.OBJECT]:
                 json_type_ = "array" if item_type_ == glm.Type.ARRAY else "object"
                 # Use Index -1 for consistency with `_get_nullable_type_from_schema`
-                v = [val for val in any_of_types if val.get("type") == json_type_][-1]
+                filtered_schema = [
+                    val for val in any_of_types if val.get("type") == json_type_
+                ][-1]
+                # Merge filtered schema with original properties to preserve enum/items
+                v = filtered_schema.copy()
+                if original_enum and not v.get("enum"):
+                    v["enum"] = original_enum
+                if original_items and not v.get("items"):
+                    v["items"] = original_items
 
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
@@ -415,6 +425,8 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
             items["description"] = (
                 schema.get("description") or schema.get("title") or ""
             )
+        if "enum" in schema:
+            items["enum"] = schema["enum"]
         if _is_nullable_schema(schema):
             items["nullable"] = True
         if "required" in schema:
