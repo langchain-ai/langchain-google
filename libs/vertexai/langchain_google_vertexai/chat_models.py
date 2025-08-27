@@ -1076,7 +1076,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             import httpx
             from langchain_core.messages import HumanMessage
 
-            image_url = "https://httpbin.org/image/jpeg"
+            image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
             image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
             message = HumanMessage(
                 content=[

@@ -61,7 +61,7 @@ def test_pdf_byts():
 
 @pytest.mark.extended
 def test_https_image():
-    uri = "https://picsum.photos/seed/picsum/200/300.jpg"
+    uri = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
 
     llm = ChatAnthropicVertex(
         model="claude-3-5-sonnet-v2@20241022",

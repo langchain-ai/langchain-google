@@ -82,7 +82,7 @@ llm = ChatGoogleGenerativeAI(model="gemini-pro-vision")
 message = HumanMessage(
     content=[
         {"type": "text", "text": "What's in this image?"},
-        {"type": "image_url", "image_url": "https://picsum.photos/seed/picsum/200/300"},
+        {"type": "image_url", "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"},
     ]
 )
 

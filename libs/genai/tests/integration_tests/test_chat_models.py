@@ -443,7 +443,7 @@ def test_chat_google_genai_invoke_multimodal_by_url() -> None:
                 },
                 {
                     "type": "image_url",
-                    "image_url": "https://httpbin.org/image/jpeg",
+                    "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",
                 },
             ]
         ),
