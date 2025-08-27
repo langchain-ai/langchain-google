@@ -410,6 +410,8 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
             items["description"] = (
                 schema.get("description") or schema.get("title") or ""
             )
+        if "enum" in schema:
+            items["enum"] = schema["enum"]
         if _is_nullable_schema(schema):
             items["nullable"] = True
         if "required" in schema:
