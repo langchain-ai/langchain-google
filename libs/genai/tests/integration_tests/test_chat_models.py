@@ -881,7 +881,7 @@ def test_code_execution_builtin() -> None:
     # Test we can process chat history
     next_message = {
         "role": "user",
-        "content": "Can you add some comments to the code?",
+        "content": "Can you show me the calculation again with comments?",
     }
     with pytest.warns(match="executable_code"):
         _ = llm.invoke([input_message, full, next_message])
