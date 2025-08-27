@@ -101,7 +101,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     algorithm_config: Optional[Any] = None
     filter_columns: Optional[List[str]] = None
     crowding_column: Optional[str] = None
-    distance_measure_type: Optional[str] = None
+    distance_measure_type: Optional[Any] = None
     online_store: Any = None
     enable_private_service_connect: bool = False
     transport: Any = None
@@ -507,12 +507,18 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 uri=f"bq://{self.full_table_id}",
                 entity_id_columns=[self.doc_id_field],
             )
+            # Type guards for IndexConfig parameters
+            if self.embedding_dimension is None:
+                raise ValueError("embedding_dimension must be set")
+            if self.algorithm_config is None:
+                raise ValueError("algorithm_config must be set")
+
             index_config = utils.IndexConfig(
                 embedding_column=self.embedding_field,
                 crowding_column=self.crowding_column,
                 filter_columns=self.filter_columns,
                 dimensions=self.embedding_dimension,
-                distance_measure_type=self.distance_measure_type,
+                distance_measure_type=self.distance_measure_type,  # type: ignore[arg-type]
                 algorithm_config=self.algorithm_config,
             )
             return self.online_store.create_feature_view(
