@@ -1324,6 +1324,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ``cachedContents/{cachedContent}``.
     """
 
+    stop: Optional[List[str]] = None
+    """Stop sequences for the model."""
+
+    streaming: Optional[bool] = None
+    """Whether to stream responses from the model."""
+
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
     """Holds any unexpected initialization parameters."""
 
