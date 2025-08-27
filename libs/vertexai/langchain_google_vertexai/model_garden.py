@@ -16,7 +16,6 @@ from typing import (
     Union,
 )
 
-import httpx
 from google.auth.credentials import Credentials
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,

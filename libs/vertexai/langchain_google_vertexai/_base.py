@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from concurrent.futures import Executor
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
