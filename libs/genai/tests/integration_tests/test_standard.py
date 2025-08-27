@@ -1,9 +1,12 @@
 """Standard LangChain interface tests"""
 
+import base64
 from typing import Dict, List, Literal, Type
 
+import httpx
 import pytest
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.tools import BaseTool
 from langchain_tests.integration_tests import ChatModelIntegrationTests
@@ -44,6 +47,55 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
     @property
     def supports_audio_inputs(self) -> bool:
         return True
+
+    def test_image_inputs(self, model: BaseChatModel) -> None:
+        """Override parent method to use a reliable image URL."""
+        if not self.supports_image_inputs:
+            pytest.skip("Model does not support image message.")
+
+        # Use a reliable image URL that works with requests
+        image_url = "https://httpbin.org/image/jpeg"
+        image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+
+        # OpenAI format, base64 data
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the weather in this image"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                },
+            ],
+        )
+        _ = model.invoke([message])
+
+        # Standard format, base64 data
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the weather in this image"},
+                {
+                    "type": "image",
+                    "source_type": "base64",
+                    "mime_type": "image/jpeg",
+                    "data": image_data,
+                },
+            ],
+        )
+        _ = model.invoke([message])
+
+        # Standard format, URL
+        if self.supports_image_urls:
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the weather in this image"},
+                    {
+                        "type": "image",
+                        "source_type": "url",
+                        "url": image_url,
+                    },
+                ],
+            )
+            _ = model.invoke([message])
 
 
 class TestGeminiProStandard(ChatModelIntegrationTests):
