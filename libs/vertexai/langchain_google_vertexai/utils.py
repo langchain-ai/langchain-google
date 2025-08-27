@@ -61,14 +61,17 @@ def create_context_cache(
     if tools is not None:
         tools = [_format_to_gapic_tool(tools)]
 
+    if model.full_model_name is None:
+        raise ValueError("Model must have a full_model_name to create cached content")
+
     cached_content = caching.CachedContent.create(
         model_name=model.full_model_name,
         system_instruction=system_instruction,
-        contents=contents,
+        contents=contents,  # type: ignore[arg-type]
         ttl=time_to_live,
         expire_time=expire_time,
         tool_config=tool_config,
-        tools=tools,
+        tools=tools,  # type: ignore[arg-type]
     )
 
     return cached_content.name

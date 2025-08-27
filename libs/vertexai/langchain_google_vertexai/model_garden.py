@@ -180,10 +180,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         "- max: Maximum wait time in seconds (default: 10.0) "
         "- exp_base: Exponent base to use (default: 2.0) ",
     )
-    timeout: Optional[Union[float, httpx.Timeout]] = Field(
-        default=None,
-        description="Timeout for API requests.",
-    )
 
     model_config = ConfigDict(
         populate_by_name=True,

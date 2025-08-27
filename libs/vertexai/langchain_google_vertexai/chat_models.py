@@ -1718,10 +1718,40 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """
         if safety_settings is None:
             if self.safety_settings:
-                return self._safety_settings_gemini(self.safety_settings)
+                # Return the original settings unchanged for backward compatibility
+                return self.safety_settings  # type: ignore[return-value]
             return None
         if isinstance(safety_settings, list):
-            return safety_settings
+            # Check if conversion is needed
+            needs_conversion = any(
+                hasattr(setting, "to_dict") and not hasattr(setting, "_pb")
+                for setting in safety_settings
+            )
+
+            if not needs_conversion:
+                # Return as-is if already gapic SafetySettings
+                return safety_settings  # type: ignore[return-value]
+
+            # Convert vertexai SafetySetting objects to gapic SafetySetting objects
+            converted_settings = []
+            for setting in safety_settings:
+                if hasattr(setting, "to_dict"):
+                    # VertexAI SafetySetting with to_dict method
+                    setting_dict = setting.to_dict()
+                    converted_setting = SafetySetting(
+                        category=setting_dict.get("category"),
+                        threshold=setting_dict.get("threshold"),
+                    )
+                    converted_settings.append(converted_setting)
+                else:
+                    # Direct attribute access for other types
+                    converted_settings.append(
+                        SafetySetting(
+                            category=getattr(setting, "category", None),
+                            threshold=getattr(setting, "threshold", None),
+                        )
+                    )
+            return converted_settings
         if isinstance(safety_settings, dict):
             formatted_safety_settings = []
             for category, threshold in safety_settings.items():
@@ -1771,7 +1801,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        safety_settings = self._safety_settings_gemini(safety_settings)
+        processed_safety_settings: Optional[Sequence[SafetySetting]] = (
+            self._safety_settings_gemini(safety_settings)
+        )
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -1804,18 +1836,22 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 v1_tools = [v1Tool(**proto.Message.to_dict(t)) for t in formatted_tools]
 
             if tool_config:
-                v1_tool_config = v1ToolConfig(
-                    function_calling_config=v1FunctionCallingConfig(
-                        **proto.Message.to_dict(tool_config.function_calling_config)
+                if hasattr(tool_config, "function_calling_config"):
+                    v1_tool_config = v1ToolConfig(
+                        function_calling_config=v1FunctionCallingConfig(
+                            **proto.Message.to_dict(tool_config.function_calling_config)
+                        )
                     )
-                )
+                else:
+                    # Handle other ToolConfig types or convert as needed
+                    v1_tool_config = v1ToolConfig(**proto.Message.to_dict(tool_config))
 
-            if safety_settings:
+            if processed_safety_settings:
                 v1_safety_settings = [
                     v1SafetySetting(
                         category=s.category, method=s.method, threshold=s.threshold
                     )
-                    for s in safety_settings
+                    for s in processed_safety_settings
                 ]
 
         if (self.cached_content is not None) or (cached_content is not None):
@@ -1840,7 +1876,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return GenerateContentRequest(
                 contents=contents,
                 model=self.full_model_name,
-                safety_settings=safety_settings,
+                safety_settings=processed_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
             )
@@ -1862,7 +1898,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=safety_settings,
+            safety_settings=processed_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
             labels=self.labels,

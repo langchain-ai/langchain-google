@@ -36,6 +36,11 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           cache-key: core
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libqpdf-dev
+
       - name: Install dependencies
         shell: bash
         run: uv sync --group test

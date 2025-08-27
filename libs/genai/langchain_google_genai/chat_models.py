@@ -1814,10 +1814,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 filtered_messages.append(message)
         messages = filtered_messages
 
-        system_instruction, history = _parse_chat_history(
-            messages,
-            convert_system_message_to_human=self.convert_system_message_to_human,
-        )
+        if self.convert_system_message_to_human:
+            system_instruction, history = _parse_chat_history(
+                messages,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+        else:
+            system_instruction, history = _parse_chat_history(messages)
         if tool_choice:
             if not formatted_tools:
                 msg = (

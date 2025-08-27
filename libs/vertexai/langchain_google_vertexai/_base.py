@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from concurrent.futures import Executor
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -15,6 +16,7 @@ from typing import (
     cast,
 )
 
+import httpx
 import vertexai
 from google.api_core.client_options import ClientOptions
 from google.cloud.aiplatform import initializer
@@ -106,6 +108,17 @@ class _VertexAIBase(BaseModel):
     
     v1 is more performant, but v1beta1 might have some new features.
     """
+    timeout: Optional[Union[float, httpx.Timeout]] = Field(
+        default=None,
+        description="Timeout for requests in seconds.",
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "API key for authentication. Note: VertexAI typically uses service account "
+            "authentication."
+        ),
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
