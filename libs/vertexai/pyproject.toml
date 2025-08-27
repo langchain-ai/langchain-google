@@ -97,6 +97,20 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
+[tool.poetry]
+# HACK: Compatibility section for legacy Poetry-based CI triggers
+# This library actually uses uv/PDM - see [build-system] and [project] sections above
+name = "langchain-google-vertexai"
+version = "2.0.28"
+description = "An integration package connecting Google VertexAI and LangChain"
+authors = []
+license = "MIT"
+readme = "README.md"
+packages = [{include = "langchain_google_vertexai"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+
 [tool.coverage.run]
 omit = ["tests/*"]
 
