@@ -104,7 +104,7 @@ numpy = [
 optional = true
 
 [tool.poetry.group.lint.dependencies]
-ruff = "^0.12.10"
+ruff = "^0.1.5"
 
 
 [tool.poetry.group.typing.dependencies]
