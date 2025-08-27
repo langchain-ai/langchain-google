@@ -185,8 +185,7 @@ async def test_vertexai_astream() -> None:
 def test_multimodal() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
     gcs_url = (
-        "gs://cloud-samples-data/generative-ai/image/"
-        "320px-Felis_catus-cat_on_snow.jpg"
+        "gs://cloud-samples-data/generative-ai/image/320px-Felis_catus-cat_on_snow.jpg"
     )
     image_message = {
         "type": "image_url",
