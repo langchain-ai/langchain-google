@@ -1385,11 +1385,13 @@ def test_anthropic_format_output() -> None:
     assert message.tool_calls[0]["name"] == "calculator"
     assert message.tool_calls[0]["args"] == {"number": 42}
     assert message.usage_metadata == {
-        "input_tokens": 2,
+        "input_tokens": 4,  # 2 + 1 + 1 (original + cache_read + cache_creation)
         "output_tokens": 1,
-        "total_tokens": 3,
-        "cache_creation_input_tokens": 1,
-        "cache_read_input_tokens": 1,
+        "total_tokens": 5,  # 4 + 1
+        "input_token_details": {
+            "cache_creation": 1,
+            "cache_read": 1,
+        },
     }
 
 
@@ -1453,11 +1455,13 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     assert len(message.content) == 3
     assert message.content == test_msg.model_dump()["content"]
     assert message.usage_metadata == {
-        "input_tokens": 2,
+        "input_tokens": 4,  # 2 + 1 + 1 (original + cache_read + cache_creation)
         "output_tokens": 1,
-        "total_tokens": 3,
-        "cache_creation_input_tokens": 1,
-        "cache_read_input_tokens": 1,
+        "total_tokens": 5,  # 4 + 1
+        "input_token_details": {
+            "cache_creation": 1,
+            "cache_read": 1,
+        },
     }
 
 
