@@ -52,7 +52,7 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
         """Override parent method to use a reliable image URL."""
         if not self.supports_image_inputs:
             pytest.skip("Model does not support image message.")
-        
+
         # Use a reliable image URL that works with requests
         image_url = "https://httpbin.org/image/jpeg"
         image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
