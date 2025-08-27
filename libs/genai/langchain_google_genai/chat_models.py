@@ -698,9 +698,8 @@ def _parse_response_candidate(
                     )
     if content is None:
         content = ""
-    if (
-        isinstance(content, list)
-        and any(isinstance(item, dict) and "executable_code" in item for item in content)
+    if isinstance(content, list) and any(
+        isinstance(item, dict) and "executable_code" in item for item in content
     ):
         warnings.warn(
             """
