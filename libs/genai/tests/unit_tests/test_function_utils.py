@@ -1,7 +1,9 @@
+from enum import Enum
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from unittest.mock import MagicMock, patch
 
 import google.ai.generativelanguage as glm
+import google.ai.generativelanguage_v1beta.types as gapic
 import pytest
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
@@ -11,9 +13,11 @@ from typing_extensions import Annotated
 
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
+    _dict_to_gapic_schema,
     _format_base_tool_to_function_declaration,
     _format_dict_to_function_declaration,
     _FunctionDeclarationLike,
+    _get_items_from_schema,
     _tool_choice_to_tool_config,
     _ToolConfigDict,
     convert_to_genai_function_declarations,
@@ -1241,3 +1245,71 @@ def test_tool_field_union_types() -> None:
     required_fields = parameters.get("required", [])
     assert "location" in required_fields, "Expected 'location' to be required"
     assert "date" in required_fields, "Expected 'date' to be required"
+
+
+def test_dict_to_gapic_schema_with_enums() -> None:
+    class MyEnum(Enum):
+        A = "A"
+        B = "B"
+
+    class SomeModel(BaseModel):
+        a_string: str
+        an_enum: MyEnum
+        a_list_of_strs: list[str]
+        list_of_enums: list[MyEnum]
+
+    expected_json = """
+    {
+        "properties": {
+            "a_string": {
+                "type_": 1
+            },
+            "an_enum": {
+                "type_": 1,
+                "enum": [
+                    "A",
+                    "B"
+                ]
+            },
+            "a_list_of_strs": {
+                "type_": 5,
+                "items": {
+                    "type_": 1
+                }
+            },
+            "list_of_enums": {
+                "type_": 5,
+                "items": {
+                    "type_": 1,
+                    "description": "MyEnum",
+                    "enum": [
+                        "A",
+                        "B"
+                    ]
+                }
+            }
+        },
+        "required": [
+            "a_string",
+            "an_enum",
+            "a_list_of_strs",
+            "list_of_enums"
+        ],
+        "title": "SomeModel",
+        "type": "OBJECT"
+    }
+    """
+    expected_schema = gapic.Schema.from_json(expected_json)
+    actual_result = _dict_to_gapic_schema(SomeModel.model_json_schema())
+    assert actual_result == expected_schema
+
+
+def test_get_items_from_schema_with_enums() -> None:
+    schema = {"enum": ["A", "B"], "title": "MyEnum", "type": "string"}
+    expected_items = {
+        "type_": glm.Type.STRING,
+        "description": "MyEnum",
+        "enum": ["A", "B"],
+    }
+    actual_items = _get_items_from_schema(schema)
+    assert actual_items == expected_items
