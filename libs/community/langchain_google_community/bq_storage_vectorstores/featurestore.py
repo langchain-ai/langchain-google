@@ -316,7 +316,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         output = []
         if ids is None:
             raise ValueError(
-                "Feature Store executor doesn't support search by filter " "only"
+                "Feature Store executor doesn't support search by filter only"
             )
         for id in ids:
             with aiplatform.telemetry.tool_context_manager(self._user_agent):
@@ -363,7 +363,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         output = []
         if ids is None:
             raise ValueError(
-                "Feature Store executor doesn't support search by filter " "only"
+                "Feature Store executor doesn't support search by filter only"
             )
         for entity_id in ids:
             try:
