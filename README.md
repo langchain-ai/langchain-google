@@ -32,7 +32,7 @@ best way to get our attention.
 
 This project utilizes [Poetry](https://python-poetry.org/) v1.7.1+ as a dependency manager.
 
-❗Note: *Before installing Poetry*, if you use `Conda`, create and activate a new Conda env (e.g. `conda create -n langchain python=3.9`)
+❗Note: *Before installing Poetry*, if you use `Conda`, create and activate a new Conda env (e.g. `conda create -n langchain python=3.10`)
 
 Install Poetry: **[documentation on how to install it](https://python-poetry.org/docs/#installation)**.
 
