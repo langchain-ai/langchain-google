@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from langchain_core.messages import BaseMessage
-from vertexai.preview import caching  # type: ignore
+from vertexai.preview import caching
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (

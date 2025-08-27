@@ -496,7 +496,12 @@ def _parse_chat_history(
     messages: List[Content] = []
 
     if convert_system_message_to_human:
-        warnings.warn("Convert_system_message_to_human will be deprecated!")
+        warnings.warn(
+            "The 'convert_system_message_to_human' parameter is deprecated and will be "
+            "removed in a future version. Use system instructions instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     system_instruction: Optional[Content] = None
     messages_without_tool_messages = [

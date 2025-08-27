@@ -76,17 +76,17 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from vertexai.generative_models import (  # type: ignore
+from vertexai.generative_models import (
     Tool as VertexTool,
 )
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (
     ToolConfig,
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
     _convert_schema_dict_to_gapic,
 )
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     ChatMessage,
     InputOutputTextPair,
 )
@@ -219,10 +219,20 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         if i == 0 and isinstance(message, SystemMessage):
             context = content
         elif isinstance(message, AIMessage):
-            vertex_message = ChatMessage(content=message.content, author="bot")
+            content = (
+                message.content
+                if isinstance(message.content, str)
+                else str(message.content)
+            )
+            vertex_message = ChatMessage(content=content, author="bot")
             vertex_messages.append(vertex_message)
         elif isinstance(message, HumanMessage):
-            vertex_message = ChatMessage(content=message.content, author="user")
+            content = (
+                message.content
+                if isinstance(message.content, str)
+                else str(message.content)
+            )
+            vertex_message = ChatMessage(content=content, author="user")
             vertex_messages.append(vertex_message)
         else:
             raise ValueError(
@@ -555,16 +565,25 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"Expected the first message in a part to be from human, got "
                     f"{type(example)} for the {i}th message."
                 )
-            input_text = example.content
+            input_text = (
+                example.content
+                if isinstance(example.content, str)
+                else str(example.content)
+            )
         if i % 2 == 1:
             if not isinstance(example, AIMessage):
                 raise ValueError(
                     f"Expected the second message in a part to be from AI, got "
                     f"{type(example)} for the {i}th message."
                 )
-            pair = InputOutputTextPair(
-                input_text=input_text, output_text=example.content
+            output_text = (
+                example.content
+                if isinstance(example.content, str)
+                else str(example.content)
             )
+            if input_text is None:
+                raise ValueError("input_text should not be None at this point")
+            pair = InputOutputTextPair(input_text=input_text, output_text=output_text)
             example_pairs.append(pair)
     return example_pairs
 
@@ -1952,7 +1971,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast(_ToolConfigDict, tool_config))
+            return _format_tool_config(tool_config)
         return None
 
     async def _agenerate(
@@ -2309,7 +2328,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            message = _parse_response_candidate(candidate)
+            message = _parse_response_candidate(candidate, streaming=False)  # type: ignore[call-overload]
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
@@ -2357,7 +2376,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            message = _parse_response_candidate(top_candidate, streaming=True)
+            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(

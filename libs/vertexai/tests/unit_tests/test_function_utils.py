@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import google.cloud.aiplatform_v1beta1.types as gapic
 import pytest
-import vertexai.generative_models as vertexai  # type: ignore
+import vertexai.generative_models as vertexai
 from google.cloud.aiplatform_v1beta1.types import (
     FunctionCallingConfig as GapicFunctionCallingConfig,
 )
@@ -457,7 +457,7 @@ def test_format_to_gapic_tool():
     assert result == src_5
 
     with pytest.raises(ValueError) as exc_info1:
-        _ = _format_to_gapic_tool(["fake_tool"])
+        _ = _format_to_gapic_tool(cast(List[Any], ["fake_tool"]))
     assert str(exc_info1.value).startswith("Unsupported tool")
 
     with pytest.raises(Exception) as exc_info:

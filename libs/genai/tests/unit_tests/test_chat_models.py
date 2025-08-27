@@ -123,8 +123,7 @@ def test_initialization_with_async() -> None:
         _ = model.async_client
         return model
 
-    loop = asyncio.get_event_loop()
-    chat = loop.run_until_complete(initialize_chat_with_async_client())
+    chat = asyncio.run(initialize_chat_with_async_client())
     assert chat.async_client is not None
 
 

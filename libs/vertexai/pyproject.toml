@@ -23,6 +23,7 @@ dependencies = [
     "bottleneck>=1.4.2,<2",
     "numexpr>=2.8.6,<3",
     "pyarrow>=19.0.1,<20",
+    "protobuf>=4.21.0,<6.0.0",
 ]
 
 [project.urls]
@@ -50,6 +51,7 @@ test = [
     "langchain>=0.3.27,<1",
     "anthropic[vertexai]>=0.35.0,<1",
     "validators>=0.34.0,<1",
+    "langchain-tests>=0.2.0,<1",
 ]
 
 test_integration = [
@@ -59,6 +61,7 @@ test_integration = [
     "google-api-python-client>=2.114.0,<3",
     "google-cloud-datastore>=2.19.0,<3",
     "langchain-mistralai>=0.2.0,<1",
+    "langchain-tests>=0.2.0,<1",
 ]
 
 lint = [
@@ -114,5 +117,6 @@ markers = [
     "requires: mark tests as requiring a specific library",
     "asyncio: mark tests as requiring asyncio",
     "compile: mark placeholder test used to compile integration tests without running them",
+    "extended: mark tests as extended integration tests",
 ]
 asyncio_mode = "auto"
