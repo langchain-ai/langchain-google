@@ -1282,7 +1282,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
     default_metadata: Optional[Sequence[Tuple[str, str]]] = Field(
-        default_factory=list, alias="default_metadata_input"
+        default=None, alias="default_metadata_input"
     )  #: :meta private:
 
     convert_system_message_to_human: bool = False
