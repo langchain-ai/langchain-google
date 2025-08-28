@@ -90,3 +90,17 @@ markers = [
     "compile: mark placeholder test used to compile integration tests without running them",
 ]
 asyncio_mode = "auto"
+
+[tool.poetry]
+# HACK: Compatibility section for legacy Poetry-based CI triggers  
+# This library actually uses uv/PDM - see [build-system] and [project] sections above
+name = "langchain-google-genai"
+version = "2.1.10" 
+description = "An integration package connecting Google's genai package and LangChain"
+authors = []
+license = "MIT"
+readme = "README.md"
+packages = [{include = "langchain_google_genai"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
