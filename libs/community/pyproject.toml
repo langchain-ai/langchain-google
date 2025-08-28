@@ -28,10 +28,10 @@ dependencies = [
 bigquery = ["google-cloud-bigquery>=3.21.0,<4"]
 calendar = ["google-auth>=2.36.0,<3", "google-auth-oauthlib>=1.2.0,<2"]
 docai = [
-  "google-cloud-documentai>=2.26.0,<3",
-  "google-cloud-contentwarehouse>=0.7.7,<1",
-  "google-cloud-documentai-toolbox>=0.13.3a0,<1",
-  "gapic-google-longrunning>=0.11.2,<1",
+    "google-cloud-documentai>=2.26.0,<3",
+    "google-cloud-contentwarehouse>=0.7.7,<1",
+    "google-cloud-documentai-toolbox>=0.13.3a0,<1",
+    "gapic-google-longrunning>=0.11.2,<1",
 ]
 drive = ["google-auth-httplib2>=0.2.0,<1", "google-auth-oauthlib>=1.2.0,<2"]
 gcs = ["google-cloud-storage>=2.16.0,<3"]
