@@ -115,7 +115,7 @@ class _BaseVertexAISearchRetriever(Serializable):
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
                 "Please, install vertexaisearch dependency group: "
-                "poetry install --with vertexaisearch"
+                "uv sync --extra vertexaisearch"
             ) from exc
 
         values["project_id"] = get_from_dict_or_env(values, "project_id", "PROJECT_ID")
