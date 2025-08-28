@@ -12,9 +12,6 @@ on:
         type: string
         description: "Relative path to the langchain library folder"
 
-env:
-  POETRY_VERSION: "1.7.1"
-
 jobs:
   build:
     defaults:
@@ -24,25 +21,29 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
+          - "3.13"
     name: "make test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python ${{ matrix.python-version }} + uv
+        uses: "./.github/actions/uv_setup"
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-version: ${{ env.POETRY_VERSION }}
           working-directory: ${{ inputs.working-directory }}
           cache-key: core
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libqpdf-dev
+
       - name: Install dependencies
         shell: bash
-        run: poetry install --with test
+        run: uv sync --group test
 
       - name: Install langchain editable
         working-directory: ${{ inputs.working-directory }}
@@ -50,7 +51,7 @@ jobs:
         env:
           LANGCHAIN_LOCATION: ${{ inputs.langchain-location }}
         run: |
-          poetry run pip install -e "$LANGCHAIN_LOCATION"
+          uv pip install -e "$LANGCHAIN_LOCATION"
 
       - name: Run core tests
         shell: bash

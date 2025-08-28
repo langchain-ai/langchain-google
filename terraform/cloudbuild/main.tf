@@ -23,7 +23,7 @@ locals {
     { _PYTHON_VERSION = var.python_version },
   )
   #TODO: multiline
-  cloudbuild_config = "python -m pip install -q poetry==$${_POETRY_VERSION} --verbose && cd libs/$${_LIB} && poetry install -q --with test,test_integration  --all-extras && poetry run pytest --extended --release tests/integration_tests/"
+  cloudbuild_config = "python -m pip install -q uv --verbose && cd libs/$${_LIB} && uv sync --group test --group test_integration --all-extras && uv run pytest --extended --release tests/integration_tests/"
 }
 
 resource "google_project_service" "model_armor_service" {
