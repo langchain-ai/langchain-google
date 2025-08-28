@@ -76,17 +76,17 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from vertexai.generative_models import (  # type: ignore
+from vertexai.generative_models import (
     Tool as VertexTool,
 )
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (
     ToolConfig,
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
     _convert_schema_dict_to_gapic,
 )
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     ChatMessage,
     InputOutputTextPair,
 )
@@ -604,15 +604,13 @@ def _append_to_content(
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -1115,7 +1113,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.' # codespell:ignore brunch
+            'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.'
 
     PDF input:
         .. code-block:: python
@@ -1954,7 +1952,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast(_ToolConfigDict, tool_config))
+            return _format_tool_config(tool_config)
         return None
 
     async def _agenerate(
@@ -2311,7 +2309,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            message = _parse_response_candidate(candidate)
+            message = _parse_response_candidate(candidate, streaming=False)  # type: ignore[call-overload]
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
@@ -2359,7 +2357,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            message = _parse_response_candidate(top_candidate, streaming=True)
+            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(
