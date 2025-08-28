@@ -1848,9 +1848,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             if processed_safety_settings:
                 v1_safety_settings = [
-                    v1SafetySetting(
-                        category=s.category, method=s.method, threshold=s.threshold
-                    )
+                    v1SafetySetting(category=s.category, threshold=s.threshold)
                     for s in processed_safety_settings
                 ]
 
