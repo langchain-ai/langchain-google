@@ -443,7 +443,7 @@ def test_chat_google_genai_invoke_multimodal_by_url() -> None:
                 },
                 {
                     "type": "image_url",
-                    "image_url": "https://httpbin.org/image/jpeg",
+                    "image_url": "https://picsum.photos/seed/picsum/200/300",
                 },
             ]
         ),

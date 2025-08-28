@@ -1848,7 +1848,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             if processed_safety_settings:
                 v1_safety_settings = [
-                    v1SafetySetting(category=s.category, threshold=s.threshold)
+                    v1SafetySetting(**proto.Message.to_dict(s))
                     for s in processed_safety_settings
                 ]
 
