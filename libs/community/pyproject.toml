@@ -15,10 +15,10 @@ repository = "https://github.com/langchain-ai/langchain-google"
 dependencies = [
     "langchain-core>=0.3.75,<0.4",
     "langchain-community>=0.3.0,<0.4",
-    "google-api-core>=2.24.1,<3",
+    "google-api-core>=2.25,<3",
     "google-api-python-client>=2.161.0,<3",
-    "google-cloud-core>=2.4.2,<3",
-    "grpcio>=1.70.0,<2",
+    "google-cloud-core>=2.4.3,<3",
+    "grpcio>=1.74,<2",
 ]
 
 [project.urls]
@@ -87,9 +87,9 @@ dev = [
 
 [tool.ruff.lint]
 select = [
-  "E", # pycodestyle
-  "F", # pyflakes
-  "I", # isort
+    "E", # pycodestyle
+    "F", # pyflakes
+    "I", # isort
 ]
 
 [tool.mypy]
@@ -113,9 +113,9 @@ addopts = "--snapshot-warn-unused --strict-markers --strict-config --durations=5
 # Registering custom markers.
 # https://docs.pytest.org/en/7.1.x/example/markers.html#registering-markers
 markers = [
-  "requires: mark tests as requiring a specific library",
-  "asyncio: mark tests as requiring asyncio",
-  "compile: mark placeholder test used to compile integration tests without running them",
+    "requires: mark tests as requiring a specific library",
+    "asyncio: mark tests as requiring asyncio",
+    "compile: mark placeholder test used to compile integration tests without running them",
 ]
 asyncio_mode = "auto"
 
