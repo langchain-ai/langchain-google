@@ -1754,18 +1754,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return converted_settings
         if isinstance(safety_settings, dict):
             formatted_safety_settings = []
-            for category, threshold in safety_settings.items():
-                if isinstance(category, str):
-                    category = HarmCategory[category]  # type: ignore[misc]
-                if isinstance(threshold, str):
-                    threshold = SafetySetting.HarmBlockThreshold[threshold]  # type: ignore[misc]
+            items = cast(Dict[Any, Any], safety_settings).items()
+            for raw_category, raw_threshold in items:
+                # Convert category to HarmCategory if needed
+                if isinstance(raw_category, HarmCategory):
+                    category = raw_category
+                elif isinstance(raw_category, str):
+                    category = HarmCategory[raw_category]  # type: ignore[misc]
+                else:
+                    # This handles numeric enum values
+                    category = HarmCategory(raw_category)
 
-                # Only wrap with HarmCategory if not already a HarmCategory instance
-                if not isinstance(category, HarmCategory):
-                    category = HarmCategory(category)
-                # Only wrap with HarmBlockThreshold if not already wrapped
-                if not isinstance(threshold, SafetySetting.HarmBlockThreshold):
-                    threshold = SafetySetting.HarmBlockThreshold(threshold)
+                # Convert threshold to HarmBlockThreshold if needed
+                if isinstance(raw_threshold, SafetySetting.HarmBlockThreshold):
+                    threshold = raw_threshold
+                elif isinstance(raw_threshold, str):
+                    threshold = SafetySetting.HarmBlockThreshold[raw_threshold]  # type: ignore[misc]
+                else:
+                    # This handles numeric enum values
+                    threshold = SafetySetting.HarmBlockThreshold(raw_threshold)
 
                 formatted_safety_settings.append(
                     SafetySetting(
