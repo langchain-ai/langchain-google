@@ -364,6 +364,19 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
                     v["enum"] = original_enum
                 if original_items and not v.get("items"):
                     v["items"] = original_items
+            elif any_of_types:
+                # For other types (like strings with enums), find the non-null schema
+                # and preserve enum/items from the original anyOf structure
+                non_null_schemas = [
+                    val for val in any_of_types if val.get("type") != "null"
+                ]
+                if non_null_schemas:
+                    filtered_schema = non_null_schemas[-1]
+                    v = filtered_schema.copy()
+                    if original_enum and not v.get("enum"):
+                        v["enum"] = original_enum
+                    if original_items and not v.get("items"):
+                        v["items"] = original_items
 
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
