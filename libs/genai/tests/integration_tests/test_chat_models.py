@@ -443,7 +443,7 @@ def test_chat_google_genai_invoke_multimodal_by_url() -> None:
                 },
                 {
                     "type": "image_url",
-                    "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",
+                    "image_url": "https://httpbin.org/image/jpeg",
                 },
             ]
         ),
@@ -881,7 +881,7 @@ def test_code_execution_builtin() -> None:
     # Test we can process chat history
     next_message = {
         "role": "user",
-        "content": "Can you add some comments to the code?",
+        "content": "Can you show me the calculation again with comments?",
     }
     with pytest.warns(match="executable_code"):
         _ = llm.invoke([input_message, full, next_message])
