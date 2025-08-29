@@ -78,6 +78,7 @@ from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from vertexai.generative_models import (
     Tool as VertexTool,
+    HarmBlockThreshold,
 )
 from vertexai.generative_models._generative_models import (
     ToolConfig,
@@ -1768,6 +1769,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # Convert threshold to HarmBlockThreshold if needed
                 if isinstance(raw_threshold, SafetySetting.HarmBlockThreshold):
                     threshold = raw_threshold
+                elif isinstance(raw_threshold, HarmBlockThreshold):
+                    # Convert vertexai.generative_models.HarmBlockThreshold to gapic
+                    threshold = SafetySetting.HarmBlockThreshold(raw_threshold.value)
                 elif isinstance(raw_threshold, str):
                     threshold = SafetySetting.HarmBlockThreshold[raw_threshold]  # type: ignore[misc]
                 else:
