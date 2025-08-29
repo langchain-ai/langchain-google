@@ -819,7 +819,11 @@ def _response_to_result(
         if stream:
             generations = [
                 ChatGenerationChunk(
-                    message=AIMessageChunk(content=""), generation_info={}
+                    message=AIMessageChunk(
+                        content="", 
+                        response_metadata={"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
+                    ), 
+                    generation_info={}
                 )
             ]
         else:
