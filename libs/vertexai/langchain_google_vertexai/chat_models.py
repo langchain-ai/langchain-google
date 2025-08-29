@@ -1762,7 +1762,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 elif isinstance(raw_category, str):
                     category = HarmCategory[raw_category]  # type: ignore[misc]
                 else:
-                    # This handles numeric enum values
+                    # Handles numeric enum values
                     category = HarmCategory(raw_category)
 
                 # Convert threshold to HarmBlockThreshold if needed
@@ -1771,7 +1771,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 elif isinstance(raw_threshold, str):
                     threshold = SafetySetting.HarmBlockThreshold[raw_threshold]  # type: ignore[misc]
                 else:
-                    # This handles numeric enum values
+                    # Handles numeric enum values
                     threshold = SafetySetting.HarmBlockThreshold(raw_threshold)
 
                 formatted_safety_settings.append(
