@@ -1766,7 +1766,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 # Only wrap with HarmBlockThreshold if not already wrapped
                 if not isinstance(threshold, SafetySetting.HarmBlockThreshold):
                     threshold = SafetySetting.HarmBlockThreshold(threshold)
-                    
+
                 formatted_safety_settings.append(
                     SafetySetting(
                         category=category,
