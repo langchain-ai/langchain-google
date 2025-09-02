@@ -443,7 +443,7 @@ def test_chat_google_genai_invoke_multimodal_by_url() -> None:
                 },
                 {
                     "type": "image_url",
-                    "image_url": "https://httpbin.org/image/jpeg",
+                    "image_url": "https://picsum.photos/seed/picsum/200/300",
                 },
             ]
         ),
@@ -494,7 +494,7 @@ def test_chat_google_genai_single_call_with_history() -> None:
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model([message1, message2, message3])
+    response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 

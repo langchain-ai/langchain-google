@@ -101,7 +101,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
     algorithm_config: Optional[Any] = None
     filter_columns: Optional[List[str]] = None
     crowding_column: Optional[str] = None
-    distance_measure_type: Optional[str] = None
+    distance_measure_type: Optional[Any] = None
     online_store: Any = None
     enable_private_service_connect: bool = False
     transport: Any = None
@@ -316,7 +316,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         output = []
         if ids is None:
             raise ValueError(
-                "Feature Store executor doesn't support search by filter " "only"
+                "Feature Store executor doesn't support search by filter only"
             )
         for id in ids:
             with aiplatform.telemetry.tool_context_manager(self._user_agent):
@@ -363,7 +363,7 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         output = []
         if ids is None:
             raise ValueError(
-                "Feature Store executor doesn't support search by filter " "only"
+                "Feature Store executor doesn't support search by filter only"
             )
         for entity_id in ids:
             try:
@@ -507,6 +507,10 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                 uri=f"bq://{self.full_table_id}",
                 entity_id_columns=[self.doc_id_field],
             )
+            if self.embedding_dimension is None:
+                raise ValueError("embedding_dimension must be set for index creation")
+            if self.algorithm_config is None:
+                raise ValueError("algorithm_config must be set for index creation")
             index_config = utils.IndexConfig(
                 embedding_column=self.embedding_field,
                 crowding_column=self.crowding_column,

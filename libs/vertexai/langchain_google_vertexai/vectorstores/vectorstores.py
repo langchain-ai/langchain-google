@@ -313,7 +313,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         if ids is not None and len(set(ids)) != len(ids):
             raise ValueError(
                 "All provided ids should be unique."
-                f"There are {len(ids)-len(set(ids))} duplicates."
+                f"There are {len(ids) - len(set(ids))} duplicates."
             )
 
         if ids is not None and len(ids) != len(texts):

@@ -1,4 +1,5 @@
 """Integration test for Google Search API Wrapper."""
+
 from unittest.mock import patch
 
 import pytest
