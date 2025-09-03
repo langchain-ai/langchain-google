@@ -92,13 +92,7 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    SecretStr,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic.v1 import BaseModel as BaseModelV1
 from tenacity import (
     before_sleep_log,
@@ -664,9 +658,15 @@ def _parse_response_candidate(
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
-            function_call["arguments"] = json.dumps(
-                {k: function_call_args_dict[k] for k in function_call_args_dict}
-            )
+
+            # Fix: Correct integer-like floats from protobuf conversion
+            # The protobuf library sometimes converts integers to floats
+            corrected_args = {
+                k: int(v) if isinstance(v, float) and v.is_integer() else v
+                for k, v in function_call_args_dict.items()
+            }
+
+            function_call["arguments"] = json.dumps(corrected_args)
             additional_kwargs["function_call"] = function_call
 
             if streaming:
@@ -1541,18 +1541,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "response_modalities": self.response_modalities,
                 "thinking_config": (
                     (
-                        {"thinking_budget": self.thinking_budget}
-                        if self.thinking_budget is not None
-                        else {}
+                        (
+                            {"thinking_budget": self.thinking_budget}
+                            if self.thinking_budget is not None
+                            else {}
+                        )
+                        | (
+                            {"include_thoughts": self.include_thoughts}
+                            if self.include_thoughts is not None
+                            else {}
+                        )
                     )
-                    | (
-                        {"include_thoughts": self.include_thoughts}
-                        if self.include_thoughts is not None
-                        else {}
-                    )
-                )
-                if self.thinking_budget is not None or self.include_thoughts is not None
-                else None,
+                    if self.thinking_budget is not None
+                    or self.include_thoughts is not None
+                    else None
+                ),
             }.items()
             if v is not None
         }
