@@ -29,7 +29,8 @@ To move this translator to langchain-core:
    - To: `from .. import AIMessage, AIMessageChunk`
 
 3. **Update registration:**
-   - Ensure `_register_google_genai_translator()` is called when langchain-core is imported
+   - Ensure `_register_google_genai_translator()` is called when langchain-core is
+     imported
    - The registration should happen automatically in langchain-core's __init__.py
 
 4. **Remove from langchain-google:**
@@ -471,5 +472,6 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
