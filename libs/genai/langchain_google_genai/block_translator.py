@@ -242,7 +242,7 @@ def _convert_executable_code_block(block: Dict[str, Any]) -> Dict[str, Any]:
     known_fields = {"type", "language", "executable_code"}
     extras = _extract_extras(block, known_fields)
 
-    code_call: types.CodeInterpreterCall = {
+    code_call: Dict[str, Any] = {
         "type": "code_interpreter_call",
         "code": block.get("executable_code", ""),
     }
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
