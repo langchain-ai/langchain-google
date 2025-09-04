@@ -329,7 +329,7 @@ def _convert_google_block_to_standard(block: Dict[str, Any]) -> Dict[str, Any]:
         return _convert_thinking_block(block)
     else:
         # For unknown block types, use NonStandardContentBlock
-        return types.create_non_standard_block(value=block)
+        return {"type": "non_standard", "value": block}
 
 
 def translate_content(message: AIMessage) -> List[types.ContentBlock]:
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
