@@ -192,7 +192,8 @@ def _convert_text_block(block: Dict[str, Any]) -> types.ContentBlock:
 
 
 def _convert_media_block(block: Dict[str, Any]) -> types.ContentBlock:
-    """Convert Google GenAI media block to appropriate content block based on mime_type."""
+    """Convert Google GenAI media block to appropriate content block based on
+    mime_type."""
     mime_type = block.get("mime_type", "")
     known_fields = {"type", "mime_type", "data", "file_uri", "video_metadata"}
     extras = _extract_extras(block, known_fields)
@@ -480,6 +481,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
