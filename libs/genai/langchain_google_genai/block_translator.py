@@ -200,7 +200,6 @@ def _convert_media_block(block: Dict[str, Any]) -> types.ContentBlock:
 
     # Determine content block type based on mime_type
     if mime_type.startswith("video/"):
-        content_type = "video"
         create_func = types.create_video_block
     elif mime_type.startswith("audio/"):
         create_func = types.create_audio_block
@@ -479,3 +478,4 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
