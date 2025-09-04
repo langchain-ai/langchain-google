@@ -74,7 +74,8 @@ Google GenAI content types are mapped to standard content blocks as follows:
     * video_metadata → extras["video_metadata"]
     * Any other Google-specific fields → extras[field_name]
   - Example:
-    Google: {"type": "media", "mime_type": "video/mp4", "file_uri": "gs://...", "video_metadata": {...}}
+    Google: {"type": "media", "mime_type": "video/mp4", "file_uri": "gs://...",
+             "video_metadata": {...}}
     Standard: {"type": "video", "mime_type": "video/mp4", "url": "gs://...", "extras": {"video_metadata": {...}}}
 
 💻 CODE EXECUTION:
@@ -472,6 +473,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
