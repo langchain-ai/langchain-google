@@ -166,7 +166,7 @@ def _extract_extras(block: Dict[str, Any], known_fields: set[str]) -> Dict[str, 
     return {k: v for k, v in block.items() if k not in known_fields}
 
 
-def _convert_text_block(block: Dict[str, Any]) -> types.ContentBlock:
+def _convert_text_block(block: Dict[str, Any]) -> Dict[str, Any]:
     """Convert Google GenAI text block to TextContentBlock."""
     known_fields = {"type", "text", "thinking", "thought"}
     extras = _extract_extras(block, known_fields)
@@ -478,4 +478,5 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
