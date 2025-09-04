@@ -155,7 +155,7 @@ USAGE NOTES:
 """
 
 import warnings
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.messages import content as types
@@ -478,3 +478,4 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
