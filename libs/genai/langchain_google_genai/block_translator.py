@@ -135,7 +135,8 @@ Google GenAI content types are mapped to standard content blocks as follows:
 
 FIELD PRESERVATION STRATEGY:
 ============================
-The 'extras' field in standard content blocks is used to preserve Google-specific metadata:
+The 'extras' field in standard content blocks is used to preserve Google-specific
+metadata:
 
 1. **Known Google fields** are mapped to their standard equivalents
 2. **Unknown or Google-specific fields** are preserved in extras
@@ -478,6 +479,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
