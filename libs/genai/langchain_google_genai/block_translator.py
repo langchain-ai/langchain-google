@@ -294,7 +294,7 @@ def _convert_code_execution_result_block(
     return result_block
 
 
-def _convert_thinking_block(block: Dict[str, Any]) -> types.ReasoningContentBlock:
+def _convert_thinking_block(block: Dict[str, Any]) -> Dict[str, Any]:
     """Convert Google GenAI thinking block to ReasoningContentBlock."""
     known_fields = {"type", "thinking", "thought"}
     extras = _extract_extras(block, known_fields)
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
