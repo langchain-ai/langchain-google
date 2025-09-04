@@ -75,6 +75,24 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
+from langchain_core.messages.content import (
+    AudioContentBlock,
+    CodeInterpreterCall,
+    CodeInterpreterResult,
+    FileContentBlock,
+    ImageContentBlock,
+    NonStandardContentBlock,
+    ReasoningContentBlock,
+    TextContentBlock,
+    VideoContentBlock,
+    create_audio_block,
+    create_file_block,
+    create_image_block,
+    create_non_standard_block,
+    create_reasoning_block,
+    create_text_block,
+    create_video_block,
+)
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
