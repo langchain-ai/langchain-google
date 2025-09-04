@@ -264,7 +264,7 @@ def _convert_executable_code_block(block: Dict[str, Any]) -> Dict[str, Any]:
 
 def _convert_code_execution_result_block(
     block: Dict[str, Any],
-) -> types.CodeInterpreterResult:
+) -> Dict[str, Any]:
     """Convert Google GenAI code_execution_result block to CodeInterpreterResult."""
     known_fields = {"type", "code_execution_result", "outcome"}
     extras = _extract_extras(block, known_fields)
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
