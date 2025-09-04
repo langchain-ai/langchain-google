@@ -158,7 +158,9 @@ import warnings
 from typing import Any, Dict, List, Union
 
 from langchain_core.messages import AIMessage, AIMessageChunk
-from langchain_core.messages import content as types
+
+# Note: This is a temporary implementation. The actual content block types
+# and factory functions will be available when this translator is moved to langchain-core
 
 
 def _extract_extras(block: Dict[str, Any], known_fields: set[str]) -> Dict[str, Any]:
@@ -478,6 +480,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
