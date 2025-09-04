@@ -405,8 +405,10 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     content = result.content
 
     assert isinstance(content[0], dict)
-    assert content[0].get("type") == "thinking"
-    assert isinstance(content[0].get("thinking"), str)
+    assert _is_thinking_block(content[0])
+    thinking_text = _get_thinking_text(content[0])
+    assert isinstance(thinking_text, str)
+    assert len(thinking_text) > 0
 
     assert isinstance(content[1], str)
 
@@ -988,5 +990,6 @@ def test_code_execution_builtin() -> None:
     }
     with pytest.warns(match="executable_code"):
         _ = llm.invoke([input_message, full, next_message])
+
 
 
