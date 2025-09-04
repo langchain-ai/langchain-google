@@ -384,7 +384,8 @@ def translate_content(message: AIMessage) -> List[types.ContentBlock]:
 
 
 def translate_content_chunk(message: AIMessageChunk) -> List[types.ContentBlock]:
-    """Derive standard content blocks from a message chunk with Google GenAI content."""
+    """Derive standard content blocks from a message chunk with Google GenAI
+    content."""
     content_blocks: List[types.ContentBlock] = []
 
     if isinstance(message.content, str):
@@ -481,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
