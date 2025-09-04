@@ -28,6 +28,12 @@ To move this translator to langchain-core:
    - Change: `from langchain_core.messages import AIMessage, AIMessageChunk`
    - To: `from .. import AIMessage, AIMessageChunk`
 
+def _create_text_block(text: str) -> Dict[str, Any]:
+    """Helper function to create text blocks."""
+    return {"type": "text", "text": text}
+
+
+
 3. **Update registration:**
    - Ensure `_register_google_genai_translator()` is called when langchain-core is
      imported
@@ -338,7 +344,7 @@ def translate_content(message: AIMessage) -> List[Dict[str, Any]]:
 
     if isinstance(message.content, str):
         if message.content:
-            content_blocks = [types.create_text_block(text=message.content)]
+            content_blocks = [{"type": "text", "text": message.content}]
         else:
             content_blocks = []
 
@@ -360,7 +366,7 @@ def translate_content(message: AIMessage) -> List[Dict[str, Any]]:
         for item in message.content:
             if isinstance(item, str):
                 if item:
-                    content_blocks.append(types.create_text_block(text=item))
+                    content_blocks.append(_create_text_block(text=item))
             elif isinstance(item, dict):
                 content_blocks.append(_convert_google_block_to_standard(item))
             else:
@@ -383,19 +389,19 @@ def translate_content(message: AIMessage) -> List[Dict[str, Any]]:
     return content_blocks
 
 
-def translate_content_chunk(message: AIMessageChunk) -> List[types.ContentBlock]:
+def translate_content_chunk(message: AIMessageChunk) -> List[Dict[str, Any]]:
     """Derive standard content blocks from a message chunk with Google GenAI
     content."""
-    content_blocks: List[types.ContentBlock] = []
+    content_blocks: List[Dict[str, Any]] = []
 
     if isinstance(message.content, str):
         if message.content:
-            content_blocks = [types.create_text_block(text=message.content)]
+            content_blocks = [{"type": "text", "text": message.content}]
         else:
             content_blocks = []
 
         # Handle tool call chunks
-        if message.chunk_position == "last":
+        if getattr(message, "chunk_position", None) == "last":
             for tool_call in message.tool_calls:
                 content_blocks.append(
                     {
@@ -407,7 +413,7 @@ def translate_content_chunk(message: AIMessageChunk) -> List[types.ContentBlock]
                 )
         else:
             for tool_call_chunk in message.tool_call_chunks:
-                tc: types.ToolCallChunk = {
+                tc: Dict[str, Any] = {
                     "type": "tool_call_chunk",
                     "id": tool_call_chunk.get("id"),
                     "name": tool_call_chunk.get("name"),
@@ -424,7 +430,7 @@ def translate_content_chunk(message: AIMessageChunk) -> List[types.ContentBlock]
         for item in message.content:
             if isinstance(item, str):
                 if item:
-                    content_blocks.append(types.create_text_block(text=item))
+                    content_blocks.append(_create_text_block(text=item))
             elif isinstance(item, dict):
                 content_blocks.append(_convert_google_block_to_standard(item))
             else:
@@ -434,7 +440,7 @@ def translate_content_chunk(message: AIMessageChunk) -> List[types.ContentBlock]
                 )
 
     # Handle tool call chunks
-    if message.chunk_position == "last":
+    if getattr(message, "chunk_position", None) == "last":
         for tool_call in message.tool_calls:
             content_blocks.append(
                 {
@@ -446,7 +452,7 @@ def translate_content_chunk(message: AIMessageChunk) -> List[types.ContentBlock]
             )
     else:
         for tool_call_chunk in message.tool_call_chunks:
-            tc: types.ToolCallChunk = {
+            tc: Dict[str, Any] = {
                 "type": "tool_call_chunk",
                 "id": tool_call_chunk.get("id"),
                 "name": tool_call_chunk.get("name"),
