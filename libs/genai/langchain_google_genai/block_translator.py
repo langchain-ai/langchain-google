@@ -130,7 +130,8 @@ Google GenAI content types are mapped to standard content blocks as follows:
   - Preserved in value field with type="non_standard"
   - Example:
     Google: {"type": "custom_google_type", "custom_field": "value"}
-    Standard: {"type": "non_standard", "value": {"type": "custom_google_type", "custom_field": "value"}}
+    Standard: {"type": "non_standard", 
+               "value": {"type": "custom_google_type", "custom_field": "value"}}
 
 FIELD PRESERVATION STRATEGY:
 ============================
@@ -477,6 +478,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
