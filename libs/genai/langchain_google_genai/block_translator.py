@@ -210,7 +210,6 @@ def _convert_media_block(block: Dict[str, Any]) -> types.ContentBlock:
         create_func = types.create_image_block
     else:
         # Default to file block for unknown mime types
-        content_type = "file"
         create_func = types.create_file_block
 
     # Build the content block
@@ -482,3 +481,4 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
