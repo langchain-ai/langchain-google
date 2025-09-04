@@ -106,7 +106,9 @@ Google GenAI content types are mapped to standard content blocks as follows:
     * outcome → extras["outcome"]
   - Example:
     Google: {"type": "code_execution_result", "output": "hello", "outcome": 1}
-    Standard: {"type": "code_interpreter_result", "output": [{"type": "code_interpreter_output", "stdout": "hello"}], "extras": {"outcome": 1}}
+    Standard: {"type": "code_interpreter_result", 
+               "output": [{"type": "code_interpreter_output", "stdout": "hello"}], 
+               "extras": {"outcome": 1}}
 
 🧠 REASONING/THINKING:
 - 'thinking' → ReasoningContentBlock
@@ -475,6 +477,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
