@@ -1,7 +1,8 @@
 """
 Google GenAI Block Translator for Standard Content Blocks
 
-This module provides translation functions to convert Google GenAI-specific content blocks
+This module provides translation functions to convert Google GenAI-specific
+content blocks
 to the standard content block format defined in langchain-core.
 
 ⚠️  IMPORTANT: TEMPORARY LOCATION ⚠️
@@ -469,3 +470,4 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
