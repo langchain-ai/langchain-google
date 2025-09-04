@@ -972,7 +972,8 @@ def test_code_execution_builtin() -> None:
         response = llm.invoke([input_message])
     content_blocks = [block for block in response.content if isinstance(block, dict)]
     expected_block_types = {"executable_code", "code_execution_result"}
-    assert set(block.get("type") for block in content_blocks) == expected_block_types
+    actual_block_types = _get_content_block_types(content_blocks)
+    assert actual_block_types == expected_block_types
 
     # Test streaming
     full: Optional[BaseMessageChunk] = None
@@ -992,6 +993,7 @@ def test_code_execution_builtin() -> None:
     }
     with pytest.warns(match="executable_code"):
         _ = llm.invoke([input_message, full, next_message])
+
 
 
 
