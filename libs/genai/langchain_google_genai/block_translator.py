@@ -299,7 +299,7 @@ def _convert_thinking_block(block: Dict[str, Any]) -> Dict[str, Any]:
     known_fields = {"type", "thinking", "thought"}
     extras = _extract_extras(block, known_fields)
 
-    reasoning_block: types.ReasoningContentBlock = {
+    reasoning_block: Dict[str, Any] = {
         "type": "reasoning",
         "reasoning": block.get("thinking", ""),
     }
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
