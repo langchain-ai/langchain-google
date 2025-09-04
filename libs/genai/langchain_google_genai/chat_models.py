@@ -426,7 +426,8 @@ def _convert_standard_content_block_to_part(part: dict, image_loader) -> Part:
         # Handle NonStandardContentBlock - extract the original Google format
         original_block = part.get("value", {})
         if isinstance(original_block, dict) and "type" in original_block:
-            # This is a Google-specific block that was wrapped in NonStandardContentBlock
+            # This is a Google-specific block that was wrapped in
+            # NonStandardContentBlock
             # Convert it using the legacy logic
             return _convert_legacy_google_block_to_part(original_block, image_loader)
         else:
@@ -439,7 +440,8 @@ def _convert_standard_content_block_to_part(part: dict, image_loader) -> Part:
 
 
 def _convert_legacy_google_block_to_part(part: dict, image_loader) -> Part:
-    """Convert legacy Google-specific content blocks to Parts (for backward compatibility)."""
+    """Convert legacy Google-specific content blocks to Parts (for backward
+    compatibility)."""
     if part["type"] == "media":
         if "mime_type" not in part:
             raise ValueError(f"Missing mime_type in media part: {part}")
@@ -513,7 +515,8 @@ def _convert_to_parts(
 ) -> List[Part]:
     """Converts a list of LangChain messages into a Google parts.
 
-    Supports both standard content blocks from langchain-core and legacy dict-based blocks
+    Supports both standard content blocks from langchain-core and legacy
+    dict-based blocks
     for backward compatibility during the transition period.
     """
     parts = []
@@ -534,7 +537,8 @@ def _convert_to_parts(
                 except Exception as e:
                     # If standard conversion fails, fall back to legacy handling
                     logger.warning(
-                        f"Failed to convert standard content block, falling back to legacy: {e}"
+                        f"Failed to convert standard content block, "
+                        f"falling back to legacy: {e}"
                     )
 
             # Legacy content block handling (backward compatibility)
@@ -650,7 +654,8 @@ def _convert_tool_message_to_parts(
 ) -> list[Part]:
     """Converts a tool or function message to a Google part.
 
-    Supports both standard content blocks from langchain-core and legacy dict-based blocks
+    Supports both standard content blocks from langchain-core and legacy
+    dict-based blocks
     for backward compatibility during the transition period.
     """
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
