@@ -232,7 +232,9 @@ def _convert_media_block(block: Dict[str, Any]) -> Dict[str, Any]:
             kwargs["extras"] = {}
         kwargs["extras"].update(extras)
 
-    return create_func(**kwargs)
+    # Create the content block dictionary
+    content_block = {"type": block_type, **kwargs}
+    return content_block
 
 
 def _convert_executable_code_block(block: Dict[str, Any]) -> types.CodeInterpreterCall:
@@ -480,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
