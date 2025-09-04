@@ -237,7 +237,7 @@ def _convert_media_block(block: Dict[str, Any]) -> Dict[str, Any]:
     return content_block
 
 
-def _convert_executable_code_block(block: Dict[str, Any]) -> types.CodeInterpreterCall:
+def _convert_executable_code_block(block: Dict[str, Any]) -> Dict[str, Any]:
     """Convert Google GenAI executable_code block to CodeInterpreterCall."""
     known_fields = {"type", "language", "executable_code"}
     extras = _extract_extras(block, known_fields)
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
