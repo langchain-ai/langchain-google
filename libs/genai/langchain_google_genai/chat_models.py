@@ -632,7 +632,11 @@ def _convert_to_parts(
 def _convert_tool_message_to_parts(
     message: ToolMessage | FunctionMessage, name: Optional[str] = None
 ) -> list[Part]:
-    """Converts a tool or function message to a Google part."""
+    """Converts a tool or function message to a Google part.
+    
+    Supports both standard content blocks from langchain-core and legacy dict-based blocks
+    for backward compatibility during the transition period.
+    """
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
     name = message.name or name or message.additional_kwargs.get("name")
     response: Any
@@ -641,10 +645,19 @@ def _convert_tool_message_to_parts(
         media_blocks = []
         other_blocks = []
         for block in message.content:
-            if isinstance(block, dict) and (
-                is_data_content_block(block) or _is_openai_image_block(block)
-            ):
-                media_blocks.append(block)
+            if isinstance(block, dict):
+                # Check for standard content blocks first
+                if _is_standard_content_block(block):
+                    # Standard content blocks that represent media/visual content
+                    if block.get("type") in ("image", "video", "audio", "file"):
+                        media_blocks.append(block)
+                    else:
+                        other_blocks.append(block)
+                # Legacy content block handling (backward compatibility)
+                elif is_data_content_block(block) or _is_openai_image_block(block):
+                    media_blocks.append(block)
+                else:
+                    other_blocks.append(block)
             else:
                 other_blocks.append(block)
         parts.extend(_convert_to_parts(media_blocks))
