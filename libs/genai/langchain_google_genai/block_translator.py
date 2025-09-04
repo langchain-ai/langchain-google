@@ -19,7 +19,8 @@ To move this translator to langchain-core:
 
 1. **Copy the file:**
    - Source: langchain-google/libs/genai/langchain_google_genai/block_translator.py
-   - Destination: langchain-core/src/langchain_core/messages/block_translators/google_genai.py
+   - Destination: langchain-core/src/langchain_core/messages/block_translators/
+     google_genai.py
 
 2. **Update imports:**
    - Change: `from langchain_core.messages import content as types`
@@ -470,4 +471,5 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
