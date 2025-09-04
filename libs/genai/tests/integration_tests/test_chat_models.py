@@ -24,6 +24,107 @@ from langchain_google_genai import (
     Modality,
 )
 
+
+def _is_thinking_block(block: dict) -> bool:
+    """Check if a block is a thinking/reasoning block (legacy or standard format)."""
+    if not isinstance(block, dict):
+        return False
+    
+    block_type = block.get("type")
+    
+    # Standard content block format
+    if block_type == "reasoning":
+        return True
+    
+    # Legacy Google format
+    if block_type == "thinking":
+        return True
+    
+    # Legacy format with thought flag
+    if block_type == "text" and block.get("extras", {}).get("thought") is True:
+        return True
+    
+    return False
+
+
+def _get_thinking_text(block: dict) -> str:
+    """Extract thinking text from a thinking block (legacy or standard format)."""
+    if not isinstance(block, dict):
+        return ""
+    
+    block_type = block.get("type")
+    
+    # Standard content block format
+    if block_type == "reasoning":
+        return block.get("reasoning", "")
+    
+    # Legacy Google format
+    if block_type == "thinking":
+        return block.get("thinking", "")
+    
+    # Legacy format with thought flag
+    if block_type == "text" and block.get("extras", {}).get("thought") is True:
+        return block.get("text", "")
+    
+    return ""
+
+
+def _is_code_execution_block(block: dict) -> bool:
+    """Check if a block is a code execution block (legacy or standard format)."""
+    if not isinstance(block, dict):
+        return False
+    
+    block_type = block.get("type")
+    
+    # Standard content block format
+    if block_type == "code_interpreter_call":
+        return True
+    
+    # Legacy Google format
+    if block_type == "executable_code":
+        return True
+    
+    return False
+
+
+def _is_code_result_block(block: dict) -> bool:
+    """Check if a block is a code execution result block (legacy or standard format)."""
+    if not isinstance(block, dict):
+        return False
+    
+    block_type = block.get("type")
+    
+    # Standard content block format
+    if block_type == "code_interpreter_result":
+        return True
+    
+    # Legacy Google format
+    if block_type == "code_execution_result":
+        return True
+    
+    return False
+
+
+def _get_content_block_types(content_blocks: list) -> set:
+    """Get the set of content block types, handling both legacy and standard formats."""
+    types = set()
+    
+    for block in content_blocks:
+        if isinstance(block, dict):
+            block_type = block.get("type")
+            
+            # Map standard types back to legacy types for test compatibility
+            if block_type == "reasoning":
+                types.add("thinking")
+            elif block_type == "code_interpreter_call":
+                types.add("executable_code")
+            elif block_type == "code_interpreter_result":
+                types.add("code_execution_result")
+            else:
+                types.add(block_type)
+    
+    return types
+
 _MODEL = "models/gemini-1.5-flash-latest"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
@@ -885,3 +986,4 @@ def test_code_execution_builtin() -> None:
     }
     with pytest.warns(match="executable_code"):
         _ = llm.invoke([input_message, full, next_message])
+
