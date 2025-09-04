@@ -143,7 +143,8 @@ metadata:
 3. **Nested objects** (like video_metadata) are preserved as-is in extras
 4. **Type information** is maintained for round-trip compatibility
 
-This ensures that no Google-specific functionality is lost during the translation process.
+This ensures that no Google-specific functionality is lost during the translation
+process.
 
 USAGE NOTES:
 ============
@@ -479,6 +480,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
