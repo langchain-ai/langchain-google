@@ -334,7 +334,7 @@ def _convert_google_block_to_standard(block: Dict[str, Any]) -> Dict[str, Any]:
 
 def translate_content(message: AIMessage) -> List[Dict[str, Any]]:
     """Derive standard content blocks from a message with Google GenAI content."""
-    content_blocks: List[types.ContentBlock] = []
+    content_blocks: List[Dict[str, Any]] = []
 
     if isinstance(message.content, str):
         if message.content:
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
