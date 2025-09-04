@@ -313,7 +313,7 @@ def _convert_thinking_block(block: Dict[str, Any]) -> Dict[str, Any]:
     return reasoning_block
 
 
-def _convert_google_block_to_standard(block: Dict[str, Any]) -> types.ContentBlock:
+def _convert_google_block_to_standard(block: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a Google GenAI content block to a standard content block."""
     block_type = block.get("type")
 
@@ -482,6 +482,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
