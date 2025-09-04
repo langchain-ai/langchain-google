@@ -91,7 +91,8 @@ Google GenAI content types are mapped to standard content blocks as follows:
     * language → extras["language"]
   - Example:
     Google: {"type": "executable_code", "language": "python", "code": "print('hello')"}
-    Standard: {"type": "code_interpreter_call", "code": "print('hello')", "extras": {"language": "python"}}
+    Standard: {"type": "code_interpreter_call", "code": "print('hello')",
+               "extras": {"language": "python"}}
 
 📊 CODE RESULTS:
 - 'code_execution_result' → CodeInterpreterResult
@@ -474,6 +475,7 @@ def _register_google_genai_translator() -> None:
 
 # Register the translator when the module is imported
 _register_google_genai_translator()
+
 
 
 
