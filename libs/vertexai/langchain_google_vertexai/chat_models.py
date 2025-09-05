@@ -76,17 +76,18 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from vertexai.generative_models import (  # type: ignore
+from vertexai.generative_models import (
     Tool as VertexTool,
+    HarmBlockThreshold,
 )
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (
     ToolConfig,
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
     _convert_schema_dict_to_gapic,
 )
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     ChatMessage,
     InputOutputTextPair,
 )
@@ -219,10 +220,20 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         if i == 0 and isinstance(message, SystemMessage):
             context = content
         elif isinstance(message, AIMessage):
-            vertex_message = ChatMessage(content=message.content, author="bot")
+            content = (
+                message.content
+                if isinstance(message.content, str)
+                else str(message.content)
+            )
+            vertex_message = ChatMessage(content=content, author="bot")
             vertex_messages.append(vertex_message)
         elif isinstance(message, HumanMessage):
-            vertex_message = ChatMessage(content=message.content, author="user")
+            content = (
+                message.content
+                if isinstance(message.content, str)
+                else str(message.content)
+            )
+            vertex_message = ChatMessage(content=content, author="user")
             vertex_messages.append(vertex_message)
         else:
             raise ValueError(
@@ -555,16 +566,25 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"Expected the first message in a part to be from human, got "
                     f"{type(example)} for the {i}th message."
                 )
-            input_text = example.content
+            input_text = (
+                example.content
+                if isinstance(example.content, str)
+                else str(example.content)
+            )
         if i % 2 == 1:
             if not isinstance(example, AIMessage):
                 raise ValueError(
                     f"Expected the second message in a part to be from AI, got "
                     f"{type(example)} for the {i}th message."
                 )
-            pair = InputOutputTextPair(
-                input_text=input_text, output_text=example.content
+            output_text = (
+                example.content
+                if isinstance(example.content, str)
+                else str(example.content)
             )
+            if input_text is None:
+                raise ValueError("input_text should not be None at this point")
+            pair = InputOutputTextPair(input_text=input_text, output_text=output_text)
             example_pairs.append(pair)
     return example_pairs
 
@@ -604,15 +624,13 @@ def _append_to_content(
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -1115,7 +1133,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.' # codespell:ignore brunch
+            'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.'
 
     PDF input:
         .. code-block:: python
@@ -1701,22 +1719,69 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """
         if safety_settings is None:
             if self.safety_settings:
-                return self._safety_settings_gemini(self.safety_settings)
+                # Return the original settings unchanged for backward compatibility
+                return self.safety_settings  # type: ignore[return-value]
             return None
         if isinstance(safety_settings, list):
-            return safety_settings
+            # Check if conversion is needed
+            needs_conversion = any(
+                hasattr(setting, "to_dict") and not hasattr(setting, "_pb")
+                for setting in safety_settings
+            )
+
+            if not needs_conversion:
+                # Return as-is if already gapic SafetySettings
+                return safety_settings  # type: ignore[return-value]
+
+            # Convert vertexai SafetySetting objects to gapic SafetySetting objects
+            converted_settings = []
+            for setting in safety_settings:
+                if hasattr(setting, "to_dict"):
+                    # VertexAI SafetySetting with to_dict method
+                    setting_dict = setting.to_dict()
+                    converted_setting = SafetySetting(
+                        category=setting_dict.get("category"),
+                        threshold=setting_dict.get("threshold"),
+                    )
+                    converted_settings.append(converted_setting)
+                else:
+                    # Direct attribute access for other types
+                    converted_settings.append(
+                        SafetySetting(
+                            category=getattr(setting, "category", None),
+                            threshold=getattr(setting, "threshold", None),
+                        )
+                    )
+            return converted_settings
         if isinstance(safety_settings, dict):
             formatted_safety_settings = []
-            for category, threshold in safety_settings.items():
-                if isinstance(category, str):
-                    category = HarmCategory[category]  # type: ignore[misc]
-                if isinstance(threshold, str):
-                    threshold = SafetySetting.HarmBlockThreshold[threshold]  # type: ignore[misc]
+            items = cast(Dict[Any, Any], safety_settings).items()
+            for raw_category, raw_threshold in items:
+                # Convert category to HarmCategory if needed
+                if isinstance(raw_category, HarmCategory):
+                    category = raw_category
+                elif isinstance(raw_category, str):
+                    category = HarmCategory[raw_category]  # type: ignore[misc]
+                else:
+                    # Handles numeric enum values
+                    category = HarmCategory(raw_category)
+
+                # Convert threshold to HarmBlockThreshold if needed
+                if isinstance(raw_threshold, SafetySetting.HarmBlockThreshold):
+                    threshold = raw_threshold
+                elif isinstance(raw_threshold, HarmBlockThreshold):
+                    # Convert vertexai.generative_models.HarmBlockThreshold to gapic
+                    threshold = SafetySetting.HarmBlockThreshold(raw_threshold.value)
+                elif isinstance(raw_threshold, str):
+                    threshold = SafetySetting.HarmBlockThreshold[raw_threshold]  # type: ignore[misc]
+                else:
+                    # Handles numeric enum values
+                    threshold = SafetySetting.HarmBlockThreshold(raw_threshold)
 
                 formatted_safety_settings.append(
                     SafetySetting(
-                        category=HarmCategory(category),
-                        threshold=SafetySetting.HarmBlockThreshold(threshold),
+                        category=category,
+                        threshold=threshold,
                     )
                 )
             return formatted_safety_settings
@@ -1754,7 +1819,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        safety_settings = self._safety_settings_gemini(safety_settings)
+        processed_safety_settings: Optional[Sequence[SafetySetting]] = (
+            self._safety_settings_gemini(safety_settings)
+        )
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -1787,18 +1854,20 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 v1_tools = [v1Tool(**proto.Message.to_dict(t)) for t in formatted_tools]
 
             if tool_config:
-                v1_tool_config = v1ToolConfig(
-                    function_calling_config=v1FunctionCallingConfig(
-                        **proto.Message.to_dict(tool_config.function_calling_config)
+                if hasattr(tool_config, "function_calling_config"):
+                    v1_tool_config = v1ToolConfig(
+                        function_calling_config=v1FunctionCallingConfig(
+                            **proto.Message.to_dict(tool_config.function_calling_config)
+                        )
                     )
-                )
+                else:
+                    # Handle other ToolConfig types or convert as needed
+                    v1_tool_config = v1ToolConfig(**proto.Message.to_dict(tool_config))
 
-            if safety_settings:
+            if processed_safety_settings:
                 v1_safety_settings = [
-                    v1SafetySetting(
-                        category=s.category, method=s.method, threshold=s.threshold
-                    )
-                    for s in safety_settings
+                    v1SafetySetting(**proto.Message.to_dict(s))
+                    for s in processed_safety_settings
                 ]
 
         if (self.cached_content is not None) or (cached_content is not None):
@@ -1823,7 +1892,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return GenerateContentRequest(
                 contents=contents,
                 model=self.full_model_name,
-                safety_settings=safety_settings,
+                safety_settings=processed_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
             )
@@ -1845,7 +1914,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=safety_settings,
+            safety_settings=processed_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
             labels=self.labels,
@@ -1954,7 +2023,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast(_ToolConfigDict, tool_config))
+            return _format_tool_config(tool_config)
         return None
 
     async def _agenerate(
@@ -2311,7 +2380,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            message = _parse_response_candidate(candidate)
+            message = _parse_response_candidate(candidate, streaming=False)  # type: ignore[call-overload]
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
@@ -2359,7 +2428,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            message = _parse_response_candidate(top_candidate, streaming=True)
+            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(

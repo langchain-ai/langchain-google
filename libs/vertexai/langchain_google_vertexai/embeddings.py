@@ -6,7 +6,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, wait
 from enum import Enum, auto
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from google.api_core.exceptions import (
     Aborted,
@@ -22,14 +22,14 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
-from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
+from vertexai.generative_models._generative_models import (
     SafetySettingsType as SafetySettingsType,
 )
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     TextEmbeddingInput,
     TextEmbeddingModel,
 )
-from vertexai.vision_models import (  # type: ignore
+from vertexai.vision_models import (
     Image,
     MultiModalEmbeddingModel,
     MultiModalEmbeddingResponse,
@@ -149,6 +149,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "default_metadata": self.default_metadata,
         }
         self._init_vertexai(values)
+        if not self.model_name:
+            raise ValueError("model_name must be provided")
         _, user_agent = get_user_agent(f"{self.__class__.__name__}_{self.model_name}")
         with telemetry.tool_context_manager(user_agent):
             if (
@@ -317,7 +319,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         """Makes a Vertex AI model request with retry logic."""
 
         if embeddings_type and self.model_version.task_type_supported:
-            requests = [
+            requests: Union[List[str], List[TextEmbeddingInput]] = [
                 TextEmbeddingInput(text=t, task_type=embeddings_type) for t in texts
             ]
         else:
@@ -538,6 +540,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         result: MultiModalEmbeddingResponse = self.instance[
             "get_embeddings_with_retry"
         ](image=image, contextual_text=contextual_text, dimension=dimensions)
+        if result.image_embedding is None:
+            raise ValueError("Failed to generate image embedding")
         return result.image_embedding
 
     def embed_images(
@@ -561,13 +565,17 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
 
         image_loader = self._image_bytes_loader_client
 
-        embeddings = []
+        embeddings: List[List[float]] = []
         for image_path in uris:
             bytes_image = image_loader.load_bytes(image_path)
             image = Image(bytes_image)
             result: MultiModalEmbeddingResponse = self.instance[
                 "get_embeddings_with_retry"
             ](image=image, contextual_text=contextual_text, dimension=dimensions)
+            if result.image_embedding is None:
+                raise ValueError(
+                    f"Failed to generate embedding for image: {image_path}"
+                )
             embeddings.append(result.image_embedding)
         return embeddings
 
