@@ -1469,7 +1469,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """ Optional tag llm calls with metadata to help in tracebility and biling.
     """
 
-    perform_literal_eval_on_string_raw_content: bool = True
+    perform_literal_eval_on_string_raw_content: bool = False
     """Whether to perform literal eval on string raw content.
     """
 
