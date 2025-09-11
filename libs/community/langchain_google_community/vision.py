@@ -15,7 +15,7 @@ class CloudVisionParser(BaseBlobParser):
             raise ImportError(
                 "Could not import google-cloud-vision python package. "
                 "Please, install vision dependency group: "
-                "uv sync --extra vision"
+                "poetry install --with vision"
             ) from e
         client_options = None
         if project:

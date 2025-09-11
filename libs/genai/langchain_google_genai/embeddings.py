@@ -1,4 +1,3 @@
-import asyncio
 import re
 import string
 from typing import Any, Dict, List, Optional
@@ -25,14 +24,6 @@ from langchain_google_genai._genai_extension import (
 
 _MAX_TOKENS_PER_BATCH = 20000
 _DEFAULT_BATCH_SIZE = 100
-
-
-def _is_event_loop_running() -> bool:
-    try:
-        asyncio.get_running_loop()
-        return True
-    except RuntimeError:
-        return False
 
 
 class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
@@ -116,47 +107,14 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             client_options=self.client_options,
             transport=self.transport,
         )
-        # Only initialize async client if there's an event loop running
-        # to avoid RuntimeError during synchronous initialization
-        if _is_event_loop_running():
-            # async clients don't support "rest" transport
-            transport = self.transport
-            if transport == "rest":
-                transport = "grpc_asyncio"
-            self.async_client = build_generative_async_service(
-                credentials=self.credentials,
-                api_key=google_api_key,
-                client_info=client_info,
-                client_options=self.client_options,
-                transport=transport,
-            )
-        else:
-            self.async_client = None
+        self.async_client = build_generative_async_service(
+            credentials=self.credentials,
+            api_key=google_api_key,
+            client_info=client_info,
+            client_options=self.client_options,
+            transport=self.transport,
+        )
         return self
-
-    @property
-    def _async_client(self) -> Any:
-        """Get or create the async client when needed."""
-        if self.async_client is None:
-            if isinstance(self.google_api_key, SecretStr):
-                google_api_key: Optional[str] = self.google_api_key.get_secret_value()
-            else:
-                google_api_key = self.google_api_key
-
-            client_info = get_client_info("GoogleGenerativeAIEmbeddings")
-            # async clients don't support "rest" transport
-            transport = self.transport
-            if transport == "rest":
-                transport = "grpc_asyncio"
-
-            self.async_client = build_generative_async_service(
-                credentials=self.credentials,
-                api_key=google_api_key,
-                client_info=client_info,
-                client_options=self.client_options,
-                transport=transport,
-            )
-        return self.async_client
 
     @staticmethod
     def _split_by_punctuation(text: str) -> List[str]:
@@ -370,7 +328,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             ]
 
             try:
-                result = await self._async_client.batch_embed_contents(
+                result = await self.async_client.batch_embed_contents(
                     BatchEmbedContentsRequest(requests=requests, model=self.model)
                 )
             except Exception as e:
@@ -408,7 +366,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 title=title,
                 output_dimensionality=output_dimensionality,
             )
-            result: EmbedContentResponse = await self._async_client.embed_content(
+            result: EmbedContentResponse = await self.async_client.embed_content(
                 request
             )
         except Exception as e:

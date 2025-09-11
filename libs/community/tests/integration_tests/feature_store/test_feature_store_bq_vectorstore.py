@@ -1,7 +1,6 @@
 """
 Test Vertex Feature Store Vector Search with BQ Vector Search vectorstore.
 """
-
 import os
 import random
 
@@ -14,7 +13,7 @@ from tests.integration_tests.fake import FakeEmbeddings
 
 TEST_DATASET = "langchain_test_dataset"
 TEST_TEMP_DATASET = "temp_langchain_test_dataset"
-TEST_TABLE_NAME = f"langchain_test_table{str(random.randint(1, 100000))}"
+TEST_TABLE_NAME = f"langchain_test_table{str(random.randint(1,100000))}"
 TEST_FOS_NAME = "langchain_test_fos"
 EMBEDDING_SIZE = 768
 

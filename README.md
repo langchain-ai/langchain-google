@@ -28,13 +28,16 @@ It's essential that we maintain great documentation and testing. If you:
 We are a small, progress-oriented team. If there's something you'd like to add or change, opening a pull request is the
 best way to get our attention.
 
-## Dependency Management: uv
+## Dependency Management: Poetry and other env/dependency managers
 
-This project utilizes [uv](https://docs.astral.sh/uv/) as a dependency manager.
+This project utilizes [Poetry](https://python-poetry.org/) v1.7.1+ as a dependency manager.
 
-❗Note: *Before installing uv*, if you use `Conda`, create and activate a new Conda env (e.g. `conda create -n langchain python=3.10`)
+❗Note: *Before installing Poetry*, if you use `Conda`, create and activate a new Conda env (e.g. `conda create -n langchain python=3.9`)
 
-Install uv: **[documentation on how to install it](https://docs.astral.sh/uv/getting-started/installation/)**.
+Install Poetry: **[documentation on how to install it](https://python-poetry.org/docs/#installation)**.
+
+❗Note: If you use `Conda` or `Pyenv` as your environment/package manager, after installing Poetry,
+tell Poetry to use the virtualenv python environment (`poetry config virtualenvs.prefer-active-python true`)
 
 ## Different packages
 
@@ -78,7 +81,7 @@ There are other files in the root directory level, but their presence should be 
 Install development requirements (for running langchain, running examples, linting, formatting, tests, and coverage):
 
 ```bash
-uv sync --group lint --group typing --group test --group test_integration
+poetry install --with lint,typing,test,test_integration
 ```
 
 Then verify dependency installation:
@@ -86,6 +89,12 @@ Then verify dependency installation:
 ```bash
 make test
 ```
+
+If during installation you receive a `WheelFileValidationError` for `debugpy`, please make sure you are running
+Poetry v1.6.1+. This bug was present in older versions of Poetry (e.g. 1.4.1) and has been resolved in newer releases.
+If you are still seeing this bug on v1.6.1+, you may also try disabling "modern installation"
+(`poetry config installer.modern-installation false`) and re-installing requirements.
+See [this `debugpy` issue](https://github.com/microsoft/debugpy/issues/1246) for more details.
 
 ## Formatting and Linting
 
@@ -135,11 +144,37 @@ This can be very helpful when you've made changes to only certain parts of the p
 
 We recognize linting can be annoying - if you do not want to do it, please contact a project maintainer, and they can help you with it. We do not want this to be a blocker for good code getting contributed.
 
+### Spellcheck
+
+Spellchecking for this project is done via [codespell](https://github.com/codespell-project/codespell).
+Note that `codespell` finds common typos, so it could have false-positive (correctly spelled but rarely used) and false-negatives (not finding misspelled) words.
+
+To check spelling for this project:
+
+```bash
+make spell_check
+```
+
+To fix spelling in place:
+
+```bash
+make spell_fix
+```
+
+If codespell is incorrectly flagging a word, you can skip spellcheck for that word by adding it to the codespell config in the `pyproject.toml` file.
+
+```python
+[tool.codespell]
+...
+# Add here:
+ignore-words-list =...
+```
+
 ## Working with Optional Dependencies
 
 `community`, `genai`, and `vertexai` rely on optional dependencies to keep these packages lightweight.
 
-You'll notice that `pyproject.toml` and `uv.lock` are **not** touched when you add optional dependencies below.
+You'll notice that `pyproject.toml` and `poetry.lock` are **not** touched when you add optional dependencies below.
 
 If you're adding a new dependency to Langchain-Google, assume that it will be an optional dependency, and
 that most users won't have it installed.
@@ -171,7 +206,7 @@ In unit tests we check pre/post processing and mocking all external dependencies
 To install dependencies for unit tests:
 
 ```bash
-uv sync --group test
+poetry install --with test
 ```
 
 To run unit tests:
@@ -208,7 +243,7 @@ If you add support for a new external API, please add a new integration test.
 To install dependencies for integration tests:
 
 ```bash
-uv sync --group test --group test_integration
+poetry install --with test,test_integration
 ```
 
 To run integration tests:
@@ -234,7 +269,7 @@ aim to verify the correct behavior of the engines and databases according to
 their specifications and requirements.
 
 To run some integration tests, you will need GCP project configured.
-The configuration of the GCP project required for integration testing is stored in the terraform folder within each library.
+The configuration of the GCP project required for integration testing is stored in the [terraform folder]() within each library.
 
 ### Prepare environment variables for local testing
 
@@ -260,7 +295,7 @@ Code coverage (i.e. the amount of code that is covered by unit tests) helps iden
 Coverage requires the dependencies for integration tests:
 
 ```bash
-uv sync --group test_integration
+poetry install --with test_integration
 ```
 
 To get a report of current coverage, run the following:

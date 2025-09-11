@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import requests
 from google.cloud import storage
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
-from vertexai.generative_models import Image, Part
+from vertexai.generative_models import Image, Part  # type: ignore
 
 
 class Route(Enum):

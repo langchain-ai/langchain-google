@@ -39,9 +39,9 @@ def get_output_parser(
         }
     else:
         pydantic_schema = functions[0]
-    output_parser: Union[BaseOutputParser, BaseGenerationOutputParser] = (
-        PydanticFunctionsOutputParser(pydantic_schema=pydantic_schema)
-    )
+    output_parser: Union[
+        BaseOutputParser, BaseGenerationOutputParser
+    ] = PydanticFunctionsOutputParser(pydantic_schema=pydantic_schema)
     return output_parser
 
 

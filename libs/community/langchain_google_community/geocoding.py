@@ -1,4 +1,4 @@
-"""Wrapper and Tool for the Google Maps Geocoding API."""
+"""Wrapper and Tool for the Google Maps Geocoding API. """
 
 import os
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type

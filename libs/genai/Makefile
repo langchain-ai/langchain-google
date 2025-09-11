@@ -3,29 +3,23 @@
 # Default target executed when no arguments are given to make.
 all: help
 
-.EXPORT_ALL_VARIABLES:
-UV_FROZEN = true
-
 # Define a variable for the test file path.
 TEST_FILE ?= tests/unit_tests/
 
 integration_test integration_tests: TEST_FILE = tests/integration_tests/
 
-test tests:
-	uv run --group test pytest --disable-socket --allow-unix-socket $(TEST_FILE)
-
-integration_test integration_tests:
-	uv run --group test --group test_integration pytest --retries 3 --retry-delay 1 $(TEST_FILE)
+test tests integration_test integration_tests:
+	poetry run pytest $(TEST_FILE)
 
 check_imports: $(shell find langchain_google_genai -name '*.py')
-	uv run --all-groups python ./scripts/check_imports.py $^
+	poetry run python ./scripts/check_imports.py $^
 
 test_watch:
-	uv run ptw --snapshot-update --now . -- -vv $(TEST_FILE)
+	poetry run ptw --snapshot-update --now . -- -vv $(TEST_FILE)
 
 # Run unit tests and generate a coverage report.
 coverage:
-	uv run pytest --cov \
+	poetry run pytest --cov \
 		--cov-config=.coveragerc \
 		--cov-report xml \
 		--cov-report term-missing:skip-covered \
@@ -46,14 +40,20 @@ lint_tests: MYPY_CACHE=.mypy_cache_test
 
 lint lint_diff lint_package lint_tests:
 	./scripts/lint_imports.sh
-	[ "$(PYTHON_FILES)" = "" ] || uv run --all-groups ruff check $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || uv run --all-groups ruff format $(PYTHON_FILES) --diff
-	[ "$(PYTHON_FILES)" = "" ] || uv run --all-groups ruff check --select I $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) && uv run --all-groups mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+	poetry run ruff check .
+	poetry run ruff format $(PYTHON_FILES) --diff
+	poetry run ruff check --select I $(PYTHON_FILES)
+	mkdir -p $(MYPY_CACHE); poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
 format format_diff:
-	[ "$(PYTHON_FILES)" = "" ] || uv run --all-groups ruff format $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || uv run --all-groups ruff check --fix $(PYTHON_FILES)
+	poetry run ruff format $(PYTHON_FILES)
+	poetry run ruff check --select I --fix $(PYTHON_FILES)
+
+spell_check:
+	poetry run codespell --toml pyproject.toml
+
+spell_fix:
+	poetry run codespell --toml pyproject.toml -w
 
 ######################
 # HELP

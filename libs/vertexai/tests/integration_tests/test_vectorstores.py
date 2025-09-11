@@ -15,7 +15,7 @@ from typing import Dict, List, Union
 from uuid import uuid4
 
 import pytest
-import vertexai
+import vertexai  # type: ignore[import-untyped]
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.aiplatform.matching_engine import (
     MatchingEngineIndex,

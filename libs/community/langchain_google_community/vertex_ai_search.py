@@ -4,7 +4,6 @@ Set the following environment variables before the tests:
 export PROJECT_ID=... - set to your Google Cloud project ID
 export DATA_STORE_ID=... - the ID of the search engine to use for the test
 """
-
 from __future__ import annotations
 
 import json
@@ -116,7 +115,7 @@ class _BaseVertexAISearchRetriever(Serializable):
             raise ImportError(
                 "Could not import google-cloud-discoveryengine python package. "
                 "Please, install vertexaisearch dependency group: "
-                "uv sync --extra vertexaisearch"
+                "poetry install --with vertexaisearch"
             ) from exc
 
         values["project_id"] = get_from_dict_or_env(values, "project_id", "PROJECT_ID")

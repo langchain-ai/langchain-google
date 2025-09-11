@@ -13,9 +13,9 @@ from tests.integration_tests.fake import FakeEmbeddings
 
 # Feature Online store is static to avoid cold start setup time during testing
 TEST_DATASET = "langchain_test_dataset"
-TEST_TABLE_NAME = f"langchain_test_table{str(random.randint(1, 100000))}"
+TEST_TABLE_NAME = f"langchain_test_table{str(random.randint(1,100000))}"
 TEST_FOS_NAME = "langchain_test_fos"
-TEST_VIEW_NAME = f"test{str(random.randint(1, 100000))}"
+TEST_VIEW_NAME = f"test{str(random.randint(1,100000))}"
 EMBEDDING_SIZE = 768
 
 
@@ -105,7 +105,7 @@ class TestVertexFSVectorStore_fs_vectorstore:
             embedding=store_fs_vectorstore.embedding,
             location="us-central1",
             dataset_name=store_fs_vectorstore.dataset_name,
-            table_name=f"error_table{str(random.randint(1, 100000))}",
+            table_name=f"error_table{str(random.randint(1,100000))}",
             online_store_name=store_fs_vectorstore.online_store_name,
             view_name=store_fs_vectorstore.view_name,
         )
@@ -148,7 +148,7 @@ def test_psc_feature_store() -> None:
         vertex_fs = VertexFSVectorStore(
             project_id=project_id,  # type: ignore[arg-type]
             location="us-central1",
-            dataset_name=TEST_DATASET + f"_psc_{str(random.randint(1, 100000))}",
+            dataset_name=TEST_DATASET + f"_psc_{str(random.randint(1,100000))}",
             table_name=TEST_TABLE_NAME,
             embedding=embedding_model,
             enable_private_service_connect=True,
