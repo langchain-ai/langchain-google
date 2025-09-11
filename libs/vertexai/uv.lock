@@ -1041,7 +1041,6 @@ dependencies = [
     { name = "langchain-core" },
     { name = "numexpr", version = "2.10.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "numexpr", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-    { name = "protobuf" },
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "validators" },
@@ -1101,19 +1100,18 @@ typing = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.64,<1" },
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.35,<1" },
     { name = "bottleneck", specifier = ">=1.4,<2" },
     { name = "google-cloud-aiplatform", specifier = ">=1.97.0" },
     { name = "google-cloud-storage", specifier = ">=2.18,<3" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "httpx-sse", specifier = ">=0.4,<1" },
     { name = "langchain-core", specifier = ">=0.3.75" },
-    { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.11,<1" },
-    { name = "numexpr", specifier = ">=2,<3" },
-    { name = "protobuf", specifier = ">=6.32,<7.0.0" },
-    { name = "pyarrow", specifier = ">=21,<22" },
-    { name = "pydantic", specifier = ">=2.11,<3" },
-    { name = "validators", specifier = ">=0.35,<1" },
+    { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.0,<1" },
+    { name = "numexpr", specifier = ">=2.8.6,<3" },
+    { name = "pyarrow", specifier = ">=19.0.1,<22" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "validators", specifier = ">=0.22,<1" },
 ]
 provides-extras = ["anthropic", "mistral"]
 
