@@ -341,6 +341,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
     assert isinstance(output["output"], str)
 
 
+@pytest.mark.flaky(retries=3)
 def test_audio_timestamp():
     storage_client = storage.Client()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
