@@ -55,7 +55,7 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
             pytest.skip("Model does not support image message.")
 
         # Use a reliable image URL that works with requests
-        image_url = "https://httpbin.org/image/jpeg"
+        image_url = "https://picsum.photos/seed/picsum/200/300"
         image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
 
         # OpenAI format, base64 data

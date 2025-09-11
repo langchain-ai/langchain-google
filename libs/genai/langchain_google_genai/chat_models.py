@@ -490,7 +490,12 @@ def _parse_chat_history(
     messages: List[Content] = []
 
     if convert_system_message_to_human:
-        warnings.warn("Convert_system_message_to_human will be deprecated!")
+        warnings.warn(
+            "The 'convert_system_message_to_human' parameter is deprecated and will be "
+            "removed in a future version. Use system instructions instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     system_instruction: Optional[Content] = None
     messages_without_tool_messages = [
@@ -1319,6 +1324,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ``cachedContents/{cachedContent}``.
     """
 
+    stop: Optional[List[str]] = None
+    """Stop sequences for the model."""
+
+    streaming: Optional[bool] = None
+    """Whether to stream responses from the model."""
+
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
     """Holds any unexpected initialization parameters."""
 
@@ -1812,10 +1823,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 filtered_messages.append(message)
         messages = filtered_messages
 
-        system_instruction, history = _parse_chat_history(
-            messages,
-            convert_system_message_to_human=self.convert_system_message_to_human,
-        )
+        if self.convert_system_message_to_human:
+            system_instruction, history = _parse_chat_history(
+                messages,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+        else:
+            system_instruction, history = _parse_chat_history(messages)
         if tool_choice:
             if not formatted_tools:
                 msg = (
