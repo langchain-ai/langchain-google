@@ -14,7 +14,7 @@ repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
     "langchain-core>=0.3.75",
-    "google-cloud-aiplatform>=1.111,<2",
+    "google-cloud-aiplatform>=1.97.0",
     "google-cloud-storage>=2.18,<3",
     "httpx>=0.28,<1",
     "httpx-sse>=0.4,<1",
