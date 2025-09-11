@@ -1546,3 +1546,10 @@ def test_thought_signature() -> None:
             ],
         ),
     ]
+
+
+def test_python_literal_inputs() -> None:
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+
+    for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
+        _ = llm._prepare_request_gemini([HumanMessage(input_string)])
