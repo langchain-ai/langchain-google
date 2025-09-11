@@ -65,7 +65,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
                     f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
                 )
                 logger.warning(
-                    f"Unexpected argument '{arg}' " f"provided to VertexAI.{suggestion}"
+                    f"Unexpected argument '{arg}' provided to VertexAI.{suggestion}"
                 )
         super().__init__(**kwargs)
 
