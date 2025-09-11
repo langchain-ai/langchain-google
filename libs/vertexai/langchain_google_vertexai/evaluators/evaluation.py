@@ -245,11 +245,6 @@ class VertexPairWiseStringEvaluator(_EvaluatorBase, PairwiseStringEvaluator):
         if _format_metric(metric) not in _PAIRWISE_METRICS:
             raise ValueError(f"Metric {metric} is not supported yet!")
 
-    @property
-    def requires_reference(self) -> bool:
-        """Whether this evaluator requires a reference label."""
-        return "reference" in _METRICS_OPTIONAL_ATTRS.get(self._metric, [])
-
     def _evaluate_string_pairs(
         self,
         *,

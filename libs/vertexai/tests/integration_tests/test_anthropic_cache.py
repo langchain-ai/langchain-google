@@ -1,5 +1,4 @@
 """Integration tests for Anthropic cache control functionality."""
-
 import os
 from typing import Dict, List, Union
 

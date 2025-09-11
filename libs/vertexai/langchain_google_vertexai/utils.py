@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from langchain_core.messages import BaseMessage
-from vertexai.preview import caching
+from vertexai.preview import caching  # type: ignore
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
@@ -61,17 +61,14 @@ def create_context_cache(
     if tools is not None:
         tools = [_format_to_gapic_tool(tools)]
 
-    if model.full_model_name is None:
-        raise ValueError("Model must have a full_model_name to create cached content")
-
     cached_content = caching.CachedContent.create(
         model_name=model.full_model_name,
         system_instruction=system_instruction,
-        contents=contents,  # type: ignore[arg-type]
+        contents=contents,
         ttl=time_to_live,
         expire_time=expire_time,
         tool_config=tool_config,
-        tools=tools,  # type: ignore[arg-type]
+        tools=tools,
     )
 
     return cached_content.name

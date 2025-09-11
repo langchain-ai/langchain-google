@@ -1,5 +1,4 @@
 """Test ChatGoogleVertexAI chat model."""
-
 import os
 
 import pytest
