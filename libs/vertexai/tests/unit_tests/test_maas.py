@@ -62,6 +62,28 @@ def test_llama_async_client_lazy_init(mock_auth: Any) -> None:
 
 
 @patch("langchain_google_vertexai.model_garden_maas._base.auth")
+def test_client_caching(mock_auth: Any) -> None:
+    """Test that clients are cached and not recreated on multiple accesses."""
+    mock_credentials = MagicMock()
+    mock_credentials.token.return_value = "test-token"
+    mock_auth.default.return_value = (mock_credentials, None)
+    
+    llm = get_vertex_maas_model(
+        model_name=_MODEL_NAME,
+        location="us-central1", 
+        project="test-project",
+    )
+    
+    # Multiple calls should only trigger auth once due to caching
+    llm._create_client_if_needed()
+    llm._create_client_if_needed()
+    llm._create_client_if_needed()
+    
+    # Should only be called once due to caching
+    mock_credentials.refresh.assert_called_once()
+
+
+@patch("langchain_google_vertexai.model_garden_maas._base.auth")
 def test_parse_history(mock_auth: Any) -> None:
     llm = get_vertex_maas_model(
         model_name=_MODEL_NAME,
