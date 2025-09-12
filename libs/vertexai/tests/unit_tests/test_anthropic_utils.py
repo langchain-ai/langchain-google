@@ -950,3 +950,132 @@ def test_documents_in_params_false_no_document() -> None:
     }
 
     assert not _documents_in_params(params)
+
+
+def test_ai_message_empty_content_with_tool_calls():
+    """
+    Test that AIMessage with empty content (string or list) and tool_calls
+    correctly includes the tool_calls in the output.
+    
+    This test addresses the issue where tool_calls were being trimmed out
+    when content was empty.
+    """
+    
+    # Test case 1: Empty string content with tool_calls
+    message_empty_string = AIMessage(
+        content="",
+        tool_calls=[
+            create_tool_call(
+                name="Information",
+                args={"name": "Ben"},
+                id="00000000-0000-0000-0000-00000000000",
+            ),
+        ],
+    )
+    
+    result_empty_string = _format_message_anthropic(
+        message_empty_string, project="test-project"
+    )
+    
+    assert result_empty_string is not None
+    assert result_empty_string["role"] == "assistant"
+    assert "content" in result_empty_string
+    content = result_empty_string["content"]
+    
+    # Should contain exactly one tool_use block
+    tool_use_blocks = [block for block in content if block.get("type") == "tool_use"]
+    assert len(tool_use_blocks) == 1
+    
+    tool_use = tool_use_blocks[0]
+    assert tool_use["name"] == "Information"
+    assert tool_use["input"] == {"name": "Ben"}
+    assert tool_use["id"] == "00000000-0000-0000-0000-00000000000"
+    
+    # Test case 2: Empty list content with tool_calls
+    message_empty_list = AIMessage(
+        content=[],
+        tool_calls=[
+            create_tool_call(
+                name="GetWeather",
+                args={"location": "New York"},
+                id="11111111-1111-1111-1111-11111111111",
+            ),
+        ],
+    )
+    
+    result_empty_list = _format_message_anthropic(
+        message_empty_list, project="test-project"
+    )
+    
+    assert result_empty_list is not None
+    assert result_empty_list["role"] == "assistant"
+    assert "content" in result_empty_list
+    content = result_empty_list["content"]
+    
+    # Should contain exactly one tool_use block
+    tool_use_blocks = [block for block in content if block.get("type") == "tool_use"]
+    assert len(tool_use_blocks) == 1
+    
+    tool_use = tool_use_blocks[0]
+    assert tool_use["name"] == "GetWeather"
+    assert tool_use["input"] == {"location": "New York"}
+    assert tool_use["id"] == "11111111-1111-1111-1111-11111111111"
+
+
+def test_ai_message_empty_content_without_tool_calls():
+    """
+    Test that AIMessage with empty content and no tool_calls returns None.
+    This ensures we don't break the existing behavior for messages without tool_calls.
+    """
+    
+    # Test case 1: Empty string content without tool_calls
+    message_empty_string = AIMessage(content="")
+    result_empty_string = _format_message_anthropic(
+        message_empty_string, project="test-project"
+    )
+    assert result_empty_string is None
+    
+    # Test case 2: Empty list content without tool_calls  
+    message_empty_list = AIMessage(content=[])
+    result_empty_list = _format_message_anthropic(
+        message_empty_list, project="test-project"
+    )
+    assert result_empty_list is None
+
+
+def test_ai_message_whitespace_content_with_tool_calls():
+    """
+    Test that AIMessage with whitespace-only content and tool_calls
+    correctly includes the tool_calls in the output.
+    """
+    
+    message = AIMessage(
+        content="   \n\t  ",  # Whitespace-only content
+        tool_calls=[
+            create_tool_call(
+                name="Calculator",
+                args={"expression": "2 + 2"},
+                id="22222222-2222-2222-2222-22222222222",
+            ),
+        ],
+    )
+    
+    result = _format_message_anthropic(message, project="test-project")
+    
+    assert result is not None
+    assert result["role"] == "assistant"
+    assert "content" in result
+    content = result["content"]
+    
+    # Should contain exactly one tool_use block (whitespace content is stripped)
+    tool_use_blocks = [block for block in content if block.get("type") == "tool_use"]
+    assert len(tool_use_blocks) == 1
+    
+    tool_use = tool_use_blocks[0]
+    assert tool_use["name"] == "Calculator"
+    assert tool_use["input"] == {"expression": "2 + 2"}
+    assert tool_use["id"] == "22222222-2222-2222-2222-22222222222"
+    
+    # Should not contain any text blocks (whitespace is stripped)
+    text_blocks = [block for block in content if block.get("type") == "text"]
+    assert len(text_blocks) == 0

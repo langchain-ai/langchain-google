@@ -163,11 +163,14 @@ def _format_message_anthropic(
 
     if isinstance(message.content, str):
         if not message.content.strip():
-            return None
-        message_dict = _format_text_content(message.content)
-        if cache_control := _get_cache_control(message):
-            message_dict["cache_control"] = cache_control
-        content.append(message_dict)
+            # Don't return None early if there are tool_calls to process
+            if not (isinstance(message, AIMessage) and message.tool_calls):
+                return None
+        else:
+            message_dict = _format_text_content(message.content)
+            if cache_control := _get_cache_control(message):
+                message_dict["cache_control"] = cache_control
+            content.append(message_dict)
     elif isinstance(message.content, list):
         for block in message.content:
             if isinstance(block, str):
@@ -283,6 +286,10 @@ def _format_message_anthropic(
         for tc in message.tool_calls:
             tu = cast(Dict[str, Any], _lc_tool_call_to_anthropic_tool_use_block(tc))
             content.append(tu)
+
+    # Return None if content is empty after processing all blocks
+    if not content:
+        return None
 
     if message.type == "system":
         return content
