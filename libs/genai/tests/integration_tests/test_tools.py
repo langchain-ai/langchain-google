@@ -25,7 +25,7 @@ def test_multiple_tools() -> None:
     tools = [check_weather, check_live_traffic, check_tennis_score]
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash-001",
+        model="gemini-2.0-flash-001",
     )
 
     model_with_tools = model.bind_tools(tools)

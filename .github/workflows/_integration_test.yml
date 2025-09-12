@@ -11,9 +11,6 @@ on:
         type: string
         description: "Python version to use"
 
-env:
-  POETRY_VERSION: "1.7.1"
-
 jobs:
   build:
     defaults:
@@ -24,17 +21,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ inputs.python-version }} + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python ${{ inputs.python-version }} + uv
+        uses: "./.github/actions/uv_setup"
         with:
           python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ env.POETRY_VERSION }}
           working-directory: ${{ inputs.working-directory }}
           cache-key: core
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libqpdf-dev
+
       - name: Install dependencies
         shell: bash
-        run: poetry install --with test,test_integration
+        run: uv sync --group test --group test_integration
 
       - name: 'Authenticate to Google Cloud'
         id: 'auth'

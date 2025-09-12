@@ -29,7 +29,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         .. code-block:: python
 
             from langchain_google_genai import GoogleGenerativeAI
-            llm = GoogleGenerativeAI(model="gemini-pro")
+            llm = GoogleGenerativeAI(model="gemini-2.5-pro")
     """
 
     client: Any = None  #: :meta private:
@@ -41,7 +41,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         """Needed for arg validation."""
         # Get all valid field names, including aliases
         valid_fields = set()
-        for field_name, field_info in self.model_fields.items():
+        for field_name, field_info in self.__class__.model_fields.items():
             valid_fields.add(field_name)
             if hasattr(field_info, "alias") and field_info.alias is not None:
                 valid_fields.add(field_info.alias)
@@ -62,6 +62,9 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
+
+        if not any(self.model.startswith(prefix) for prefix in ("models/",)):
+            self.model = f"models/{self.model}"
 
         self.client = ChatGoogleGenerativeAI(
             api_key=self.google_api_key,
@@ -86,6 +89,15 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         """Get standard params for tracing."""
         ls_params = super()._get_ls_params(stop=stop, **kwargs)
         ls_params["ls_provider"] = "google_genai"
+
+        models_prefix = "models/"
+        ls_model_name = (
+            self.model[len(models_prefix) :]
+            if self.model and self.model.startswith(models_prefix)
+            else self.model
+        )
+        ls_params["ls_model_name"] = ls_model_name
+
         if ls_max_tokens := kwargs.get("max_output_tokens", self.max_output_tokens):
             ls_params["ls_max_tokens"] = ls_max_tokens
         return ls_params

@@ -532,6 +532,7 @@ def test_nested_bind_tools():
         hair_color: str | None = Field("Hair color, only if provided.")  # type: ignore[syntax, unused-ignore]
 
     class People(BaseModel):
+        group_ids: list[int] = Field(description="The group ids.")
         data: list[Person] = Field(description="The people.")
 
     tool = convert_to_openai_tool(People)
@@ -540,3 +541,306 @@ def test_nested_bind_tools():
         cast(FunctionDescription, function)
     )
     assert converted_tool.name == "People"
+
+
+def test_tool_with_union_types() -> None:
+    """
+    Test that validates tools with Union types in function declarations
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper1(BaseModel):
+        """Test helper class 1."""
+
+        x: bool = False
+
+    class Helper2(BaseModel):
+        """Test helper class 2."""
+
+        y: str = "1"
+
+    class GetWeather(BaseModel):
+        """Get weather information."""
+
+        location: str = "New York, USA"
+        date: Union[Helper1, Helper2] = Helper1()
+
+    # Convert the model schema
+    schema = GetWeather.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "location" in result["properties"]
+    assert "date" in result["properties"]
+
+    # Verify that anyOf is present in the date property
+    date_property = result["properties"]["date"]
+    assert "anyOf" in date_property
+    assert isinstance(date_property["anyOf"], list)
+    assert len(date_property["anyOf"]) == 2
+
+    # Check first option (Helper1)
+    helper1 = date_property["anyOf"][0]
+    assert "properties" in helper1
+    assert "x" in helper1["properties"]
+    assert helper1["properties"]["x"]["type"] == "BOOLEAN"
+
+    # Check second option (Helper2)
+    helper2 = date_property["anyOf"][1]
+    assert "properties" in helper2
+    assert "y" in helper2["properties"]
+    assert helper2["properties"]["y"]["type"] == "STRING"
+
+    # Test with conversion to gapic.Schema
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    date_prop = gapic_schema.properties["date"]
+    assert hasattr(date_prop, "any_of")
+    assert len(date_prop.any_of) == 2
+
+
+def test_tool_with_union_primitive_types() -> None:
+    """
+    Test that validates tools with Union types that include primitive types
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper(BaseModel):
+        """Test helper class."""
+
+        value: int = 42
+
+    class SearchQuery(BaseModel):
+        """Search query model with a union parameter."""
+
+        query: str = "default query"
+        filter: Union[str, Helper] = "default filter"
+
+    # Convert the model schema
+    schema = SearchQuery.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "filter" in result["properties"]
+
+    # Verify that anyOf is present in the filter property
+    filter_property = result["properties"]["filter"]
+    assert "anyOf" in filter_property
+    assert isinstance(filter_property["anyOf"], list)
+    assert len(filter_property["anyOf"]) == 2
+
+    # One option should be a string
+    string_option = next(
+        (opt for opt in filter_property["anyOf"] if opt.get("type") == "STRING"), None
+    )
+    assert string_option is not None
+
+    # One option should be an object (Helper)
+    object_option = next(
+        (opt for opt in filter_property["anyOf"] if opt.get("type") == "OBJECT"), None
+    )
+    assert object_option is not None
+    assert "properties" in object_option
+    assert "value" in object_option["properties"]
+    assert object_option["properties"]["value"]["type"] == "INTEGER"
+
+    # Test with conversion to gapic.Schema
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    filter_prop = gapic_schema.properties["filter"]
+    assert hasattr(filter_prop, "any_of")
+    assert len(filter_prop.any_of) == 2
+
+
+def test_tool_with_nested_union_types() -> None:
+    """
+    Test that validates tools with nested Union types are correctly converted
+    to nested 'anyOf' structures in the schema.
+    """
+
+    class Address(BaseModel):
+        """Address model."""
+
+        street: str = "123 Main St"
+        city: str = "Anytown"
+
+    class Contact(BaseModel):
+        """Contact model."""
+
+        email: str = "user@example.com"
+        phone: Optional[str] = None
+
+    class Person(BaseModel):
+        """Person model with complex nested unions."""
+
+        name: str
+        location: Union[str, Address] = "Unknown"
+        contacts: List[Union[str, Contact]] = []
+
+    # Convert the model schema
+    schema = Person.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "name" in result["properties"]
+    assert "location" in result["properties"]
+    assert "contacts" in result["properties"]
+
+    # Check location property (direct Union)
+    location_property = result["properties"]["location"]
+    assert "anyOf" in location_property
+    location_any_of = location_property["anyOf"]
+    assert len(location_any_of) == 2
+
+    # One option should be a string
+    string_option = next(
+        (opt for opt in location_any_of if opt.get("type") == "STRING"), None
+    )
+    assert string_option is not None
+
+    # One option should be an object (Address)
+    address_option = next(
+        (opt for opt in location_any_of if opt.get("type") == "OBJECT"), None
+    )
+    assert address_option is not None
+    assert "properties" in address_option
+    assert "city" in address_option["properties"]
+
+    # Check contacts property (List of Union types)
+    contacts_property = result["properties"]["contacts"]
+    assert "type" in contacts_property
+    assert contacts_property["type"] == "ARRAY"
+    assert "items" in contacts_property
+
+    # The items should have anyOf for the union types
+    items = contacts_property["items"]
+    assert "anyOf" in items
+    assert len(items["anyOf"]) == 2
+
+    # Convert to gapic.Schema to ensure it's valid
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    assert gapic_schema.properties["location"].any_of is not None
+    assert len(gapic_schema.properties["location"].any_of) == 2
+
+
+def test_tool_field_union_types() -> None:
+    """
+    Test that validates Field with Union types in Pydantic models
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper1(BaseModel):
+        """Helper class 1."""
+
+        x: bool = False
+
+    class Helper2(BaseModel):
+        """Helper class 2."""
+
+        y: str = "1"
+
+    class GetWeather(BaseModel):
+        """
+        Get weather information for a location.
+        """
+
+        location: str = Field(
+            ..., description="The city and country, e.g. New York, USA"
+        )
+        date: Union[Helper1, Helper2] = Field(description="Test field")
+
+    # Convert the model schema
+    schema = GetWeather.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "location" in result["properties"]
+    assert "date" in result["properties"]
+
+    # Check location property
+    location_property = result["properties"]["location"]
+    assert "description" in location_property
+    assert (
+        location_property["description"] == "The city and country, e.g. New York, USA"
+    )
+
+    # Check date property (the union type)
+    date_property = result["properties"]["date"]
+    assert "anyOf" in date_property
+    assert "description" in date_property
+    assert date_property["description"] == "Test field"
+
+    any_of = date_property["anyOf"]
+    assert len(any_of) == 2
+
+    # Extract the titles of the models in the anyOf
+    model_titles = []
+    for option in any_of:
+        if "title" in option:
+            model_titles.append(option["title"])
+
+    assert "Helper1" in model_titles
+    assert "Helper2" in model_titles
+
+    # Check that the required fields include both location and date
+    assert "required" in result
+    required_fields = result["required"]
+    assert "location" in required_fields
+    assert "date" in required_fields
+
+    # Convert to gapic.Schema to ensure it's valid
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    date_prop = gapic_schema.properties["date"]
+    assert hasattr(date_prop, "any_of")
+    assert len(date_prop.any_of) == 2
+
+
+def test_union_nullable_types() -> None:
+    """
+    Test that validates the handling of Union types with null (None/Optional)
+    are correctly handled by removing them from required fields.
+    """
+
+    class Config(BaseModel):
+        """Config model with nullable fields."""
+
+        required_field: str
+        optional_primitive: Optional[int] = None
+        optional_complex: Optional[Dict[str, str]] = None
+
+    schema = Config.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that only the required_field is in required
+    assert "required" in result
+    assert "required_field" in result["required"]
+    assert "optional_primitive" not in result["required"]
+    assert "optional_complex" not in result["required"]
+
+    # Check that the nullable fields have the correct schema
+    assert "properties" in result
+
+    # Optional primitive field should have INTEGER type (not anyOf)
+    assert "optional_primitive" in result["properties"]
+    optional_primitive = result["properties"]["optional_primitive"]
+    assert "type" in optional_primitive
+    assert optional_primitive["type"] == "INTEGER"
+
+    # Optional complex field should have OBJECT type
+    assert "optional_complex" in result["properties"]
+    optional_complex = result["properties"]["optional_complex"]
+    assert "type" in optional_complex
+    assert optional_complex["type"] == "OBJECT"
+
+    # Convert to gapic.Schema to ensure it's valid
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    assert "required_field" in gapic_schema.required
+    assert "optional_primitive" not in gapic_schema.required
+    assert "optional_complex" not in gapic_schema.required

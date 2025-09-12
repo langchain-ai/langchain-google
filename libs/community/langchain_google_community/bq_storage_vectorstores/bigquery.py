@@ -324,7 +324,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
 
         if fields_to_exclude is not None:
             select_clause = f"""SELECT
-            base.* EXCEPT({','.join(fields_to_exclude)}),
+            base.* EXCEPT({",".join(fields_to_exclude)}),
             query.row_num,
             distance AS score
             """

@@ -3,6 +3,7 @@
 Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 """
+
 import json
 
 import pytest
@@ -95,7 +96,7 @@ def test_vertex_call_count_tokens() -> None:
 def test_structured_output_schema_json():
     model = VertexAI(
         rate_limiter=rate_limiter,
-        model_name="gemini-1.5-pro-001",
+        model_name="gemini-2.0-flash-001",
         response_mime_type="application/json",
         response_schema={
             "type": "array",

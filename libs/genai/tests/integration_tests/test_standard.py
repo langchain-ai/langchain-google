@@ -1,9 +1,12 @@
 """Standard LangChain interface tests"""
 
+import base64
 from typing import Dict, List, Literal, Type
 
+import httpx
 import pytest
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.tools import BaseTool
 from langchain_tests.integration_tests import ChatModelIntegrationTests
@@ -13,7 +16,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
 
-class TestGeminiAI2Standard(ChatModelIntegrationTests):
+class TestGeminiFlashStandard(ChatModelIntegrationTests):
     @property
     def chat_model_class(self) -> Type[BaseChatModel]:
         return ChatGoogleGenerativeAI
@@ -21,7 +24,7 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-2.0-flash-001",
+            "model": "models/gemini-2.5-flash",
             "rate_limiter": rate_limiter,
         }
 
@@ -45,22 +48,58 @@ class TestGeminiAI2Standard(ChatModelIntegrationTests):
     def supports_audio_inputs(self) -> bool:
         return True
 
-    @pytest.mark.xfail(
-        reason="Likely a bug in genai: prompt_token_count inconsistent in final chunk."
-    )
-    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
-        super().test_usage_metadata_streaming(model)
+    @pytest.mark.xfail(reason="Override parent method to use a reliable image URL")
+    def test_image_inputs(self, model: BaseChatModel) -> None:
+        """Override parent method to use a reliable image URL."""
+        if not self.supports_image_inputs:
+            pytest.skip("Model does not support image message.")
 
-    @pytest.mark.xfail(reason="investigate")
-    def test_bind_runnables_as_tools(self, model: BaseChatModel) -> None:
-        super().test_bind_runnables_as_tools(model)
+        # Use a reliable image URL that works with requests
+        image_url = "https://picsum.photos/seed/picsum/200/300"
+        image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
 
-    @pytest.mark.xfail(reason=("investigate"))
-    def test_tool_calling_with_no_arguments(self, model: BaseChatModel) -> None:
-        super().test_tool_calling_with_no_arguments(model)
+        # OpenAI format, base64 data
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the weather in this image"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                },
+            ],
+        )
+        _ = model.invoke([message])
+
+        # Standard format, base64 data
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the weather in this image"},
+                {
+                    "type": "image",
+                    "source_type": "base64",
+                    "mime_type": "image/jpeg",
+                    "data": image_data,
+                },
+            ],
+        )
+        _ = model.invoke([message])
+
+        # Standard format, URL
+        if self.supports_image_urls:
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the weather in this image"},
+                    {
+                        "type": "image",
+                        "source_type": "url",
+                        "url": image_url,
+                    },
+                ],
+            )
+            _ = model.invoke([message])
 
 
-class TestGeminiAIStandard(ChatModelIntegrationTests):
+class TestGeminiProStandard(ChatModelIntegrationTests):
     @property
     def chat_model_class(self) -> Type[BaseChatModel]:
         return ChatGoogleGenerativeAI
@@ -68,7 +107,7 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-1.5-pro-001",
+            "model": "models/gemini-2.5-pro",
             "rate_limiter": rate_limiter,
         }
 
@@ -77,6 +116,12 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         self, model: BaseChatModel, my_adder_tool: BaseTool
     ) -> None:
         super().test_tool_message_histories_list_content(model, my_adder_tool)
+
+    @pytest.mark.xfail(
+        reason="Investigate: prompt_token_count inconsistent in final chunk."
+    )
+    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
+        super().test_usage_metadata_streaming(model)
 
     @property
     def supported_usage_metadata_details(
@@ -94,6 +139,3 @@ class TestGeminiAIStandard(ChatModelIntegrationTests):
         ],
     ]:
         return {"invoke": [], "stream": []}
-
-
-# TODO: increase quota on gemini-1.5-pro-001 and test as well
