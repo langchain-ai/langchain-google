@@ -1169,15 +1169,14 @@ tabulate = ">=0.9.0,<1.0.0"
 
 [[package]]
 name = "google-cloud-modelarmor"
-version = "0.2.5"
+version = "0.2.8"
 description = "Google Cloud Modelarmor API client library"
-optional = true
+optional = false
 python-versions = ">=3.7"
-groups = ["main"]
-markers = "extra == \"modelarmor\""
+groups = ["main", "test"]
 files = [
-    {file = "google_cloud_modelarmor-0.2.5-py3-none-any.whl", hash = "sha256:6ec4fd1ce09eaa71772c17f1e2ebff3048b45b186e863598594fc631c616256f"},
-    {file = "google_cloud_modelarmor-0.2.5.tar.gz", hash = "sha256:348457838c3f3512ee5374d306789a5d4e7cfaae06e155274f2a023844b98448"},
+    {file = "google_cloud_modelarmor-0.2.8-py3-none-any.whl", hash = "sha256:4141ce1437f15f20a758c8d53e0ecaa91e60b5045dc66d94a8f4076b588c194b"},
+    {file = "google_cloud_modelarmor-0.2.8.tar.gz", hash = "sha256:8e06edb0c0d063509733c9612a85142b42897d31b548cca76b4f4d5323b7aae5"},
 ]
 
 [package.dependencies]
@@ -4503,4 +4502,4 @@ vision = ["google-cloud-vision"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "ff3d7a7602b091d5b8e99afd53b8d62ec9cbda42659d1db62fa9f547f9a44527"
+content-hash = "fa8787816446f3dcd80eb22a633fd171afa8cf2d19b0a9ad9907eec5a8ac15f3"

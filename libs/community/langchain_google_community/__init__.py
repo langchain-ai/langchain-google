@@ -28,6 +28,10 @@ from langchain_google_community.geocoding import (
 from langchain_google_community.gmail.loader import GMailLoader
 from langchain_google_community.gmail.toolkit import GmailToolkit
 from langchain_google_community.google_speech_to_text import SpeechToTextLoader
+from langchain_google_community.model_armor.runnable import (
+    ModelArmorSanitizePromptRunnable,
+    ModelArmorSanitizeResponseRunnable,
+)
 from langchain_google_community.places_api import (
     GooglePlacesAPIWrapper,
     GooglePlacesTool,
@@ -80,6 +84,8 @@ __all__ = [
     "GoogleSearchResults",
     "GoogleSearchRun",
     "GoogleTranslateTransformer",
+    "ModelArmorSanitizePromptRunnable",
+    "ModelArmorSanitizeResponseRunnable",
     "SpeechToTextLoader",
     "TextToSpeechTool",
     "VertexAIMultiTurnSearchRetriever",
