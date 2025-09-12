@@ -19,6 +19,7 @@ dependencies = [
     "google-api-python-client>=2.161.0,<3",
     "google-cloud-core>=2.4.3,<3",
     "grpcio>=1.74,<2",
+    "google-cloud-modelarmor>=0.2.8",
 ]
 
 [project.urls]

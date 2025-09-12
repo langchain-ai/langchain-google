@@ -262,10 +262,7 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
             findings (SanitizationResult): SanitizationResult object from
                 Model Armor sanitization request.
             config (Optional[RunnableConfig]): A config to use when invoking
-               the Runnable. The config supports standard keys like 'tags',
-               'metadata' for tracing purposes, 'max_concurrency' for
-               controlling how much work to do in parallel, and other keys.
-               Please refer to the RunnableConfig for more details.
+                the Runnable. Please refer to the RunnableConfig for more details.
 
         Returns:
             bool: True if all findings are safe, False if any are unsafe (MATCH_FOUND).
