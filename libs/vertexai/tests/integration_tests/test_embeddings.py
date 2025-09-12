@@ -5,8 +5,8 @@ Your end-user credentials would be used to make the calls (make sure you've run
 """
 
 import pytest
-from vertexai.language_models import TextEmbeddingModel
-from vertexai.vision_models import MultiModalEmbeddingModel
+from vertexai.language_models import TextEmbeddingModel  # type: ignore
+from vertexai.vision_models import MultiModalEmbeddingModel  # type: ignore
 
 from langchain_google_vertexai.embeddings import (
     GoogleEmbeddingModelType,

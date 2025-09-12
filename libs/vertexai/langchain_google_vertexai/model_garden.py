@@ -16,6 +16,7 @@ from typing import (
     Union,
 )
 
+import httpx
 from google.auth.credentials import Credentials
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -178,6 +179,10 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         "- min: Minimum wait time in seconds (default: 4.0) "
         "- max: Maximum wait time in seconds (default: 10.0) "
         "- exp_base: Exponent base to use (default: 2.0) ",
+    )
+    timeout: Optional[Union[float, httpx.Timeout]] = Field(
+        default=None,
+        description="Timeout for API requests.",
     )
 
     model_config = ConfigDict(
