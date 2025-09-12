@@ -76,17 +76,18 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from vertexai.generative_models import (  # type: ignore
+from vertexai.generative_models import (
     Tool as VertexTool,
+    HarmBlockThreshold,
 )
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (
     ToolConfig,
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
     _convert_schema_dict_to_gapic,
 )
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     ChatMessage,
     InputOutputTextPair,
 )
@@ -163,8 +164,12 @@ _allowed_params = [
     "logprobs",
     "labels",
     "audio_timestamp",
+    "response_modalities",
     "thinking_budget",
     "include_thoughts",
+]
+_allowed_beta_params = [
+    "media_resolution",
 ]
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
@@ -215,10 +220,20 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         if i == 0 and isinstance(message, SystemMessage):
             context = content
         elif isinstance(message, AIMessage):
-            vertex_message = ChatMessage(content=message.content, author="bot")
+            content = (
+                message.content
+                if isinstance(message.content, str)
+                else str(message.content)
+            )
+            vertex_message = ChatMessage(content=content, author="bot")
             vertex_messages.append(vertex_message)
         elif isinstance(message, HumanMessage):
-            vertex_message = ChatMessage(content=message.content, author="user")
+            content = (
+                message.content
+                if isinstance(message.content, str)
+                else str(message.content)
+            )
+            vertex_message = ChatMessage(content=content, author="user")
             vertex_messages.append(vertex_message)
         else:
             raise ValueError(
@@ -551,16 +566,25 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"Expected the first message in a part to be from human, got "
                     f"{type(example)} for the {i}th message."
                 )
-            input_text = example.content
+            input_text = (
+                example.content
+                if isinstance(example.content, str)
+                else str(example.content)
+            )
         if i % 2 == 1:
             if not isinstance(example, AIMessage):
                 raise ValueError(
                     f"Expected the second message in a part to be from AI, got "
                     f"{type(example)} for the {i}th message."
                 )
-            pair = InputOutputTextPair(
-                input_text=input_text, output_text=example.content
+            output_text = (
+                example.content
+                if isinstance(example.content, str)
+                else str(example.content)
             )
+            if input_text is None:
+                raise ValueError("input_text should not be None at this point")
+            pair = InputOutputTextPair(input_text=input_text, output_text=output_text)
             example_pairs.append(pair)
     return example_pairs
 
@@ -577,18 +601,36 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
     return question
 
 
+# Helper function to append content consistently
+def _append_to_content(
+    current_content: Union[str, List[Any], None], new_item: Any
+) -> Union[str, List[Any]]:
+    """Appends a new item to the content, handling different initial content types."""
+    if current_content is None and isinstance(new_item, str):
+        return new_item
+    elif current_content is None:
+        return [new_item]
+    elif isinstance(current_content, str):
+        return [current_content, new_item]
+    elif isinstance(current_content, list):
+        current_content.append(new_item)
+        return current_content
+    else:
+        # This case should ideally not be reached with proper type checking,
+        # but it catches any unexpected types that might slip through.
+        raise TypeError(f"Unexpected content type: {type(current_content)}")
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -601,34 +643,21 @@ def _parse_response_candidate(
     tool_call_chunks = []
 
     for part in response_candidate.content.parts:
+        text: Optional[str] = part.text
         try:
-            text: Optional[str] = part.text
+            if hasattr(part, "text") and part.text is not None:
+                text = part.text
         except AttributeError:
-            text = None
+            pass
 
         if part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
             }
-            if not content:
-                content = [thinking_message]
-            elif isinstance(content, str):
-                content = [thinking_message, content]
-            elif isinstance(content, list):
-                content.append(thinking_message)
-            else:
-                raise Exception("Unexpected content type")
-
-        elif text:
-            if not content:
-                content = text
-            elif isinstance(content, str):
-                content = [content, text]
-            elif isinstance(content, list):
-                content.append(text)
-            else:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, thinking_message)
+        elif text is not None and text:
+            content = _append_to_content(content, text)
 
         if part.function_call:
             # For backward compatibility we store a function call in additional_kwargs,
@@ -700,14 +729,7 @@ def _parse_response_candidate(
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
                 }
-                if not content:
-                    content = [code_message]
-                elif isinstance(content, str):
-                    content = [content, code_message]
-                elif isinstance(content, list):
-                    content.append(code_message)
-                else:
-                    raise Exception("Unexpected content type")
+                content = _append_to_content(content, code_message)
 
         if (
             hasattr(part, "code_execution_result")
@@ -721,15 +743,7 @@ def _parse_response_candidate(
                     "code_execution_result": part.code_execution_result.output,
                     "outcome": part.code_execution_result.outcome,
                 }
-
-                if not content:
-                    content = [execution_result]
-                elif isinstance(content, str):
-                    content = [content, execution_result]
-                elif isinstance(content, list):
-                    content.append(execution_result)
-                else:
-                    raise Exception("Unexpected content type")
+                content = _append_to_content(content, execution_result)
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
@@ -741,14 +755,7 @@ def _parse_response_candidate(
                     )
                 },
             }
-            if not content:
-                content = [image_message]
-            elif isinstance(content, str):
-                content = [content, image_message]
-            elif isinstance(content, list):
-                content.append(image_message)
-            else:
-                raise Exception("Unexpected content type")
+            content = _append_to_content(content, image_message)
 
     if content is None:
         content = ""
@@ -1126,12 +1133,108 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.' # codespell:ignore brunch
+            'The image is of five blueberry scones arranged on a piece of baking paper. Here is a list of what is in the picture:* **Five blueberry scones:** They are scattered across the parchment paper, dusted with powdered sugar.  * **Two cups of coffee:**  Two white cups with saucers. One appears full, the other partially drunk. * **A bowl of blueberries:** A brown bowl is filled with fresh blueberries, placed near the scones.* **A spoon:**  A silver spoon with the words "Let\'s Jam" rests on the paper.* **Pink peonies:** Several pink peonies lie beside the scones, adding a touch of color.* **Baking paper:** The scones, cups, bowl, and spoon are arranged on a piece of white baking paper, splattered with purple.  The paper is crinkled and sits on a dark surface. The image has a rustic and delicious feel, suggesting a cozy and enjoyable breakfast or brunch setting.'
+
+    PDF input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            pdf_bytes = open("/path/to/your/test.pdf", 'rb').read()
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the document in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"application/pdf",
+                        "data": pdf_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance.'
+
+        You can also point to GCS files.
+
+        .. code-block:: python
+
+            llm.invoke(
+                [
+                    HumanMessage(
+                        [
+                            "describe the document in a sentence",
+                            {
+                                "type": "media",
+                                "file_uri": "gs://cloud-samples-data/generative-ai/pdf/1706.03762v7.pdf",
+                                "mime_type": "application/pdf",
+                            },
+                        ]
+                    )
+                ]
+            ).content
+
+        .. code-block:: python
+
+            'The article introduces Transformer, a new model architecture for sequence transduction based solely on attention mechanisms, outperforming previous models in machine translation tasks and demonstrating good generalization to English constituency parsing.'
 
     Video input:
+        .. code-block:: python
 
-        .. note::
-            Currently only supported for ``gemini-...-vision`` models.
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            video_bytes = open("/path/to/your/video.mp4", 'rb').read()
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe what's in this video in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type": "video/mp4",
+                        "data": video_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner.'
+
+        You can also pass YouTube URLs directly:
+
+        .. code-block:: python
+
+            from langchain_core.messages import HumanMessage
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize the video in 3 sentences."},
+                    {
+                        "type": "media",
+                        "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                        "mime_type": "video/mp4",
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+
+        You can also point to GCS files.
 
         .. code-block:: python
 
@@ -1157,6 +1260,34 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
              'The video is about a new feature in Google Photos called "Zoomable Selfies". The feature allows users to take selfies with animals at the zoo. The video shows several examples of people taking selfies with animals, including a tiger, an elephant, and a sea otter. The video also shows how the feature works. Users simply need to open the Google Photos app and select the "Zoomable Selfies" option. Then, they need to choose an animal from the list of available animals. The app will then guide the user through the process of taking the selfie.'
 
     Audio input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            audio_bytes = open("/path/to/your/audio.mp3", 'rb').read()
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize this audio in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"audio/mp3",
+                        "data": audio_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "In this episode of the Made by Google podcast, Stephen Johnson and Simon Tokumine discuss NotebookLM, a tool designed to help users understand complex material in various modalities, with a focus on its unexpected uses, the development of audio overviews, and the implementation of new features like mind maps and source discovery."
+
+        You can also point to GCS files.
+
         .. code-block:: python
 
             from langchain_core.messages import HumanMessage
@@ -1477,6 +1608,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             params["thinking_config"]["include_thoughts"] = include_thoughts
         _ = params.pop("include_thoughts", None)
 
+        media_resolution = kwargs.get("media_resolution")
+        if media_resolution is not None:
+            params["media_resolution"] = media_resolution
+        response_modalities = kwargs.get(
+            "response_modalities", self.response_modalities
+        )
+        if response_modalities is not None:
+            params["response_modalities"] = response_modalities
+
         return params
 
     def _get_ls_params(
@@ -1566,6 +1706,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 stop=stop,
                 stream=stream,
                 **{k: v for k, v in kwargs.items() if k in _allowed_params},
+                **{k: v for k, v in kwargs.items() if k in _allowed_beta_params},
             )
         )
 
@@ -1578,22 +1719,69 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """
         if safety_settings is None:
             if self.safety_settings:
-                return self._safety_settings_gemini(self.safety_settings)
+                # Return the original settings unchanged for backward compatibility
+                return self.safety_settings  # type: ignore[return-value]
             return None
         if isinstance(safety_settings, list):
-            return safety_settings
+            # Check if conversion is needed
+            needs_conversion = any(
+                hasattr(setting, "to_dict") and not hasattr(setting, "_pb")
+                for setting in safety_settings
+            )
+
+            if not needs_conversion:
+                # Return as-is if already gapic SafetySettings
+                return safety_settings  # type: ignore[return-value]
+
+            # Convert vertexai SafetySetting objects to gapic SafetySetting objects
+            converted_settings = []
+            for setting in safety_settings:
+                if hasattr(setting, "to_dict"):
+                    # VertexAI SafetySetting with to_dict method
+                    setting_dict = setting.to_dict()
+                    converted_setting = SafetySetting(
+                        category=setting_dict.get("category"),
+                        threshold=setting_dict.get("threshold"),
+                    )
+                    converted_settings.append(converted_setting)
+                else:
+                    # Direct attribute access for other types
+                    converted_settings.append(
+                        SafetySetting(
+                            category=getattr(setting, "category", None),
+                            threshold=getattr(setting, "threshold", None),
+                        )
+                    )
+            return converted_settings
         if isinstance(safety_settings, dict):
             formatted_safety_settings = []
-            for category, threshold in safety_settings.items():
-                if isinstance(category, str):
-                    category = HarmCategory[category]  # type: ignore[misc]
-                if isinstance(threshold, str):
-                    threshold = SafetySetting.HarmBlockThreshold[threshold]  # type: ignore[misc]
+            items = cast(Dict[Any, Any], safety_settings).items()
+            for raw_category, raw_threshold in items:
+                # Convert category to HarmCategory if needed
+                if isinstance(raw_category, HarmCategory):
+                    category = raw_category
+                elif isinstance(raw_category, str):
+                    category = HarmCategory[raw_category]  # type: ignore[misc]
+                else:
+                    # Handles numeric enum values
+                    category = HarmCategory(raw_category)
+
+                # Convert threshold to HarmBlockThreshold if needed
+                if isinstance(raw_threshold, SafetySetting.HarmBlockThreshold):
+                    threshold = raw_threshold
+                elif isinstance(raw_threshold, HarmBlockThreshold):
+                    # Convert vertexai.generative_models.HarmBlockThreshold to gapic
+                    threshold = SafetySetting.HarmBlockThreshold(raw_threshold.value)
+                elif isinstance(raw_threshold, str):
+                    threshold = SafetySetting.HarmBlockThreshold[raw_threshold]  # type: ignore[misc]
+                else:
+                    # Handles numeric enum values
+                    threshold = SafetySetting.HarmBlockThreshold(raw_threshold)
 
                 formatted_safety_settings.append(
                     SafetySetting(
-                        category=HarmCategory(category),
-                        threshold=SafetySetting.HarmBlockThreshold(threshold),
+                        category=category,
+                        threshold=threshold,
                     )
                 )
             return formatted_safety_settings
@@ -1631,7 +1819,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        safety_settings = self._safety_settings_gemini(safety_settings)
+        processed_safety_settings: Optional[Sequence[SafetySetting]] = (
+            self._safety_settings_gemini(safety_settings)
+        )
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -1664,18 +1854,20 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 v1_tools = [v1Tool(**proto.Message.to_dict(t)) for t in formatted_tools]
 
             if tool_config:
-                v1_tool_config = v1ToolConfig(
-                    function_calling_config=v1FunctionCallingConfig(
-                        **proto.Message.to_dict(tool_config.function_calling_config)
+                if hasattr(tool_config, "function_calling_config"):
+                    v1_tool_config = v1ToolConfig(
+                        function_calling_config=v1FunctionCallingConfig(
+                            **proto.Message.to_dict(tool_config.function_calling_config)
+                        )
                     )
-                )
+                else:
+                    # Handle other ToolConfig types or convert as needed
+                    v1_tool_config = v1ToolConfig(**proto.Message.to_dict(tool_config))
 
-            if safety_settings:
+            if processed_safety_settings:
                 v1_safety_settings = [
-                    v1SafetySetting(
-                        category=s.category, method=s.method, threshold=s.threshold
-                    )
-                    for s in safety_settings
+                    v1SafetySetting(**proto.Message.to_dict(s))
+                    for s in processed_safety_settings
                 ]
 
         if (self.cached_content is not None) or (cached_content is not None):
@@ -1700,7 +1892,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return GenerateContentRequest(
                 contents=contents,
                 model=self.full_model_name,
-                safety_settings=safety_settings,
+                safety_settings=processed_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
             )
@@ -1722,7 +1914,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=safety_settings,
+            safety_settings=processed_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
             labels=self.labels,
@@ -1831,7 +2023,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast(_ToolConfigDict, tool_config))
+            return _format_tool_config(tool_config)
         return None
 
     async def _agenerate(
@@ -1906,7 +2098,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 response_chunk, prev_total_usage=total_lc_usage
             )
             if run_manager and isinstance(chunk.message.content, str):
-                run_manager.on_llm_new_token(chunk.message.content)
+                run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
 
     async def _astream(
@@ -1934,7 +2126,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 response_chunk, prev_total_usage=total_lc_usage
             )
             if run_manager and isinstance(chunk.message.content, str):
-                await run_manager.on_llm_new_token(chunk.message.content)
+                await run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
 
     def with_structured_output(
@@ -2188,7 +2380,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            message = _parse_response_candidate(candidate)
+            message = _parse_response_candidate(candidate, streaming=False)  # type: ignore[call-overload]
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
@@ -2236,7 +2428,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            message = _parse_response_candidate(top_candidate, streaming=True)
+            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(

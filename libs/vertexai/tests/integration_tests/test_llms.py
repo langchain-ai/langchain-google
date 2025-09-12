@@ -3,6 +3,7 @@
 Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 """
+
 import json
 
 import pytest

@@ -15,7 +15,8 @@ from typing import (
     cast,
 )
 
-import vertexai  # type: ignore[import-untyped]
+import httpx
+import vertexai
 from google.api_core.client_options import ClientOptions
 from google.cloud.aiplatform import initializer
 from google.cloud.aiplatform.constants import base as constants
@@ -36,12 +37,13 @@ from google.cloud.aiplatform_v1beta1.services.prediction_service import (
 from google.cloud.aiplatform_v1beta1.services.prediction_service import (
     PredictionServiceClient as v1beta1PredictionServiceClient,
 )
+from google.cloud.aiplatform_v1beta1.types.content import Modality
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Literal, Self
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (
     SafetySettingsType,
 )
 
@@ -105,6 +107,17 @@ class _VertexAIBase(BaseModel):
     
     v1 is more performant, but v1beta1 might have some new features.
     """
+    timeout: Optional[Union[float, httpx.Timeout]] = Field(
+        default=None,
+        description="Timeout for requests in seconds.",
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "API key for authentication. Note: VertexAI typically uses service account "
+            "authentication."
+        ),
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -232,6 +245,11 @@ class _VertexAICommon(_VertexAIBase):
 
     tuned_model_name: Optional[str] = None
     """The name of a tuned model."""
+
+    response_modalities: Optional[List[Modality]] = Field(
+        default=None, description=("A list of modalities of the response")
+    )
+
     thinking_budget: Optional[int] = Field(
         default=None, description="Indicates the thinking budget in tokens."
     )

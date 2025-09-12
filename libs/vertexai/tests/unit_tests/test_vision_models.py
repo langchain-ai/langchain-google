@@ -1,5 +1,5 @@
 import pytest
-from vertexai.vision_models import Image  # type: ignore[import-untyped]
+from vertexai.vision_models import Image
 
 from langchain_google_vertexai.vision_models import _BaseImageTextModel
 

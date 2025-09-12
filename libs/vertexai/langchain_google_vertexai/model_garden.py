@@ -16,7 +16,6 @@ from typing import (
     Union,
 )
 
-import httpx
 from google.auth.credentials import Credentials
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -33,7 +32,6 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
 )
-from langchain_core.messages.ai import UsageMetadata
 from langchain_core.outputs import (
     ChatGeneration,
     ChatGenerationChunk,
@@ -55,6 +53,7 @@ from langchain_google_vertexai._anthropic_parsers import (
     _extract_tool_calls,
 )
 from langchain_google_vertexai._anthropic_utils import (
+    _create_usage_metadata,
     _documents_in_params,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
@@ -64,13 +63,6 @@ from langchain_google_vertexai._anthropic_utils import (
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
 from langchain_google_vertexai._retry import create_base_retry_decorator
-
-
-class CacheUsageMetadata(UsageMetadata):
-    cache_creation_input_tokens: Optional[int]
-    """The number of input tokens used to create the cache entry."""
-    cache_read_input_tokens: Optional[int]
-    """The number of input tokens read from the cache."""
 
 
 def _create_retry_decorator(
@@ -187,10 +179,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         "- max: Maximum wait time in seconds (default: 10.0) "
         "- exp_base: Exponent base to use (default: 2.0) ",
     )
-    timeout: Optional[Union[float, httpx.Timeout]] = Field(
-        default=None,
-        description="Timeout for API requests.",
-    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -287,14 +275,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             )
         else:
             msg = AIMessage(content=content)
-        # Collect token usage
-        msg.usage_metadata = CacheUsageMetadata(
-            input_tokens=data.usage.input_tokens,
-            output_tokens=data.usage.output_tokens,
-            total_tokens=data.usage.input_tokens + data.usage.output_tokens,
-            cache_creation_input_tokens=data.usage.cache_creation_input_tokens,
-            cache_read_input_tokens=data.usage.cache_read_input_tokens,
-        )
+        # Collect token usage using the reusable function (matches langchain_anthropic)
+        msg.usage_metadata = _create_usage_metadata(data.usage)
         return ChatResult(
             generations=[ChatGeneration(message=msg)],
             llm_output=llm_output,
