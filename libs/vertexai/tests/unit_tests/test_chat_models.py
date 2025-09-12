@@ -2,6 +2,7 @@
 
 import base64
 import json
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional
 from unittest.mock import MagicMock, patch
@@ -93,13 +94,17 @@ def test_init() -> None:
 
     # test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.chat_models.logger.warning") as mock_warning:
-        llm = ChatVertexAI(
-            model_name="gemini-pro",
-            project="test-project",
-            safety_setting={
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
-            },  # Invalid arg
-        )
+        # Suppress UserWarning during test execution - we're testing the warning
+        # mechanism via logger mock assertions, not via pytest's warning system
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            llm = ChatVertexAI(
+                model_name="gemini-pro",
+                project="test-project",
+                safety_setting={
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+                },  # Invalid arg
+            )
         assert llm.model_name == "gemini-pro"
         assert llm.project == "test-project"
         mock_warning.assert_called_once()
@@ -1546,3 +1551,10 @@ def test_thought_signature() -> None:
             ],
         ),
     ]
+
+
+def test_python_literal_inputs() -> None:
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+
+    for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
+        _ = llm._prepare_request_gemini([HumanMessage(input_string)])
