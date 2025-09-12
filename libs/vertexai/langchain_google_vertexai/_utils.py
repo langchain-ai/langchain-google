@@ -14,11 +14,11 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from vertexai.generative_models import (
+from vertexai.generative_models import (  # type: ignore[import-untyped]
     Candidate,
     Image,
 )
-from vertexai.language_models import (
+from vertexai.language_models import (  # type: ignore[import-untyped]
     TextGenerationResponse,
 )
 
@@ -146,9 +146,8 @@ def get_generation_info(
     logprobs: Union[bool, int] = False,
 ) -> Dict[str, Any]:
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
-    safety_ratings = getattr(candidate, "safety_ratings", []) or []
     info = {
-        "is_blocked": any([rating.blocked for rating in safety_ratings]),
+        "is_blocked": any([rating.blocked for rating in candidate.safety_ratings]),
         "safety_ratings": [
             {
                 "category": rating.category.name,
@@ -160,24 +159,20 @@ def get_generation_info(
             }
             # Image generation models sometime return ratings that are not
             # included in the proto.
-            for rating in safety_ratings
+            for rating in candidate.safety_ratings
             if hasattr(rating.category, "name")
         ],
         "citation_metadata": (
             proto.Message.to_dict(candidate.citation_metadata)
-            if hasattr(candidate, "citation_metadata") and candidate.citation_metadata
+            if candidate.citation_metadata
             else None
         ),
         "usage_metadata": usage_metadata,
         "finish_reason": (
-            candidate.finish_reason.name
-            if hasattr(candidate, "finish_reason") and candidate.finish_reason
-            else None
+            candidate.finish_reason.name if candidate.finish_reason else None
         ),
         "finish_message": (
-            candidate.finish_message
-            if hasattr(candidate, "finish_message") and candidate.finish_message
-            else None
+            candidate.finish_message if candidate.finish_message else None
         ),
     }
     if hasattr(candidate, "avg_logprobs") and candidate.avg_logprobs is not None:
