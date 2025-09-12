@@ -123,25 +123,44 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        token = _get_token(credentials=self.credentials)
-        endpoint = self.get_url()
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {token}",
-            "x-goog-api-client": self._library_version,
-            "user_agent": self._user_agent,
-        }
-        self.client = httpx.Client(
-            base_url=endpoint,
-            headers=headers,
-            timeout=self.timeout,
-        )
-        self.async_client = httpx.AsyncClient(
-            base_url=endpoint,
-            headers=headers,
-            timeout=self.timeout,
-        )
+        # Do not initialize clients here to avoid network traffic
+        # Clients will be created lazily when first accessed
+
+    def _create_client_if_needed(self) -> None:
+        """Create HTTP clients if they don't exist yet."""
+        if self.client is None:
+            token = _get_token(credentials=self.credentials)
+            endpoint = self.get_url()
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}",
+                "x-goog-api-client": self._library_version,
+                "user_agent": self._user_agent,
+            }
+            self.client = httpx.Client(
+                base_url=endpoint,
+                headers=headers,
+                timeout=self.timeout,
+            )
+
+    def _create_async_client_if_needed(self) -> None:
+        """Create async HTTP client if it doesn't exist yet."""
+        if self.async_client is None:
+            token = _get_token(credentials=self.credentials)
+            endpoint = self.get_url()
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}",
+                "x-goog-api-client": self._library_version,
+                "user_agent": self._user_agent,
+            }
+            self.async_client = httpx.AsyncClient(
+                base_url=endpoint,
+                headers=headers,
+                timeout=self.timeout,
+            )
 
     @model_validator(mode="after")
     def validate_environment_model_garden(self) -> Self:
@@ -215,6 +234,7 @@ async def acompletion_with_retry(
             if headers_content_type := kwargs.pop("headers_content_type", None):
                 headers["Content-Type"] = headers_content_type
 
+            llm._create_async_client_if_needed()
             event_source = aconnect_sse(
                 llm.async_client,
                 "POST",
@@ -224,6 +244,7 @@ async def acompletion_with_retry(
             )
             return _aiter_sse(event_source)
         else:
+            llm._create_async_client_if_needed()
             response = await llm.async_client.post(url=llm._get_url_part(), json=kwargs)
             await _araise_on_error(response)
             return response.json()
@@ -245,6 +266,7 @@ def completion_with_retry(llm: _BaseVertexMaasModelGarden, **kwargs):
             headers["Content-Type"] = headers_content_type
 
         def iter_sse():
+            llm._create_client_if_needed()
             with connect_sse(
                 llm.client,
                 "POST",
@@ -259,6 +281,7 @@ def completion_with_retry(llm: _BaseVertexMaasModelGarden, **kwargs):
                     yield event.json()
 
         return iter_sse()
+    llm._create_client_if_needed()
     response = llm.client.post(url=llm._get_url_part(), json=kwargs)
     _raise_on_error(response)
     return response.json()

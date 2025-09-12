@@ -33,6 +33,31 @@ def test_llama_init(mock_auth: Any) -> None:
     )
     assert llm._get_url_part() == "endpoints/openapi/chat/completions"
     assert llm._get_url_part(stream=True) == "endpoints/openapi/chat/completions"
+    # Verify no network traffic during initialization
+    mock_credentials.refresh.assert_not_called()
+
+    # Network traffic should only happen when client is first accessed
+    llm._create_client_if_needed()  # Access the client to trigger lazy initialization
+    mock_credentials.refresh.assert_called_once()
+
+
+@patch("langchain_google_vertexai.model_garden_maas._base.auth")
+def test_llama_async_client_lazy_init(mock_auth: Any) -> None:
+    """Test that async client is also lazily initialized."""
+    mock_credentials = MagicMock()
+    mock_credentials.token.return_value = "test-token"
+    mock_auth.default.return_value = (mock_credentials, None)
+    llm = get_vertex_maas_model(
+        model_name=_MODEL_NAME,
+        location="us-central1",
+        project="test-project",
+    )
+    
+    # Verify no network traffic during initialization
+    mock_credentials.refresh.assert_not_called()
+
+    # Network traffic should only happen when async client is first accessed
+    llm._create_async_client_if_needed()
     mock_credentials.refresh.assert_called_once()
 
 
