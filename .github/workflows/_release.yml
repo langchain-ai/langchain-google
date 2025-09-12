@@ -110,7 +110,12 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           working-directory: ${{ inputs.working-directory }}
 
-      - name: Import published package
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: ${{ inputs.working-directory }}/dist/
+
+      - name: Import dist package
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         env:
@@ -127,15 +132,7 @@ jobs:
         #   sometimes a delay in availability on test pypi
         run: |
           uv venv
-          VIRTUAL_ENV=.venv uv pip install \
-            --extra-index-url https://test.pypi.org/simple/ \
-            "$PKG_NAME==$VERSION" || \
-          ( \
-            sleep 5 && \
-            VIRTUAL_ENV=.venv uv pip install \
-              --extra-index-url https://test.pypi.org/simple/ \
-              "$PKG_NAME==$VERSION" \
-          )
+          VIRTUAL_ENV=.venv uv pip install dist/*.whl
 
           # Replace all dashes in the package name with underscores,
           # since that's how Python imports packages with dashes in the name.
@@ -147,7 +144,7 @@ jobs:
         run: uv sync --group test --group test_integration
         working-directory: ${{ inputs.working-directory }}
 
-      # Overwrite the local version of the package with the test PyPI version.
+      # Overwrite the local version of the package with the built PyPI version.
       - name: Import published package (again)
         working-directory: ${{ inputs.working-directory }}
         shell: bash
@@ -155,9 +152,7 @@ jobs:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          VIRTUAL_ENV=.venv uv pip install \
-            --extra-index-url https://test.pypi.org/simple/ \
-            "$PKG_NAME==$VERSION"
+          VIRTUAL_ENV=.venv uv pip install dist/*.whl
 
       - name: Run unit tests
         run: make tests
