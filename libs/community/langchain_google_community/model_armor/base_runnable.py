@@ -90,7 +90,7 @@ class ModelArmorParams(BaseModel):
             if self.credentials and hasattr(self.credentials, "project_id"):
                 self.project = self.credentials.project_id
             # Get Project ID from env variable.
-            if os.getenv("GOOGLE_CLOUD_PROJECT"):
+            elif os.getenv("GOOGLE_CLOUD_PROJECT"):
                 self.project = os.getenv("GOOGLE_CLOUD_PROJECT")
             # Get Project ID using ADC.
             else:
