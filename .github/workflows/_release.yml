@@ -1,5 +1,6 @@
-name: release
-run-name: Release ${{ inputs.working-directory }} by @${{ github.actor }}
+name: '🚀 Package Release'
+run-name: 'Release ${{ inputs.working-directory }} ${{ inputs.release-version }}'
+
 on:
   workflow_call:
     inputs:
@@ -85,8 +86,109 @@ jobs:
               f.write(f"pkg-name={pkg_name}\n")
               f.write(f"version={version}\n")
 
+  release-notes:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    outputs:
+      release-body: ${{ steps.generate-release-body.outputs.release-body }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # this fetches entire commit history
+      - name: Check tags
+        id: check-tags
+        shell: bash
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          WORKING_DIR: ${{ inputs.working-directory }}
+        run: |
+          # Handle regular versions and pre-release versions differently
+          if [[ "$VERSION" == *"-"* ]]; then
+            # This is a pre-release version (contains a hyphen)
+            # Extract the base version without the pre-release suffix
+            BASE_VERSION=${VERSION%%-*}
+            # Look for the latest release of the same base version using directory format
+            REGEX="^$WORKING_DIR/v$BASE_VERSION\$"
+            PREV_TAG=$(git tag --sort=-creatordate | (grep -E "$REGEX" || true) | head -1)
+
+            # If no exact base version match, look for the latest release of any kind
+            if [ -z "$PREV_TAG" ]; then
+              REGEX="^$WORKING_DIR/v[0-9]+\\.[0-9]+\\.[0-9]+\$"
+              CURRENT_TAG="$WORKING_DIR/v$VERSION"
+              PREV_TAG=$(git tag --sort=-creatordate | (grep -E "$REGEX" || true) | grep -v "^$CURRENT_TAG\$" | head -1)
+            fi
+          else
+            # Regular version handling
+            PATCH_VERSION=${VERSION##*.}
+            if [ "$PATCH_VERSION" -eq 0 ]; then
+              # For x.y.0 releases, look up the most recent release chronologically
+              PREV_TAG=""
+            else
+              # Try to find the previous patch version
+              PREV_VERSION="${VERSION%.*}.$(( PATCH_VERSION - 1 ))"
+              PREV_TAG="$WORKING_DIR/v$PREV_VERSION"
+              
+              # Check if the calculated previous tag exists
+              if ! git tag -l "$PREV_TAG" | grep -q "$PREV_TAG"; then
+                PREV_TAG=""
+              fi
+            fi
+
+            # backup case if calculated prev tag doesn't exist or is empty, look up last release
+            if [ -z "$PREV_TAG" ]; then
+              REGEX="^$WORKING_DIR/v[0-9]+\\.[0-9]+\\.[0-9]+\$"
+              CURRENT_TAG="$WORKING_DIR/v$VERSION"
+              PREV_TAG=$(git tag --sort=-creatordate | (grep -E "$REGEX" || true) | grep -v "^$CURRENT_TAG\$" | head -1)
+            fi
+          fi
+
+          # if PREV_TAG is empty, let it be empty
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found - first release"
+          else
+            # confirm prev-tag actually exists in git repo
+            GIT_TAG_RESULT=$(git tag -l "$PREV_TAG")
+            if [ -z "$GIT_TAG_RESULT" ]; then
+              echo "Previous tag $PREV_TAG not found in git repo"
+              exit 1
+            fi
+          fi
+
+          TAG="$WORKING_DIR/v$VERSION"
+          if [ "$TAG" == "$PREV_TAG" ]; then
+            echo "No new version to release"
+            exit 1
+          fi
+          echo tag="$TAG" >> $GITHUB_OUTPUT
+          echo prev-tag="$PREV_TAG" >> $GITHUB_OUTPUT
+      - name: Generate release body
+        id: generate-release-body
+        env:
+          WORKING_DIR: ${{ inputs.working-directory }}
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          TAG: ${{ steps.check-tags.outputs.tag }}
+          PREV_TAG: ${{ steps.check-tags.outputs.prev-tag }}
+        run: |
+          PREAMBLE="Changes since $PREV_TAG"
+          # if PREV_TAG is empty, then we are releasing the first version
+          if [ -z "$PREV_TAG" ]; then
+            PREAMBLE="Initial release"
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          {
+            echo 'release-body<<EOF'
+            echo $PREAMBLE
+            echo
+            git log --format="%s" "$PREV_TAG"..HEAD -- $WORKING_DIR
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
   test-pypi-publish:
-    needs: [build]
+    needs:
+      - build
+      - release-notes
     runs-on: ubuntu-latest
     permissions:
       # This permission is used for trusted publishing:
@@ -121,6 +223,7 @@ jobs:
   pre-release-checks:
     needs:
       - build
+      - release-notes
       - test-pypi-publish
     runs-on: ubuntu-latest
     steps:
@@ -229,6 +332,7 @@ jobs:
   publish:
     needs:
       - build
+      - release-notes
       - test-pypi-publish
       - pre-release-checks
     runs-on: ubuntu-latest
@@ -271,6 +375,7 @@ jobs:
   mark-release:
     needs:
       - build
+      - release-notes
       - test-pypi-publish
       - pre-release-checks
       - publish
@@ -305,6 +410,7 @@ jobs:
           artifacts: "dist/*"
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
-          generateReleaseNotes: true
+          generateReleaseNotes: false
           tag: ${{ inputs.working-directory }}/v${{ needs.build.outputs.version }}
+          body: ${{ needs.release-notes.outputs.release-body }}
           commit: ${{ github.sha }}
