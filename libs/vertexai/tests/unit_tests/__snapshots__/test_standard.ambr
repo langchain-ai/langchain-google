@@ -8,22 +8,23 @@
       'ChatVertexAI',
     ]),
     'kwargs': dict({
-      'api_key': 'test',
       'default_metadata': list([
       ]),
       'endpoint_version': 'v1beta1',
       'location': 'us-central1',
       'max_output_tokens': 100,
       'max_retries': 2,
+      'model_kwargs': dict({
+        'api_key': 'test',
+        'timeout': 60,
+      }),
       'model_name': 'gemini-2.5-pro',
       'n': 1,
-      'perform_literal_eval_on_string_raw_content': True,
       'project': 'test-proj',
       'request_parallelism': 5,
       'stop': list([
       ]),
       'temperature': 0.0,
-      'timeout': 60.0,
     }),
     'lc': 1,
     'name': 'ChatVertexAI',

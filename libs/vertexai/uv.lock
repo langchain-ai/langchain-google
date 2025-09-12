@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
@@ -425,7 +425,7 @@ wheels = [
 
 [[package]]
 name = "google-cloud-aiplatform"
-version = "1.111.0"
+version = "1.97.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
@@ -443,9 +443,9 @@ dependencies = [
     { name = "shapely", version = "2.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/db/def79d3cbf2b502864f8ab18d0094f437edc5c2e5db5994bd10a16e813d4/google_cloud_aiplatform-1.111.0.tar.gz", hash = "sha256:80b07186419970fb1e39e2728e7aa2402a8753c1041ec5117677f489202c91d4", size = 9604280, upload-time = "2025-08-27T02:57:57.243Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/ea/38224d2972e16c82ee16c13407e647586e25671bd2f75d4455491c678c92/google_cloud_aiplatform-1.97.0.tar.gz", hash = "sha256:01277ac5648abe7d2af688b123d7d050c1a34922e9f4297e51e44d165cb79b45", size = 9229557, upload-time = "2025-06-11T06:40:19.907Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/27/492c171ccdaa56a409c9d50f4126170cfa779d0a976cb2d561f30d03146f/google_cloud_aiplatform-1.111.0-py2.py3-none-any.whl", hash = "sha256:a38796050b7d427fbf1f7d6d6e1d5069abe9a1fd948e3193250f68ccd67388f5", size = 7995239, upload-time = "2025-08-27T02:57:53.766Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/b8/f9ca10a648bc2596e904c30270c49e72528e2b3b583d886eeeec5080b27d/google_cloud_aiplatform-1.97.0-py2.py3-none-any.whl", hash = "sha256:4db9455308110b1e8c1b587bd3ff34449fa459fda45c4466b9b2d9ae259a7af6", size = 7687924, upload-time = "2025-06-11T06:40:16.947Z" },
 ]
 
 [[package]]
@@ -1012,7 +1012,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "0.3.75"
+version = "0.3.76"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -1023,14 +1023,14 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/06/63/270b71a23e849984505ddc7c5c9fd3f4bd9cb14b1a484ee44c4e51c33cc2/langchain_core-0.3.75.tar.gz", hash = "sha256:ab0eb95a06ed6043f76162e6086b45037690cb70b7f090bd83b5ebb8a05b70ed", size = 570876, upload-time = "2025-08-26T15:24:12.246Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/4d/5e2ea7754ee0a1f524c412801c6ba9ad49318ecb58b0d524903c3d9efe0a/langchain_core-0.3.76.tar.gz", hash = "sha256:71136a122dd1abae2c289c5809d035cf12b5f2bb682d8a4c1078cd94feae7419", size = 573568, upload-time = "2025-09-10T14:49:39.863Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/42/0d0221cce6f168f644d7d96cb6c87c4e42fc55d2941da7a36e970e3ab8ab/langchain_core-0.3.75-py3-none-any.whl", hash = "sha256:03ca1fadf955ee3c7d5806a841f4b3a37b816acea5e61a7e6ba1298c05eea7f5", size = 443986, upload-time = "2025-08-26T15:24:10.883Z" },
+    { url = "https://files.pythonhosted.org/packages/77/b5/501c0ffcb09c734457ceaa86bc7b1dd37b6a261147bd653add03b838aacb/langchain_core-0.3.76-py3-none-any.whl", hash = "sha256:46e0eb48c7ac532432d51f8ca1ece1804c82afe9ae3dcf027b867edadf82b3ec", size = 447508, upload-time = "2025-09-10T14:49:38.179Z" },
 ]
 
 [[package]]
 name = "langchain-google-vertexai"
-version = "2.0.28"
+version = "2.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "bottleneck" },
@@ -1041,7 +1041,6 @@ dependencies = [
     { name = "langchain-core" },
     { name = "numexpr", version = "2.10.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "numexpr", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-    { name = "protobuf" },
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "validators" },
@@ -1101,19 +1100,18 @@ typing = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.64,<1" },
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.35,<1" },
     { name = "bottleneck", specifier = ">=1.4,<2" },
-    { name = "google-cloud-aiplatform", specifier = ">=1.111,<2" },
+    { name = "google-cloud-aiplatform", specifier = ">=1.97.0" },
     { name = "google-cloud-storage", specifier = ">=2.18,<3" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "httpx-sse", specifier = ">=0.4,<1" },
-    { name = "langchain-core", specifier = ">=0.3.75" },
-    { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.11,<1" },
-    { name = "numexpr", specifier = ">=2,<3" },
-    { name = "protobuf", specifier = ">=6.32,<7.0.0" },
-    { name = "pyarrow", specifier = ">=21,<22" },
-    { name = "pydantic", specifier = ">=2.11,<3" },
-    { name = "validators", specifier = ">=0.35,<1" },
+    { name = "langchain-core", specifier = ">=0.3.76" },
+    { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.0,<1" },
+    { name = "numexpr", specifier = ">=2.8.6,<3" },
+    { name = "pyarrow", specifier = ">=19.0.1,<22" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "validators", specifier = ">=0.22,<1" },
 ]
 provides-extras = ["anthropic", "mistral"]
 
