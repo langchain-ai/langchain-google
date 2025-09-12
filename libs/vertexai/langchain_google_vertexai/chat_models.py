@@ -343,7 +343,10 @@ def _parse_chat_history_gemini(
         if isinstance(raw_content, (int, float, str)):
             raw_content = [str(raw_content)]
         elif isinstance(raw_content, list):
-            raw_content = [str(item) for item in raw_content]
+            # Preserve dict structure when literal_eval successfully parsed the content
+            raw_content = [
+                item if isinstance(item, dict) else str(item) for item in raw_content
+            ]
         else:
             raise TypeError(f"Unsupported type: {type(raw_content)}")
         result = []
