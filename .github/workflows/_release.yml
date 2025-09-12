@@ -12,12 +12,18 @@ on:
       working-directory:
         required: true
         type: string
+        description: "From which folder this pipeline executes"
         default: 'libs/vertexai'
+      release-version:
+        required: true
+        type: string
+        default: '0.1.0'
+        description: "New version of package being released"
       dangerous-nonmaster-release:
         required: false
         type: boolean
         default: false
-        description: "Release from a non-master branch (danger!)"
+        description: "Release from a non-master branch (danger!) - Only use for hotfixes"
 
 env:
   PYTHON_VERSION: "3.11"
@@ -34,7 +40,7 @@ jobs:
       version: ${{ steps.check-version.outputs.version }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python + uv
         uses: "./.github/actions/uv_setup"
@@ -64,15 +70,23 @@ jobs:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
 
-      - name: Check Version
+      - name: Check version
         id: check-version
-        shell: bash
+        shell: python
         working-directory: ${{ inputs.working-directory }}
         run: |
-          echo pkg-name="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['name'])")" >> $GITHUB_OUTPUT
-          echo version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")" >> $GITHUB_OUTPUT
+          import os
+          import tomllib
+          with open("pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          pkg_name = data["project"]["name"]
+          version = data["project"]["version"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"pkg-name={pkg_name}\n")
+              f.write(f"version={version}\n")
 
   test-pypi-publish:
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       # This permission is used for trusted publishing:
@@ -110,7 +124,7 @@ jobs:
       - test-pypi-publish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # We explicitly *don't* set up caching here. This ensures our tests are
       # maximally sensitive to catching breakage.
@@ -231,7 +245,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python + uv
         uses: "./.github/actions/uv_setup"
@@ -240,7 +254,7 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
@@ -271,7 +285,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python + uv
         uses: "./.github/actions/uv_setup"
@@ -280,7 +294,7 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
