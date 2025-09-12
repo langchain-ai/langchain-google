@@ -126,12 +126,13 @@ jobs:
         # - attempt install again after 5 seconds if it fails because there is
         #   sometimes a delay in availability on test pypi
         run: |
-          uv pip install \
+          uv venv
+          VIRTUAL_ENV=.venv uv pip install \
             --extra-index-url https://test.pypi.org/simple/ \
             "$PKG_NAME==$VERSION" || \
           ( \
             sleep 5 && \
-            uv pip install \
+            VIRTUAL_ENV=.venv uv pip install \
               --extra-index-url https://test.pypi.org/simple/ \
               "$PKG_NAME==$VERSION" \
           )
@@ -154,7 +155,7 @@ jobs:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          uv pip install \
+          VIRTUAL_ENV=.venv uv pip install \
             --extra-index-url https://test.pypi.org/simple/ \
             "$PKG_NAME==$VERSION"
 
@@ -181,7 +182,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         id: min-version
         run: |
-          uv pip install packaging
+          VIRTUAL_ENV=.venv uv pip install packaging
           min_versions="$(uv run python $GITHUB_WORKSPACE/.github/scripts/get_min_versions.py pyproject.toml release)"
           echo "min-versions=$min_versions" >> "$GITHUB_OUTPUT"
           echo "min-versions=$min_versions"
@@ -191,7 +192,7 @@ jobs:
         env:
           MIN_VERSIONS: ${{ steps.min-version.outputs.min-versions }}
         run: |
-          uv pip install $MIN_VERSIONS
+          VIRTUAL_ENV=.venv uv pip install $MIN_VERSIONS
           make tests
         working-directory: ${{ inputs.working-directory }}
 
