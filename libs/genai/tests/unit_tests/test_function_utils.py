@@ -5,7 +5,7 @@ import google.ai.generativelanguage as glm
 import pytest
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import convert_to_openai_tool, convert_to_openai_function
 from pydantic import BaseModel, Field
 from typing_extensions import Annotated
 
@@ -13,6 +13,7 @@ from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
     _format_base_tool_to_function_declaration,
     _format_dict_to_function_declaration,
+    _format_to_gapic_function_declaration,
     _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
     _ToolConfigDict,
@@ -1241,3 +1242,63 @@ def test_tool_field_union_types() -> None:
     required_fields = parameters.get("required", [])
     assert "location" in required_fields, "Expected 'location' to be required"
     assert "date" in required_fields, "Expected 'date' to be required"
+
+
+def test_union_type_schema_validation():
+    """Test that Union types get proper type_ assignment for Gemini compatibility."""
+    
+    class Response(BaseModel):
+        """Response to user."""
+        response: str
+
+    class Plan(BaseModel):
+        """Plan to perform.""" 
+        plan: str
+
+    class Act(BaseModel):
+        """Action to perform."""
+        action: Union[Response, Plan] = Field(
+            description="Action to perform."
+        )
+    
+    # Convert to GenAI function declaration
+    openai_func = convert_to_openai_function(Act)
+    genai_func = _format_to_gapic_function_declaration(openai_func)
+    
+    # The action property should have a valid type (not 0) for Gemini compatibility
+    action_prop = genai_func.parameters.properties["action"]
+    assert action_prop.type_ == glm.Type.OBJECT, (
+        f"Union type should have OBJECT type, got {action_prop.type_}"
+    )
+    assert action_prop.type_ != 0, "Union type should not have type_ = 0"
+
+
+def test_optional_dict_schema_validation():
+    """Test that Optional[Dict] types get proper OBJECT type for Gemini compatibility."""
+    
+    class RequestsGetToolInput(BaseModel):
+        url: str = Field(description="The URL to send the GET request to")
+        params: Optional[Dict[str, str]] = Field(
+            default={},
+            description="Query parameters for the GET request"
+        )
+        output_instructions: str = Field(
+            description="Instructions on what information to extract from the response"
+        )
+    
+    # Convert to GenAI function declaration
+    openai_func = convert_to_openai_function(RequestsGetToolInput)
+    genai_func = _format_to_gapic_function_declaration(openai_func)
+    
+    # The params property should have OBJECT type, not STRING
+    params_prop = genai_func.parameters.properties["params"]
+    assert params_prop.type_ == glm.Type.OBJECT, (
+        f"Optional[Dict] should have OBJECT type, got {params_prop.type_}"
+    )
+    assert params_prop.type_ != glm.Type.STRING, (
+        "Optional[Dict] should not be converted to STRING type"
+    )
+    assert params_prop.nullable == True, "Optional[Dict] should be nullable"
+    assert params_prop.description == "Query parameters for the GET request", (
+        "Description should be preserved"
+    )
