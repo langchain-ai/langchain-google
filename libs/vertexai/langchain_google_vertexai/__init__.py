@@ -43,6 +43,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 from langchain_google_vertexai._enums import (
     HarmBlockThreshold,
     HarmCategory,
+    Modality,
     SafetySetting,
 )
 from langchain_google_vertexai.chains import create_structured_runnable
@@ -97,6 +98,7 @@ __all__ = [
     "GemmaVertexAIModelGarden",
     "HarmBlockThreshold",
     "HarmCategory",
+    "Modality",
     "PydanticFunctionsOutputParser",
     "SafetySetting",
     "Schema",
