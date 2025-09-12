@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "langchain-google-vertexai"
-version = "2.0.28"
+version = "2.1.0"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 license = {text = "MIT"}
@@ -13,7 +13,7 @@ readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=0.3.75",
+    "langchain-core>=0.3.76",
     "google-cloud-aiplatform>=1.97.0",
     "google-cloud-storage>=2.18,<3",
     "httpx>=0.28,<1",
