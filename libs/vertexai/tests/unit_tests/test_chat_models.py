@@ -1561,7 +1561,9 @@ def test_python_literal_inputs() -> None:
 
 
 def test_v1_function_parts() -> None:
-    llm = ChatVertexAI(model="gemini-2.5-flash", endpoint_version="v1")
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash", project="test-project", endpoint_version="v1"
+    )
 
     messages = [
         HumanMessage(content="What is 2+2*2?"),
