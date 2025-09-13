@@ -1558,3 +1558,20 @@ def test_python_literal_inputs() -> None:
 
     for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
         _ = llm._prepare_request_gemini([HumanMessage(input_string)])
+
+
+def test_v1_function_parts() -> None:
+    llm = ChatVertexAI(model="gemini-2.5-flash", endpoint_version="v1")
+
+    messages = [
+        HumanMessage(content="What is 2+2*2?"),
+        AIMessage(
+            content="I am calling a calculator to evaluate the expression",
+            tool_calls=[
+                {"name": "calculator", "args": {"expression": "2+2*2"}, "id": "123"}
+            ],
+        ),
+        ToolMessage(content="6", tool_call_id="123"),
+    ]
+
+    assert llm._prepare_request_gemini(messages)
