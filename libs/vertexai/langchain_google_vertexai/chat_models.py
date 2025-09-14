@@ -92,7 +92,9 @@ from vertexai.language_models import (  # type: ignore
 )
 from google.cloud.aiplatform_v1.types import (
     Content as v1Content,
+    FunctionCall as v1FunctionCall,
     FunctionCallingConfig as v1FunctionCallingConfig,
+    FunctionResponse as v1FunctionResponse,
     GenerateContentRequest as v1GenerateContentRequest,
     GenerationConfig as v1GenerationConfig,
     Part as v1Part,
@@ -1767,7 +1769,33 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     raw_part = proto.Message.to_dict(part)
                     _ = raw_part.pop("thought")
                     _ = raw_part.pop("thought_signature", None)
-                    v1_parts.append(v1Part(**raw_part))
+
+                    if "function_call" in raw_part and isinstance(
+                        raw_part["function_call"], dict
+                    ):
+                        _ = raw_part["function_call"].pop("id", None)
+                        v1_parts.append(
+                            v1Part(
+                                function_call=v1FunctionCall(
+                                    **raw_part["function_call"]
+                                )
+                            )
+                        )
+
+                    elif "function_response" in raw_part and isinstance(
+                        raw_part["function_response"], dict
+                    ):
+                        _ = raw_part["function_response"].pop("id", None)
+                        v1_parts.append(
+                            v1Part(
+                                function_response=v1FunctionResponse(
+                                    **raw_part["function_response"]
+                                )
+                            )
+                        )
+
+                    else:
+                        v1_parts.append(v1Part(**raw_part))
                 v1_contens.append(v1Content(role=content.role, parts=v1_parts))
             return v1_contens
 
