@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
+from langchain_core.utils import guard_import
 
 from langchain_google_community._utils import get_client_info
 
 if TYPE_CHECKING:
     from google.auth.credentials import Credentials  # type: ignore[import]
+
+
+def import_bigquery() -> Any:
+    """Import the google-cloud-bigquery library and return the client."""
+    return guard_import(
+        "google.cloud.bigquery", pip_name="langchain-google-community[bigquery]"
+    )
 
 
 class BigQueryLoader(BaseLoader):
@@ -44,6 +52,7 @@ class BigQueryLoader(BaseLoader):
                 (`google.auth.compute_engine.Credentials`) or Service Account
                 (`google.oauth2.service_account.Credentials`) credentials directly.
         """
+        import_bigquery()
         self.query = query
         self.project = project
         self.page_content_columns = page_content_columns
