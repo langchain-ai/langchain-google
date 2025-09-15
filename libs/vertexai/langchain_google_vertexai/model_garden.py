@@ -184,6 +184,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         default=None,
         description="Timeout for API requests.",
     )
+    http_client: Any = Field(default=None, exclude=True)
+    async_http_client: Any = Field(default=None, exclude=True)
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -484,3 +486,4 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return RunnableMap(raw=llm) | parser_with_fallback
         else:
             return llm | output_parser
+
