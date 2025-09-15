@@ -102,6 +102,10 @@ def _format_json_schema_to_gapic_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
                     f"Got {len(value)}, ignoring other than first value!"
                 )
             return _format_json_schema_to_gapic_v1(value[0])
+        elif key == "anyOf":
+            converted_schema["anyOf"] = [
+                _format_json_schema_to_gapic_v1(anyOf_type) for anyOf_type in value
+            ]
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
