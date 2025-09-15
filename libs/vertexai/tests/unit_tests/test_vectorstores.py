@@ -100,21 +100,21 @@ def test_to_data_points_with_integer_metadata():
     integer_restriction = num_restriction_lookup["integer_field"]
     assert hasattr(integer_restriction, 'value_int')
     assert integer_restriction.value_int == 42
-    # Ensure value_float is not set for integer values
-    assert not hasattr(integer_restriction, 'value_float') or integer_restriction.value_float is None
+    # Ensure value_float is 0.0 for integer values (not used)
+    assert integer_restriction.value_float == 0.0
 
     # Test float field uses value_float
     float_restriction = num_restriction_lookup["float_field"]
     assert hasattr(float_restriction, 'value_float')
     assert float_restriction.value_float == pytest.approx(3.14)
-    # Ensure value_int is not set for float values
-    assert not hasattr(float_restriction, 'value_int') or float_restriction.value_int is None
+    # Ensure value_int is 0 for float values (not used)
+    assert integer_restriction.value_int == 0
 
     # Test another integer field uses value_int
     mixed_restriction = num_restriction_lookup["mixed_integers"]
     assert hasattr(mixed_restriction, 'value_int')
     assert mixed_restriction.value_int == 100
-    assert not hasattr(mixed_restriction, 'value_float') or mixed_restriction.value_float is None
+    assert mixed_restriction.value_float == 0.0
 
     # Check string restrictions are still handled correctly
     restriction_lookup = {
@@ -231,4 +231,5 @@ def test_similarity_search_by_vector_with_score_output_shape():
     assert len(result_without_sparse[0]) == 2
     assert isinstance(result_without_sparse[0][0], Document)
     assert isinstance(result_without_sparse[0][1], float)
+
 
