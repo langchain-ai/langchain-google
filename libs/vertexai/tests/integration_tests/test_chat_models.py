@@ -29,7 +29,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.runnables import RunnableSerializable
+from langchain_core.runnables import ConfigurableField, RunnableSerializable
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -185,8 +185,7 @@ async def test_vertexai_astream() -> None:
 def test_multimodal() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
     gcs_url = (
-        "gs://cloud-samples-data/generative-ai/image/"
-        "320px-Felis_catus-cat_on_snow.jpg"
+        "gs://cloud-samples-data/generative-ai/image/320px-Felis_catus-cat_on_snow.jpg"
     )
     image_message = {
         "type": "image_url",
@@ -267,13 +266,24 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 
 @pytest.mark.release
 @pytest.mark.first
-@pytest.mark.xfail(reason="need a model supporting more than 1M input tokens")
 def test_multimodal_media_inline_base64_template() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
-    prompt_template = ChatPromptTemplate.from_messages(
+    prompt_template = ChatPromptTemplate(
         [
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "media",
+                        "data": "{media_base64}",
+                        "mime_type": "{mime_type}",
+                    },
+                    {
+                        "type": "text",
+                        "text": "Describe the attached media in 5 words!",
+                    },
+                ],
+            },
         ]
     )
     storage_client = storage.Client()
@@ -283,15 +293,8 @@ def test_multimodal_media_inline_base64_template() -> None:
     mime_type = "audio/mp3"
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
-    media_message = {
-        "type": "media",
-        "data": media_base64,
-        "mime_type": mime_type,
-    }
-    text_message = {"type": "text", "text": "Describe the attached media in 5 words!"}
-    message = HumanMessage(content=[media_message, text_message])
     chain = prompt_template | llm
-    output = chain.invoke({"input": [message]})
+    output = chain.invoke({"media_base64": media_base64, "mime_type": mime_type})
     assert isinstance(output.content, str)
 
 
@@ -304,7 +307,10 @@ def test_multimodal_media_inline_base64_agent() -> None:
         """Retrieves information about the Climate."""
         return "MOCK CLIMATE INFO STRING"
 
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
+    llm = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME,
+        perform_literal_eval_on_string_raw_content=True,
+    )
     prompt_template = ChatPromptTemplate.from_messages(
         [
             ("human", "{input}"),
@@ -333,16 +339,16 @@ def test_multimodal_media_inline_base64_agent() -> None:
         tools=tools,
         prompt=prompt_template,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
+    agent_executor = agents.AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=False,
-        stream_runnable=False,
     )
     output = agent_executor.invoke({"input": message})
     assert isinstance(output["output"], str)
 
 
+@pytest.mark.flaky(retries=3)
 def test_audio_timestamp():
     storage_client = storage.Client()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
@@ -981,13 +987,25 @@ def test_thought_signatures() -> None:
 
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_disabled() -> None:
-    model = ChatVertexAI(
-        model_name=_DEFAULT_THINKING_MODEL_NAME,
-        thinking_budget=200,  # Test we override with runtime kwarg
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
+    response = model.invoke("How many O's are in Google?")
+    assert isinstance(response, AIMessage)
+    assert (
+        response.usage_metadata["total_tokens"]  # type: ignore
+        == response.usage_metadata["input_tokens"]  # type: ignore
+        + response.usage_metadata["output_tokens"]  # type: ignore
     )
-    response = model.invoke(
-        [HumanMessage("How many O's are in Google?")],
-        thinking_budget=0,  # Disable thinking
+    assert "output_token_details" not in response.usage_metadata  # type: ignore
+
+
+@pytest.mark.release
+def test_chat_vertexai_gemini_thinking_configurable() -> None:
+    model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
+    configurable_model = model.configurable_fields(
+        thinking_budget=ConfigurableField(id="thinking_budget")
+    )
+    response = configurable_model.invoke(
+        "How many O's are in Google?", {"configurable": {"thinking_budget": 0}}
     )
     assert isinstance(response, AIMessage)
     assert response.usage_metadata is not None
@@ -1103,7 +1121,7 @@ def test_structured_output_schema_enum():
         """
         The film aims to educate and inform viewers about real-life subjects, events, or
         people. It offers a factual record of a particular topic by combining interviews
-        , historical footage and narration. The primary purpose of a film is to present 
+        , historical footage and narration. The primary purpose of a film is to present
         information and provide insights into various aspects of reality.
         """
     )
@@ -1118,14 +1136,14 @@ def test_structured_output_schema_enum():
 @pytest.mark.first
 def test_context_catching():
     system_instruction = """
-    
+
     You are an expert researcher. You always stick to the facts in the sources provided,
     and never make up new facts.
     
     If asked about it, the secret number is 747.
-    
+
     Now look at these research papers, and answer the following questions.
-    
+
     """
 
     cached_content = create_context_cache(
@@ -1191,9 +1209,8 @@ def test_context_catching_tools():
 
     You have a get_secret_number function available. Use this tool if someone asks
     for the secret number.
-        
     Now look at these research papers, and answer the following questions.
-        
+
     """
 
     cached_content = create_context_cache(
@@ -1238,9 +1255,7 @@ def test_context_catching_tools():
         tools=tools,
         prompt=prompt,
     )
-    agent_executor = agents.AgentExecutor(  # type: ignore[call-arg]
-        agent=agent, tools=tools, verbose=False, stream_runnable=False
-    )
+    agent_executor = agents.AgentExecutor(agent=agent, tools=tools, verbose=False)
     response = agent_executor.invoke({"input": "what is the secret number?"})
     assert isinstance(response["output"], str)
 

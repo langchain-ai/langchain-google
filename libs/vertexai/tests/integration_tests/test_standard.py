@@ -33,7 +33,8 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
 
     @property
     def supports_image_urls(self) -> bool:
-        return True
+        # TODO: 403 Client Error: Forbidden for this specific URL
+        return False
 
     @property
     def supports_pdf_inputs(self) -> bool:
@@ -72,7 +73,8 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
 
     @property
     def supports_image_urls(self) -> bool:
-        return True
+        # TODO: 403 Client Error: Forbidden for this specific URL
+        return False
 
     @property
     def supports_pdf_inputs(self) -> bool:
