@@ -245,4 +245,3 @@ class VertexAICheckGroundingWrapper(
         extra="ignore",
         arbitrary_types_allowed=True,
     )
-
