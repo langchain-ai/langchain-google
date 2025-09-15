@@ -47,7 +47,7 @@ def test_model_garden(
         result_arg=result_arg,
         location=location,
     )
-    output = llm("What is the meaning of life?")
+    output = llm.invoke("What is the meaning of life?")
     assert isinstance(output, str)
     print(output)
     assert llm._llm_type == "vertexai_model_garden"

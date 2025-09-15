@@ -36,13 +36,13 @@ def test_chat_call(model_name: str) -> None:
     vb = VertexAICallbackHandler()
     llm = ChatVertexAI(model_name=model_name, temperature=0.0, callbacks=[vb])
     message = HumanMessage(content="Hello")
-    _ = llm([message])
+    _ = llm.invoke([message])
     assert vb.successful_requests == 1
     assert vb.prompt_tokens > 0
     assert vb.completion_tokens > 0
     prompt_tokens = vb.prompt_tokens
     completion_tokens = vb.completion_tokens
-    _ = llm([message])
+    _ = llm.invoke([message])
     assert vb.successful_requests == 2
     assert vb.prompt_tokens > prompt_tokens
     assert vb.completion_tokens > completion_tokens

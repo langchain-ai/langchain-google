@@ -806,7 +806,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     tool_calls = response.tool_calls
     assert len(tool_calls) == 3
 
-    tool_response = search("sparrow")
+    tool_response = search.invoke({"question": "sparrow"})
     tool_messages: List[BaseMessage] = []
 
     for tool_call in tool_calls:
