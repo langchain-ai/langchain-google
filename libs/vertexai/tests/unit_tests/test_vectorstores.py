@@ -88,7 +88,9 @@ def test_to_data_points_with_integer_metadata():
     assert datapoint.datapoint_id == "Id1"
 
     # Check that we have the expected number of numeric restrictions
-    assert len(datapoint.numeric_restricts) == 3  # integer_field, float_field, mixed_integers
+    assert (
+        len(datapoint.numeric_restricts) == 3
+    )  # integer_field, float_field, mixed_integers
 
     # Create lookup for numeric restrictions
     num_restriction_lookup = {
@@ -98,21 +100,21 @@ def test_to_data_points_with_integer_metadata():
 
     # Test integer field uses value_int
     integer_restriction = num_restriction_lookup["integer_field"]
-    assert hasattr(integer_restriction, 'value_int')
+    assert hasattr(integer_restriction, "value_int")
     assert integer_restriction.value_int == 42
     # Ensure value_float is 0.0 for integer values (not used)
     assert integer_restriction.value_float == 0.0
 
     # Test float field uses value_float
     float_restriction = num_restriction_lookup["float_field"]
-    assert hasattr(float_restriction, 'value_float')
+    assert hasattr(float_restriction, "value_float")
     assert float_restriction.value_float == pytest.approx(3.14)
     # Ensure value_int is 0 for float values (not used)
     assert float_restriction.value_int == 0
 
     # Test another integer field uses value_int
     mixed_restriction = num_restriction_lookup["mixed_integers"]
-    assert hasattr(mixed_restriction, 'value_int')
+    assert hasattr(mixed_restriction, "value_int")
     assert mixed_restriction.value_int == 100
     assert mixed_restriction.value_float == 0.0
 
@@ -231,6 +233,3 @@ def test_similarity_search_by_vector_with_score_output_shape():
     assert len(result_without_sparse[0]) == 2
     assert isinstance(result_without_sparse[0][0], Document)
     assert isinstance(result_without_sparse[0][1], float)
-
-
-
