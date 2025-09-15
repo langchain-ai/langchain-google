@@ -87,9 +87,11 @@ class VertexAICheckGroundingWrapper(
         return discoveryengine_v1alpha.GroundedGenerationServiceClient(
             credentials=(
                 self.credentials
-                or Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
-                if self.credentials_path
-                else None
+                or (
+                    Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
+                    if self.credentials_path
+                    else None
+                )
             ),
             client_info=get_client_info(module="vertex-ai-search"),
         )
@@ -243,3 +245,4 @@ class VertexAICheckGroundingWrapper(
         extra="ignore",
         arbitrary_types_allowed=True,
     )
+
