@@ -170,7 +170,11 @@ def data_points_to_batch_update_records(
                 for restrict in data_point.restricts
             ],
             "numeric_restricts": [
-                {"namespace": restrict.namespace, "value_float": restrict.value_float}
+                {
+                    "namespace": restrict.namespace,
+                    **({"value_int": restrict.value_int} if hasattr(restrict, 'value_int') and restrict.value_int is not None else {}),
+                    **({"value_float": restrict.value_float} if hasattr(restrict, 'value_float') and restrict.value_float is not None else {})
+                }
                 for restrict in data_point.numeric_restricts
             ],
         }
@@ -187,4 +191,5 @@ def data_points_to_batch_update_records(
         records.append(record)
 
     return records
+
 
