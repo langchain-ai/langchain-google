@@ -14,7 +14,7 @@ repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
     "langchain-core>=0.3.75",
-    "google-ai-generativelanguage>=0.6.18,<1",
+    "google-ai-generativelanguage>=0.7,<1",
     "pydantic>=2,<3",
     "filetype>=1.2,<2",
 ]
