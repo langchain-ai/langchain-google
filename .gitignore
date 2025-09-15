@@ -1,5 +1,4 @@
 .vs/
-.vscode/
 .idea/
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -135,6 +134,7 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+.mypy_cache_test/
 .dmypy.json
 dmypy.json
 

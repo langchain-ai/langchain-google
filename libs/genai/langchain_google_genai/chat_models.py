@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import mimetypes
+import time
 import uuid
 import warnings
 import wave
@@ -91,13 +92,7 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    SecretStr,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic.v1 import BaseModel as BaseModelV1
 from tenacity import (
     before_sleep_log,
@@ -223,13 +218,17 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     Returns:
         Any: The result from the chat generation method.
     """
-    retry_decorator = _create_retry_decorator()
+    retry_decorator = _create_retry_decorator(
+        max_retries=kwargs.get("max_retries", 6),
+        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
+        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
+        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
+    )
 
     @retry_decorator
     def _chat_with_retry(**kwargs: Any) -> Any:
         try:
             return generation_method(**kwargs)
-        # Do not retry for these errors.
         except google.api_core.exceptions.FailedPrecondition as exc:
             if "location is not supported" in exc.message:
                 error_msg = (
@@ -243,6 +242,13 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise ChatGoogleGenerativeAIError(
                 f"Invalid argument provided to Gemini: {e}"
             ) from e
+        except google.api_core.exceptions.ResourceExhausted as e:
+            # Handle quota-exceeded error with recommended retry delay
+            if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
+                "wait_exponential_max", 60.0
+            ):
+                time.sleep(e.retry_after)
+            raise e
         except Exception as e:
             raise e
 
@@ -505,7 +511,12 @@ def _parse_chat_history(
     messages: List[Content] = []
 
     if convert_system_message_to_human:
-        warnings.warn("Convert_system_message_to_human will be deprecated!")
+        warnings.warn(
+            "The 'convert_system_message_to_human' parameter is deprecated and will be "
+            "removed in a future version. Use system instructions instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     system_instruction: Optional[Content] = None
     messages_without_tool_messages = [
@@ -668,9 +679,15 @@ def _parse_response_candidate(
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
-            function_call["arguments"] = json.dumps(
-                {k: function_call_args_dict[k] for k in function_call_args_dict}
-            )
+
+            # Fix: Correct integer-like floats from protobuf conversion
+            # The protobuf library sometimes converts integers to floats
+            corrected_args = {
+                k: int(v) if isinstance(v, float) and v.is_integer() else v
+                for k, v in function_call_args_dict.items()
+            }
+
+            function_call["arguments"] = json.dumps(corrected_args)
             additional_kwargs["function_call"] = function_call
 
             if streaming:
@@ -707,7 +724,9 @@ def _parse_response_candidate(
                     )
     if content is None:
         content = ""
-    if any(isinstance(item, dict) and "executable_code" in item for item in content):
+    if isinstance(content, list) and any(
+        isinstance(item, dict) and "executable_code" in item for item in content
+    ):
         warnings.warn(
             """
         ⚠️ Warning: Output may vary each run.  
@@ -826,7 +845,15 @@ def _response_to_result(
         if stream:
             generations = [
                 ChatGenerationChunk(
-                    message=AIMessageChunk(content=""), generation_info={}
+                    message=AIMessageChunk(
+                        content="",
+                        response_metadata={
+                            "prompt_feedback": proto.Message.to_dict(
+                                response.prompt_feedback
+                            )
+                        },
+                    ),
+                    generation_info={},
                 )
             ]
         else:
@@ -1123,6 +1150,144 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting fair weather. The lush green grass and trees indicate a warm and possibly slightly breezy day. There are no signs of rain or storms.'
 
+    PDF input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            pdf_bytes = open("/path/to/your/test.pdf", 'rb').read()
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe the document in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"application/pdf",
+                        "data": pdf_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance.'
+
+    Video input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            video_bytes = open("/path/to/your/video.mp4", 'rb').read()
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe what's in this video in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type": "video/mp4",
+                        "data": video_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner.'
+
+        You can also pass YouTube URLs directly:
+
+        .. code-block:: python
+
+            from langchain_core.messages import HumanMessage
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize the video in 3 sentences."},
+                    {
+                        "type": "media",
+                        "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                        "mime_type": "video/mp4",
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+
+    Audio input:
+        .. code-block:: python
+
+            import base64
+            from langchain_core.messages import HumanMessage
+
+            audio_bytes = open("/path/to/your/audio.mp3", 'rb').read()
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "summarize this audio in a sentence"},
+                    {
+                        "type": "file",
+                        "source_type": "base64",
+                        "mime_type":"audio/mp3",
+                        "data": audio_base64
+                    }
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "In this episode of the Made by Google podcast, Stephen Johnson and Simon Tokumine discuss NotebookLM, a tool designed to help users understand complex material in various modalities, with a focus on its unexpected uses, the development of audio overviews, and the implementation of new features like mind maps and source discovery."
+
+    File upload (URI-based):
+        You can also upload files to Google's servers and reference them by URI.
+        This works for PDFs, images, videos, and audio files.
+
+        .. code-block:: python
+
+            import time
+            from google import genai
+            from langchain_core.messages import HumanMessage
+
+            client = genai.Client()
+
+            myfile = client.files.upload(file="/path/to/your/sample.pdf")
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = client.files.get(name=myfile.name)
+
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": "What is in the document?"},
+                    {
+                        "type": "media",
+                        "file_uri": myfile.uri,
+                        "mime_type": "application/pdf",
+                    },
+                ]
+            )
+            ai_msg = llm.invoke([message])
+            ai_msg.content
+
+        .. code-block:: python
+
+            "This research paper assesses and mitigates multi-turn jailbreak vulnerabilities in large language models using the Crescendo attack study, evaluating attack success rates and mitigation strategies like prompt hardening and LLM-as-guardrail."
+
     Token usage:
         .. code-block:: python
 
@@ -1152,8 +1317,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
-    default_metadata: Sequence[Tuple[str, str]] = Field(
-        default_factory=list
+    default_metadata: Optional[Sequence[Tuple[str, str]]] = Field(
+        default=None, alias="default_metadata_input"
     )  #: :meta private:
 
     convert_system_message_to_human: bool = False
@@ -1187,6 +1352,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
     ``cachedContents/{cachedContent}``.
     """
+
+    stop: Optional[List[str]] = None
+    """Stop sequences for the model."""
+
+    streaming: Optional[bool] = None
+    """Whether to stream responses from the model."""
 
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
     """Holds any unexpected initialization parameters."""
@@ -1399,18 +1570,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "response_modalities": self.response_modalities,
                 "thinking_config": (
                     (
-                        {"thinking_budget": self.thinking_budget}
-                        if self.thinking_budget is not None
-                        else {}
+                        (
+                            {"thinking_budget": self.thinking_budget}
+                            if self.thinking_budget is not None
+                            else {}
+                        )
+                        | (
+                            {"include_thoughts": self.include_thoughts}
+                            if self.include_thoughts is not None
+                            else {}
+                        )
                     )
-                    | (
-                        {"include_thoughts": self.include_thoughts}
-                        if self.include_thoughts is not None
-                        else {}
-                    )
-                )
-                if self.thinking_budget is not None or self.include_thoughts is not None
-                else None,
+                    if self.thinking_budget is not None
+                    or self.include_thoughts is not None
+                    else None
+                ),
             }.items()
             if v is not None
         }
@@ -1570,7 +1744,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             if run_manager:
-                run_manager.on_llm_new_token(gen.text)
+                run_manager.on_llm_new_token(gen.text, chunk=gen)
             yield gen
 
     async def _astream(
@@ -1636,7 +1810,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
 
                 if run_manager:
-                    await run_manager.on_llm_new_token(gen.text)
+                    await run_manager.on_llm_new_token(gen.text, chunk=gen)
                 yield gen
 
     def _prepare_request(
@@ -1652,7 +1826,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         **kwargs: Any,
-    ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
+    ) -> GenerateContentRequest:
         if tool_choice and tool_config:
             raise ValueError(
                 "Must specify at most one of tool_choice and tool_config, received "
@@ -1678,10 +1852,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 filtered_messages.append(message)
         messages = filtered_messages
 
-        system_instruction, history = _parse_chat_history(
-            messages,
-            convert_system_message_to_human=self.convert_system_message_to_human,
-        )
+        if self.convert_system_message_to_human:
+            system_instruction, history = _parse_chat_history(
+                messages,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+        else:
+            system_instruction, history = _parse_chat_history(messages)
         if tool_choice:
             if not formatted_tools:
                 msg = (

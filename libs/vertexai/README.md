@@ -4,15 +4,18 @@ This package contains the LangChain integrations for Google Cloud generative mod
 
 ## Contents
 
-1. [Installation](#installation)
-2. [Chat Models](#chat-models)
-   * [Multimodal inputs](#multimodal-inputs)
-3. [Embeddings](#embeddings)
-4. [LLMs](#llms)
-5. [Code Generation](#code-generation)
-   * [Example: Generate a Python function](#example-generate-a-python-function)
-   * [Example: Generate JavaScript code](#example-generate-javascript-code)
-   * [Notes](#notes)
+- [langchain-google-vertexai](#langchain-google-vertexai)
+  - [Contents](#contents)
+  - [Installation](#installation)
+  - [Chat Models](#chat-models)
+    - [Multimodal inputs](#multimodal-inputs)
+    - [Multimodal Outputs](#multimodal-outputs)
+  - [Embeddings](#embeddings)
+  - [LLMs](#llms)
+  - [Code Generation](#code-generation)
+    - [Example: Generate a Python function](#example-generate-a-python-function)
+    - [Example: Generate JavaScript code](#example-generate-javascript-code)
+    - [Notes](#notes)
 
 ## Installation
 
@@ -56,9 +59,30 @@ llm.invoke([message])
 
 The value of `image_url` can be:
 
-* A public image URL
-* An accessible Google Cloud Storage (GCS) file (e.g., `"gcs://path/to/file.png"`)
-* A base64 encoded image (e.g., `"data:image/png;base64,abcd124"`)
+- A public image URL
+- An accessible Google Cloud Storage (GCS) file (e.g., `"gcs://path/to/file.png"`)
+- A base64 encoded image (e.g., `"data:image/png;base64,abcd124"`)
+
+### Multimodal Outputs
+
+Gemini supports image output. Example:
+
+```python
+from langchain_core.messages import HumanMessage
+from langchain_google_vertexai import ChatVertexAI, Modality
+
+llm = ChatVertexAI(model_name="gemini-2.0-flash-preview-image-generation",
+                   response_modalities = [Modality.TEXT, Modality.IMAGE])
+message = HumanMessage(
+    content=[
+        {
+            "type": "text",
+            "text": "Generate an image of a cat.",
+        },
+    ]
+)
+llm.invoke([message])
+```
 
 ## Embeddings
 
@@ -121,6 +145,6 @@ print(llm.invoke(prompt_js))
 
 ### Notes
 
-* Adjust `temperature` to control creativity (higher values increase randomness).
-* Use `max_output_tokens` to limit the length of the generated code.
-* Gemini models are well-suited for code generation tasks with advanced understanding of programming concepts.
+- Adjust `temperature` to control creativity (higher values increase randomness).
+- Use `max_output_tokens` to limit the length of the generated code.
+- Gemini models are well-suited for code generation tasks with advanced understanding of programming concepts.
