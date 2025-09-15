@@ -228,7 +228,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             credentials=self.credentials,
             timeout=self.timeout,
             http_client=self.http_client,
-            **self.model_kwargs
+            **self.model_kwargs,
         )
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
@@ -239,7 +239,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             credentials=self.credentials,
             timeout=self.timeout,
             http_client=self.async_http_client,
-            **self.model_kwargs
+            **self.model_kwargs,
         )
         return self
 
@@ -500,7 +500,3 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return RunnableMap(raw=llm) | parser_with_fallback
         else:
             return llm | output_parser
-
-
-
-
