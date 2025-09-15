@@ -16,7 +16,7 @@ from langchain_google_vertexai.embeddings import (
 )
 
 _EMBEDDING_MODELS = [
-    ("text-embedding-004", 768),
+    ("gemini-embedding-001", 3072),
     ("multimodalembedding@001", 1408),
 ]
 
@@ -26,11 +26,11 @@ def test_initialization() -> None:
     """Test embedding model initialization."""
     for embeddings in [
         VertexAIEmbeddings(
-            model_name="text-embedding-004",
+            model_name="gemini-embedding-001",
         ),
-        VertexAIEmbeddings(model="text-embedding-004"),
+        VertexAIEmbeddings(model="gemini-embedding-001"),
     ]:
-        assert embeddings.model_name == "text-embedding-004"
+        assert embeddings.model_name == "gemini-embedding-001"
 
 
 @pytest.mark.release
@@ -120,7 +120,7 @@ def test_langchain_google_vertexai_image_embeddings(
 
 @pytest.mark.release
 def test_langchain_google_vertexai_text_model() -> None:
-    embeddings_model = VertexAIEmbeddings(model_name="text-embedding-004")
+    embeddings_model = VertexAIEmbeddings(model_name="gemini-embedding-001")
     assert isinstance(embeddings_model.client, TextEmbeddingModel)
     assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
 
@@ -143,7 +143,7 @@ def test_langchain_google_vertexai_multimodal_model() -> None:
 @pytest.mark.parametrize(
     "model_name, embeddings_dim",
     [
-        ("text-embedding-004", 768),
+        ("gemini-embedding-001", 768),
         ("text-multilingual-embedding-002", 768),
         ("gemini-embedding-001", 3072),
     ],
