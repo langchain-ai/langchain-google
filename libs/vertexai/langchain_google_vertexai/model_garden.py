@@ -198,6 +198,14 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
+    @model_validator(mode="before")
+    @classmethod
+    def build_extra(cls, values: dict[str, Any]) -> Any:
+        """Build extra kwargs from additional params that were passed in."""
+        all_required_field_names = get_pydantic_field_names(cls)
+        values = _build_model_kwargs(values, all_required_field_names)
+        return values
+
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         from anthropic import (  # type: ignore[unused-ignore, import-not-found]
@@ -492,6 +500,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return RunnableMap(raw=llm) | parser_with_fallback
         else:
             return llm | output_parser
+
 
 
 
