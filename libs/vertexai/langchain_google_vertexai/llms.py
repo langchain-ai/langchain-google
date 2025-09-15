@@ -52,7 +52,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
 
         # Get all valid field names, including aliases
         valid_fields = set()
-        for field_name, field_info in self.model_fields.items():
+        for field_name, field_info in self.__class__.model_fields.items():
             valid_fields.add(field_name)
             if hasattr(field_info, "alias") and field_info.alias is not None:
                 valid_fields.add(field_info.alias)
@@ -65,7 +65,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
                     f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
                 )
                 logger.warning(
-                    f"Unexpected argument '{arg}' " f"provided to VertexAI.{suggestion}"
+                    f"Unexpected argument '{arg}' provided to VertexAI.{suggestion}"
                 )
         super().__init__(**kwargs)
 
