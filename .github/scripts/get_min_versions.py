@@ -31,6 +31,14 @@ def get_min_version(version: str) -> str:
         assert parse_version(_min) < parse_version(_max)
         return _min
 
+    # case x.x.x,<y
+    _match = re.match(f"^({vstring}),<({vstring})$", version)
+    if _match:
+        _min = _match.group(1)
+        _max = _match.group(2)
+        assert parse_version(_min) < parse_version(_max)
+        return _min
+
     # case x.x.x
     _match = re.match(f"^({vstring})$", version)
     if _match:

@@ -16,6 +16,7 @@ from typing import (
     Union,
 )
 
+import httpx
 from google.auth.credentials import Credentials
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -45,6 +46,8 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.tools import BaseTool
+from langchain_core.utils import get_pydantic_field_names
+from langchain_core.utils.utils import _build_model_kwargs
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
@@ -179,6 +182,12 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         "- max: Maximum wait time in seconds (default: 10.0) "
         "- exp_base: Exponent base to use (default: 2.0) ",
     )
+    timeout: Optional[Union[float, httpx.Timeout]] = Field(
+        default=None,
+        description="Timeout for API requests.",
+    )
+    http_client: Any = Field(default=None, exclude=True)
+    async_http_client: Any = Field(default=None, exclude=True)
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -188,6 +197,14 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_extra(cls, values: dict[str, Any]) -> Any:
+        """Build extra kwargs from additional params that were passed in."""
+        all_required_field_names = get_pydantic_field_names(cls)
+        values = _build_model_kwargs(values, all_required_field_names)
+        return values
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
@@ -210,6 +227,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             access_token=self.access_token,
             credentials=self.credentials,
             timeout=self.timeout,
+            http_client=self.http_client,
         )
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
@@ -219,6 +237,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             access_token=self.access_token,
             credentials=self.credentials,
             timeout=self.timeout,
+            http_client=self.async_http_client,
         )
         return self
 

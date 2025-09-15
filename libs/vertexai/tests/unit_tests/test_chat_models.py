@@ -2,6 +2,7 @@
 
 import base64
 import json
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional
 from unittest.mock import MagicMock, patch
@@ -32,10 +33,10 @@ from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
 from pydantic import BaseModel
-from vertexai.generative_models import (
+from vertexai.generative_models import (  # type: ignore
     SafetySetting as VertexSafetySetting,
 )
-from vertexai.language_models import (
+from vertexai.language_models import (  # type: ignore
     ChatMessage,
     InputOutputTextPair,
 )
@@ -93,13 +94,17 @@ def test_init() -> None:
 
     # test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.chat_models.logger.warning") as mock_warning:
-        llm = ChatVertexAI(
-            model_name="gemini-pro",
-            project="test-project",
-            safety_setting={
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
-            },  # Invalid arg
-        )
+        # Suppress UserWarning during test execution - we're testing the warning
+        # mechanism via logger mock assertions, not via pytest's warning system
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            llm = ChatVertexAI(
+                model_name="gemini-pro",
+                project="test-project",
+                safety_setting={
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+                },  # Invalid arg
+            )
         assert llm.model_name == "gemini-pro"
         assert llm.project == "test-project"
         mock_warning.assert_called_once()
@@ -1120,14 +1125,14 @@ def test_safety_settings_gemini() -> None:
     safety_settings = model._safety_settings_gemini([expected_safety_setting])
     assert safety_settings == [expected_safety_setting]
     safety_settings = model._safety_settings_gemini(
-        {"HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"}  # type: ignore[dict-item]
+        {"HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"}
     )
     assert safety_settings == [expected_safety_setting]
-    safety_settings = model._safety_settings_gemini({2: 1})  # type: ignore[dict-item]
+    safety_settings = model._safety_settings_gemini({2: 1})
     assert safety_settings == [expected_safety_setting]
     threshold = SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
     safety_settings = model._safety_settings_gemini(
-        {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}  # type: ignore[dict-item]
+        {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}
     )
     assert safety_settings == [expected_safety_setting]
 
@@ -1546,3 +1551,29 @@ def test_thought_signature() -> None:
             ],
         ),
     ]
+
+
+def test_python_literal_inputs() -> None:
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+
+    for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
+        _ = llm._prepare_request_gemini([HumanMessage(input_string)])
+
+
+def test_v1_function_parts() -> None:
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash", project="test-project", endpoint_version="v1"
+    )
+
+    messages = [
+        HumanMessage(content="What is 2+2*2?"),
+        AIMessage(
+            content="I am calling a calculator to evaluate the expression",
+            tool_calls=[
+                {"name": "calculator", "args": {"expression": "2+2*2"}, "id": "123"}
+            ],
+        ),
+        ToolMessage(content="6", tool_call_id="123"),
+    ]
+
+    assert llm._prepare_request_gemini(messages)

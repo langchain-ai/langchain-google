@@ -27,6 +27,10 @@ model_locations = {
     "meta/llama-4-scout-17b-16e-instruct-maas": "us-east5",
 }
 
+# TODO: mistral-nemo@2407 missing from Cloud project
+model_names.remove("mistral-nemo@2407")
+model_names_with_tools_support.remove("mistral-nemo@2407")
+
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)

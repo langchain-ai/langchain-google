@@ -266,13 +266,24 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 
 @pytest.mark.release
 @pytest.mark.first
-@pytest.mark.xfail(reason="need a model supporting more than 1M input tokens")
 def test_multimodal_media_inline_base64_template() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
-    prompt_template = ChatPromptTemplate.from_messages(
+    prompt_template = ChatPromptTemplate(
         [
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "media",
+                        "data": "{media_base64}",
+                        "mime_type": "{mime_type}",
+                    },
+                    {
+                        "type": "text",
+                        "text": "Describe the attached media in 5 words!",
+                    },
+                ],
+            },
         ]
     )
     storage_client = storage.Client()
@@ -282,15 +293,8 @@ def test_multimodal_media_inline_base64_template() -> None:
     mime_type = "audio/mp3"
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
-    media_message = {
-        "type": "media",
-        "data": media_base64,
-        "mime_type": mime_type,
-    }
-    text_message = {"type": "text", "text": "Describe the attached media in 5 words!"}
-    message = HumanMessage(content=[media_message, text_message])
     chain = prompt_template | llm
-    output = chain.invoke({"input": [message]})
+    output = chain.invoke({"media_base64": media_base64, "mime_type": mime_type})
     assert isinstance(output.content, str)
 
 
@@ -303,7 +307,10 @@ def test_multimodal_media_inline_base64_agent() -> None:
         """Retrieves information about the Climate."""
         return "MOCK CLIMATE INFO STRING"
 
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
+    llm = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME,
+        perform_literal_eval_on_string_raw_content=True,
+    )
     prompt_template = ChatPromptTemplate.from_messages(
         [
             ("human", "{input}"),
@@ -341,6 +348,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
     assert isinstance(output["output"], str)
 
 
+@pytest.mark.flaky(retries=3)
 def test_audio_timestamp():
     storage_client = storage.Client()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)

@@ -240,15 +240,15 @@ class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
 class VertexPairWiseStringEvaluator(_EvaluatorBase, PairwiseStringEvaluator):
     """Evaluate the perplexity of a predicted string."""
 
+    @property
+    def requires_reference(self) -> bool:
+        """Whether this evaluator requires a reference label."""
+        return True
+
     def __init__(self, metric: str, **kwargs):
         super().__init__(metric, **kwargs)
         if _format_metric(metric) not in _PAIRWISE_METRICS:
             raise ValueError(f"Metric {metric} is not supported yet!")
-
-    @property
-    def requires_reference(self) -> bool:
-        """Whether this evaluator requires a reference label."""
-        return "reference" in _METRICS_OPTIONAL_ATTRS.get(self._metric, [])
 
     def _evaluate_string_pairs(
         self,
