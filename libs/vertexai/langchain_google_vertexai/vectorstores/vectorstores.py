@@ -281,7 +281,11 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         # Makes sure is a list and can get the length, should we support iterables?
         # metadata is a list so probably not?
-        texts = list(texts)
+        if isinstance(texts, str):
+            texts = [texts]
+        else:
+            texts = list(texts)
+
         embeddings = self._embeddings.embed_documents(texts)
 
         return self.add_texts_with_embeddings(
@@ -309,7 +313,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         if ids is not None and len(set(ids)) != len(ids):
             raise ValueError(
                 "All provided ids should be unique."
-                f"There are {len(ids)-len(set(ids))} duplicates."
+                f"There are {len(ids) - len(set(ids))} duplicates."
             )
 
         if ids is not None and len(ids) != len(texts):

@@ -157,7 +157,10 @@ def get_generation_info(
                 "severity": rating.severity.name,
                 "severity_score": rating.severity_score,
             }
+            # Image generation models sometime return ratings that are not
+            # included in the proto.
             for rating in candidate.safety_ratings
+            if hasattr(rating.category, "name")
         ],
         "citation_metadata": (
             proto.Message.to_dict(candidate.citation_metadata)
@@ -166,7 +169,9 @@ def get_generation_info(
         ),
         "usage_metadata": usage_metadata,
         "finish_reason": (
-            candidate.finish_reason.name if candidate.finish_reason else None
+            candidate.finish_reason.name
+            if candidate.finish_reason and hasattr(candidate.finish_reason, "name")
+            else None
         ),
         "finish_message": (
             candidate.finish_message if candidate.finish_message else None
