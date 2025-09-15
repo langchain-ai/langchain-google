@@ -250,6 +250,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             "top_k": self.top_k,
             "top_p": self.top_p,
         }
+        return {**default_parameters, **self.model_kwargs}
 
     def _format_params(
         self,
@@ -497,3 +498,4 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             return RunnableMap(raw=llm) | parser_with_fallback
         else:
             return llm | output_parser
+
