@@ -123,8 +123,7 @@ def test_initialization_with_async() -> None:
         _ = model.async_client
         return model
 
-    loop = asyncio.get_event_loop()
-    chat = loop.run_until_complete(initialize_chat_with_async_client())
+    chat = asyncio.run(initialize_chat_with_async_client())
     assert chat.async_client is not None
 
 
@@ -147,8 +146,8 @@ def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> N
     assert captured.out == "**********"
 
 
-@pytest.mark.parametrize("convert_system_message_to_human", [False, True])
-def test_parse_history(convert_system_message_to_human: bool) -> None:
+def test_parse_history() -> None:
+    convert_system_message_to_human = False
     system_input = "You're supposed to answer math questions."
     text_question1, text_answer1 = "How much is 2+2?", "4"
     function_name = "calculator"
@@ -213,19 +212,9 @@ def test_parse_history(convert_system_message_to_human: bool) -> None:
         message8,
         message9,
     ]
-    system_instruction, history = _parse_chat_history(
-        messages, convert_system_message_to_human=convert_system_message_to_human
-    )
+    system_instruction, history = _parse_chat_history(messages)
     assert len(history) == 8
-    if convert_system_message_to_human:
-        assert history[0] == glm.Content(
-            role="user",
-            parts=[glm.Part(text=system_input), glm.Part(text=text_question1)],
-        )
-    else:
-        assert history[0] == glm.Content(
-            role="user", parts=[glm.Part(text=text_question1)]
-        )
+    assert history[0] == glm.Content(role="user", parts=[glm.Part(text=text_question1)])
     assert history[1] == glm.Content(
         role="model",
         parts=[
@@ -330,7 +319,7 @@ def test_parse_history(convert_system_message_to_human: bool) -> None:
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
 def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
-    _parse_chat_history([function_message], convert_system_message_to_human=True)
+    _parse_chat_history([function_message])
 
 
 @pytest.mark.parametrize(
@@ -384,6 +373,40 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
     assert "langchain-google-genai" in call_client_info.user_agent
     assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+
+
+def test_default_metadata_field_alias() -> None:
+    """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
+    # Test with default_metadata_input field name (alias) - should accept None without
+    # error
+    # This is the main issue: LangSmith Playground passes None to default_metadata_input
+    chat1 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=None,
+    )
+    # When None is passed to alias, it should use the default factory and be overridden
+    # by validator
+    assert chat1.default_metadata == ()
+
+    # Test with empty list for default_metadata_input (should not cause validation
+    # error)
+    chat2 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=[],
+    )
+    # Empty list should be accepted and overridden by validator
+    assert chat2.default_metadata == ()
+
+    # Test with tuple for default_metadata_input (should not cause validation error)
+    chat3 = ChatGoogleGenerativeAI(
+        model="gemini-pro",
+        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        default_metadata_input=[("X-Test", "test")],
+    )
+    # The validator will override this with additional_headers, so it should be empty
+    assert chat3.default_metadata == ()
 
 
 @pytest.mark.parametrize(

@@ -17,7 +17,6 @@ _OUTPUT_DIMENSIONALITY = 768
         " model against the pickle rick?",
     ],
 )
-@pytest.mark.asyncio
 def test_embed_query_different_lengths(query: str) -> None:
     """Test embedding queries of different lengths."""
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
@@ -35,6 +34,7 @@ def test_embed_query_different_lengths(query: str) -> None:
         " model against the pickle rick?",
     ],
 )
+@pytest.mark.asyncio
 async def test_aembed_query_different_lengths(query: str) -> None:
     """Test embedding queries of different lengths."""
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
@@ -60,6 +60,7 @@ def test_embed_documents() -> None:
     assert isinstance(result[0], list)
 
 
+@pytest.mark.asyncio
 async def test_aembed_documents() -> None:
     """Test embedding a query."""
     model = GoogleGenerativeAIEmbeddings(

@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Literal
 
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
@@ -110,9 +110,9 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     assert isinstance(items_property, dict), "Expected a dict."
 
     # Assertions
-    assert (
-        items_property.get("type_") == glm.Type.ARRAY
-    ), "Expected 'items' to be ARRAY."
+    assert items_property.get("type_") == glm.Type.ARRAY, (
+        "Expected 'items' to be ARRAY."
+    )
     assert items_property.get("nullable"), "Expected 'items' to be marked as nullable."
     # Check that the array items are recognized as strings
 
@@ -166,9 +166,9 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
         glm.Type.OBJECT,
         glm.Type.STRING,
     ], "Expected 'data' to be recognized as an OBJECT or fallback to STRING."
-    assert (
-        data_property.get("nullable") is True
-    ), "Expected 'data' to be marked as nullable."
+    assert data_property.get("nullable") is True, (
+        "Expected 'data' to be marked as nullable."
+    )
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
@@ -220,12 +220,12 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     assert isinstance(status_property, dict), "Expected a dict."
 
     # Assertions
-    assert (
-        status_property.get("type_") == glm.Type.STRING
-    ), "Expected 'status' to be STRING."
-    assert (
-        status_property.get("nullable") is True
-    ), "Expected 'status' to be marked as nullable."
+    assert status_property.get("type_") == glm.Type.STRING, (
+        "Expected 'status' to be STRING."
+    )
+    assert status_property.get("nullable") is True, (
+        "Expected 'status' to be marked as nullable."
+    )
     assert status_property.get("enum") == [
         "active",
         "inactive",
@@ -809,21 +809,21 @@ def test_tool_with_doubly_nested_list_param() -> None:
     matrix_property = properties.get("matrix")
     assert isinstance(matrix_property, dict)
 
-    assert (
-        matrix_property.get("type_") == glm.Type.ARRAY
-    ), "Expected 'matrix' to be ARRAY."
+    assert matrix_property.get("type_") == glm.Type.ARRAY, (
+        "Expected 'matrix' to be ARRAY."
+    )
 
     items_level1 = matrix_property.get("items")
     assert isinstance(items_level1, dict), "Expected first level 'items' to be a dict."
-    assert (
-        items_level1.get("type_") == glm.Type.ARRAY
-    ), "Expected first level items to be ARRAY."
+    assert items_level1.get("type_") == glm.Type.ARRAY, (
+        "Expected first level items to be ARRAY."
+    )
 
     items_level2 = items_level1.get("items")
     assert isinstance(items_level2, dict), "Expected second level 'items' to be a dict."
-    assert (
-        items_level2.get("type_") == glm.Type.STRING
-    ), "Expected second level items to be STRING."
+    assert items_level2.get("type_") == glm.Type.STRING, (
+        "Expected second level items to be STRING."
+    )
 
     assert "description" in matrix_property
     assert "description" in items_level1
@@ -941,18 +941,18 @@ def test_tool_with_union_types() -> None:
     assert isinstance(helper1, dict), "Expected first option to be a dict."
     assert "properties" in helper1, "Expected first option to have properties."
     assert "x" in helper1["properties"], "Expected first option to have 'x' property."
-    assert (
-        helper1["properties"]["x"]["type_"] == glm.Type.BOOLEAN
-    ), "Expected 'x' to be BOOLEAN."
+    assert helper1["properties"]["x"]["type_"] == glm.Type.BOOLEAN, (
+        "Expected 'x' to be BOOLEAN."
+    )
 
     # Check second option (Helper2)
     helper2 = any_of[1]
     assert isinstance(helper2, dict), "Expected second option to be a dict."
     assert "properties" in helper2, "Expected second option to have properties."
     assert "y" in helper2["properties"], "Expected second option to have 'y' property."
-    assert (
-        helper2["properties"]["y"]["type_"] == glm.Type.STRING
-    ), "Expected 'y' to be STRING."
+    assert helper2["properties"]["y"]["type_"] == glm.Type.STRING, (
+        "Expected 'y' to be STRING."
+    )
 
 
 def test_tool_with_union_primitive_types() -> None:
@@ -1013,12 +1013,12 @@ def test_tool_with_union_primitive_types() -> None:
     )
     assert object_option is not None, "Expected one option to be an OBJECT."
     assert "properties" in object_option, "Expected object option to have properties."
-    assert (
-        "value" in object_option["properties"]
-    ), "Expected object option to have 'value' property."
-    assert (
-        object_option["properties"]["value"]["type_"] == 3
-    ), "Expected 'value' to be NUMBER or INTEGER."
+    assert "value" in object_option["properties"], (
+        "Expected object option to have 'value' property."
+    )
+    assert object_option["properties"]["value"]["type_"] == 3, (
+        "Expected 'value' to be NUMBER or INTEGER."
+    )
 
 
 def test_tool_with_nested_union_types() -> None:
@@ -1081,9 +1081,9 @@ def test_tool_with_nested_union_types() -> None:
     )
     assert address_option is not None, "Expected one location option to be an OBJECT."
     assert "properties" in address_option, "Expected address option to have properties"
-    assert (
-        "city" in address_option["properties"]
-    ), "Expected Address to have 'city' property."
+    assert "city" in address_option["properties"], (
+        "Expected Address to have 'city' property."
+    )
 
 
 def test_tool_invocation_with_union_types() -> None:
@@ -1209,9 +1209,9 @@ def test_tool_field_union_types() -> None:
     # Check location property
     assert "location" in properties, "Expected location field in properties"
     location_property = properties.get("location", {})
-    assert (
-        "description" in location_property
-    ), "Expected description field in location property"
+    assert "description" in location_property, (
+        "Expected description field in location property"
+    )
     assert (
         location_property.get("description")
         == "The city and country, e.g. New York, USA"
@@ -1241,3 +1241,34 @@ def test_tool_field_union_types() -> None:
     required_fields = parameters.get("required", [])
     assert "location" in required_fields, "Expected 'location' to be required"
     assert "date" in required_fields, "Expected 'date' to be required"
+
+
+def test_tool_field_enum_array() -> None:
+    class ToolInfo(BaseModel):
+        kind: List[Literal["foo", "bar"]]
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(ToolInfo)
+
+    # Convert to GenAI
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    # Get function declaration
+    function_declarations = genai_tool_dict.get("function_declarations", [])
+    assert len(function_declarations) > 0, "Expected at least one function declaration"
+    fn_decl = function_declarations[0]
+
+    # Check parameters
+    parameters = fn_decl.get("parameters", {})  # type: ignore
+    properties = parameters.get("properties", {})
+
+    # Check location property
+    assert "kind" in properties
+    kind_property = properties["kind"]
+    assert kind_property["type_"] == glm.Type.ARRAY
+
+    assert "items" in kind_property
+    items_property = kind_property["items"]
+    assert items_property["type_"] == glm.Type.STRING
+    assert items_property["enum"] == ["foo", "bar"]

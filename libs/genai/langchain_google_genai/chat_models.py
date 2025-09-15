@@ -92,13 +92,7 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    SecretStr,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic.v1 import BaseModel as BaseModelV1
 from tenacity import (
     before_sleep_log,
@@ -496,7 +490,12 @@ def _parse_chat_history(
     messages: List[Content] = []
 
     if convert_system_message_to_human:
-        warnings.warn("Convert_system_message_to_human will be deprecated!")
+        warnings.warn(
+            "The 'convert_system_message_to_human' parameter is deprecated and will be "
+            "removed in a future version. Use system instructions instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     system_instruction: Optional[Content] = None
     messages_without_tool_messages = [
@@ -659,9 +658,15 @@ def _parse_response_candidate(
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
-            function_call["arguments"] = json.dumps(
-                {k: function_call_args_dict[k] for k in function_call_args_dict}
-            )
+
+            # Fix: Correct integer-like floats from protobuf conversion
+            # The protobuf library sometimes converts integers to floats
+            corrected_args = {
+                k: int(v) if isinstance(v, float) and v.is_integer() else v
+                for k, v in function_call_args_dict.items()
+            }
+
+            function_call["arguments"] = json.dumps(corrected_args)
             additional_kwargs["function_call"] = function_call
 
             if streaming:
@@ -698,7 +703,9 @@ def _parse_response_candidate(
                     )
     if content is None:
         content = ""
-    if any(isinstance(item, dict) and "executable_code" in item for item in content):
+    if isinstance(content, list) and any(
+        isinstance(item, dict) and "executable_code" in item for item in content
+    ):
         warnings.warn(
             """
         ⚠️ Warning: Output may vary each run.  
@@ -1281,8 +1288,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
-    default_metadata: Sequence[Tuple[str, str]] = Field(
-        default_factory=list
+    default_metadata: Optional[Sequence[Tuple[str, str]]] = Field(
+        default=None, alias="default_metadata_input"
     )  #: :meta private:
 
     convert_system_message_to_human: bool = False
@@ -1316,6 +1323,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
     ``cachedContents/{cachedContent}``.
     """
+
+    stop: Optional[List[str]] = None
+    """Stop sequences for the model."""
+
+    streaming: Optional[bool] = None
+    """Whether to stream responses from the model."""
 
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
     """Holds any unexpected initialization parameters."""
@@ -1528,18 +1541,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "response_modalities": self.response_modalities,
                 "thinking_config": (
                     (
-                        {"thinking_budget": self.thinking_budget}
-                        if self.thinking_budget is not None
-                        else {}
+                        (
+                            {"thinking_budget": self.thinking_budget}
+                            if self.thinking_budget is not None
+                            else {}
+                        )
+                        | (
+                            {"include_thoughts": self.include_thoughts}
+                            if self.include_thoughts is not None
+                            else {}
+                        )
                     )
-                    | (
-                        {"include_thoughts": self.include_thoughts}
-                        if self.include_thoughts is not None
-                        else {}
-                    )
-                )
-                if self.thinking_budget is not None or self.include_thoughts is not None
-                else None,
+                    if self.thinking_budget is not None
+                    or self.include_thoughts is not None
+                    else None
+                ),
             }.items()
             if v is not None
         }
@@ -1781,7 +1797,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         **kwargs: Any,
-    ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
+    ) -> GenerateContentRequest:
         if tool_choice and tool_config:
             raise ValueError(
                 "Must specify at most one of tool_choice and tool_config, received "
@@ -1807,10 +1823,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 filtered_messages.append(message)
         messages = filtered_messages
 
-        system_instruction, history = _parse_chat_history(
-            messages,
-            convert_system_message_to_human=self.convert_system_message_to_human,
-        )
+        if self.convert_system_message_to_human:
+            system_instruction, history = _parse_chat_history(
+                messages,
+                convert_system_message_to_human=self.convert_system_message_to_human,
+            )
+        else:
+            system_instruction, history = _parse_chat_history(messages)
         if tool_choice:
             if not formatted_tools:
                 msg = (
