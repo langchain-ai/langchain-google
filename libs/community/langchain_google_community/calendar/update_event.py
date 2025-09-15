@@ -4,10 +4,10 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type, Union
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
-from zoneinfo import ZoneInfo
 
 from langchain_google_community.calendar.base import CalendarBaseTool
 from langchain_google_community.calendar.utils import is_all_day_event
@@ -210,9 +210,9 @@ class CalendarUpdateEvent(CalendarBaseTool):  # type: ignore[override, override]
     def _run(
         self,
         event_id: str,
-        summary: str,
-        start_datetime: str,
-        end_datetime: str,
+        summary: Optional[str] = None,
+        start_datetime: Optional[str] = None,
+        end_datetime: Optional[str] = None,
         calendar_id: str = "primary",
         timezone: Optional[str] = None,
         recurrence: Optional[Dict[str, Any]] = None,

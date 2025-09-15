@@ -92,7 +92,9 @@ from vertexai.language_models import (  # type: ignore
 )
 from google.cloud.aiplatform_v1.types import (
     Content as v1Content,
+    FunctionCall as v1FunctionCall,
     FunctionCallingConfig as v1FunctionCallingConfig,
+    FunctionResponse as v1FunctionResponse,
     GenerateContentRequest as v1GenerateContentRequest,
     GenerationConfig as v1GenerationConfig,
     Part as v1Part,
@@ -340,15 +342,15 @@ def _parse_chat_history_gemini(
                 pass
             except ValueError:
                 pass
-        # A linting error is thrown here because it does not think this line is
-        # reachable due to typing, but mypy is wrong so we ignore the lint
-        # error.
-        if isinstance(raw_content, int):  # type: ignore
-            raw_content = str(raw_content)  # type: ignore
-        if isinstance(raw_content, float):  # type: ignore
-            raw_content = str(raw_content)  # type: ignore
-        if isinstance(raw_content, str):
-            raw_content = [raw_content]
+        if isinstance(raw_content, (int, float, str)):
+            raw_content = [str(raw_content)]
+        elif isinstance(raw_content, list):
+            # Preserve dict structure when literal_eval successfully parsed the content
+            raw_content = [
+                item if isinstance(item, dict) else str(item) for item in raw_content
+            ]
+        else:
+            raise TypeError(f"Unsupported type: {type(raw_content)}")
         result = []
         for raw_part in raw_content:
             part = _convert_to_prompt(raw_part)
@@ -604,15 +606,13 @@ def _append_to_content(
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
     response_candidate: "Candidate", streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
@@ -1451,7 +1451,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """ Optional tag llm calls with metadata to help in tracebility and biling.
     """
 
-    perform_literal_eval_on_string_raw_content: bool = True
+    perform_literal_eval_on_string_raw_content: bool = False
     """Whether to perform literal eval on string raw content.
     """
 
@@ -1769,7 +1769,33 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     raw_part = proto.Message.to_dict(part)
                     _ = raw_part.pop("thought")
                     _ = raw_part.pop("thought_signature", None)
-                    v1_parts.append(v1Part(**raw_part))
+
+                    if "function_call" in raw_part and isinstance(
+                        raw_part["function_call"], dict
+                    ):
+                        _ = raw_part["function_call"].pop("id", None)
+                        v1_parts.append(
+                            v1Part(
+                                function_call=v1FunctionCall(
+                                    **raw_part["function_call"]
+                                )
+                            )
+                        )
+
+                    elif "function_response" in raw_part and isinstance(
+                        raw_part["function_response"], dict
+                    ):
+                        _ = raw_part["function_response"].pop("id", None)
+                        v1_parts.append(
+                            v1Part(
+                                function_response=v1FunctionResponse(
+                                    **raw_part["function_response"]
+                                )
+                            )
+                        )
+
+                    else:
+                        v1_parts.append(v1Part(**raw_part))
                 v1_contens.append(v1Content(role=content.role, parts=v1_parts))
             return v1_contens
 

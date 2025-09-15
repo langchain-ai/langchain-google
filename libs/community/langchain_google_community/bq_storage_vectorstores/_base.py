@@ -80,8 +80,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     _full_table_id: Optional[str] = None
 
     @abstractmethod
-    def sync_data(self) -> None:
-        ...
+    def sync_data(self) -> None: ...
 
     @abstractmethod
     def get_documents(
@@ -112,8 +111,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         k: int = 5,
         batch_size: Union[int, None] = None,
         **kwargs: Any,
-    ) -> List[List[List[Any]]]:
-        ...
+    ) -> List[List[List[Any]]]: ...
 
     @model_validator(mode="after")
     def validate_vals(self) -> Self:
