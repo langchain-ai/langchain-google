@@ -8,6 +8,7 @@ from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai._utils import (
     _get_def_key_from_schema_path,
     _strip_nullable_anyof,
+    get_generation_info,
     get_user_agent,
     replace_defs_in_schema,
 )
@@ -235,3 +236,54 @@ def test_strip_nullable_anyof() -> None:
         "type": "object",
     }
     assert _strip_nullable_anyof(input_schema) == expected
+
+
+def test_get_generation_info_with_raw_int_finish_reason():
+    """Test that get_generation_info handles raw integer finish_reason values."""
+    # Create a mock candidate with finish_reason as raw int (e.g., 15)
+    mock_candidate = MagicMock()
+    mock_candidate.finish_reason = 15  # Raw integer value
+    mock_candidate.finish_message = None
+    mock_candidate.safety_ratings = []
+    mock_candidate.citation_metadata = None
+    mock_candidate.grounding_metadata = None
+
+    # get_generation_info should not crash and should handle the raw int
+    result = get_generation_info(mock_candidate)
+
+    assert "finish_reason" in result
+    assert result["finish_reason"] == "UNKNOWN_15"
+
+
+def test_get_generation_info_with_enum_finish_reason():
+    """Test that get_generation_info handles normal enum finish_reason values."""
+    # Create a mock candidate with finish_reason as enum with .name attribute
+    mock_finish_reason = MagicMock()
+    mock_finish_reason.name = "STOP"
+
+    mock_candidate = MagicMock()
+    mock_candidate.finish_reason = mock_finish_reason
+    mock_candidate.finish_message = None
+    mock_candidate.safety_ratings = []
+    mock_candidate.citation_metadata = None
+    mock_candidate.grounding_metadata = None
+
+    result = get_generation_info(mock_candidate)
+
+    assert "finish_reason" in result
+    assert result["finish_reason"] == "STOP"
+
+
+def test_get_generation_info_with_none_finish_reason():
+    """Test that get_generation_info handles None finish_reason values."""
+    mock_candidate = MagicMock()
+    mock_candidate.finish_reason = None
+    mock_candidate.finish_message = None
+    mock_candidate.safety_ratings = []
+    mock_candidate.citation_metadata = None
+    mock_candidate.grounding_metadata = None
+
+    result = get_generation_info(mock_candidate)
+
+    # (Should be None for None finish_reason)
+    assert result.get("finish_reason") is None
