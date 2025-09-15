@@ -228,7 +228,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             credentials=self.credentials,
             timeout=self.timeout,
             http_client=self.http_client,
-            **self.model_kwargs,
         )
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
@@ -239,7 +238,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             credentials=self.credentials,
             timeout=self.timeout,
             http_client=self.async_http_client,
-            **self.model_kwargs,
         )
         return self
 
@@ -252,7 +250,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             "top_k": self.top_k,
             "top_p": self.top_p,
         }
-        return {**default_parameters, **self.model_kwargs}
 
     def _format_params(
         self,
