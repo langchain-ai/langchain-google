@@ -16,7 +16,7 @@ from langchain_google_vertexai.embeddings import (
 )
 
 _EMBEDDING_MODELS = [
-    ("gemini-embedding-001", 768),
+    ("gemini-embedding-001", 3072),
     ("multimodalembedding@001", 1408),
 ]
 
