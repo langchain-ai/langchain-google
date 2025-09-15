@@ -325,7 +325,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
     """Base class form generation and edition of images."""
 
     cached_client: Any = Field(default=None, exclude=True)
-    model_name: str = Field(default="imagegeneration@002")
+    model_name: str = Field(default="imagen-3.0-generate-002")
     """Name of the base model"""
     negative_prompt: Union[str, None] = Field(default=None)
     """A description of what you want to omit in
