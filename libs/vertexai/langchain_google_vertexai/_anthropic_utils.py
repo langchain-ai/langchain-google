@@ -163,8 +163,8 @@ def _format_message_anthropic(
 
     if isinstance(message.content, str):
         if not message.content.strip():
-            # Don't return None early if there are tool_calls to process
             if not (isinstance(message, AIMessage) and message.tool_calls):
+                # We still have tool calls to process
                 return None
         else:
             message_dict = _format_text_content(message.content)
@@ -287,7 +287,6 @@ def _format_message_anthropic(
             tu = cast(Dict[str, Any], _lc_tool_call_to_anthropic_tool_use_block(tc))
             content.append(tu)
 
-    # Return None if content is empty after processing all blocks
     if not content:
         return None
 
