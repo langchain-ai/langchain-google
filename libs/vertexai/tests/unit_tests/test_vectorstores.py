@@ -108,7 +108,7 @@ def test_to_data_points_with_integer_metadata():
     assert hasattr(float_restriction, 'value_float')
     assert float_restriction.value_float == pytest.approx(3.14)
     # Ensure value_int is 0 for float values (not used)
-    assert integer_restriction.value_int == 0
+    assert float_restriction.value_int == 0
 
     # Test another integer field uses value_int
     mixed_restriction = num_restriction_lookup["mixed_integers"]
@@ -231,5 +231,6 @@ def test_similarity_search_by_vector_with_score_output_shape():
     assert len(result_without_sparse[0]) == 2
     assert isinstance(result_without_sparse[0][0], Document)
     assert isinstance(result_without_sparse[0][1], float)
+
 
 
