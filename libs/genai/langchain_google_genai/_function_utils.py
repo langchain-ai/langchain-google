@@ -331,6 +331,10 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
+
+        # Get description from original schema before any modifications
+        description = v.get("description")
+
         if v.get("anyOf") and all(
             anyOf_type.get("type") != "null" for anyOf_type in v.get("anyOf", [])
         ):
@@ -338,6 +342,9 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
                 _format_json_schema_to_gapic(anyOf_type)
                 for anyOf_type in v.get("anyOf", [])
             ]
+            # For non-nullable anyOf, we still need to set a type
+            item_type_ = _get_type_from_schema(v)
+            properties_item["type_"] = item_type_
         elif v.get("type") or v.get("anyOf") or v.get("type_"):
             item_type_ = _get_type_from_schema(v)
             properties_item["type_"] = item_type_
@@ -354,7 +361,6 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
 
-        description = v.get("description")
         if description and isinstance(description, str):
             properties_item["description"] = description
 
@@ -377,8 +383,9 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
                     properties_item["required"] = [
                         k for k, v in v_properties.items() if "default" not in v
                     ]
-            else:
-                # Providing dummy type for object without properties
+            elif not v.get("additionalProperties"):
+                # Only provide dummy type for object without properties AND without
+                # additionalProperties
                 properties_item["type_"] = glm.Type.STRING
 
         if k == "title" and "description" not in properties_item:
