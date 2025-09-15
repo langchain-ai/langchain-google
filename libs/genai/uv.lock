@@ -471,7 +471,7 @@ wheels = [
 
 [[package]]
 name = "langchain-google-genai"
-version = "2.1.10"
+version = "2.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "filetype" },
