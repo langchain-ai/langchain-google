@@ -259,4 +259,3 @@ class CalendarUpdateEvent(CalendarBaseTool):  # type: ignore[override, override]
             return f"Event updated: {result.get('htmlLink')}"
         except Exception as error:
             raise Exception(f"An error occurred: {error}") from error
-
