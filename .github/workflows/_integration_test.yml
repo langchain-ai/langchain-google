@@ -11,6 +11,9 @@ on:
         type: string
         description: "Python version to use"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     defaults:
