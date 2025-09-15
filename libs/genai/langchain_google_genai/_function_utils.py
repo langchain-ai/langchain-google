@@ -331,10 +331,10 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
-        
+
         # Get description from original schema before any modifications
         description = v.get("description")
-        
+
         if v.get("anyOf") and all(
             anyOf_type.get("type") != "null" for anyOf_type in v.get("anyOf", [])
         ):
@@ -384,7 +384,8 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
                         k for k, v in v_properties.items() if "default" not in v
                     ]
             elif not v.get("additionalProperties"):
-                # Only provide dummy type for object without properties AND without additionalProperties
+                # Only provide dummy type for object without properties AND without
+                # additionalProperties
                 properties_item["type_"] = glm.Type.STRING
 
         if k == "title" and "description" not in properties_item:
