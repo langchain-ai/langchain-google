@@ -210,9 +210,9 @@ class CalendarUpdateEvent(CalendarBaseTool):  # type: ignore[override, override]
     def _run(
         self,
         event_id: str,
-        summary: str,
-        start_datetime: str,
-        end_datetime: str,
+        summary: Optional[str] = None,
+        start_datetime: Optional[str] = None,
+        end_datetime: Optional[str] = None,
         calendar_id: str = "primary",
         timezone: Optional[str] = None,
         recurrence: Optional[Dict[str, Any]] = None,
@@ -259,3 +259,4 @@ class CalendarUpdateEvent(CalendarBaseTool):  # type: ignore[override, override]
             return f"Event updated: {result.get('htmlLink')}"
         except Exception as error:
             raise Exception(f"An error occurred: {error}") from error
+
