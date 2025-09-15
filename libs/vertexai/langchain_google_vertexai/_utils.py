@@ -138,6 +138,24 @@ def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
     return Image.from_bytes(blobs[0].download_as_bytes())
 
 
+def _get_finish_reason_string(finish_reason: Any) -> Optional[str]:
+    """Convert finish_reason to string, handling both enum and raw integer values.
+
+    Args:
+        finish_reason: The finish reason value from the candidate.
+
+    Returns:
+        String representation of the finish reason, or None if not present.
+    """
+    if finish_reason is None:
+        return None
+    if hasattr(finish_reason, "name"):
+        return finish_reason.name
+    if isinstance(finish_reason, int):
+        return f"UNKNOWN_{finish_reason}"
+    return None
+
+
 def get_generation_info(
     candidate: Union[TextGenerationResponse, Candidate],
     *,
@@ -168,11 +186,7 @@ def get_generation_info(
             else None
         ),
         "usage_metadata": usage_metadata,
-        "finish_reason": (
-            candidate.finish_reason.name
-            if candidate.finish_reason and hasattr(candidate.finish_reason, "name")
-            else None
-        ),
+        "finish_reason": _get_finish_reason_string(candidate.finish_reason),
         "finish_message": (
             candidate.finish_message if candidate.finish_message else None
         ),

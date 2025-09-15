@@ -373,7 +373,7 @@ def test_audio_timestamp():
     output = llm.invoke([message], audio_timestamp=True)
 
     assert isinstance(output.content, str)
-    assert re.search(r"^\d+:\d+", output.content)
+    assert re.search(r"\d{2}:\d{2}:", output.content)
 
 
 def test_parse_history_gemini_multimodal_FC():
