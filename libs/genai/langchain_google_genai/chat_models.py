@@ -1797,7 +1797,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: Optional[Dict[str, Any]] = None,
         cached_content: Optional[str] = None,
         **kwargs: Any,
-    ) -> Tuple[GenerateContentRequest, Dict[str, Any]]:
+    ) -> GenerateContentRequest:
         if tool_choice and tool_config:
             raise ValueError(
                 "Must specify at most one of tool_choice and tool_config, received "
