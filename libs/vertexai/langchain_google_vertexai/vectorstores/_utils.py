@@ -111,9 +111,14 @@ def to_data_points(
                 )
                 restricts.append(restriction)
             elif isinstance(value, (int, float)) and not isinstance(value, bool):
-                restriction = meidx_types.IndexDatapoint.NumericRestriction(
-                    namespace=namespace, value_float=value
-                )
+                if isinstance(value, int) and not isinstance(value, bool):
+                    restriction = meidx_types.IndexDatapoint.NumericRestriction(
+                        namespace=namespace, value_int=value
+                    )
+                elif isinstance(value, float):
+                    restriction = meidx_types.IndexDatapoint.NumericRestriction(
+                        namespace=namespace, value_float=value
+                    )
                 numeric_restricts.append(restriction)
             else:
                 ignored_fields.add(namespace)
@@ -182,3 +187,4 @@ def data_points_to_batch_update_records(
         records.append(record)
 
     return records
+
