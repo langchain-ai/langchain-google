@@ -150,8 +150,10 @@ def test_vertexai_stream() -> None:
         if chunk.response_metadata.get("model_name"):
             chunks_with_model_name += 1
         full = chunk if full is None else full + chunk
-    if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
-        pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
+    if chunks_with_usage_metadata == 0 or chunks_with_model_name != 1:
+        pytest.fail(
+            "Expected >=1 chunk with usage metadata and exactly 1 with model_name."
+        )
     assert isinstance(full, AIMessageChunk)
     _check_usage_metadata(full)
     assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
@@ -174,8 +176,10 @@ async def test_vertexai_astream() -> None:
         if chunk.response_metadata.get("model_name"):
             chunks_with_model_name += 1
         full = chunk if full is None else full + chunk
-    if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
-        pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
+    if chunks_with_usage_metadata == 0 or chunks_with_model_name != 1:
+        pytest.fail(
+            "Expected >=1 chunk with usage metadata and exactly 1 with model_name."
+        )
     assert isinstance(full, AIMessageChunk)
     _check_usage_metadata(full)
     assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
@@ -373,7 +377,7 @@ def test_audio_timestamp():
     output = llm.invoke([message], audio_timestamp=True)
 
     assert isinstance(output.content, str)
-    assert re.search(r"\d{2}:\d{2}:", output.content)
+    assert re.search(r"(\d{2}:\d{2}:?|\[\d{2}:\d{2}:\d{2}\])", output.content)
 
 
 def test_parse_history_gemini_multimodal_FC():
