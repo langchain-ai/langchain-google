@@ -5,7 +5,7 @@ import base64
 import json
 import warnings
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -28,7 +28,6 @@ from langchain_core.messages import (
 from langchain_core.messages.tool import tool_call as create_tool_call
 from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
-from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
@@ -138,7 +137,9 @@ def test_api_key_is_string() -> None:
     assert isinstance(chat.google_api_key, SecretStr)
 
 
-def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> None:
+def test_api_key_masked_when_passed_via_constructor(
+    capsys: pytest.CaptureFixture,
+) -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
         google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
@@ -320,15 +321,15 @@ def test_parse_history() -> None:
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
-def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> None:
+def test_parse_function_history(content: Union[str, list[Union[str, dict]]]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
     _parse_chat_history([function_message])
 
 
 @pytest.mark.parametrize(
-    "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
+    "headers", [None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"}]
 )
-def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
+def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -358,7 +359,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         assert chat.additional_headers == headers
     else:
         assert chat.additional_headers
-        assert all(header in chat.additional_headers for header in headers.keys())
+        assert all(header in chat.additional_headers for header in headers)
         expected_default_metadata = tuple(headers.items())
         assert chat.default_metadata == expected_default_metadata
 
@@ -413,7 +414,7 @@ def test_default_metadata_field_alias() -> None:
 
 
 @pytest.mark.parametrize(
-    "raw_candidate, expected",
+    ("raw_candidate", "expected"),
     [
         (
             {"content": {"parts": [{"text": "Mike age is 30"}]}},
@@ -690,7 +691,7 @@ def test_default_metadata_field_alias() -> None:
         ),
     ],
 )
-def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> None:
+def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> None:
     with patch("langchain_google_genai.chat_models.uuid.uuid4") as uuid4:
         uuid4.return_value = "00000000-0000-0000-0000-00000000000"
         response_candidate = glm.Candidate(raw_candidate)
@@ -750,7 +751,7 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 
 
 def test_temperature_range_pydantic_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]"""
+    """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValidationError):
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.1)
 
@@ -772,7 +773,7 @@ def test_temperature_range_pydantic_validation() -> None:
 
 
 def test_temperature_range_model_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]"""
+    """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.5)
 
@@ -822,7 +823,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
 
 
 @pytest.mark.parametrize(
-    "raw_response, expected_grounding_metadata",
+    ("raw_response", "expected_grounding_metadata"),
     [
         (
             # Case 1: Response with grounding_metadata
@@ -900,7 +901,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
     ],
 )
 def test_response_to_result_grounding_metadata(
-    raw_response: Dict, expected_grounding_metadata: Dict
+    raw_response: dict, expected_grounding_metadata: dict
 ) -> None:
     """Test that _response_to_result includes grounding_metadata in the response."""
     response = GenerateContentResponse(raw_response)

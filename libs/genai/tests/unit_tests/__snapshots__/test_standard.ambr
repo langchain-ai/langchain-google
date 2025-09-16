@@ -1,4 +1,35 @@
 # serializer version: 1
+# name: TestGemini15AIStandard.test_serdes[serialized]
+  dict({
+    'id': list([
+      'langchain_google_genai',
+      'chat_models',
+      'ChatGoogleGenerativeAI',
+    ]),
+    'kwargs': dict({
+      'default_metadata': list([
+      ]),
+      'google_api_key': dict({
+        'id': list([
+          'GOOGLE_API_KEY',
+        ]),
+        'lc': 1,
+        'type': 'secret',
+      }),
+      'max_output_tokens': 100,
+      'max_retries': 2,
+      'model': 'models/gemini-1.5-pro-001',
+      'n': 1,
+      'stop': list([
+      ]),
+      'temperature': 0.0,
+      'timeout': 60.0,
+    }),
+    'lc': 1,
+    'name': 'ChatGoogleGenerativeAI',
+    'type': 'constructor',
+  })
+# ---
 # name: TestGeminiAIStandard.test_serdes[serialized]
   dict({
     'id': list([
@@ -19,37 +50,6 @@
       'max_output_tokens': 100,
       'max_retries': 2,
       'model': 'models/gemini-1.0-pro-001',
-      'n': 1,
-      'stop': list([
-      ]),
-      'temperature': 0.0,
-      'timeout': 60.0,
-    }),
-    'lc': 1,
-    'name': 'ChatGoogleGenerativeAI',
-    'type': 'constructor',
-  })
-# ---
-# name: TestGemini_15_AIStandard.test_serdes[serialized]
-  dict({
-    'id': list([
-      'langchain_google_genai',
-      'chat_models',
-      'ChatGoogleGenerativeAI',
-    ]),
-    'kwargs': dict({
-      'default_metadata': list([
-      ]),
-      'google_api_key': dict({
-        'id': list([
-          'GOOGLE_API_KEY',
-        ]),
-        'lc': 1,
-        'type': 'secret',
-      }),
-      'max_output_tokens': 100,
-      'max_retries': 2,
-      'model': 'models/gemini-1.5-pro-001',
       'n': 1,
       'stop': list([
       ]),

@@ -212,18 +212,17 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                 raise ValueError(error_msg)
 
         except google.api_core.exceptions.InvalidArgument as e:
-            raise ChatGoogleGenerativeAIError(
-                f"Invalid argument provided to Gemini: {e}"
-            ) from e
+            msg = f"Invalid argument provided to Gemini: {e}"
+            raise ChatGoogleGenerativeAIError(msg) from e
         except google.api_core.exceptions.ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
             if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
                 time.sleep(e.retry_after)
-            raise e
-        except Exception as e:
-            raise e
+            raise
+        except Exception:
+            raise
 
     params = (
         {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
@@ -258,11 +257,10 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             return await generation_method(**kwargs)
         except InvalidArgument as e:
             # Do not retry for these errors.
-            raise ChatGoogleGenerativeAIError(
-                f"Invalid argument provided to Gemini: {e}"
-            ) from e
-        except Exception as e:
-            raise e
+            msg = f"Invalid argument provided to Gemini: {e}"
+            raise ChatGoogleGenerativeAIError(msg) from e
+        except Exception:
+            raise
 
     params = (
         {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
@@ -315,7 +313,8 @@ def _convert_to_parts(
                     elif part["source_type"] == "base64":
                         bytes_ = base64.b64decode(part["data"])
                     else:
-                        raise ValueError("source_type must be url or base64.")
+                        msg = "source_type must be url or base64."
+                        raise ValueError(msg)
                     inline_data: dict = {"data": bytes_}
                     if "mime_type" in part:
                         inline_data["mime_type"] = part["mime_type"]
@@ -333,16 +332,16 @@ def _convert_to_parts(
                     img_url = part["image_url"]
                     if isinstance(img_url, dict):
                         if "url" not in img_url:
-                            raise ValueError(
-                                f"Unrecognized message image format: {img_url}"
-                            )
+                            msg = f"Unrecognized message image format: {img_url}"
+                            raise ValueError(msg)
                         img_url = img_url["url"]
                     parts.append(image_loader.load_part(img_url))
                 # Handle media type like LangChain.js
                 # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                 elif part["type"] == "media":
                     if "mime_type" not in part:
-                        raise ValueError(f"Missing mime_type in media part: {part}")
+                        msg = f"Missing mime_type in media part: {part}"
+                        raise ValueError(msg)
                     mime_type = part["mime_type"]
                     media_part = Part()
 
@@ -355,19 +354,19 @@ def _convert_to_parts(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
                     else:
-                        raise ValueError(
-                            f"Media part must have either data or file_uri: {part}"
-                        )
+                        msg = f"Media part must have either data or file_uri: {part}"
+                        raise ValueError(msg)
                     if "video_metadata" in part:
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
                 elif part["type"] == "executable_code":
                     if "executable_code" not in part or "language" not in part:
-                        raise ValueError(
+                        msg = (
                             "Executable code part must have 'code' and 'language' "
                             f"keys, got {part}"
                         )
+                        raise ValueError(msg)
                     executable_code_part = Part(
                         executable_code=ExecutableCode(
                             language=part["language"], code=part["executable_code"]
@@ -376,10 +375,11 @@ def _convert_to_parts(
                     parts.append(executable_code_part)
                 elif part["type"] == "code_execution_result":
                     if "code_execution_result" not in part:
-                        raise ValueError(
+                        msg = (
                             "Code execution result part must have "
                             f"'code_execution_result', got {part}"
                         )
+                        raise ValueError(msg)
                     if "outcome" in part:
                         outcome = part["outcome"]
                     else:
@@ -394,10 +394,11 @@ def _convert_to_parts(
                 elif part["type"] == "thinking":
                     parts.append(Part(text=part["thinking"], thought=True))
                 else:
-                    raise ValueError(
+                    msg = (
                         f"Unrecognized message part type: {part['type']}. Only text, "
                         f"image_url, and media types are supported."
                     )
+                    raise ValueError(msg)
             else:
                 # Yolo
                 logger.warning(
@@ -407,9 +408,8 @@ def _convert_to_parts(
         else:
             # TODO: Maybe some of Google's native stuff
             # would hit this branch.
-            raise ChatGoogleGenerativeAIError(
-                "Gemini only supports text and inline_data parts."
-            )
+            msg = "Gemini only supports text and inline_data parts."
+            raise ChatGoogleGenerativeAIError(msg)
     return parts
 
 
@@ -462,7 +462,7 @@ def _get_ai_message_tool_messages_parts(
     # We are interested only in the tool messages that are part of the AI message
     tool_calls_ids = {tool_call["id"]: tool_call for tool_call in ai_message.tool_calls}
     parts = []
-    for i, message in enumerate(tool_messages):
+    for _i, message in enumerate(tool_messages):
         if not tool_calls_ids:
             break
         if message.tool_call_id in tool_calls_ids:
@@ -538,15 +538,14 @@ def _parse_chat_history(
             role = "user"
             parts = _convert_to_parts(message.content)
             if i == 1 and convert_system_message_to_human and system_instruction:
-                parts = [p for p in system_instruction.parts] + parts
+                parts = list(system_instruction.parts) + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
             parts = _convert_tool_message_to_parts(message)
         else:
-            raise ValueError(
-                f"Unexpected message with type {type(message)} at the position {i}."
-            )
+            msg = f"Unexpected message with type {type(message)} at the position {i}."
+            raise ValueError(msg)
 
         messages.append(Content(role=role, parts=parts))
     return system_instruction, messages
@@ -568,7 +567,8 @@ def _append_to_content(
         return current_content
     # This case should ideally not be reached with proper type checking,
     # but it catches any unexpected types that might slip through.
-    raise TypeError(f"Unexpected content type: {type(current_content)}")
+    msg = f"Unexpected content type: {type(current_content)}"
+    raise TypeError(msg)
 
 
 def _parse_response_candidate(
@@ -612,14 +612,13 @@ def _parse_response_candidate(
         if (
             hasattr(part, "code_execution_result")
             and part.code_execution_result is not None
-        ):
-            if part.code_execution_result.output:
-                execution_result = {
-                    "type": "code_execution_result",
-                    "code_execution_result": part.code_execution_result.output,
-                    "outcome": part.code_execution_result.outcome,
-                }
-                content = _append_to_content(content, execution_result)
+        ) and part.code_execution_result.output:
+            execution_result = {
+                "type": "code_execution_result",
+                "code_execution_result": part.code_execution_result.output,
+                "outcome": part.code_execution_result.outcome,
+            }
+            content = _append_to_content(content, execution_result)
 
         if part.inline_data.mime_type.startswith("audio/"):
             buffer = io.BytesIO()
@@ -699,9 +698,9 @@ def _parse_response_candidate(
     ):
         warnings.warn(
             """
-        ⚠️ Warning: Output may vary each run.  
-        - 'executable_code': Always present.  
-        - 'execution_result' & 'image_url': May be absent for some queries.  
+        ⚠️ Warning: Output may vary each run.
+        - 'executable_code': Always present.
+        - 'execution_result' & 'image_url': May be absent for some queries.
 
         Validate before using in production.
 """
@@ -840,7 +839,7 @@ def _is_event_loop_running() -> bool:
 
 
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
-    """`Google AI` chat models integration.
+    r"""`Google AI` chat models integration.
 
     Instantiation:
         To use, you must have either:
@@ -1438,12 +1437,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     response_mime_type: Optional[str] = None
     """Optional. Output response mimetype of the generated candidate text. Only
     supported in Gemini 1.5 and later models.
-    
+
     Supported mimetype:
         * ``'text/plain'``: (default) Text output.
         * ``'application/json'``: JSON response in the candidates.
         * ``'text/x.enum'``: Enum in plain text.
-    
+
     The model also needs to be prompted to output the appropriate response
     type, otherwise the behavior is undefined. This is a preview feature.
     """
@@ -1454,10 +1453,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     """
 
     cached_content: Optional[str] = None
-    """The name of the cached content used as context to serve the prediction. 
+    """The name of the cached content used as context to serve the prediction.
 
-    Note: only used in explicit caching, where users can have control over caching 
-    (e.g. what content to cache) and enjoy guaranteed cost savings. Format: 
+    Note: only used in explicit caching, where users can have control over caching
+    (e.g. what content to cache) and enjoy guaranteed cost savings. Format:
     ``cachedContents/{cachedContent}``.
     """
 
@@ -1513,7 +1512,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
     @classmethod
-    def is_lc_serializable(self) -> bool:
+    def is_lc_serializable(cls) -> bool:
         return True
 
     @model_validator(mode="before")
@@ -1521,20 +1520,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def build_extra(cls, values: dict[str, Any]) -> Any:
         """Build extra kwargs from additional params that were passed in."""
         all_required_field_names = get_pydantic_field_names(cls)
-        values = _build_model_kwargs(values, all_required_field_names)
-        return values
+        return _build_model_kwargs(values, all_required_field_names)
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
         if self.temperature is not None and not 0 <= self.temperature <= 2.0:
-            raise ValueError("temperature must be in the range [0.0, 2.0]")
+            msg = "temperature must be in the range [0.0, 2.0]"
+            raise ValueError(msg)
 
         if self.top_p is not None and not 0 <= self.top_p <= 1:
-            raise ValueError("top_p must be in the range [0.0, 1.0]")
+            msg = "top_p must be in the range [0.0, 1.0]"
+            raise ValueError(msg)
 
         if self.top_k is not None and self.top_k <= 0:
-            raise ValueError("top_k must be positive")
+            msg = "top_k must be positive"
+            raise ValueError(msg)
 
         if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
@@ -1618,20 +1619,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         if code_execution is not None:
             if not self._supports_code_execution:
-                raise ValueError(
+                msg = (
                     f"Code execution is only supported on Gemini 1.5 Pro, \
                     Gemini 1.5 Flash, "
                     f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. \
                     Current model: {self.model}"
                 )
+                raise ValueError(msg)
             if "tools" not in kwargs:
                 code_execution_tool = GoogleTool(code_execution=CodeExecution())
                 kwargs["tools"] = [code_execution_tool]
 
             else:
-                raise ValueError(
-                    "Tools are already defined.code_execution tool can't be defined"
-                )
+                msg = "Tools are already defined.code_execution tool can't be defined"
+                raise ValueError(msg)
 
         return super().invoke(input, config, stop=stop, **kwargs)
 
@@ -1930,10 +1931,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> GenerateContentRequest:
         if tool_choice and tool_config:
-            raise ValueError(
+            msg = (
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
+            raise ValueError(msg)
 
         formatted_tools = None
         code_execution_tool = GoogleTool(code_execution=CodeExecution())
@@ -1978,9 +1980,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 elif isinstance(t, GoogleTool) and hasattr(t, "code_execution"):
                     continue
                 else:
-                    raise TypeError(
-                        f"Tool {t} doesn't have function_declarations attribute"
-                    )
+                    msg = f"Tool {t} doesn't have function_declarations attribute"
+                    raise TypeError(msg)
 
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
 
@@ -2039,7 +2040,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         _ = kwargs.pop("strict", None)
         if kwargs:
-            raise ValueError(f"Received unsupported arguments {kwargs}")
+            msg = f"Received unsupported arguments {kwargs}"
+            raise ValueError(msg)
 
         parser: OutputParserLike
 
@@ -2056,7 +2058,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 elif isinstance(schema, dict):
                     schema_json = schema
                 else:
-                    raise ValueError(f"Unsupported schema type {type(schema)}")
+                    msg = f"Unsupported schema type {type(schema)}"
+                    raise ValueError(msg)
                 parser = JsonOutputParser()
 
             # Resolve refs in schema because they are not supported
@@ -2125,10 +2128,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 :class:`~langchain.runnable.Runnable` constructor.
         """
         if tool_choice and tool_config:
-            raise ValueError(
+            msg = (
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
+            raise ValueError(msg)
         try:
             formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
         except Exception:
@@ -2157,8 +2161,8 @@ def _get_tool_name(
 ) -> str:
     try:
         genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
-        return [f["name"] for f in genai_tool["function_declarations"]][0]  # type: ignore[index]
-    except ValueError as e:  # other TypedDict
+        return next(f["name"] for f in genai_tool["function_declarations"])  # type: ignore[index]
+    except ValueError:  # other TypedDict
         if is_typeddict(tool):
             return convert_to_openai_tool(cast("Dict", tool))["function"]["name"]
-        raise e
+        raise

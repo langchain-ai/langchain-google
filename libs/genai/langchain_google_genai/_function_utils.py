@@ -48,12 +48,7 @@ TYPE_ENUM = {
 _ALLOWED_SCHEMA_FIELDS = []
 _ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
 _ALLOWED_SCHEMA_FIELDS.extend(
-    [
-        f
-        for f in gapic.Schema.to_dict(
-            gapic.Schema(), preserving_proto_field_name=False
-        ).keys()
-    ]
+    list(gapic.Schema.to_dict(gapic.Schema(), preserving_proto_field_name=False).keys())
 )
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
@@ -142,10 +137,11 @@ def convert_to_genai_function_declarations(
     gapic_tool = gapic.Tool()
     for tool in tools:
         if any(f in gapic_tool for f in ["google_search_retrieval"]):
-            raise ValueError(
+            msg = (
                 "Providing multiple google_search_retrieval"
                 " or mixing with function_declarations is not supported"
             )
+            raise ValueError(msg)
         if isinstance(tool, (gapic.Tool)):
             rt: gapic.Tool = (
                 tool if isinstance(tool, gapic.Tool) else tool._raw_tool  # type: ignore
@@ -177,10 +173,11 @@ def convert_to_genai_function_declarations(
                 if not isinstance(
                     tool["function_declarations"], collections.abc.Sequence
                 ):
-                    raise ValueError(
+                    msg = (
                         "function_declarations should be a list"
                         f"got '{type(function_declarations)}'"
                     )
+                    raise ValueError(msg)
                 if function_declarations:
                     fds = [
                         _format_to_gapic_function_declaration(fd)
@@ -245,7 +242,8 @@ def _format_to_gapic_function_declaration(
         )
     if callable(tool):
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
-    raise ValueError(f"Unsupported tool type {tool}")
+    msg = f"Unsupported tool type {tool}"
+    raise ValueError(msg)
 
 
 def _format_base_tool_to_function_declaration(
@@ -271,10 +269,11 @@ def _format_base_tool_to_function_declaration(
     elif issubclass(tool.args_schema, BaseModelV1):
         schema = tool.args_schema.schema()
     else:
-        raise NotImplementedError(
+        msg = (
             "args_schema must be a Pydantic BaseModel or JSON schema, "
             f"got {tool.args_schema}."
         )
+        raise NotImplementedError(msg)
     parameters = _dict_to_gapic_schema(schema)
 
     return gapic.FunctionDeclaration(
@@ -294,12 +293,11 @@ def _convert_pydantic_to_genai_function(
     elif issubclass(pydantic_model, BaseModelV1):
         schema = pydantic_model.schema()
     else:
-        raise NotImplementedError(
-            f"pydantic_model must be a Pydantic BaseModel, got {pydantic_model}"
-        )
+        msg = f"pydantic_model must be a Pydantic BaseModel, got {pydantic_model}"
+        raise NotImplementedError(msg)
     schema = dereference_refs(schema)
     schema.pop("definitions", None)
-    function_declaration = gapic.FunctionDeclaration(
+    return gapic.FunctionDeclaration(
         name=tool_name if tool_name else schema.get("title"),
         description=tool_description if tool_description else schema.get("description"),
         parameters={
@@ -313,7 +311,6 @@ def _convert_pydantic_to_genai_function(
             "type_": TYPE_ENUM[schema["type"]],
         },
     )
-    return function_declaration
 
 
 def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
@@ -511,12 +508,14 @@ def _tool_choice_to_tool_config(
                 "allowed_function_names"
             )
         else:
-            raise ValueError(
+            msg = (
                 f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
                 f"Google GenerativeAI ToolConfig or FunctionCallingConfig format."
             )
+            raise ValueError(msg)
     else:
-        raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
+        msg = f"Unrecognized tool choice format:\n\n{tool_choice=}"
+        raise ValueError(msg)
     return _ToolConfigDict(
         function_calling_config={
             "mode": mode.upper(),

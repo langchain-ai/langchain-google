@@ -228,14 +228,13 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         output_dimensionality: Optional[int] = None,
     ) -> EmbedContentRequest:
         task_type = self.task_type or task_type or "RETRIEVAL_DOCUMENT"
-        request = EmbedContentRequest(
+        return EmbedContentRequest(
             content={"parts": [{"text": text}]},
             model=self.model,
             task_type=task_type.upper(),
             title=title,
             output_dimensionality=output_dimensionality,
         )
-        return request
 
     def embed_documents(
         self,
@@ -287,7 +286,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                     BatchEmbedContentsRequest(requests=requests, model=self.model)
                 )
             except Exception as e:
-                raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e
+                msg = f"Error embedding content: {e}"
+                raise GoogleGenerativeAIError(msg) from e
             embeddings.extend([list(e.values) for e in result.embeddings])
         return embeddings
 
@@ -323,7 +323,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             )
             result: EmbedContentResponse = self.client.embed_content(request)
         except Exception as e:
-            raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e
+            msg = f"Error embedding content: {e}"
+            raise GoogleGenerativeAIError(msg) from e
         return list(result.embedding.values)
 
     async def aembed_documents(
@@ -376,7 +377,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                     BatchEmbedContentsRequest(requests=requests, model=self.model)
                 )
             except Exception as e:
-                raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e
+                msg = f"Error embedding content: {e}"
+                raise GoogleGenerativeAIError(msg) from e
             embeddings.extend([list(e.values) for e in result.embeddings])
         return embeddings
 
@@ -414,5 +416,6 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 request
             )
         except Exception as e:
-            raise GoogleGenerativeAIError(f"Error embedding content: {e}") from e
+            msg = f"Error embedding content: {e}"
+            raise GoogleGenerativeAIError(msg) from e
         return list(result.embedding.values)

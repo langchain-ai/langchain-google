@@ -94,20 +94,22 @@ class _SemanticRetriever(BaseModel):
         document_id: Optional[str] = None,
     ) -> List[str]:
         if self.name.document_id is None and document_id is None:
-            raise NotImplementedError(
+            msg = (
                 "Adding texts to a corpus directly is not supported. "
                 "Please provide a document ID under the corpus first. "
                 "Then add the texts to the document."
             )
+            raise NotImplementedError(msg)
         if (
             self.name.document_id is not None
             and document_id is not None
             and self.name.document_id != document_id
         ):
-            raise NotImplementedError(
+            msg = (
                 f"Parameter `document_id` {document_id} does not match the "
                 f"vector store's `document_id` {self.name.document_id}"
             )
+            raise NotImplementedError(msg)
         assert self.name.document_id or document_id is not None
         new_document_id = self.name.document_id or document_id or ""
 
@@ -115,10 +117,11 @@ class _SemanticRetriever(BaseModel):
         if metadatas is None:
             metadatas = [{} for _ in texts]
         if len(texts) != len(metadatas):
-            raise ValueError(
+            msg = (
                 f"metadatas's length {len(metadatas)} and "
                 f"texts's length {len(texts)} are mismatched"
             )
+            raise ValueError(msg)
 
         chunks = genaix.batch_create_chunk(
             corpus_id=self.name.corpus_id,
@@ -182,7 +185,8 @@ def _delete_chunk(
 ) -> None:
     if chunk_id is not None:
         if document_id is None:
-            raise ValueError(f"Chunk {chunk_id} requires a document ID")
+            msg = f"Chunk {chunk_id} requires a document ID"
+            raise ValueError(msg)
         genaix.delete_chunk(
             corpus_id=corpus_id,
             document_id=document_id,
@@ -249,7 +253,7 @@ class GoogleVectorStore(VectorStore):
 
     def __init__(
         self, *, corpus_id: str, document_id: Optional[str] = None, **kwargs: Any
-    ):
+    ) -> None:
         """Returns an existing Google Semantic Retriever corpus or document.
 
         If just the corpus ID is provided, the vector store operates over all
@@ -353,9 +357,8 @@ class GoogleVectorStore(VectorStore):
                 Google server.
         """
         if corpus_id is None or document_id is None:
-            raise NotImplementedError(
-                "Must provide an existing corpus ID and document ID"
-            )
+            msg = "Must provide an existing corpus ID and document ID"
+            raise NotImplementedError(msg)
 
         doc_store = cls(corpus_id=corpus_id, document_id=document_id, **kwargs)
         doc_store.add_texts(texts, metadatas)
@@ -428,7 +431,7 @@ class GoogleVectorStore(VectorStore):
         ]
 
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
-        """Delete chunnks.
+        """Delete chunks.
 
         Note that the "ids" are not corpus ID or document ID. Rather, these
         are the entity names returned by `add_texts`.
@@ -441,12 +444,21 @@ class GoogleVectorStore(VectorStore):
     async def adelete(
         self, ids: Optional[List[str]] = None, **kwargs: Any
     ) -> Optional[bool]:
+        """Delete chunks asynchronously.
+
+        Note that the "ids" are not corpus ID or document ID. Rather, these
+        are the entity names returned by `add_texts`.
+
+        Returns:
+            True if successful. Otherwise, you should get an exception anyway.
+        """
         return await asyncio.get_running_loop().run_in_executor(
             None, partial(self.delete, **kwargs), ids
         )
 
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
         """TODO: Check with the team about this!
+
         The underlying vector store already returns a "score proper",
         i.e. one in [0, 1] where higher means more *similar*.
         """

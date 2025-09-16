@@ -1,7 +1,5 @@
 """Tests configuration to be executed before tests execution."""
 
-from typing import List
-
 import pytest
 
 _RELEASE_FLAG = "release"
@@ -17,9 +15,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
     Args:
         parser: The pytest parser object.
-
-    Returns:
-
     """
     for flag in _PYTEST_FLAGS:
         parser.addoption(
@@ -32,8 +27,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
     Args:
         config: The pytest config object.
-
-    Returns:
     """
     for flag in _PYTEST_FLAGS:
         config.addinivalue_line(
@@ -42,7 +35,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(
-    config: pytest.Config, items: List[pytest.Item]
+    config: pytest.Config, items: list[pytest.Item]
 ) -> None:
     """Skip tests with a marker from our list that were not explicitly invoked.
 

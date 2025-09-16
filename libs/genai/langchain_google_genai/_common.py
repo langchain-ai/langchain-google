@@ -17,7 +17,7 @@ class GoogleGenerativeAIError(Exception):
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
-    """Base class for Google Generative AI LLMs"""
+    """Base class for Google Generative AI LLMs."""
 
     model: str = Field(
         ...,
@@ -87,9 +87,9 @@ Examples:
     )
 
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
-    """The default safety settings to use for all generations. 
-    
-        For example: 
+    """The default safety settings to use for all generations.
+
+        For example:
 
         .. code-block:: python
             from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory

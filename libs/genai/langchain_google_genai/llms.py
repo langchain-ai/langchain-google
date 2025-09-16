@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from difflib import get_close_matches
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -85,7 +85,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         return self
 
     def _get_ls_params(
-        self, stop: Optional[List[str]] = None, **kwargs: Any
+        self, stop: Optional[list[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         ls_params = super()._get_ls_params(stop=stop, **kwargs)
@@ -105,8 +105,8 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
 
     def _generate(
         self,
-        prompts: List[str],
-        stop: Optional[List[str]] = None,
+        prompts: list[str],
+        stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> LLMResult:
@@ -135,7 +135,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     def _stream(
         self,
         prompt: str,
-        stop: Optional[List[str]] = None,
+        stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[GenerationChunk]:

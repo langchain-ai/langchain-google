@@ -3,7 +3,7 @@
 import asyncio
 import json
 from collections.abc import Generator
-from typing import Dict, List, Literal, Optional
+from typing import Literal, Optional
 
 import pytest
 from langchain_core.messages import (
@@ -34,8 +34,7 @@ _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJ
 
 
 def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
-    """Determines if the given bytes represent a WAV file
-    by inspecting the header.
+    """Determines if the given bytes represent a WAV file by inspecting the header.
 
     Args:
         file_bytes: Bytes representing the file content.
@@ -51,11 +50,8 @@ def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
         return False
 
     # Check for WAVE format (bytes 8-11)
-    if file_bytes[8:12] != b"WAVE":
-        return False
-
-    # If both checks pass, it's likely a WAV file
-    return True
+    # Return whether bytes 8-11 match the WAVE signature
+    return file_bytes[8:12] == b"WAVE"
 
 
 def _check_usage_metadata(message: AIMessage) -> None:
@@ -116,8 +112,8 @@ def test_chat_google_genai_invoke() -> None:
 
     result = llm.invoke(
         "This is a test. Say 'foo'",
-        config=dict(tags=["foo"]),
-        generation_config=dict(top_k=2, top_p=1, temperature=0.7),
+        config={"tags": ["foo"]},
+        generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
     )
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, str)
@@ -134,10 +130,13 @@ def test_chat_google_genai_invoke_with_image() -> None:
     for _ in range(3):
         result = llm.invoke(
             "Generate an image of a cat. Then, say meow!",
-            config=dict(tags=["meow"]),
-            generation_config=dict(
-                top_k=2, top_p=1, temperature=0.7, response_modalities=["TEXT", "IMAGE"]
-            ),
+            config={"tags": ["meow"]},
+            generation_config={
+                "top_k": 2,
+                "top_p": 1,
+                "temperature": 0.7,
+                "response_modalities": ["TEXT", "IMAGE"],
+            },
         )
         if (
             isinstance(result.content, list)
@@ -156,9 +155,7 @@ def test_chat_google_genai_invoke_with_image() -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_modalities() -> None:
-    """Test invoke tokens with image from ChatGoogleGenerativeAI with response
-    modalities.
-    """
+    """Test invoke tokens with image from ChatGoogleGenerativeAI with modalities."""
     llm = ChatGoogleGenerativeAI(
         model=_IMAGE_OUTPUT_MODEL,
         response_modalities=[Modality.TEXT, Modality.IMAGE],  # type: ignore[list-item]
@@ -167,8 +164,8 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
     for _ in range(3):
         result = llm.invoke(
             "Generate an image of a cat. Then, say meow!",
-            config=dict(tags=["meow"]),
-            generation_config=dict(top_k=2, top_p=1, temperature=0.7),
+            config={"tags": ["meow"]},
+            generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
         )
         if (
             isinstance(result.content, list)
@@ -208,9 +205,12 @@ def test_chat_google_genai_invoke_with_audio_genconfig() -> None:
 
     result = llm.invoke(
         "Please say The quick brown fox jumps over the lazy dog",
-        generation_config=dict(
-            top_k=2, top_p=1, temperature=0.7, response_modalities=["AUDIO"]
-        ),
+        generation_config={
+            "top_k": 2,
+            "top_p": 1,
+            "temperature": 0.7,
+            "response_modalities": ["AUDIO"],
+        },
     )
     assert isinstance(result, AIMessage)
     assert result.content == ""
@@ -221,9 +221,7 @@ def test_chat_google_genai_invoke_with_audio_genconfig() -> None:
 
 
 def test_chat_google_genai_invoke_thinking() -> None:
-    """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config
-    """
+    """Test invoke thinking model with default thinking config."""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=100)
 
     result = llm.invoke(
@@ -240,9 +238,7 @@ def test_chat_google_genai_invoke_thinking() -> None:
 
 
 def test_chat_google_genai_invoke_thinking_default() -> None:
-    """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config
-    """
+    """Test invoke thinking model with default thinking config."""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
 
     result = llm.invoke(
@@ -259,9 +255,7 @@ def test_chat_google_genai_invoke_thinking_default() -> None:
 
 
 def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None:
-    """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config
-    """
+    """Test invoke thinking model with default thinking config."""
     llm = ChatGoogleGenerativeAI(
         model=_THINKING_MODEL, thinking_budget=100, include_thoughts=True
     )
@@ -288,9 +282,7 @@ def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None
 # TODO: Parametrize this test to run on a certain output version (v1)
 # e.g. @pytest.mark.parametrize("output_version", ["v0", "responses/v1", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
-    """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config
-    """
+    """Test invoke thinking model with default thinking config."""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
 
     input_message = {
@@ -323,9 +315,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
 
 
 def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() -> None:
-    """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config
-    """
+    """Test invoke thinking model with default thinking config."""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
 
     result = llm.invoke(
@@ -349,9 +339,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() 
 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
-    """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config
-    """
+    """Test invoke thinking model with default thinking config."""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=0)
 
     result = llm.invoke(
@@ -369,15 +357,13 @@ def test_chat_google_genai_invoke_thinking_disabled() -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> None:
-    """Test invoke tokens with image from ChatGoogleGenerativeAI without response
-    modalities.
-    """
+    """Test invoke tokens with image without response modalities."""
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
 
     result = llm.invoke(
         "Generate an image of a cat. Then, say meow!",
-        config=dict(tags=["meow"]),
-        generation_config=dict(top_k=2, top_p=1, temperature=0.7),
+        config={"tags": ["meow"]},
+        generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
     )
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, str)
@@ -397,13 +383,13 @@ def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> No
     )
     result = llm.invoke(
         "Generate an image of a cat. Then, say meow!",
-        config=dict(tags=["meow"]),
-        generation_config=dict(
-            top_k=2,
-            top_p=1,
-            temperature=0.7,
-            response_modalities=["TEXT", "IMAGE"],
-        ),
+        config={"tags": ["meow"]},
+        generation_config={
+            "top_k": 2,
+            "top_p": 1,
+            "temperature": 0.7,
+            "response_modalities": ["TEXT", "IMAGE"],
+        },
     )
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, list)
@@ -509,7 +495,7 @@ def test_chat_google_genai_single_call_with_history() -> None:
 
 
 @pytest.mark.parametrize(
-    "model_name,convert_system_message_to_human",
+    ("model_name", "convert_system_message_to_human"),
     [(_MODEL, True), ("models/gemini-1.5-pro-latest", False)],
 )
 def test_chat_google_genai_system_message(
@@ -537,7 +523,7 @@ def test_generativeai_get_num_tokens_gemini() -> None:
 
 
 def test_safety_settings_gemini() -> None:
-    safety_settings: Dict[HarmCategory, HarmBlockThreshold] = {
+    safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
     }
     # test with safety filters on bind
@@ -549,11 +535,9 @@ def test_safety_settings_gemini() -> None:
     assert len(output.content) > 0
 
     # test direct to stream
-    streamed_messages = []
     output_stream = llm.stream("how to make a bomb?", safety_settings=safety_settings)
     assert isinstance(output_stream, Generator)
-    for message in output_stream:
-        streamed_messages.append(message)
+    streamed_messages = list(output_stream)
     assert len(streamed_messages) > 0
 
     # test as init param
@@ -571,13 +555,14 @@ def test_chat_function_calling_with_multiple_parts() -> None:
         question: str,
     ) -> str:
         """Useful for when you need to answer questions or visit websites.
+
         You should ask targeted questions.
         """
         return "brown"
 
     tools = [search]
 
-    safety: Dict[HarmCategory, HarmBlockThreshold] = {
+    safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     llm = ChatGoogleGenerativeAI(
@@ -661,7 +646,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         age: int
         likes: list[str]
 
-    safety: Dict[HarmCategory, HarmBlockThreshold] = {
+    safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     # Test .bind_tools with BaseModel
@@ -714,7 +699,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
 
 
 @pytest.mark.parametrize(
-    "model_name, method",
+    ("model_name", "method"),
     [
         (_MODEL, None),
         (_MODEL, "function_calling"),
@@ -729,7 +714,7 @@ def test_chat_google_genai_with_structured_output(
         name: str
         age: int
 
-    safety: Dict[HarmCategory, HarmBlockThreshold] = {
+    safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
     llm = ChatGoogleGenerativeAI(model=model_name, safety_settings=safety)
@@ -811,8 +796,7 @@ def test_ainvoke_without_eventloop() -> None:
     model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 
     async def model_ainvoke(context: str) -> BaseMessage:
-        result = await model.ainvoke(context)
-        return result
+        return await model.ainvoke(context)
 
     result = asyncio.run(model_ainvoke("How can you help me?"))
     assert isinstance(result, AIMessage)
@@ -821,11 +805,8 @@ def test_ainvoke_without_eventloop() -> None:
 def test_astream_without_eventloop() -> None:
     model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 
-    async def model_astream(context: str) -> List[BaseMessageChunk]:
-        result = []
-        async for chunk in model.astream(context):
-            result.append(chunk)
-        return result
+    async def model_astream(context: str) -> list[BaseMessageChunk]:
+        return [chunk async for chunk in model.astream(context)]
 
     result = asyncio.run(model_astream("How can you help me?"))
     assert len(result) > 0
@@ -871,7 +852,7 @@ def test_code_execution_builtin() -> None:
         response = llm.invoke([input_message])
     content_blocks = [block for block in response.content if isinstance(block, dict)]
     expected_block_types = {"executable_code", "code_execution_result"}
-    assert set(block.get("type") for block in content_blocks) == expected_block_types
+    assert {block.get("type") for block in content_blocks} == expected_block_types
 
     # Test streaming
     full: Optional[BaseMessageChunk] = None
@@ -882,7 +863,7 @@ def test_code_execution_builtin() -> None:
     assert isinstance(full, AIMessageChunk)
     content_blocks = [block for block in full.content if isinstance(block, dict)]
     expected_block_types = {"executable_code", "code_execution_result"}
-    assert set(block.get("type") for block in content_blocks) == expected_block_types
+    assert {block.get("type") for block in content_blocks} == expected_block_types
 
     # Test we can process chat history
     next_message = {

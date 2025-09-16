@@ -79,6 +79,13 @@ ignore = [
     "TD002",   # Missing author in TODO
     "TD003",   # Missing issue link in TODO
 
+    # 3.9 needs
+    "UP007",
+    "UP006",
+    "UP038",
+    "UP045",
+    "FA100",
+
     # TODO rules
     "ANN401",  # No Any types
     "BLE",     # Blind exceptions
@@ -95,7 +102,7 @@ pydocstyle.convention = "google"
 pydocstyle.ignore-var-parameters = true
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = [ "D1", "S", "SLF",]
+"tests/**" = [ "D1", "S", "SLF", "ARG001", "PGH003", "PT011"]
 "scripts/**" = [ "INP", "S",]
 
 [tool.mypy]

@@ -56,10 +56,12 @@ class _AqaModel(BaseModel):
     def __init__(
         self,
         answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-        safety_settings: List[genai.SafetySetting] = [],
+        safety_settings: Optional[List[genai.SafetySetting]] = None,
         temperature: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
+        if safety_settings is None:
+            safety_settings = []
         super().__init__(**kwargs)
         self._client = genaix.build_generative_service()
         self._answer_style = answer_style
