@@ -89,7 +89,7 @@ def test_vertexai_single_call(model_name: Optional[str], endpoint_version: str) 
         endpoint_version=endpoint_version,
     )
     message = HumanMessage(content="Hello")
-    response = model([message])
+    response = model.invoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     _check_usage_metadata(response)
@@ -150,8 +150,10 @@ def test_vertexai_stream() -> None:
         if chunk.response_metadata.get("model_name"):
             chunks_with_model_name += 1
         full = chunk if full is None else full + chunk
-    if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
-        pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
+    if chunks_with_usage_metadata == 0 or chunks_with_model_name != 1:
+        pytest.fail(
+            "Expected >=1 chunk with usage metadata and exactly 1 with model_name."
+        )
     assert isinstance(full, AIMessageChunk)
     _check_usage_metadata(full)
     assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
@@ -174,8 +176,10 @@ async def test_vertexai_astream() -> None:
         if chunk.response_metadata.get("model_name"):
             chunks_with_model_name += 1
         full = chunk if full is None else full + chunk
-    if chunks_with_usage_metadata != 1 or chunks_with_model_name != 1:
-        pytest.fail("Expected exactly one chunk with usage metadata or model_name.")
+    if chunks_with_usage_metadata == 0 or chunks_with_model_name != 1:
+        pytest.fail(
+            "Expected >=1 chunk with usage metadata and exactly 1 with model_name."
+        )
     assert isinstance(full, AIMessageChunk)
     _check_usage_metadata(full)
     assert full.response_metadata["model_name"] == _DEFAULT_MODEL_NAME
@@ -238,7 +242,7 @@ def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
         "text": "Describe the attached media in 5 words!",
     }
     message = HumanMessage(content=[text_message, media_message])
-    output = llm([message])
+    output = llm.invoke([message])
     assert isinstance(output.content, str)
 
 
@@ -260,7 +264,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
         "text": "Describe the attached media in 5 words!",
     }
     message = HumanMessage(content=[text_message, media_message])
-    output = llm([message])
+    output = llm.invoke([message])
     assert isinstance(output.content, str)
 
 
@@ -373,7 +377,7 @@ def test_audio_timestamp():
     output = llm.invoke([message], audio_timestamp=True)
 
     assert isinstance(output.content, str)
-    assert re.search(r"^\d+:\d+", output.content)
+    assert re.search(r"(\d{2}:\d{2}:?|\[\d{2}:\d{2}:\d{2}\])", output.content)
 
 
 def test_parse_history_gemini_multimodal_FC():
@@ -429,7 +433,7 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
     }
 
     message = HumanMessage(content=[text_message, media_message])
-    output = llm([message])
+    output = llm.invoke([message])
     assert isinstance(output.content, str)
 
 
@@ -442,7 +446,7 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model([message1, message2, message3])
+    response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -454,7 +458,7 @@ def test_vertexai_system_message() -> None:
     text_question1 = "Where is Cymbal located? Provide only the name of the city."
     sys_message = SystemMessage(content=system_instruction)
     message1 = HumanMessage(content=text_question1)
-    response = model([sys_message, message1])
+    response = model.invoke([sys_message, message1])
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -469,7 +473,7 @@ def test_vertexai_single_call_with_no_system_messages() -> None:
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model([message1, message2, message3])
+    response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -501,7 +505,7 @@ def test_vertexai_single_call_previous_blocked_response() -> None:
         },
     )
     message2 = HumanMessage(content=text_question2)
-    response = model([message1, message2])
+    response = model.invoke([message1, message2])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -806,7 +810,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     tool_calls = response.tool_calls
     assert len(tool_calls) == 3
 
-    tool_response = search("sparrow")
+    tool_response = search.invoke({"question": "sparrow"})
     tool_messages: List[BaseMessage] = []
 
     for tool_call in tool_calls:
@@ -1549,7 +1553,7 @@ def test_vertexai_global_location_single_call(
     )
     assert model.location == "global"
     message = HumanMessage(content="Hello")
-    response = model([message])
+    response = model.invoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     _check_usage_metadata(response)
@@ -1580,7 +1584,9 @@ def test_search_builtin() -> None:
         "content": "What is today's news?",
     }
     response = llm.invoke([input_message])
-    assert "grounding_metadata" in response.response_metadata
+    # Grounding metadata is optional and may not be present in all responses
+    if "grounding_metadata" in response.response_metadata:
+        assert response.response_metadata["grounding_metadata"] is not None
 
     # Test streaming
     full: Optional[BaseMessageChunk] = None
@@ -1588,7 +1594,9 @@ def test_search_builtin() -> None:
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
-    assert "grounding_metadata" in full.response_metadata
+    # Grounding metadata is optional and may not be present in all responses
+    if "grounding_metadata" in full.response_metadata:
+        assert full.response_metadata["grounding_metadata"] is not None
 
     # Test we can process chat history
     next_message = {

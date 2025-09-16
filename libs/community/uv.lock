@@ -982,6 +982,21 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-modelarmor"
+version = "0.2.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/58/ab/414e0dc60331d19dde1c751f13829e732d3e1349ea9bdcc8fb9b375b7b6b/google_cloud_modelarmor-0.2.8.tar.gz", hash = "sha256:8e06edb0c0d063509733c9612a85142b42897d31b548cca76b4f4d5323b7aae5", size = 152573, upload-time = "2025-08-06T11:52:17.877Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/1b/5b572a5d35342c19b24ea80268367aeba237c9ea842b96a078889ad90812/google_cloud_modelarmor-0.2.8-py3-none-any.whl", hash = "sha256:4141ce1437f15f20a758c8d53e0ecaa91e60b5045dc66d94a8f4076b588c194b", size = 133777, upload-time = "2025-08-06T11:51:51.069Z" },
+]
+
+[[package]]
 name = "google-cloud-resource-manager"
 version = "1.14.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1523,12 +1538,13 @@ wheels = [
 
 [[package]]
 name = "langchain-google-community"
-version = "2.0.8"
+version = "2.0.10"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-core" },
     { name = "google-api-python-client" },
     { name = "google-cloud-core" },
+    { name = "google-cloud-modelarmor" },
     { name = "grpcio" },
     { name = "langchain-community" },
     { name = "langchain-core" },
@@ -1645,6 +1661,7 @@ requires-dist = [
     { name = "google-cloud-discoveryengine", marker = "extra == 'vertexaisearch'", specifier = ">=0.11.14,<1" },
     { name = "google-cloud-documentai", marker = "extra == 'docai'", specifier = ">=2.26,<3" },
     { name = "google-cloud-documentai-toolbox", marker = "extra == 'docai'", specifier = ">=0.13.3a0,<1" },
+    { name = "google-cloud-modelarmor", specifier = ">=0.2.8" },
     { name = "google-cloud-speech", marker = "extra == 'speech'", specifier = ">=2.26,<3" },
     { name = "google-cloud-storage", marker = "extra == 'gcs'", specifier = ">=2.16,<3" },
     { name = "google-cloud-texttospeech", marker = "extra == 'texttospeech'", specifier = ">=2.16.3,<3" },
