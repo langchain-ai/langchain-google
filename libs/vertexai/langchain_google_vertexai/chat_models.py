@@ -888,14 +888,63 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         .. code-block:: python
 
             messages = [
-                ("system", "You are a helpful translator. Translate the user sentence to French."),
+                (
+                    "system",
+                    "You are a helpful translator. Translate the user sentence to French.",
+                ),
                 ("human", "I love programming."),
             ]
             llm.invoke(messages)
 
         .. code-block:: python
 
-            AIMessage(content="J'adore programmer. ", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+            AIMessage(
+                content="J'adore programmer. ",
+                response_metadata={
+                    "is_blocked": False,
+                    "safety_ratings": [
+                        {
+                            "category": "HARM_CATEGORY_HATE_SPEECH",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_HARASSMENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                    ],
+                    "citation_metadata": None,
+                    "usage_metadata": {
+                        "prompt_token_count": 17,
+                        "candidates_token_count": 7,
+                        "total_token_count": 24,
+                    },
+                },
+                id="run-925ce305-2268-44c4-875f-dde9128520ad-0",
+            )
 
     Stream:
         .. code-block:: python
@@ -905,9 +954,71 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessageChunk(content='J', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
-            AIMessageChunk(content="'adore programmer. ", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
-            AIMessageChunk(content='', response_metadata={'is_blocked': False, 'safety_ratings': [], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(
+                content="J",
+                response_metadata={
+                    "is_blocked": False,
+                    "safety_ratings": [],
+                    "citation_metadata": None,
+                },
+                id="run-9df01d73-84d9-42db-9d6b-b1466a019e89",
+            )
+            AIMessageChunk(
+                content="'adore programmer. ",
+                response_metadata={
+                    "is_blocked": False,
+                    "safety_ratings": [
+                        {
+                            "category": "HARM_CATEGORY_HATE_SPEECH",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_HARASSMENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                    ],
+                    "citation_metadata": None,
+                },
+                id="run-9df01d73-84d9-42db-9d6b-b1466a019e89",
+            )
+            AIMessageChunk(
+                content="",
+                response_metadata={
+                    "is_blocked": False,
+                    "safety_ratings": [],
+                    "citation_metadata": None,
+                    "usage_metadata": {
+                        "prompt_token_count": 17,
+                        "candidates_token_count": 7,
+                        "total_token_count": 24,
+                    },
+                },
+                id="run-9df01d73-84d9-42db-9d6b-b1466a019e89",
+            )
 
         .. code-block:: python
 
@@ -919,7 +1030,53 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessageChunk(content="J'adore programmer. ", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
+            AIMessageChunk(
+                content="J'adore programmer. ",
+                response_metadata={
+                    "is_blocked": False,
+                    "safety_ratings": [
+                        {
+                            "category": "HARM_CATEGORY_HATE_SPEECH",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_HARASSMENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                    ],
+                    "citation_metadata": None,
+                    "usage_metadata": {
+                        "prompt_token_count": 17,
+                        "candidates_token_count": 7,
+                        "total_token_count": 24,
+                    },
+                },
+                id="run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb",
+            )
 
     Async:
         .. code-block:: python
@@ -934,7 +1091,53 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessage(content="J'adore programmer. ", response_metadata={'is_blocked': False, 'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_HARASSMENT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}, {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability_label': 'NEGLIGIBLE', 'probability_score': 0.1, 'blocked': False, 'severity': 'HARM_SEVERITY_NEGLIGIBLE', 'severity_score': 0.1}], 'citation_metadata': None, 'usage_metadata': {'prompt_token_count': 17, 'candidates_token_count': 7, 'total_token_count': 24}}, id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+            AIMessage(
+                content="J'adore programmer. ",
+                response_metadata={
+                    "is_blocked": False,
+                    "safety_ratings": [
+                        {
+                            "category": "HARM_CATEGORY_HATE_SPEECH",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_HARASSMENT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "probability_label": "NEGLIGIBLE",
+                            "probability_score": 0.1,
+                            "blocked": False,
+                            "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                            "severity_score": 0.1,
+                        },
+                    ],
+                    "citation_metadata": None,
+                    "usage_metadata": {
+                        "prompt_token_count": 17,
+                        "candidates_token_count": 7,
+                        "total_token_count": 24,
+                    },
+                },
+                id="run-925ce305-2268-44c4-875f-dde9128520ad-0",
+            )
 
     Context Caching:
         Context caching allows you to store and reuse content (e.g., PDFs, images) for faster processing.
@@ -947,7 +1150,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         .. code-block:: python
 
             from google import genai
-            from google.genai.types import Content, CreateCachedContentConfig, HttpOptions, Part
+            from google.genai.types import (
+                Content,
+                CreateCachedContentConfig,
+                HttpOptions,
+                Part,
+            )
             from langchain_google_vertexai import ChatVertexAI
             from langchain_core.messages import HumanMessage
 
@@ -983,7 +1191,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 model_name="gemini-1.5-flash-001",
                 cached_content=cache.name,
             )
-            message = HumanMessage(content="Provide a summary of the key information across the content.")
+            message = HumanMessage(
+                content="Provide a summary of the key information across the content."
+            )
             llm.invoke([message])
 
     Tool calling:
@@ -991,34 +1201,53 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             from pydantic import BaseModel, Field
 
+
             class GetWeather(BaseModel):
                 '''Get the current weather in a given location'''
 
-                location: str = Field(..., description="The city and state, e.g. San Francisco, CA")
+                location: str = Field(
+                    ..., description="The city and state, e.g. San Francisco, CA"
+                )
+
 
             class GetPopulation(BaseModel):
                 '''Get the current population in a given location'''
 
-                location: str = Field(..., description="The city and state, e.g. San Francisco, CA")
+                location: str = Field(
+                    ..., description="The city and state, e.g. San Francisco, CA"
+                )
+
 
             llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
-            ai_msg = llm_with_tools.invoke("Which city is hotter today and which is bigger: LA or NY?")
+            ai_msg = llm_with_tools.invoke(
+                "Which city is hotter today and which is bigger: LA or NY?"
+            )
             ai_msg.tool_calls
 
         .. code-block:: python
 
-            [{'name': 'GetWeather',
-              'args': {'location': 'Los Angeles, CA'},
-              'id': '2a2401fa-40db-470d-83ce-4e52de910d9e'},
-             {'name': 'GetWeather',
-              'args': {'location': 'New York City, NY'},
-              'id': '96761deb-ab7f-4ef9-b4b4-6d44562fc46e'},
-             {'name': 'GetPopulation',
-              'args': {'location': 'Los Angeles, CA'},
-              'id': '9147d532-abee-43a2-adb5-12f164300484'},
-             {'name': 'GetPopulation',
-              'args': {'location': 'New York City, NY'},
-              'id': 'c43374ea-bde5-49ca-8487-5b83ebeea1e6'}]
+            [
+                {
+                    "name": "GetWeather",
+                    "args": {"location": "Los Angeles, CA"},
+                    "id": "2a2401fa-40db-470d-83ce-4e52de910d9e",
+                },
+                {
+                    "name": "GetWeather",
+                    "args": {"location": "New York City, NY"},
+                    "id": "96761deb-ab7f-4ef9-b4b4-6d44562fc46e",
+                },
+                {
+                    "name": "GetPopulation",
+                    "args": {"location": "Los Angeles, CA"},
+                    "id": "9147d532-abee-43a2-adb5-12f164300484",
+                },
+                {
+                    "name": "GetPopulation",
+                    "args": {"location": "New York City, NY"},
+                    "id": "c43374ea-bde5-49ca-8487-5b83ebeea1e6",
+                },
+            ]
 
         See ``ChatVertexAI.bind_tools()`` method for more.
 
@@ -1053,19 +1282,27 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
             from pydantic import BaseModel, Field
 
+
             class Joke(BaseModel):
                 '''Joke to tell user.'''
 
                 setup: str = Field(description="The setup of the joke")
                 punchline: str = Field(description="The punchline to the joke")
-                rating: Optional[int] = Field(default=None, description="How funny the joke is, from 1 to 10")
+                rating: Optional[int] = Field(
+                    default=None, description="How funny the joke is, from 1 to 10"
+                )
+
 
             structured_llm = llm.with_structured_output(Joke)
             structured_llm.invoke("Tell me a joke about cats")
 
         .. code-block:: python
 
-            Joke(setup='What do you call a cat that loves to bowl?', punchline='An alley cat!', rating=None)
+            Joke(
+                setup="What do you call a cat that loves to bowl?",
+                punchline="An alley cat!",
+                rating=None,
+            )
 
         See ``ChatVertexAI.with_structured_output()`` for more.
 
@@ -1092,7 +1329,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting a clear and mild day. The lush green grass indicates recent rainfall or sufficient moisture. The absence of strong shadows suggests that the sun is high in the sky, possibly late afternoon. Overall, the image conveys a sense of tranquility and warmth, characteristic of a beautiful summer day.'
+            "The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting a clear and mild day. The lush green grass indicates recent rainfall or sufficient moisture. The absence of strong shadows suggests that the sun is high in the sky, possibly late afternoon. Overall, the image conveys a sense of tranquility and warmth, characteristic of a beautiful summer day."
 
         You can also point to GCS files which is faster / more efficient because bytes are transferred back and forth.
 
@@ -1123,17 +1360,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             import base64
             from langchain_core.messages import HumanMessage
 
-            pdf_bytes = open("/path/to/your/test.pdf", 'rb').read()
-            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            pdf_bytes = open("/path/to/your/test.pdf", "rb").read()
+            pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
             message = HumanMessage(
                 content=[
                     {"type": "text", "text": "describe the document in a sentence"},
                     {
                         "type": "file",
                         "source_type": "base64",
-                        "mime_type":"application/pdf",
-                        "data": pdf_base64
-                    }
+                        "mime_type": "application/pdf",
+                        "data": pdf_base64,
+                    },
                 ]
             )
             ai_msg = llm.invoke([message])
@@ -1141,7 +1378,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance.'
+            "This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance."
 
         You can also point to GCS files.
 
@@ -1164,7 +1401,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'The article introduces Transformer, a new model architecture for sequence transduction based solely on attention mechanisms, outperforming previous models in machine translation tasks and demonstrating good generalization to English constituency parsing.'
+            "The article introduces Transformer, a new model architecture for sequence transduction based solely on attention mechanisms, outperforming previous models in machine translation tasks and demonstrating good generalization to English constituency parsing."
 
     Video input:
         .. code-block:: python
@@ -1172,18 +1409,21 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             import base64
             from langchain_core.messages import HumanMessage
 
-            video_bytes = open("/path/to/your/video.mp4", 'rb').read()
-            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+            video_bytes = open("/path/to/your/video.mp4", "rb").read()
+            video_base64 = base64.b64encode(video_bytes).decode("utf-8")
 
             message = HumanMessage(
                 content=[
-                    {"type": "text", "text": "describe what's in this video in a sentence"},
+                    {
+                        "type": "text",
+                        "text": "describe what's in this video in a sentence",
+                    },
                     {
                         "type": "file",
                         "source_type": "base64",
                         "mime_type": "video/mp4",
-                        "data": video_base64
-                    }
+                        "data": video_base64,
+                    },
                 ]
             )
             ai_msg = llm.invoke([message])
@@ -1191,7 +1431,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner.'
+            "Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner."
 
         You can also pass YouTube URLs directly:
 
@@ -1206,7 +1446,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                         "type": "media",
                         "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
                         "mime_type": "video/mp4",
-                    }
+                    },
                 ]
             )
             ai_msg = llm.invoke([message])
@@ -1214,7 +1454,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            'The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard.'
+            "The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard."
 
         You can also point to GCS files.
 
@@ -1247,8 +1487,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             import base64
             from langchain_core.messages import HumanMessage
 
-            audio_bytes = open("/path/to/your/audio.mp3", 'rb').read()
-            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
+            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
             message = HumanMessage(
                 content=[
@@ -1256,9 +1496,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     {
                         "type": "file",
                         "source_type": "base64",
-                        "mime_type":"audio/mp3",
-                        "data": audio_base64
-                    }
+                        "mime_type": "audio/mp3",
+                        "data": audio_base64,
+                    },
                 ]
             )
             ai_msg = llm.invoke([message])
@@ -1293,7 +1533,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            "This audio is an interview with two product managers from Google who work on Pixel feature drops. They discuss how feature drops are important for showcasing how Google devices are constantly improving and getting better. They also discuss some of the highlights of the January feature drop and the new features coming in the March drop for Pixel phones and Pixel watches. The interview concludes with discussion of how user feedback is extremely important to them in deciding which features to include in the feature drops. "
+            "This audio is an interview with two product managers from Google who work on Pixel feature drops. They discuss how feature drops are important for showcasing how Google devices are constantly improving and getting better. They also discuss some of the highlights of the January feature drop and the new features coming in the March drop for Pixel phones and Pixel watches. The interview concludes with discussion of how user feedback is extremely important to them in deciding which features to include in the feature drops."
 
     Token usage:
         .. code-block:: python
@@ -1303,7 +1543,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            {'input_tokens': 17, 'output_tokens': 7, 'total_tokens': 24}
+            {"input_tokens": 17, "output_tokens": 7, "total_tokens": 24}
 
     Logprobs:
         .. code-block:: python
@@ -1315,13 +1555,17 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         .. code-block:: python
 
             [
-                {'token': 'J', 'logprob': -1.549651415189146e-06, 'top_logprobs': []},
-                {'token': "'", 'logprob': -1.549651415189146e-06, 'top_logprobs': []},
-                {'token': 'adore', 'logprob': 0.0, 'top_logprobs': []},
-                {'token': ' programmer', 'logprob': -1.1922384146600962e-07, 'top_logprobs': []},
-                {'token': '.', 'logprob': -4.827636439586058e-05, 'top_logprobs': []},
-                {'token': ' ', 'logprob': -0.018011733889579773, 'top_logprobs': []},
-                {'token': '\\n', 'logprob': -0.0008687592926435173, 'top_logprobs': []}
+                {"token": "J", "logprob": -1.549651415189146e-06, "top_logprobs": []},
+                {"token": "'", "logprob": -1.549651415189146e-06, "top_logprobs": []},
+                {"token": "adore", "logprob": 0.0, "top_logprobs": []},
+                {
+                    "token": " programmer",
+                    "logprob": -1.1922384146600962e-07,
+                    "top_logprobs": [],
+                },
+                {"token": ".", "logprob": -4.827636439586058e-05, "top_logprobs": []},
+                {"token": " ", "logprob": -0.018011733889579773, "top_logprobs": []},
+                {"token": "\\n", "logprob": -0.0008687592926435173, "top_logprobs": []},
             ]
 
 
@@ -1334,34 +1578,48 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            {'is_blocked': False,
-             'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1},
-              {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1},
-              {'category': 'HARM_CATEGORY_HARASSMENT',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1},
-              {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1}],
-             'usage_metadata': {'prompt_token_count': 17,
-              'candidates_token_count': 7,
-              'total_token_count': 24}}
+            {
+                "is_blocked": False,
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                ],
+                "usage_metadata": {
+                    "prompt_token_count": 17,
+                    "candidates_token_count": 7,
+                    "total_token_count": 24,
+                },
+            }
 
     Safety settings
         .. code-block:: python
@@ -1382,34 +1640,48 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         .. code-block:: python
 
-            {'is_blocked': False,
-             'safety_ratings': [{'category': 'HARM_CATEGORY_HATE_SPEECH',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1},
-              {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1},
-              {'category': 'HARM_CATEGORY_HARASSMENT',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1},
-              {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-               'probability_label': 'NEGLIGIBLE',
-               'probability_score': 0.1,
-               'blocked': False,
-               'severity': 'HARM_SEVERITY_NEGLIGIBLE',
-               'severity_score': 0.1}],
-             'usage_metadata': {'prompt_token_count': 17,
-              'candidates_token_count': 7,
-              'total_token_count': 24}}
+            {
+                "is_blocked": False,
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability_label": "NEGLIGIBLE",
+                        "probability_score": 0.1,
+                        "blocked": False,
+                        "severity": "HARM_SEVERITY_NEGLIGIBLE",
+                        "severity_score": 0.1,
+                    },
+                ],
+                "usage_metadata": {
+                    "prompt_token_count": 17,
+                    "candidates_token_count": 7,
+                    "total_token_count": 24,
+                },
+            }
 
     """  # noqa: E501
 
@@ -2136,15 +2408,20 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 from pydantic import BaseModel
                 from langchain_google_vertexai import ChatVertexAI
 
+
                 class AnswerWithJustification(BaseModel):
                     '''An answer to the user question along with justification for the answer.'''
+
                     answer: str
                     justification: str
+
 
                 llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
                 structured_llm = llm.with_structured_output(AnswerWithJustification)
 
-                structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
+                structured_llm.invoke(
+                    "What weighs more a pound of bricks or a pound of feathers"
+                )
                 # -> AnswerWithJustification(
                 #     answer='They weigh the same.', justification='A pound is a pound.'
                 # )
@@ -2155,15 +2432,22 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 from pydantic import BaseModel
                 from langchain_google_vertexai import ChatVertexAI
 
+
                 class AnswerWithJustification(BaseModel):
                     '''An answer to the user question along with justification for the answer.'''
+
                     answer: str
                     justification: str
 
-                llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
-                structured_llm = llm.with_structured_output(AnswerWithJustification, include_raw=True)
 
-                structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
+                llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+                structured_llm = llm.with_structured_output(
+                    AnswerWithJustification, include_raw=True
+                )
+
+                structured_llm.invoke(
+                    "What weighs more a pound of bricks or a pound of feathers"
+                )
                 # -> {
                 #     'raw': AIMessage(content='', additional_kwargs={'tool_calls': [{'id': 'call_Ao02pnFYXD6GN1yzc0uXPsvF', 'function': {'arguments': '{"answer":"They weigh the same.","justification":"Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ."}', 'name': 'AnswerWithJustification'}, 'type': 'function'}]}),
                 #     'parsed': AnswerWithJustification(answer='They weigh the same.', justification='Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ.'),
@@ -2174,19 +2458,26 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             .. code-block:: python
 
                 from pydantic import BaseModel
-                from langchain_core.utils.function_calling import convert_to_openai_function
+                from langchain_core.utils.function_calling import (
+                    convert_to_openai_function,
+                )
                 from langchain_google_vertexai import ChatVertexAI
+
 
                 class AnswerWithJustification(BaseModel):
                     '''An answer to the user question along with justification for the answer.'''
+
                     answer: str
                     justification: str
+
 
                 dict_schema = convert_to_openai_function(AnswerWithJustification)
                 llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
                 structured_llm = llm.with_structured_output(dict_schema)
 
-                structured_llm.invoke("What weighs more a pound of bricks or a pound of feathers")
+                structured_llm.invoke(
+                    "What weighs more a pound of bricks or a pound of feathers"
+                )
                 # -> {
                 #     'answer': 'They weigh the same',
                 #     'justification': 'Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume and density of the two substances differ.'
@@ -2198,17 +2489,26 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 from pydantic import BaseModel, Field
                 from langchain_google_vertexai import ChatVertexAI
 
+
                 class Explanation(BaseModel):
                     '''A topic explanation with examples.'''
-                    description: str = Field(description="A brief description of the topic.")
-                    examples: str = Field(description="Two examples related to the topic.")
+
+                    description: str = Field(
+                        description="A brief description of the topic."
+                    )
+                    examples: str = Field(
+                        description="Two examples related to the topic."
+                    )
+
 
                 llm = ChatVertexAI(model_name="gemini-2.0-flash", temperature=0)
-                structured_llm = llm.with_structured_output(Explanation, method="json_mode")
+                structured_llm = llm.with_structured_output(
+                    Explanation, method="json_mode"
+                )
 
                 for chunk in structured_llm.stream("Tell me about transformer models"):
                     print(chunk)
-                    print('-------------------------')
+                    print("-------------------------")
                 # -> description='Transformer models are a type of neural network architecture that have revolutionized the field of natural language processing (NLP) and are also increasingly used in computer vision and other domains. They rely on the self-attention mechanism to weigh the importance of different parts of the input data, allowing them to effectively capture long-range dependencies. Unlike recurrent neural networks (RNNs), transformers can process the entire input sequence in parallel, leading to significantly faster training times. Key components of transformer models include: the self-attention mechanism (calculates attention weights between different parts of the input), multi-head attention (performs self-attention multiple times with different learned parameters), positional encoding (adds information about the position of tokens in the input sequence), feedforward networks (applies a non-linear transformation to each position), and encoder-decoder structure (used for sequence-to-sequence tasks).' examples='1. BERT (Bidirectional Encoder Representations from Transformers): A pre-trained transformer'
                 #    -------------------------
                 #    description='Transformer models are a type of neural network architecture that have revolutionized the field of natural language processing (NLP) and are also increasingly used in computer vision and other domains. They rely on the self-attention mechanism to weigh the importance of different parts of the input data, allowing them to effectively capture long-range dependencies. Unlike recurrent neural networks (RNNs), transformers can process the entire input sequence in parallel, leading to significantly faster training times. Key components of transformer models include: the self-attention mechanism (calculates attention weights between different parts of the input), multi-head attention (performs self-attention multiple times with different learned parameters), positional encoding (adds information about the position of tokens in the input sequence), feedforward networks (applies a non-linear transformation to each position), and encoder-decoder structure (used for sequence-to-sequence tasks).' examples='1. BERT (Bidirectional Encoder Representations from Transformers): A pre-trained transformer model that can be fine-tuned for various NLP tasks like text classification, question answering, and named entity recognition. 2. GPT (Generative Pre-trained Transformer): A language model that uses transformers to generate coherent and contextually relevant text. GPT models are used in chatbots, content creation, and code generation.'

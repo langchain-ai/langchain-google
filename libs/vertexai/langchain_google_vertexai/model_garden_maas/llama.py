@@ -198,14 +198,20 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         .. code-block:: python
 
             messages = [
-                ("system", "You are a helpful translator. Translate the user sentence to French."),
+                (
+                    "system",
+                    "You are a helpful translator. Translate the user sentence to French.",
+                ),
                 ("human", "I love programming."),
             ]
             llm.invoke(messages)
 
         .. code-block:: python
 
-            AIMessage(content="J'adore programmer. \n", id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+            AIMessage(
+                content="J'adore programmer. \n",
+                id="run-925ce305-2268-44c4-875f-dde9128520ad-0",
+            )
 
     Stream:
         .. code-block:: python
@@ -215,9 +221,12 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessageChunk(content='J', id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
-            AIMessageChunk(content="'adore programmer. \n", id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
-            AIMessageChunk(content='', id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content="J", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
+            AIMessageChunk(
+                content="'adore programmer. \n",
+                id="run-9df01d73-84d9-42db-9d6b-b1466a019e89",
+            )
+            AIMessageChunk(content="", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
 
         .. code-block:: python
 
@@ -229,7 +238,10 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessageChunk(content="J'adore programmer. \n", id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
+            AIMessageChunk(
+                content="J'adore programmer. \n",
+                id="run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb",
+            )
 
     """  # noqa: E501
 

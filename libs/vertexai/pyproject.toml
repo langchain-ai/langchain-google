@@ -27,12 +27,22 @@ dependencies = [
 
 [project.urls]
 "Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/vertexai"
+"Release Notes" = "https://github.com/langchain-ai/langchain-google/releases"
+repository = "https://github.com/langchain-ai/langchain-google"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.35,<1"]
 mistral = ["langchain-mistralai>=0.2.0,<1"]
 
 [dependency-groups]
+lint = ["ruff<0.13,>=0.12.2"]
+typing = [
+    "mypy<1.19,>=1.18.1",
+    "types-requests>=2.31,<3",
+    "types-google-cloud-ndb>=2.2.0.20240106,<3",
+    "types-protobuf>=4.24.0.4,<5",
+    "anthropic>=0.64,<1",
+]
 test = [
     "pytest>=8.4,<9",
     "pytest-xdist>=3.8,<4",
@@ -63,31 +73,66 @@ test_integration = [
     "langchain-tests>=0.2.0,<1",
 ]
 
-lint = [
-    "ruff>=0.12.10,<1",
-]
-
-typing = [
-    "mypy>=1.17.1,<2",
-    "types-google-cloud-ndb>=2.2.0.20240106,<3",
-    "types-protobuf>=4.24.0.4,<5",
-    "types-requests>=2.31,<3",
-    "anthropic>=0.64,<1",
-]
-
 dev = []
 
 [tool.ruff]
 fix = true
 
+[tool.ruff.format]
+docstring-code-format = true
+
 [tool.ruff.lint]
+# TODO select = [ "ALL",]
 select = [
     "E", # pycodestyle
     "F", # pyflakes
     "I", # isort
 ]
+ignore = [
+    "C90",     # McCabe complexity
+    "COM812",  # Messes with the formatter
+    "CPY",     # No copyright
+    "FIX002",  # Line contains TODO
+    "ISC001",  # Messes with the formatter
+    "PERF203", # Rarely useful
+    "PLR09",   # Too many something (arg, statements, etc)
+    "RUF012",  # Doesn't play well with Pydantic
+    "TC001",   # Doesn't play well with Pydantic
+    "TC002",   # Doesn't play well with Pydantic
+    "TC003",   # Doesn't play well with Pydantic
+    "TD002",   # Missing author in TODO
+    "TD003",   # Missing issue link in TODO
+
+    # 3.9 needs
+    "UP007",
+    "UP006",
+    "UP038",
+    "UP045",
+    "FA100",
+
+    # TODO rules
+    "ANN401",  # No Any types
+    "BLE",     # Blind exceptions
+    "DOC",     # Docstrings (preview)
+    "ERA",     # No commented-out code
+    "PLR2004", # Comparison to magic number
+]
+unfixable = [
+    "B028",    # People should intentionally tune the stacklevel
+    "PLW1510", # People should intentionally set the check argument
+]
+
+pydocstyle.convention = "google"
+pydocstyle.ignore-var-parameters = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [ "D1", "S", "SLF", "ARG001", "PGH003", "PT011"]
+"scripts/**" = [ "INP", "S",]
 
 [tool.mypy]
+plugins = ["pydantic.mypy"]
+strict = true
+disallow_untyped_defs = true
 check_untyped_defs = true
 error_summary = false
 pretty = true
