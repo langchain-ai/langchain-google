@@ -1340,3 +1340,133 @@ def test_tool_field_enum_array() -> None:
     items_property = kind_property["items"]
     assert items_property["type_"] == glm.Type.STRING
     assert items_property["enum"] == ["foo", "bar"]
+
+
+def test_convert_pydantic_to_genai_function() -> None:
+    """
+    Test the convert_pydantic_to_genai_function function with various Pydantic models.
+    """
+    from typing import Optional, List, Dict, Union
+    from pydantic import BaseModel, Field
+    
+    # Test 1: Simple model with basic fields
+    class SimpleModel(BaseModel):
+        """A simple test model."""
+        name: str
+        age: int
+        active: bool = True
+    
+    result = convert_pydantic_to_genai_function(SimpleModel)
+    
+    assert isinstance(result, dict), "Expected result to be a dict"
+    assert "function_declarations" in result, "Expected 'function_declarations' key"
+    assert len(result["function_declarations"]) == 1, "Expected one function declaration"
+    
+    fn_decl = result["function_declarations"][0]
+    assert fn_decl["name"] == "simple_model", "Expected snake_case name conversion"
+    assert fn_decl["description"] == "A simple test model.", "Expected correct description"
+    assert "parameters" in fn_decl, "Expected 'parameters' key"
+    
+    schema = fn_decl["parameters"]
+    assert "properties" in schema, "Expected 'properties' in schema"
+    assert "name" in schema["properties"], "Expected 'name' property"
+    assert "age" in schema["properties"], "Expected 'age' property"
+    assert "active" in schema["properties"], "Expected 'active' property"
+    
+    # Test 2: Custom function name
+    result_custom = convert_pydantic_to_genai_function(SimpleModel, "custom_function")
+    fn_decl_custom = result_custom["function_declarations"][0]
+    assert fn_decl_custom["name"] == "custom_function", "Expected custom function name"
+    
+    # Test 3: Model with Field descriptions
+    class ModelWithFields(BaseModel):
+        """Model with field descriptions."""
+        location: str = Field(..., description="The location name")
+        radius: Optional[float] = Field(None, description="Search radius in km")
+    
+    result_fields = convert_pydantic_to_genai_function(ModelWithFields)
+    fn_decl_fields = result_fields["function_declarations"][0]
+    
+    assert fn_decl_fields["name"] == "model_with_fields", "Expected correct snake_case conversion"
+    assert "Model with field descriptions." in fn_decl_fields["description"], "Expected correct description"
+    
+    # Test 4: Model with complex types
+    class ComplexModel(BaseModel):
+        """Model with complex field types."""
+        tags: List[str] = []
+        metadata: Dict[str, str] = {}
+        settings: Union[str, Dict[str, str]] = "default"
+    
+    result_complex = convert_pydantic_to_genai_function(ComplexModel)
+    fn_decl_complex = result_complex["function_declarations"][0]
+    
+    assert fn_decl_complex["name"] == "complex_model", "Expected correct name"
+    schema_complex = fn_decl_complex["parameters"]
+    assert "tags" in schema_complex["properties"], "Expected 'tags' property"
+    assert "metadata" in schema_complex["properties"], "Expected 'metadata' property"
+    assert "settings" in schema_complex["properties"], "Expected 'settings' property"
+    
+    # Test 5: Model without docstring
+    class NoDocModel(BaseModel):
+        value: int
+    
+    result_no_doc = convert_pydantic_to_genai_function(NoDocModel)
+    fn_decl_no_doc = result_no_doc["function_declarations"][0]
+    assert fn_decl_no_doc["description"] == "", "Expected empty description for model without docstring"
+
+
+def test_convert_pydantic_to_genai_function_with_nested_models() -> None:
+    """
+    Test convert_pydantic_to_genai_function with nested Pydantic models.
+    """
+    from typing import List
+    from pydantic import BaseModel
+    
+    class Address(BaseModel):
+        """Address information."""
+        street: str
+        city: str
+        zip_code: str
+    
+    class Person(BaseModel):
+        """Person with address."""
+        name: str
+        address: Address
+        addresses: List[Address] = []
+    
+    result = convert_pydantic_to_genai_function(Person)
+    
+    assert isinstance(result, dict), "Expected result to be a dict"
+    fn_decl = result["function_declarations"][0]
+    assert fn_decl["name"] == "person", "Expected correct function name"
+    
+    schema = fn_decl["parameters"]
+    assert "address" in schema["properties"], "Expected 'address' property"
+    assert "addresses" in schema["properties"], "Expected 'addresses' property"
+
+
+def test_convert_pydantic_to_genai_function_integration() -> None:
+    """
+    Integration test to ensure the function works with the existing convert_to_genai_function_declarations.
+    """
+    from pydantic import BaseModel
+    
+    class SearchQuery(BaseModel):
+        """Search for information."""
+        query: str
+        limit: int = 10
+    
+    # Test that our function output can be used with existing infrastructure
+    result = convert_pydantic_to_genai_function(SearchQuery)
+    
+    # This should work with the existing convert_to_genai_function_declarations function
+    try:
+        genai_tool = convert_to_genai_function_declarations([result])
+        assert genai_tool is not None, "Expected successful conversion"
+        assert len(genai_tool.function_declarations) == 1, "Expected one function declaration"
+        
+        fn_decl = genai_tool.function_declarations[0]
+        assert fn_decl.name == "search_query", "Expected correct function name"
+        assert "Search for information." in fn_decl.description, "Expected correct description"
+    except Exception as e:
+        pytest.fail(f"Integration with existing functions failed: {e}")
