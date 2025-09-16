@@ -51,6 +51,13 @@ from google.ai.generativelanguage_v1beta.types import (
     VideoMetadata,
 )
 from google.ai.generativelanguage_v1beta.types import Tool as GoogleTool
+from google.api_core.exceptions import (
+    FailedPrecondition,
+    GoogleAPIError,
+    InvalidArgument,
+    ResourceExhausted,
+    ServiceUnavailable,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
