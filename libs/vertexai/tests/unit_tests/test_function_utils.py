@@ -42,6 +42,7 @@ from langchain_google_vertexai.functions_utils import (
     _format_vertex_to_function_declaration,
     _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
+    _ToolType,
 )
 
 
@@ -418,20 +419,20 @@ def test_format_to_gapic_function_declaration() -> None:
 
 
 def test_format_to_gapic_tool() -> None:
-    src = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
+    src: List[_FunctionDeclarationLike] = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
     fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
     expected = gapic.Tool(function_declarations=fds)
     result = _format_to_gapic_tool(src)
     assert result == expected
 
-    src_2 = [
-        *src,
+    additional_tools: List[_ToolType] = [
         gapic.Tool(function_declarations=[search_model_exp]),
         vertexai.Tool.from_function_declarations(
             [vertexai.FunctionDeclaration.from_func(search)]
         ),
         {"function_declarations": [search_model_dict]},
     ]
+    src_2 = src + additional_tools
     expected = gapic.Tool(
         function_declarations=[*fds, search_model_exp, search_vfd_exp, search_model_exp]
     )
