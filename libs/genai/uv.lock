@@ -509,10 +509,6 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
-dev = [
-    { name = "types-google-cloud-ndb" },
-    { name = "types-requests" },
-]
 lint = [
     { name = "ruff" },
 ]
@@ -553,10 +549,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "types-google-cloud-ndb", specifier = ">=2.2.0.1,<3" },
-    { name = "types-requests", specifier = ">=2.31.0,<3" },
-]
+dev = []
 lint = [{ name = "ruff", specifier = ">=0.12.2,<0.13" }]
 test = [
     { name = "freezegun", specifier = ">=1.5,<2" },
