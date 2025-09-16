@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator, Iterator, Sequence
 from operator import itemgetter
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterator,
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     Union,
 )
@@ -203,8 +201,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def build_extra(cls, values: dict[str, Any]) -> Any:
         """Build extra kwargs from additional params that were passed in."""
         all_required_field_names = get_pydantic_field_names(cls)
-        values = _build_model_kwargs(values, all_required_field_names)
-        return values
+        return _build_model_kwargs(values, all_required_field_names)
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
@@ -214,7 +211,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         )
 
         if self.project is None:
-            raise ValueError("project is required for ChatAnthropicVertex")
+            msg = "project is required for ChatAnthropicVertex"
+            raise ValueError(msg)
 
         project_id: str = self.project
 
@@ -451,8 +449,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         ] = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
-        """Bind tool-like objects to this chat model"""
-
+        """Bind tool-like objects to this chat model."""
         formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
         if not tool_choice:
             pass
@@ -463,10 +460,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         elif isinstance(tool_choice, str):
             kwargs["tool_choice"] = {"type": "tool", "name": tool_choice}
         else:
-            raise ValueError(
+            msg = (  # type: ignore[unreachable, unused-ignore]
                 f"Unrecognized 'tool_choice' type {tool_choice=}. Expected dict, "
                 f"str, or None."
             )
+            raise ValueError(msg)
         return self.bind(tools=formatted_tools, **kwargs)
 
     def with_structured_output(
@@ -477,7 +475,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema."""
-
         tool_name = convert_to_anthropic_tool(schema)["name"]
         llm = self.bind_tools([schema], tool_choice=tool_name)
         if isinstance(schema, type) and issubclass(schema, BaseModel):
@@ -496,5 +493,4 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 [parser_none], exception_key="parsing_error"
             )
             return RunnableMap(raw=llm) | parser_with_fallback
-        else:
-            return llm | output_parser
+        return llm | output_parser

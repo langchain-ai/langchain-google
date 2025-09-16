@@ -45,11 +45,10 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 
 @pytest.fixture
 def sdk_manager() -> VectorSearchSDKManager:
-    sdk_manager = VectorSearchSDKManager(
+    return VectorSearchSDKManager(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
     )
-    return sdk_manager
 
 
 @pytest.fixture
@@ -85,7 +84,7 @@ def embeddings() -> VertexAIEmbeddings:
 
 @pytest.fixture
 def vector_store(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
-    vector_store = VectorSearchVectorStore.from_components(
+    return VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
@@ -94,12 +93,10 @@ def vector_store(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
         embedding=embeddings,
     )
 
-    return vector_store
-
 
 @pytest.fixture
 def vector_store_private(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
-    vector_store_private = VectorSearchVectorStore.from_components(
+    return VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
         gcs_bucket_name=os.environ["VECTOR_SEARCH_STAGING_BUCKET"],
@@ -111,14 +108,12 @@ def vector_store_private(embeddings: VertexAIEmbeddings) -> VectorSearchVectorSt
         embedding=embeddings,
     )
 
-    return vector_store_private
-
 
 @pytest.fixture
 def datastore_vector_store(
     embeddings: VertexAIEmbeddings,
 ) -> VectorSearchVectorStoreDatastore:
-    vector_store = VectorSearchVectorStoreDatastore.from_components(
+    return VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
         index_id=os.environ["VECTOR_SEARCH_STREAM_INDEX_ID"],
@@ -127,11 +122,9 @@ def datastore_vector_store(
         stream_update=True,
     )
 
-    return vector_store
-
 
 @pytest.mark.extended
-def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
+def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager) -> None:
     gcs_client = sdk_manager.get_gcs_client()
     assert isinstance(gcs_client, storage.Client)
 
@@ -151,7 +144,7 @@ def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager):
 @pytest.mark.parametrize("n_threads", ["-1", -1, 51, "100"])
 def test_gcs_document_storage_invalid_user_input(
     sdk_manager: VectorSearchSDKManager, n_threads: int
-):
+) -> None:
     bucket = sdk_manager.get_gcs_bucket(os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
     with pytest.raises(ValueError) as excinfo:
         GCSDocumentStorage(
@@ -167,7 +160,7 @@ def test_gcs_document_storage_invalid_user_input(
 @pytest.mark.parametrize("n_threads", ["1", 1, 50])
 def test_gcs_document_storage_valid_user_input(
     sdk_manager: VectorSearchSDKManager, n_threads: int
-):
+) -> None:
     bucket = sdk_manager.get_gcs_bucket(os.environ["VECTOR_SEARCH_STAGING_BUCKET"])
     doc_store = GCSDocumentStorage(
         bucket=bucket, prefix="integration_tests", threaded=True, n_threads=n_threads
@@ -187,7 +180,7 @@ def test_gcs_document_storage_valid_user_input(
 def test_document_storage(
     storage_class: str,
     request: pytest.FixtureRequest,
-):
+) -> None:
     document_storage: DocumentStorage = request.getfixturevalue(storage_class)
 
     weirdly_encoded_texts = [
@@ -233,7 +226,7 @@ def test_document_storage(
 @pytest.mark.extended
 def test_public_endpoint_vector_searcher(
     embeddings: VertexAIEmbeddings, sdk_manager: VectorSearchSDKManager
-):
+) -> None:
     vertexai.init(api_transport="grpc")
     index = sdk_manager.get_index(os.environ["VECTOR_SEARCH_BATCH_INDEX_ID"])
     endpoint = sdk_manager.get_endpoint(os.environ["VECTOR_SEARCH_BATCH_ENDPOINT_ID"])
@@ -253,7 +246,7 @@ def test_public_endpoint_vector_searcher(
 @pytest.mark.parametrize(
     "vector_store_class", ["vector_store", "datastore_vector_store"]
 )
-def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest):
+def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest) -> None:
     vertexai.init(api_transport="grpc")
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
@@ -278,7 +271,7 @@ def test_vector_store_hybrid_search(
     vector_store_class: str,
     request: pytest.FixtureRequest,
     embeddings: VertexAIEmbeddings,
-):
+) -> None:
     vertexai.init(api_transport="grpc")
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
@@ -308,7 +301,7 @@ def test_add_texts_with_embeddings(
     vector_store_class: str,
     request: pytest.FixtureRequest,
     embeddings: VertexAIEmbeddings,
-):
+) -> None:
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
     texts = ["my favourite animal is the elephant", "my favourite animal is the lion"]
@@ -343,7 +336,7 @@ def test_add_texts_with_embeddings(
 )
 def test_vector_store_filtering(
     vector_store_class: str, request: pytest.FixtureRequest
-):
+) -> None:
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
     documents = vector_store.similarity_search(
         "I want some pants",
@@ -359,7 +352,7 @@ def test_vector_store_filtering(
 @pytest.mark.long
 def test_vector_store_update_index(
     vector_store: VectorSearchVectorStore, sample_documents: List[Document]
-):
+) -> None:
     vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
 
 
@@ -367,7 +360,7 @@ def test_vector_store_update_index(
 def test_vector_store_stream_update_index(
     datastore_vector_store: VectorSearchVectorStoreDatastore,
     sample_documents: List[Document],
-):
+) -> None:
     datastore_vector_store.add_documents(
         documents=sample_documents, is_complete_overwrite=True
     )

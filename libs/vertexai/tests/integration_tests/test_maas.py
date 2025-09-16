@@ -40,7 +40,6 @@ def test_generate(model_name: str) -> None:
     )
     output = llm.invoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
-    print(output)
 
 
 @pytest.mark.extended
@@ -51,7 +50,6 @@ async def test_agenerate(model_name: str) -> None:
     )
     output = await llm.ainvoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
-    print(output)
 
 
 @pytest.mark.extended
@@ -90,8 +88,7 @@ async def test_tools(model_name: str) -> None:
     def search(
         question: str,
     ) -> str:
-        """
-        Useful for when you need to answer questions or visit websites.
+        """Useful for when you need to answer questions or visit websites.
         You should ask targeted questions.
         """
         return "brown"
@@ -130,7 +127,7 @@ async def test_tools(model_name: str) -> None:
         )
         tool_messages.append(tool_message)
 
-    result = llm_with_search.invoke([request, response] + tool_messages)
+    result = llm_with_search.invoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
     if model_name in _MISTRAL_MODELS:

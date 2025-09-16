@@ -10,7 +10,7 @@ from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
 
 @pytest.mark.extended
-def test_pdf_gcs_uri():
+def test_pdf_gcs_uri() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
         model="claude-3-5-sonnet-v2@20241022",
@@ -34,7 +34,7 @@ def test_pdf_gcs_uri():
 
 
 @pytest.mark.extended
-def test_pdf_byts():
+def test_pdf_byts() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
         model="claude-3-5-sonnet-v2@20241022",
@@ -60,7 +60,7 @@ def test_pdf_byts():
 
 
 @pytest.mark.extended
-def test_https_image():
+def test_https_image() -> None:
     uri = "https://picsum.photos/seed/picsum/200/300.jpg"
 
     llm = ChatAnthropicVertex(

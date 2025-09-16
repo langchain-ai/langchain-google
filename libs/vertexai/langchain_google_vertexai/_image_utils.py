@@ -15,7 +15,7 @@ from vertexai.generative_models import Image, Part  # type: ignore
 
 
 class Route(Enum):
-    """Image Loading Route"""
+    """Image Loading Route."""
 
     GOOGLE_CLOUD_STORAGE = 1
     BASE64 = 2
@@ -37,7 +37,7 @@ class ImageBytesLoader:
         self,
         project: Union[str, None] = None,
     ) -> None:
-        """Constructor
+        """Constructor.
 
         Args:
             project: Google Cloud project id. Defaults to none.
@@ -60,7 +60,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes.
         """
-
         route = self._route(image_string)
 
         if route == Route.GOOGLE_CLOUD_STORAGE:
@@ -82,11 +81,12 @@ class ImageBytesLoader:
             )
             raise ValueError(msg)
 
-        raise ValueError(
+        msg = (  # type: ignore[unreachable, unused-ignore]
             "Image string must be one of: Google Cloud Storage URI, "
             "b64 encoded image string (data:image/...), valid image url. "
             f"Instead got '{image_string}'."
         )
+        raise ValueError(msg)
 
     def load_part(self, image_string: str) -> Part:
         """Gets Part for loading from Gemini.
@@ -145,11 +145,12 @@ class ImageBytesLoader:
         if os.path.exists(image_string):
             return Route.LOCAL_FILE
 
-        raise ValueError(
+        msg = (
             "Image string must be one of: Google Cloud Storage URI, "
             "b64 encoded image string (data:image/...), or valid image url. "
             f"Instead got '{image_string}'."
         )
+        raise ValueError(msg)
 
     def _bytes_from_b64(self, base64_image: str) -> bytes:
         """Gets image bytes from a base64 encoded string.
@@ -160,7 +161,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         pattern = r"data:\w+/\w{2,4};base64,(.*)"
         match = re.search(pattern, base64_image)
 
@@ -168,7 +168,8 @@ class ImageBytesLoader:
             encoded_string = match.group(1)
             return base64.b64decode(encoded_string)
 
-        raise ValueError(f"Error in b64 encoded image. Must follow pattern: {pattern}")
+        msg = f"Error in b64 encoded image. Must follow pattern: {pattern}"
+        raise ValueError(msg)
 
     def _bytes_from_url(self, url: str) -> bytes:
         """Gets image bytes from a public url.
@@ -182,7 +183,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         response = requests.get(url)
 
         if not response.ok:
@@ -202,7 +202,6 @@ class ImageBytesLoader:
         Returns:
             storage.Blob
         """
-
         gcs_client = self._storage_client
         blob = storage.Blob.from_string(gcs_uri, gcs_client)
         blob.reload(client=gcs_client)
@@ -227,7 +226,6 @@ class ImageBytesLoader:
         """Checks weather the image needs other mimetype. Currently only identifies
         pdfs, otherwise it will return None and it will be treated as an image.
         """
-
         # For local files or urls
         if image_url.endswith(".pdf"):
             return "application/pdf"
@@ -252,10 +250,7 @@ def image_bytes_to_b64_string(
     Returns:
         B64 image encoded string.
     """
-    if image_format == "pdf":
-        image_type = "application"
-    else:
-        image_type = "image"
+    image_type = "application" if image_format == "pdf" else "image"
     encoded_bytes = base64.b64encode(image_bytes).decode(encoding)
     return f"data:{image_type}/{image_format};base64,{encoded_bytes}"
 
@@ -297,7 +292,6 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
     Returns:
         Image string if the dictionary has the correct format otherwise None.
     """
-
     if isinstance(content_part, str):
         return None
 
@@ -308,8 +302,7 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
 
     if isinstance(image_str, str):
         return image_str
-    else:
-        return None
+    return None
 
 
 def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
@@ -322,7 +315,6 @@ def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
         String if the dictionary has the correct format or the input is an string,
         otherwise None.
     """
-
     if isinstance(content_part, str):
         return content_part
 
@@ -333,5 +325,4 @@ def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
 
     if isinstance(text, str):
         return text
-    else:
-        return None
+    return None

@@ -3,8 +3,9 @@
 import asyncio
 import base64
 import json
+import warnings
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -27,7 +28,6 @@ from langchain_core.messages import (
 from langchain_core.messages.tool import tool_call as create_tool_call
 from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
-from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
@@ -43,7 +43,7 @@ def test_integration_initialization() -> None:
     """Test chat model initialization."""
     llm = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        google_api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
         temperature=0.7,
@@ -59,7 +59,7 @@ def test_integration_initialization() -> None:
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        google_api_key=SecretStr("..."),
         max_output_tokens=10,
     )
     ls_params = llm._get_ls_params()
@@ -81,13 +81,15 @@ def test_integration_initialization() -> None:
 
     # test initialization with an invalid argument to check warning
     with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-nano",
-            google_api_key=SecretStr("..."),  # type: ignore[call-arg]
-            safety_setting={
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
-            },  # Invalid arg
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-nano",
+                google_api_key=SecretStr("..."),
+                safety_setting={
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+                },  # Invalid arg
+            )
         assert llm.model == "models/gemini-nano"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
@@ -102,14 +104,14 @@ def test_initialization_inside_threadpool() -> None:
         executor.submit(
             ChatGoogleGenerativeAI,
             model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+            google_api_key=SecretStr("secret-api-key"),
         ).result()
 
 
 def test_initalization_without_async() -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("secret-api-key"),
     )
     assert chat.async_client is None
 
@@ -118,7 +120,7 @@ def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         model = ChatGoogleGenerativeAI(
             model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+            google_api_key=SecretStr("secret-api-key"),
         )
         _ = model.async_client
         return model
@@ -130,15 +132,17 @@ def test_initialization_with_async() -> None:
 def test_api_key_is_string() -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(chat.google_api_key, SecretStr)
 
 
-def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> None:
+def test_api_key_masked_when_passed_via_constructor(
+    capsys: pytest.CaptureFixture,
+) -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("secret-api-key"),
     )
     print(chat.google_api_key, end="")  # noqa: T201
     captured = capsys.readouterr()
@@ -317,15 +321,15 @@ def test_parse_history() -> None:
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
-def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> None:
+def test_parse_function_history(content: Union[str, list[Union[str, dict]]]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
     _parse_chat_history([function_message])
 
 
 @pytest.mark.parametrize(
-    "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
+    "headers", [None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"}]
 )
-def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
+def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -344,7 +348,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     ):
         chat = ChatGoogleGenerativeAI(
             model="gemini-pro",
-            google_api_key=param_secret_api_key,  # type: ignore[call-arg]
+            google_api_key=param_secret_api_key,
             client_options=param_client_options,
             transport=param_transport,
             additional_headers=headers,
@@ -355,7 +359,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         assert chat.additional_headers == headers
     else:
         assert chat.additional_headers
-        assert all(header in chat.additional_headers for header in headers.keys())
+        assert all(header in chat.additional_headers for header in headers)
         expected_default_metadata = tuple(headers.items())
         assert chat.default_metadata == expected_default_metadata
 
@@ -382,7 +386,7 @@ def test_default_metadata_field_alias() -> None:
     # This is the main issue: LangSmith Playground passes None to default_metadata_input
     chat1 = ChatGoogleGenerativeAI(
         model="gemini-pro",
-        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("test-key"),
         default_metadata_input=None,
     )
     # When None is passed to alias, it should use the default factory and be overridden
@@ -393,7 +397,7 @@ def test_default_metadata_field_alias() -> None:
     # error)
     chat2 = ChatGoogleGenerativeAI(
         model="gemini-pro",
-        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("test-key"),
         default_metadata_input=[],
     )
     # Empty list should be accepted and overridden by validator
@@ -402,7 +406,7 @@ def test_default_metadata_field_alias() -> None:
     # Test with tuple for default_metadata_input (should not cause validation error)
     chat3 = ChatGoogleGenerativeAI(
         model="gemini-pro",
-        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("test-key"),
         default_metadata_input=[("X-Test", "test")],
     )
     # The validator will override this with additional_headers, so it should be empty
@@ -410,7 +414,7 @@ def test_default_metadata_field_alias() -> None:
 
 
 @pytest.mark.parametrize(
-    "raw_candidate, expected",
+    ("raw_candidate", "expected"),
     [
         (
             {"content": {"parts": [{"text": "Mike age is 30"}]}},
@@ -454,7 +458,7 @@ def test_default_metadata_field_alias() -> None:
                         "type": "image_url",
                         "image_url": {
                             "url": "data:image/bmp;base64,"
-                            + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                            "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     }
                 ]
@@ -483,7 +487,7 @@ def test_default_metadata_field_alias() -> None:
                         "type": "image_url",
                         "image_url": {
                             "url": "data:image/bmp;base64,"
-                            + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                            "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     },
                 ]
@@ -687,7 +691,7 @@ def test_default_metadata_field_alias() -> None:
         ),
     ],
 )
-def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> None:
+def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> None:
     with patch("langchain_google_genai.chat_models.uuid.uuid4") as uuid4:
         uuid4.return_value = "00000000-0000-0000-0000-00000000000"
         response_candidate = glm.Candidate(raw_candidate)
@@ -710,7 +714,7 @@ def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> N
 
 
 def test_serialize() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")  # type: ignore[call-arg]
+    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")
     serialized = dumps(llm)
     llm_loaded = loads(
         serialized,
@@ -747,8 +751,7 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 
 
 def test_temperature_range_pydantic_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]"""
-
+    """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValidationError):
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.1)
 
@@ -757,7 +760,7 @@ def test_temperature_range_pydantic_validation() -> None:
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        google_api_key=SecretStr("..."),
         temperature=1.5,
     )
     ls_params = llm._get_ls_params()
@@ -770,8 +773,7 @@ def test_temperature_range_pydantic_validation() -> None:
 
 
 def test_temperature_range_model_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]"""
-
+    """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.5)
 
@@ -804,7 +806,8 @@ def test_model_kwargs() -> None:
 def test_retry_decorator_with_custom_parameters() -> None:
     # Mock the generation method
     mock_generation_method = Mock()
-    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")
+    # TODO: remove ignore once google-auth has types.
+    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")  # type: ignore[no-untyped-call]
 
     # Call the function with custom retry parameters
     with pytest.raises(ResourceExhausted):
@@ -821,7 +824,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
 
 
 @pytest.mark.parametrize(
-    "raw_response, expected_grounding_metadata",
+    ("raw_response", "expected_grounding_metadata"),
     [
         (
             # Case 1: Response with grounding_metadata
@@ -899,7 +902,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
     ],
 )
 def test_response_to_result_grounding_metadata(
-    raw_response: Dict, expected_grounding_metadata: Dict
+    raw_response: dict, expected_grounding_metadata: dict
 ) -> None:
     """Test that _response_to_result includes grounding_metadata in the response."""
     response = GenerateContentResponse(raw_response)

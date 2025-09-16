@@ -122,8 +122,7 @@ def test_embed_documents_quality() -> None:
 
 
 def test_embed_query_task_type() -> None:
-    """Test for task_type"""
-
+    """Test for task_type."""
     embeddings = GoogleGenerativeAIEmbeddings(model=_MODEL, task_type="clustering")
     emb = embeddings.embed_query(
         "How does alphafold work?", output_dimensionality=_OUTPUT_DIMENSIONALITY

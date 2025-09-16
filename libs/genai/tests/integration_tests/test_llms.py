@@ -1,10 +1,9 @@
 """Test Google GenerativeAI API wrapper.
 
-Note: This test must be run with the GOOGLE_API_KEY environment variable set to a
-      valid API key.
+This test must be run with the GOOGLE_API_KEY env variable set to a valid API key.
 """
 
-from typing import Dict, Generator
+from collections.abc import Generator
 
 import pytest
 from langchain_core.outputs import LLMResult
@@ -23,7 +22,7 @@ def test_google_generativeai_call(model_name: str) -> None:
     if model_name:
         llm = GoogleGenerativeAI(max_tokens=10, model=model_name)
     else:
-        llm = GoogleGenerativeAI(max_tokens=10)  # type: ignore[call-arg]
+        llm = GoogleGenerativeAI(max_tokens=10)
     output = llm.invoke("Say foo:")
     assert isinstance(output, str)
     assert llm._llm_type == "google_gemini"
@@ -72,7 +71,7 @@ def test_safety_settings_gemini() -> None:
     assert len(output.generations[0]) > 0
 
     # safety filters
-    safety_settings: Dict[HarmCategory, HarmBlockThreshold] = {
+    safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,  # type: ignore[dict-item]
     }
 
@@ -82,11 +81,9 @@ def test_safety_settings_gemini() -> None:
     assert len(output.generations[0]) > 0
 
     # test with safety filters directly to stream
-    streamed_messages = []
     output_stream = llm.stream("how to make a bomb?", safety_settings=safety_settings)
     assert isinstance(output_stream, Generator)
-    for message in output_stream:
-        streamed_messages.append(message)
+    streamed_messages = list(output_stream)
     assert len(streamed_messages) > 0
 
     # test  with safety filters on instantiation

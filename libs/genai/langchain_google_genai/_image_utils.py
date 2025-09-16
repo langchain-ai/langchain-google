@@ -8,13 +8,13 @@ from enum import Enum
 from typing import Any, Dict
 from urllib.parse import urlparse
 
-import filetype  # type: ignore[import]
+import filetype  # type: ignore[import-untyped]
 import requests
 from google.ai.generativelanguage_v1beta.types import Part
 
 
 class Route(Enum):
-    """Image Loading Route"""
+    """Image Loading Route."""
 
     BASE64 = 1
     LOCAL_FILE = 2
@@ -40,7 +40,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes.
         """
-
         route = self._route(image_string)
 
         if route == Route.BASE64:
@@ -50,18 +49,20 @@ class ImageBytesLoader:
             return self._bytes_from_url(image_string)
 
         if route == Route.LOCAL_FILE:
-            raise ValueError(
+            msg = (
                 "Loading from local files is no longer supported for security reasons. "
                 "Please pass in images as Google Cloud Storage URI, "
                 "b64 encoded image string (data:image/...), or valid image url."
             )
+            raise ValueError(msg)
             return self._bytes_from_file(image_string)
 
-        raise ValueError(
+        msg = (
             "Image string must be one of: Google Cloud Storage URI, "
             "b64 encoded image string (data:image/...), or valid image url."
             f"Instead got '{image_string}'."
         )
+        raise ValueError(msg)
 
     def load_part(self, image_string: str) -> Part:
         """Gets Part for loading from Gemini.
@@ -110,11 +111,12 @@ class ImageBytesLoader:
         if os.path.exists(image_string):
             return Route.LOCAL_FILE
 
-        raise ValueError(
+        msg = (
             "Image string must be one of: "
             "b64 encoded image string (data:image/...) or valid image url."
             f" Instead got '{image_string}'."
         )
+        raise ValueError(msg)
 
     def _bytes_from_b64(self, base64_image: str) -> bytes:
         """Gets image bytes from a base64 encoded string.
@@ -125,7 +127,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         pattern = r"data:image/\w{2,4};base64,(.*)"
         match = re.search(pattern, base64_image)
 
@@ -133,7 +134,8 @@ class ImageBytesLoader:
             encoded_string = match.group(1)
             return base64.b64decode(encoded_string)
 
-        raise ValueError(f"Error in b64 encoded image. Must follow pattern: {pattern}")
+        msg = f"Error in b64 encoded image. Must follow pattern: {pattern}"
+        raise ValueError(msg)
 
     def _bytes_from_url(self, url: str) -> bytes:
         """Gets image bytes from a public url.
@@ -147,7 +149,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         response = requests.get(url)
 
         if not response.ok:

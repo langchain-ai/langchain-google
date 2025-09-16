@@ -5,4 +5,4 @@ from vertexai.generative_models import (  # type: ignore
     SafetySetting,
 )
 
-__all__ = ["HarmBlockThreshold", "HarmCategory", "SafetySetting", "Modality"]
+__all__ = ["HarmBlockThreshold", "HarmCategory", "Modality", "SafetySetting"]

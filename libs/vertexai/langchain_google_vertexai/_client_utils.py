@@ -51,8 +51,7 @@ def _get_prediction_client(
     }
     if endpoint_version == "v1":
         return v1PredictionServiceClient(**client_kwargs)
-    else:
-        return v1beta1PredictionServiceClient(**client_kwargs)
+    return v1beta1PredictionServiceClient(**client_kwargs)
 
 
 # Cache async client - must store caches per event loop
@@ -78,8 +77,7 @@ def _create_async_prediction_client(
 
     if endpoint_version == "v1":
         return v1PredictionServiceAsyncClient(**async_client_kwargs)
-    else:
-        return v1beta1PredictionServiceAsyncClient(**async_client_kwargs)
+    return v1beta1PredictionServiceAsyncClient(**async_client_kwargs)
 
 
 def _get_async_prediction_client(

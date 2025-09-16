@@ -114,7 +114,7 @@ def test_init() -> None:
 
 
 @pytest.mark.parametrize(
-    "model,location",
+    ("model", "location"),
     [
         (
             "gemini-1.0-pro-001",
@@ -149,7 +149,7 @@ def test_init_client(model: str, location: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "model,location",
+    ("model", "location"),
     [
         (
             "gemini-1.0-pro-001",
@@ -265,7 +265,8 @@ def test_parse_history_gemini() -> None:
     assert history[0].parts[0].text == text_question1
     assert history[1].role == "model"
     assert history[1].parts[0].text == text_answer1
-    assert system_instructions and system_instructions.parts[0].text == system_input
+    assert system_instructions
+    assert system_instructions.parts[0].text == system_input
 
 
 def test_parse_history_gemini_number() -> None:
@@ -281,7 +282,8 @@ def test_parse_history_gemini_number() -> None:
     assert len(history) == 1
     assert history[0].role == "user"
     assert history[0].parts[0].text == text_question1
-    assert system_instructions and system_instructions.parts[0].text == system_input
+    assert system_instructions
+    assert system_instructions.parts[0].text == system_input
 
 
 def test_parse_history_gemini_function_empty_list() -> None:
@@ -318,7 +320,8 @@ def test_parse_history_gemini_function_empty_list() -> None:
         messages, image_bytes_loader
     )
     assert len(history) == 3
-    assert system_instructions and system_instructions.parts[0].text == system_input
+    assert system_instructions
+    assert system_instructions.parts[0].text == system_input
     assert history[0].role == "user"
     assert history[0].parts[0].text == text_question1
 
@@ -395,7 +398,8 @@ def test_parse_history_gemini_function() -> None:
         messages, image_bytes_loader
     )
     assert len(history) == 6
-    assert system_instructions and system_instructions.parts[0].text == system_input
+    assert system_instructions
+    assert system_instructions.parts[0].text == system_input
     assert history[0].role == "user"
     assert history[0].parts[0].text == text_question1
 
@@ -431,7 +435,7 @@ def test_parse_history_gemini_function() -> None:
 
 
 @pytest.mark.parametrize(
-    "source_history, expected_sm, expected_history",
+    ("source_history", "expected_sm", "expected_history"),
     [
         (
             [
@@ -645,7 +649,7 @@ def test_default_params_gemini() -> None:
 
 
 @pytest.mark.parametrize(
-    "raw_candidate, expected",
+    ("raw_candidate", "expected"),
     [
         (
             Candidate(
@@ -1036,7 +1040,7 @@ def test_parse_response_candidate(raw_candidate, expected) -> None:
                 assert res_kw == exp_kw
 
 
-def test_parser_multiple_tools():
+def test_parser_multiple_tools() -> None:
     class Add(BaseModel):
         arg1: int
         arg2: int
@@ -1455,7 +1459,6 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     result = model._format_output(test_msg)
 
     message = result.generations[0].message
-    print(message)
     assert isinstance(message, AIMessage)
     assert len(message.content) == 3
     assert message.content == test_msg.model_dump()["content"]

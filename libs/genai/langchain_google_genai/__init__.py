@@ -1,4 +1,4 @@
-"""**LangChain Google Generative AI Integration**
+"""**LangChain Google Generative AI Integration**.
 
 This module integrates Google's Generative AI models, specifically the Gemini series, with the LangChain framework. It provides classes for interacting with chat models and generating embeddings, leveraging Google's advanced AI capabilities.
 
@@ -76,12 +76,12 @@ __all__ = [
     "AqaOutput",
     "ChatGoogleGenerativeAI",
     "DoesNotExistsException",
+    "DoesNotExistsException",
     "GenAIAqa",
-    "GoogleGenerativeAIEmbeddings",
     "GoogleGenerativeAI",
+    "GoogleGenerativeAIEmbeddings",
     "GoogleVectorStore",
     "HarmBlockThreshold",
     "HarmCategory",
     "Modality",
-    "DoesNotExistsException",
 ]

@@ -24,7 +24,7 @@ from langchain_google_vertexai._anthropic_utils import (
 )
 
 
-def test_format_message_anthropic_with_cache_control_in_kwargs():
+def test_format_message_anthropic_with_cache_control_in_kwargs() -> None:
     """Test formatting a message with cache control in additional_kwargs."""
     message = HumanMessage(
         content="Hello", additional_kwargs={"cache_control": {"type": "semantic"}}
@@ -38,7 +38,7 @@ def test_format_message_anthropic_with_cache_control_in_kwargs():
     }
 
 
-def test_format_message_anthropic_with_cache_control_in_block():
+def test_format_message_anthropic_with_cache_control_in_block() -> None:
     """Test formatting a message with cache control in content block."""
     message = HumanMessage(
         content=[
@@ -54,7 +54,7 @@ def test_format_message_anthropic_with_cache_control_in_block():
     }
 
 
-def test_format_message_anthropic_with_mixed_blocks():
+def test_format_message_anthropic_with_mixed_blocks() -> None:
     """Test formatting a message with mixed blocks, some with cache control."""
     message = HumanMessage(
         content=[
@@ -74,7 +74,7 @@ def test_format_message_anthropic_with_mixed_blocks():
     }
 
 
-def test_format_messages_anthropic_with_system_cache_control():
+def test_format_messages_anthropic_with_system_cache_control() -> None:
     """Test formatting messages with system message having cache control."""
     messages = [
         SystemMessage(
@@ -100,7 +100,7 @@ def test_format_messages_anthropic_with_system_cache_control():
     ]
 
 
-def test_format_message_anthropic_system():
+def test_format_message_anthropic_system() -> None:
     """Test formatting a system message."""
     message = SystemMessage(
         content="System message",
@@ -116,7 +116,7 @@ def test_format_message_anthropic_system():
     ]
 
 
-def test_format_message_anthropic_system_list():
+def test_format_message_anthropic_system_list() -> None:
     """Test formatting a system message with list content."""
     message = SystemMessage(
         content=[
@@ -139,7 +139,7 @@ def test_format_message_anthropic_system_list():
     ]
 
 
-def test_format_message_anthropic_with_chain_of_thoughts():
+def test_format_message_anthropic_with_chain_of_thoughts() -> None:
     """Test formatting a system message with chain of thoughts."""
     message = SystemMessage(
         content=[
@@ -175,7 +175,7 @@ def test_format_message_anthropic_with_chain_of_thoughts():
     ]
 
 
-def test_format_messages_anthropic_with_system_string():
+def test_format_messages_anthropic_with_system_string() -> None:
     """Test formatting messages with system message as string."""
     messages = [
         SystemMessage(content="System message"),
@@ -192,7 +192,7 @@ def test_format_messages_anthropic_with_system_string():
     ]
 
 
-def test_format_messages_anthropic_with_system_list():
+def test_format_messages_anthropic_with_system_list() -> None:
     """Test formatting messages with system message as a list."""
     messages = [
         SystemMessage(
@@ -225,7 +225,7 @@ def test_format_messages_anthropic_with_system_list():
     ]
 
 
-def test_format_messages_anthropic_with_system_mixed_list():
+def test_format_messages_anthropic_with_system_mixed_list() -> None:
     """Test formatting messages with system message as a mixed list."""
     messages = [
         SystemMessage(
@@ -258,7 +258,7 @@ def test_format_messages_anthropic_with_system_mixed_list():
     ]
 
 
-def test_format_messages_anthropic_with_mixed_messages():
+def test_format_messages_anthropic_with_mixed_messages() -> None:
     """Test formatting a conversation with various message types and cache controls."""
     messages = [
         SystemMessage(
@@ -321,7 +321,7 @@ def test_format_messages_anthropic_with_mixed_messages():
 
 
 @pytest.mark.parametrize(
-    "source_history, expected_sm, expected_history",
+    ("source_history", "expected_sm", "expected_history"),
     [
         (
             [
@@ -952,12 +952,11 @@ def test_documents_in_params_false_no_document() -> None:
     assert not _documents_in_params(params)
 
 
-def test_ai_message_empty_content_with_tool_calls():
+def test_ai_message_empty_content_with_tool_calls() -> None:
     """Test that AIMessage with empty content and tool_calls includes tool_calls output.
 
     Addresses the issue where tool_calls were being trimmed out when content was empty.
     """
-
     # Empty string content
     message_empty_string = AIMessage(
         content="",
@@ -1049,9 +1048,8 @@ def test_ai_message_empty_content_with_tool_calls():
     assert len(text_blocks) == 0
 
 
-def test_ai_message_empty_content_without_tool_calls():
+def test_ai_message_empty_content_without_tool_calls() -> None:
     """Test AIMessage with empty content and no tool_calls properly returns None."""
-
     # Empty string content without tool_calls
     message_empty_string = AIMessage(content="")
     result_empty_string = _format_message_anthropic(

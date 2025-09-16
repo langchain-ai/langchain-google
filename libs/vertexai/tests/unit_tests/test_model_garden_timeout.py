@@ -17,7 +17,7 @@ TIMEOUT_TEST_CASES = [
 
 
 @pytest.mark.parametrize("timeout_value", TIMEOUT_TEST_CASES)
-def test_timeout_configuration(timeout_value):
+def test_timeout_configuration(timeout_value) -> None:
     """Test that different timeout values are correctly handled."""
     with (
         patch("anthropic.AnthropicVertex") as mock_sync_client,
@@ -59,7 +59,7 @@ def test_timeout_configuration(timeout_value):
         )
 
 
-def test_timeout_invalid():
+def test_timeout_invalid() -> None:
     """Test that invalid timeout values raise appropriate errors."""
     with pytest.raises(ValueError) as exc_info:
         ChatAnthropicVertex(

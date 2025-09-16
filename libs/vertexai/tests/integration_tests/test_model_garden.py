@@ -25,7 +25,7 @@ _ANTHROPIC_CLAUDE35_MODEL_NAME = "claude-3-5-sonnet-v2@20241022"
 
 @pytest.mark.extended
 @pytest.mark.parametrize(
-    "endpoint_os_variable_name,result_arg",
+    ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 def test_model_garden(
@@ -49,13 +49,12 @@ def test_model_garden(
     )
     output = llm.invoke("What is the meaning of life?")
     assert isinstance(output, str)
-    print(output)
     assert llm._llm_type == "vertexai_model_garden"
 
 
 @pytest.mark.extended
 @pytest.mark.parametrize(
-    "endpoint_os_variable_name,result_arg",
+    ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 def test_model_garden_generate(
@@ -86,7 +85,7 @@ def test_model_garden_generate(
 @pytest.mark.asyncio
 @pytest.mark.first
 @pytest.mark.parametrize(
-    "endpoint_os_variable_name,result_arg",
+    ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 async def test_model_garden_agenerate(
@@ -231,7 +230,6 @@ def test_anthropic_tool_calling() -> None:
     # Test .bind_tools with function
     def my_model(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
     model_with_tools = model.bind_tools(
         [my_model], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
@@ -243,7 +241,6 @@ def test_anthropic_tool_calling() -> None:
     @tool
     def my_tool(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
     model_with_tools = model.bind_tools(
         [my_tool], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME

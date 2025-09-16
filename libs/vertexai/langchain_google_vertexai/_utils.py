@@ -50,7 +50,6 @@ def create_retry_decorator(
     Returns:
         A retry decorator.
     """
-
     errors = [
         google.api_core.exceptions.ResourceExhausted,
         google.api_core.exceptions.ServiceUnavailable,
@@ -58,13 +57,12 @@ def create_retry_decorator(
         google.api_core.exceptions.DeadlineExceeded,
         google.api_core.exceptions.GoogleAPIError,
     ]
-    decorator = create_base_retry_decorator(
+    return create_base_retry_decorator(
         error_types=errors,
         max_retries=max_retries,
         run_manager=run_manager,
         wait_exponential_kwargs=wait_exponential_kwargs,
     )
-    return decorator
 
 
 def raise_vertex_import_error(minimum_expected_version: str = "1.44.0") -> None:
@@ -72,13 +70,15 @@ def raise_vertex_import_error(minimum_expected_version: str = "1.44.0") -> None:
 
     Args:
         minimum_expected_version: The lowest expected version of the SDK.
+
     Raises:
         ImportError: an ImportError that mentions a required version of the SDK.
     """
-    raise ImportError(
+    msg = (
         "Please, install or upgrade the google-cloud-aiplatform library: "
         f"pip install google-cloud-aiplatform>={minimum_expected_version}"
     )
+    raise ImportError(msg)
 
 
 def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
@@ -87,6 +87,7 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     Args:
         module (Optional[str]):
             Optional. The module for a custom user agent header.
+
     Returns:
         Tuple[str, str]
     """
@@ -108,6 +109,7 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     Args:
         module (Optional[str]):
             Optional. The module for a custom user agent header.
+
     Returns:
         google.api_core.gapic_v1.client_info.ClientInfo
     """
@@ -134,7 +136,8 @@ def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
     pieces = path.split("/")
     blobs = list(gcs_client.list_blobs(pieces[2], prefix="/".join(pieces[3:])))
     if len(blobs) > 1:
-        raise ValueError(f"Found more than one candidate for {path}!")
+        msg = f"Found more than one candidate for {path}!"
+        raise ValueError(msg)
     return Image.from_bytes(blobs[0].download_as_bytes())
 
 
@@ -165,7 +168,7 @@ def get_generation_info(
 ) -> Dict[str, Any]:
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
     info = {
-        "is_blocked": any([rating.blocked for rating in candidate.safety_ratings]),
+        "is_blocked": any(rating.blocked for rating in candidate.safety_ratings),
         "safety_ratings": [
             {
                 "category": rating.category.name,
@@ -266,7 +269,6 @@ def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -
     Returns:
         Schema with refs replaced.
     """
-
     new_defs = defs or original_schema.get("$defs")
 
     if new_defs is None or not isinstance(new_defs, dict):
@@ -280,20 +282,19 @@ def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -
 
         if not isinstance(value, dict):
             resulting_schema[key] = value
+        elif "$ref" in value:
+            new_value = value.copy()
+
+            path = new_value.pop("$ref")
+            def_key = _get_def_key_from_schema_path(path)
+            new_item = new_defs.get(def_key)
+
+            assert isinstance(new_item, dict)
+            new_value.update(new_item)
+
+            resulting_schema[key] = replace_defs_in_schema(new_value, defs=new_defs)
         else:
-            if "$ref" in value:
-                new_value = value.copy()
-
-                path = new_value.pop("$ref")
-                def_key = _get_def_key_from_schema_path(path)
-                new_item = new_defs.get(def_key)
-
-                assert isinstance(new_item, dict)
-                new_value.update(new_item)
-
-                resulting_schema[key] = replace_defs_in_schema(new_value, defs=new_defs)
-            else:
-                resulting_schema[key] = replace_defs_in_schema(value, defs=new_defs)
+            resulting_schema[key] = replace_defs_in_schema(value, defs=new_defs)
 
     return resulting_schema
 
@@ -318,7 +319,7 @@ def _strip_nullable_anyof(schema: dict[str, Any]) -> dict[str, Any]:
     Works in place.
     """
 
-    def walk(node):
+    def walk(node) -> None:
         if not isinstance(node, dict):
             return
 

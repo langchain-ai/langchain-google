@@ -41,6 +41,9 @@ This package provides LangChain support for Google Gemini models (via the offici
 
 ```bash
 pip install -U langchain-google-genai
+
+# or, with uv:
+uv add langchain-google-genai
 ````
 
 ---
@@ -58,7 +61,7 @@ Then use the `ChatGoogleGenerativeAI` interface:
 ```python
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-llm = ChatGoogleGenerativeAI(model="gemini-pro")
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 response = llm.invoke("Sing a ballad of LangChain.")
 print(response.content)
 ```
@@ -67,22 +70,30 @@ print(response.content)
 
 ## Chat Models
 
-The main interface for Gemini chat models is `ChatGoogleGenerativeAI`.
+See the LangChain documentation for general information about [Chat Models](https://docs.langchain.com/oss/python/langchain/models).
+
+The main interface for the Gemini chat models is `ChatGoogleGenerativeAI`.
 
 ### Multimodal Inputs
 
-Gemini vision models support image inputs in single messages.
+Most Gemini models support image inputs.
 
 ```python
 from langchain_core.messages import HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-llm = ChatGoogleGenerativeAI(model="gemini-pro-vision")
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 message = HumanMessage(
     content=[
-        {"type": "text", "text": "What's in this image?"},
-        {"type": "image_url", "image_url": "https://picsum.photos/seed/picsum/200/300"},
+        {
+            "type": "text",
+            "text": "What's in this image?"
+        },
+        {
+            "type": "image_url",
+            "image_url": "https://picsum.photos/seed/picsum/200/300"
+        },
     ]
 )
 
@@ -90,7 +101,7 @@ response = llm.invoke([message])
 print(response.content)
 ```
 
-✅ `image_url` can be:
+`image_url` can be:
 
 - A public image URL
 - A Google Cloud Storage path (`gcs://...`)
@@ -100,38 +111,44 @@ print(response.content)
 
 ### Multimodal Outputs
 
-The Gemini 2.0 Flash Experimental model supports both text and inline image outputs.
+Some Gemini models supports both text and inline image outputs.
 
 ```python
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-exp-image-generation")
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-image-preview")
 
 response = llm.invoke(
     "Generate an image of a cat and say meow",
     generation_config=dict(response_modalities=["TEXT", "IMAGE"]),
 )
 
-image_base64 = response.content[0].get("image_url").get("url").split(",")[-1]
-meow_text = response.content[1]
+image_base64 = response.content[1].get("image_url").get("url").split(",")[-1]
+meow_text = response.content[0]
 print(meow_text)
+# In Jupyter, display the image:
+from base64 import b64decode
+from IPython.display import Image, display
+
+img_bytes = b64decode(image_base64)
+display(Image(data=img_bytes))
 ```
 
 ---
 
 ### Audio Output
 
-```
+```python
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash-preview-tts")
-# example
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-preview-tts")
+
 response = llm.invoke(
     "Please say The quick brown fox jumps over the lazy dog",
     generation_config=dict(response_modalities=["AUDIO"]),
 )
 
-# Base64 encoded binary data of the image
+# Base64 encoded binary data of the audio
 wav_data = response.additional_kwargs.get("audio")
 with open("output.wav", "wb") as f:
     f.write(wav_data)
@@ -141,15 +158,13 @@ with open("output.wav", "wb") as f:
 
 ### Multimodal Outputs in Chains
 
-You can use Gemini models in a LangChain chain:
-
 ```python
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI, Modality
 
 llm = ChatGoogleGenerativeAI(
-    model="models/gemini-2.0-flash-exp-image-generation",
+    model="gemini-2.5-flash-image-preview",
     response_modalities=[Modality.TEXT, Modality.IMAGE],
 )
 
@@ -165,13 +180,11 @@ response = chain.invoke("cat")
 
 ### Thinking Support
 
-Gemini 2.5 Flash Preview supports internal reasoning ("thoughts").
-
 ```python
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 llm = ChatGoogleGenerativeAI(
-    model="models/gemini-2.5-flash-preview-04-17",
+    model="models/gemini-2.5-flash",
     thinking_budget=1024
 )
 
@@ -185,8 +198,6 @@ print("Reasoning tokens used:", reasoning_score)
 ---
 
 ## Embeddings
-
-You can use Gemini embeddings in LangChain:
 
 ```python
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -236,4 +247,4 @@ print("Answerable probability:", response.answerable_probability)
 
 - [LangChain Documentation](https://docs.langchain.com/)
 - [Google Generative AI SDK](https://googleapis.github.io/python-genai/)
-- [Gemini Model Documentation](https://ai.google.dev/)
+- [Gemini Model Documentation](https://ai.google.dev/gemini-api/docs)

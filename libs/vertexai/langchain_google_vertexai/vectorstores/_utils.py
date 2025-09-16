@@ -43,7 +43,6 @@ def batch_update_index(
         file_name: File name of the staging embeddings. By default 'documents.json'.
         is_complete_overwrite: Whether is an append or overwrite operation.
     """
-
     if prefix is None:
         prefix = str(uuid.uuid4())
 
@@ -78,7 +77,6 @@ def to_data_points(
         embeddings: List of feature representatitons.
         metadatas: List of metadatas.
     """
-
     if metadatas is None:
         metadatas = [{}] * len(ids)
 
@@ -96,7 +94,8 @@ def to_data_points(
 
         for namespace, value in metadata.items():
             if not isinstance(namespace, str):
-                raise ValueError("All metadata keys must be strings")
+                msg = "All metadata keys must be strings"  # type: ignore[unreachable, unused-ignore]
+                raise ValueError(msg)
 
             if isinstance(value, str):
                 restriction = meidx_types.IndexDatapoint.Restriction(
@@ -155,17 +154,16 @@ def data_points_to_batch_update_records(
     Returns:
         List of records with the format needed to do a batch update.
     """
-
     records = []
 
     for data_point in data_points:
         record = {
             "id": data_point.datapoint_id,
-            "embedding": [component for component in data_point.feature_vector],
+            "embedding": list(data_point.feature_vector),
             "restricts": [
                 {
                     "namespace": restrict.namespace,
-                    "allow": [item for item in restrict.allow_list],
+                    "allow": list(restrict.allow_list),
                 }
                 for restrict in data_point.restricts
             ],
@@ -194,8 +192,8 @@ def data_points_to_batch_update_records(
             and data_point.sparse_embedding is not None
         ):
             record["sparse_embedding"] = {
-                "values": [value for value in data_point.sparse_embedding.values],
-                "dimensions": [dim for dim in data_point.sparse_embedding.dimensions],
+                "values": list(data_point.sparse_embedding.values),
+                "dimensions": list(data_point.sparse_embedding.dimensions),
             }
 
         records.append(record)

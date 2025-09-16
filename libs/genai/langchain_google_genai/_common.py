@@ -13,13 +13,11 @@ _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
 
 class GoogleGenerativeAIError(Exception):
-    """
-    Custom exception class for errors associated with the `Google GenAI` API.
-    """
+    """Custom exception class for errors associated with the `Google GenAI` API."""
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
-    """Base class for Google Generative AI LLMs"""
+    """Base class for Google Generative AI LLMs."""
 
     model: str = Field(
         ...,
@@ -89,9 +87,9 @@ Examples:
     )
 
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
-    """The default safety settings to use for all generations. 
-    
-        For example: 
+    """The default safety settings to use for all generations.
+
+        For example:
 
         .. code-block:: python
             from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
@@ -127,6 +125,7 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     Args:
         module (Optional[str]):
             Optional. The module for a custom user agent header.
+
     Returns:
         Tuple[str, str]
     """
@@ -148,11 +147,13 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     Args:
         module (Optional[str]):
             Optional. The module for a custom user agent header.
+
     Returns:
         ``google.api_core.gapic_v1.client_info.ClientInfo``
     """
     client_library_version, user_agent = get_user_agent(module)
-    return ClientInfo(
+    # TODO: remove ignore once google-auth has types.
+    return ClientInfo(  # type: ignore[no-untyped-call]
         client_library_version=client_library_version,
         user_agent=user_agent,
     )

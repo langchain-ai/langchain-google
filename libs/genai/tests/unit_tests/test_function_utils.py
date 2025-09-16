@@ -1,4 +1,6 @@
-from typing import Any, Dict, Generator, List, Optional, Tuple, Union
+import datetime
+from collections.abc import Generator
+from typing import Annotated, Any, Optional, Union
 from unittest.mock import MagicMock, patch
 
 import google.ai.generativelanguage as glm
@@ -10,7 +12,7 @@ from langchain_core.utils.function_calling import (
     convert_to_openai_tool,
 )
 from pydantic import BaseModel, Field
-from typing_extensions import Annotated, Literal
+from typing_extensions import Literal
 
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
@@ -27,20 +29,20 @@ from langchain_google_genai._function_utils import (
 
 
 def test_tool_with_anyof_nullable_param() -> None:
-    """
-    Example test that checks a string parameter marked as Optional,
-    verifying it's recognized as a 'string' & 'nullable'.
+    """Example test.
+
+    Checks a string parameter marked as Optional, verifying it's recognized as a
+    'string' & 'nullable'.
     """
 
     @tool(parse_docstring=True)
     def possibly_none(
         a: Optional[str] = None,
     ) -> str:
-        """
-        A test function whose argument can be a string or None.
+        """A test function whose argument can be a string or None.
 
         Args:
-          a: Possibly none.
+            a: Possibly none.
         """
         return "value"
 
@@ -73,20 +75,20 @@ def test_tool_with_anyof_nullable_param() -> None:
 
 
 def test_tool_with_array_anyof_nullable_param() -> None:
-    """
-    Checks an array parameter marked as Optional, verifying it's recognized
-    as an 'array' & 'nullable', and that the items are correctly typed.
+    """Checks an array parameter marked as Optional.
+
+    Verifying it's recognized As an 'array' & 'nullable', and that the items are
+    correctly typed.
     """
 
     @tool(parse_docstring=True)
     def possibly_none_list(
-        items: Optional[List[str]] = None,
+        items: Optional[list[str]] = None,
     ) -> str:
-        """
-        A test function whose argument can be a list of strings or None.
+        """A test function whose argument can be a list of strings or None.
 
         Args:
-          items: Possibly a list of strings or None.
+            items: Possibly a list of strings or None.
         """
         return "value"
 
@@ -127,21 +129,20 @@ def test_tool_with_array_anyof_nullable_param() -> None:
 
 
 def test_tool_with_nested_object_anyof_nullable_param() -> None:
-    """
-    Checks an object parameter (dict) marked as Optional, verifying it's recognized
-    as an 'object' but defaults to string if there are no real properties,
-    and that it is 'nullable'.
+    """Checks an object parameter (dict) marked as Optional.
+
+    Verifying it's recognized as an 'object' but defaults to string if there are no real
+    properties, and that it is 'nullable'.
     """
 
     @tool(parse_docstring=True)
     def possibly_none_dict(
         data: Optional[dict] = None,
     ) -> str:
-        """
-        A test function whose argument can be an object (dict) or None.
+        """A test function whose argument can be an object (dict) or None.
 
         Args:
-          data: Possibly a dict or None.
+            data: Possibly a dict or None.
         """
         return "value"
 
@@ -176,20 +177,20 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
-    """
-    Checks a parameter with an enum, marked as Optional, verifying it's recognized
-    as 'string' & 'nullable', and that the 'enum' field is captured.
+    """Checks a parameter with an enum, marked as Optional.
+
+    Verifying it's recognized as 'string' & 'nullable', and that the 'enum' field is
+    captured.
     """
 
     @tool(parse_docstring=True)
     def possibly_none_enum(
         status: Optional[str] = None,
     ) -> str:
-        """
-        A test function whose argument can be an enum string or None.
+        """A test function whose argument can be an enum string or None.
 
         Args:
-          status: Possibly one of ("active", "inactive", "pending") or None.
+            status: Possibly one of ("active", "inactive", "pending") or None.
         """
         return "value"
 
@@ -239,17 +240,17 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
 
 # reusable test inputs
 def search(question: str) -> str:
-    """Search tool"""
+    """Search tool."""
     return question
 
 
 search_tool = tool(search)
 search_exp = glm.FunctionDeclaration(
     name="search",
-    description="Search tool",
+    description="Search tool.",
     parameters=glm.Schema(
         type=glm.Type.OBJECT,
-        description="Search tool",
+        description="Search tool.",
         properties={"question": glm.Schema(type=glm.Type.STRING)},
         required=["question"],
         title="search",
@@ -277,7 +278,7 @@ search_base_tool_exp = glm.FunctionDeclaration(
 
 
 class SearchModel(BaseModel):
-    """Search model"""
+    """Search model."""
 
     question: str
 
@@ -290,10 +291,10 @@ search_model_dict = {
 }
 search_model_exp = glm.FunctionDeclaration(
     name="SearchModel",
-    description="Search model",
+    description="Search model.",
     parameters=glm.Schema(
         type=glm.Type.OBJECT,
-        description="Search model",
+        description="Search model.",
         properties={
             "question": glm.Schema(type=glm.Type.STRING),
         },
@@ -304,7 +305,7 @@ search_model_exp = glm.FunctionDeclaration(
 
 search_model_exp_pyd = glm.FunctionDeclaration(
     name="SearchModel",
-    description="Search model",
+    description="Search model.",
     parameters=glm.Schema(
         type=glm.Type.OBJECT,
         properties={
@@ -322,8 +323,8 @@ mock_pydantic = MagicMock(
     name="mock_pydantic", wraps=_convert_pydantic_to_genai_function
 )
 
-SRC_EXP_MOCKS_DESC: List[
-    Tuple[_FunctionDeclarationLike, glm.FunctionDeclaration, List[MagicMock], str]
+SRC_EXP_MOCKS_DESC: list[
+    tuple[_FunctionDeclarationLike, glm.FunctionDeclaration, list[MagicMock], str]
 ] = [
     (search, search_exp, [mock_base_tool], "plain function"),
     (search_tool, search_exp, [mock_base_tool], "LC tool"),
@@ -336,15 +337,13 @@ SRC_EXP_MOCKS_DESC: List[
 def test_format_tool_to_genai_function() -> None:
     @tool
     def get_datetime() -> str:
-        """Gets the current datetime"""
-        import datetime
-
-        return datetime.datetime.now().strftime("%Y-%m-%d")
+        """Gets the current datetime."""
+        return datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d")
 
     schema = convert_to_genai_function_declarations([get_datetime])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "get_datetime"
-    assert function_declaration.description == "Gets the current datetime"
+    assert function_declaration.description == "Gets the current datetime."
     assert function_declaration.parameters
     assert function_declaration.parameters.required == []
 
@@ -353,11 +352,11 @@ def test_format_tool_to_genai_function() -> None:
         """Sum two numbers 'a' and 'b'.
 
         Returns:
-           a + b in string format
+            a + b in string format
         """
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([sum_two_numbers])  # type: ignore
+    schema = convert_to_genai_function_declarations([sum_two_numbers])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "sum_two_numbers"
     assert function_declaration.parameters
@@ -365,10 +364,10 @@ def test_format_tool_to_genai_function() -> None:
 
     @tool
     def do_something_optional(a: float, b: float = 0) -> str:
-        """Some description"""
+        """Some description."""
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([do_something_optional])  # type: ignore
+    schema = convert_to_genai_function_declarations([do_something_optional])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "do_something_optional"
     assert function_declaration.parameters
@@ -384,7 +383,7 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations([src_2])
     assert result == src_2
 
-    src_3: Dict[str, Any] = {"google_search_retrieval": {}}
+    src_3: dict[str, Any] = {"google_search_retrieval": {}}
     result = convert_to_genai_function_declarations([src_3])
     assert result == src_2
 
@@ -414,14 +413,13 @@ def test_tool_with_annotated_optional_args() -> None:
         chunk_overlap: Optional[int] = None,
         tokenizer_name: Annotated[Optional[str], InjectedToolArg] = "model",
     ) -> list[Document]:
-        """
-        Tool.
+        """Tool.
 
         Args:
-          chunk_size: chunk size.
-          knowledge_base: knowledge base.
-          chunk_overlap: chunk overlap.
-          tokenizer_name: tokenizer name.
+            chunk_size: chunk size.
+            knowledge_base: knowledge base.
+            chunk_overlap: chunk overlap.
+            tokenizer_name: tokenizer name.
         """
         return []
 
@@ -432,14 +430,13 @@ def test_tool_with_annotated_optional_args() -> None:
         num_results: int = 5,
         truncate_threshold: Optional[int] = None,
     ) -> list[Document]:
-        """
-        Tool.
+        """Tool.
 
         Args:
-          query: query.
-          engine: engine.
-          num_results: number of results.
-          truncate_threshold: truncate threshold.
+            query: query.
+            engine: engine.
+            num_results: number of results.
+            truncate_threshold: truncate threshold.
         """
         return []
 
@@ -662,7 +659,7 @@ def test_format_dict_to_genai_function() -> None:
     assert function_declaration.parameters.required == []
 
 
-@pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
+@pytest.mark.parametrize("choice", [True, "foo", ["foo"], "any"])
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = _ToolConfigDict(
         function_calling_config={
@@ -843,20 +840,19 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
 
 
 def test_tool_with_doubly_nested_list_param() -> None:
-    """
-    Tests a tool parameter with a doubly nested list (List[List[str]]),
-    verifying that the GAPIC schema correctly represents the nested items.
+    """Tests a tool parameter with a doubly nested list (list[list[str]]).
+
+    Verifying that the GAPIC schema correctly represents the nested items.
     """
 
     @tool(parse_docstring=True)
     def process_nested_data(
-        matrix: List[List[str]],
+        matrix: list[list[str]],
     ) -> str:
-        """
-        Processes a matrix (list of lists of strings).
+        """Processes a matrix (list of lists of strings).
 
         Args:
-          matrix: The nested list data.
+            matrix: The nested list data.
         """
         return f"Processed {len(matrix)} rows."
 
@@ -868,7 +864,8 @@ def test_tool_with_doubly_nested_list_param() -> None:
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
     function_declarations = genai_tool_dict.get("function_declarations")
-    assert isinstance(function_declarations, list) and len(function_declarations) == 1
+    assert isinstance(function_declarations, list)
+    assert len(function_declarations) == 1
     fn_decl = function_declarations[0]
     assert isinstance(fn_decl, dict)
 
@@ -958,9 +955,10 @@ def test_schema_recursive_error_self_reference() -> None:
 
 
 def test_tool_with_union_types() -> None:
-    """
-    Test that validates tools with Union types in function declarations
-    are correctly converted to 'anyOf' in the schema.
+    """Test union types with tools.
+
+    Tests that validates tools with Union types in function declarations are correctly
+    converted to 'anyOf' in the schema.
     """
 
     class Helper1(BaseModel):
@@ -1028,9 +1026,10 @@ def test_tool_with_union_types() -> None:
 
 
 def test_tool_with_union_primitive_types() -> None:
-    """
-    Test that validates tools with Union types that include primitive types
-    are correctly converted to 'anyOf' in the schema.
+    """Test union primitive types for tools.
+
+    Tests that validates tools with Union types that include primitive types are
+    correctly converted to 'anyOf' in the schema.
     """
 
     class Helper(BaseModel):
@@ -1094,9 +1093,10 @@ def test_tool_with_union_primitive_types() -> None:
 
 
 def test_tool_with_nested_union_types() -> None:
-    """
-    Test that validates tools with nested Union types are correctly converted
-    to nested 'anyOf' structures in the schema.
+    """Test nested union types.
+
+    Tests that validates tools with nested Union types are correctly converted to nested
+    'anyOf' structures in the schema.
     """
 
     class Address(BaseModel):
@@ -1116,7 +1116,7 @@ def test_tool_with_nested_union_types() -> None:
 
         name: str
         location: Union[str, Address] = "Unknown"
-        contacts: List[Union[str, Contact]] = []
+        contacts: list[Union[str, Contact]] = []
 
     # Convert to OpenAI, then to GenAI, then to dict
     oai_tool = convert_to_openai_tool(Person)
@@ -1159,20 +1159,20 @@ def test_tool_with_nested_union_types() -> None:
 
 
 def test_tool_invocation_with_union_types() -> None:
-    """
-    Test that validates tools with Union types can be correctly invoked
-    with either type from the union.
+    """Test invocation with union types.
+
+    Tests that validates tools with Union types can be correctly invoked with either
+    type from the union.
     """
 
     class Configuration(BaseModel):
         """Configuration model."""
 
-        settings: Dict[str, str] = {}
+        settings: dict[str, str] = {}
 
     @tool
     def configure_service(service_name: str, config: Union[str, Configuration]) -> str:
-        """
-        Configure a service with either a configuration string or object.
+        """Configure a service with either a configuration string or object.
 
         Args:
             service_name: The name of the service to configure
@@ -1231,9 +1231,10 @@ def test_tool_invocation_with_union_types() -> None:
 
 
 def test_tool_field_union_types() -> None:
-    """
-    Test that validates Field with Union types in Pydantic models
-    are correctly converted to 'anyOf' in the schema.
+    """Test field union types.
+
+    Test that validates Field with Union types in Pydantic models are correctly
+    converted to 'anyOf' in the schema.
     """
 
     class Helper1(BaseModel):
@@ -1247,9 +1248,7 @@ def test_tool_field_union_types() -> None:
         y: str = "1"
 
     class GetWeather(BaseModel):
-        """
-        Get weather information for a location.
-        """
+        """Get weather information for a location."""
 
         location: str = Field(
             ..., description="The city and country, e.g. New York, USA"
@@ -1350,7 +1349,7 @@ def test_optional_dict_schema_validation() -> None:
 
     class RequestsGetToolInput(BaseModel):
         url: str = Field(description="The URL to send the GET request to")
-        params: Optional[Dict[str, str]] = Field(
+        params: Optional[dict[str, str]] = Field(
             default={}, description="Query parameters for the GET request"
         )
         output_instructions: str = Field(
@@ -1364,12 +1363,12 @@ def test_optional_dict_schema_validation() -> None:
     # The params property should have OBJECT type, not STRING
     params_prop = genai_func.parameters.properties["params"]
     assert params_prop.type_ == glm.Type.OBJECT, (
-        f"Optional[Dict] should have OBJECT type, got {params_prop.type_}"
+        f"Optional[dict] should have OBJECT type, got {params_prop.type_}"
     )
     assert params_prop.type_ != glm.Type.STRING, (
-        "Optional[Dict] should not be converted to STRING type"
+        "Optional[dict] should not be converted to STRING type"
     )
-    assert params_prop.nullable is True, "Optional[Dict] should be nullable"
+    assert params_prop.nullable is True, "Optional[dict] should be nullable"
     assert params_prop.description == "Query parameters for the GET request", (
         "Description should be preserved"
     )
@@ -1377,7 +1376,7 @@ def test_optional_dict_schema_validation() -> None:
 
 def test_tool_field_enum_array() -> None:
     class ToolInfo(BaseModel):
-        kind: List[Literal["foo", "bar"]]
+        kind: list[Literal["foo", "bar"]]
 
     # Convert to OpenAI tool
     oai_tool = convert_to_openai_tool(ToolInfo)

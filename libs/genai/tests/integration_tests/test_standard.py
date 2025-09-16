@@ -1,7 +1,7 @@
-"""Standard LangChain interface tests"""
+"""Standard LangChain interface tests."""
 
 import base64
-from typing import Dict, List, Literal, Type
+from typing import Literal
 
 import httpx
 import pytest
@@ -18,7 +18,7 @@ rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
 class TestGeminiFlashStandard(ChatModelIntegrationTests):
     @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
+    def chat_model_class(self) -> type[BaseChatModel]:
         return ChatGoogleGenerativeAI
 
     @property
@@ -101,7 +101,7 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
 
 class TestGeminiProStandard(ChatModelIntegrationTests):
     @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
+    def chat_model_class(self) -> type[BaseChatModel]:
         return ChatGoogleGenerativeAI
 
     @property
@@ -126,9 +126,9 @@ class TestGeminiProStandard(ChatModelIntegrationTests):
     @property
     def supported_usage_metadata_details(
         self,
-    ) -> Dict[
+    ) -> dict[
         Literal["invoke", "stream"],
-        List[
+        list[
             Literal[
                 "audio_input",
                 "audio_output",

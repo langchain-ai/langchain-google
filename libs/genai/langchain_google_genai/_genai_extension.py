@@ -1,14 +1,15 @@
 """Temporary high-level library of the Google GenerativeAI API.
 
-The content of this file should eventually go into the Python package
-google.generativeai.
+(The content of this file should eventually go into the Python package
+google.generativeai.)
 """
 
 import datetime
 import logging
 import re
+from collections.abc import Iterator, MutableSequence
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, MutableSequence, Optional
+from typing import Any, Dict, List, Optional
 
 import google.ai.generativelanguage as genai
 import langchain_core
@@ -21,7 +22,7 @@ from google.ai.generativelanguage_v1beta import (
 from google.api_core import client_options as client_options_lib
 from google.api_core import exceptions as gapi_exception
 from google.api_core import gapic_v1
-from google.auth import credentials, exceptions  # type: ignore
+from google.auth import credentials, exceptions
 from google.protobuf import timestamp_pb2
 
 _logger = logging.getLogger(__name__)
@@ -41,13 +42,15 @@ class EntityName:
 
     def __post_init__(self) -> None:
         if self.chunk_id is not None and self.document_id is None:
-            raise ValueError(f"Chunk must have document ID but found {self}")
+            msg = f"Chunk must have document ID but found {self}"
+            raise ValueError(msg)
 
     @classmethod
     def from_str(cls, encoded: str) -> "EntityName":
         matched = _NAME_REGEX.match(encoded)
         if not matched:
-            raise ValueError(f"Invalid entity name: {encoded}")
+            msg = f"Invalid entity name: {encoded}"
+            raise ValueError(msg)
 
         return cls(
             corpus_id=matched.group(1),
@@ -186,7 +189,9 @@ class TestCredentials(credentials.Credentials):
         """Raises :class:``InvalidOperation``, test credentials cannot be
         refreshed.
         """
-        raise exceptions.InvalidOperation("Test credentials cannot be refreshed.")
+        msg = "Test credentials cannot be refreshed."
+        # TODO: remove ignore once google-auth has types.
+        raise exceptions.InvalidOperation(msg)  # type: ignore[no-untyped-call]
 
     def apply(self, headers: Any, token: Any = None) -> None:
         """Anonymous credentials do nothing to the request.
@@ -197,7 +202,9 @@ class TestCredentials(credentials.Credentials):
             google.auth.exceptions.InvalidValue: If a token was specified.
         """
         if token is not None:
-            raise exceptions.InvalidValue("Test credentials don't support tokens.")
+            msg = "Test credentials don't support tokens."
+            # TODO: remove ignore once google-auth has types.
+            raise exceptions.InvalidValue(msg)  # type: ignore[no-untyped-call]
 
     def before_request(self, request: Any, method: Any, url: Any, headers: Any) -> None:
         """Test credentials do nothing to the request."""
@@ -214,8 +221,9 @@ def _get_credentials() -> Optional[credentials.Credentials]:
     inferred by the rules specified in google.auth package.
     """
     if _config.testing:
-        return TestCredentials()
-    elif _config.auth_credentials:
+        # TODO: remove ignore once google-auth has types.
+        return TestCredentials()  # type: ignore[no-untyped-call]
+    if _config.auth_credentials:
         return _config.auth_credentials
     return None
 
@@ -224,7 +232,8 @@ def build_semantic_retriever() -> genai.RetrieverServiceClient:
     credentials = _get_credentials()
     return genai.RetrieverServiceClient(
         credentials=credentials,
-        client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),
+        # TODO: remove ignore once google-auth has types.
+        client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),  # type: ignore[no-untyped-call]
         client_options=client_options_lib.ClientOptions(
             api_endpoint=_config.api_endpoint
         ),
@@ -248,7 +257,8 @@ def _prepare_config(
     client_info = (
         client_info
         if client_info
-        else gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT)
+        # TODO: remove ignore once google-auth has types.
+        else gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT)  # type: ignore[no-untyped-call]
     )
     config = {
         "credentials": credentials,
@@ -328,10 +338,7 @@ def create_corpus(
     client: genai.RetrieverServiceClient,
 ) -> Corpus:
     name: Optional[str]
-    if corpus_id is not None:
-        name = str(EntityName(corpus_id=corpus_id))
-    else:
-        name = None
+    name = str(EntityName(corpus_id=corpus_id)) if corpus_id is not None else None
 
     new_display_name = display_name or f"Untitled {datetime.datetime.now()}"
 
@@ -441,10 +448,11 @@ def batch_create_chunk(
     if metadatas is None:
         metadatas = [{} for _ in texts]
     if len(texts) != len(metadatas):
-        raise ValueError(
+        msg = (
             f"metadatas's length {len(metadatas)} "
             f"and texts's length {len(texts)} are mismatched"
         )
+        raise ValueError(msg)
 
     doc_name = str(EntityName(corpus_id=corpus_id, document_id=document_id))
 
@@ -571,12 +579,14 @@ def generate_answer(
     prompt: str,
     passages: List[str],
     answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-    safety_settings: List[genai.SafetySetting] = [],
+    safety_settings: Optional[List[genai.SafetySetting]] = None,
     temperature: Optional[float] = None,
     client: genai.GenerativeServiceClient,
 ) -> GroundedAnswer:
     # TODO: Consider passing in the corpus ID instead of the actual
     # passages.
+    if safety_settings is None:
+        safety_settings = []
     response = client.generate_answer(
         genai.GenerateAnswerRequest(
             contents=[
@@ -626,7 +636,9 @@ def generate_answer(
 # For now, we derive this message from other existing fields.
 def _get_finish_message(candidate: genai.Candidate) -> str:
     finish_messages: Dict[int, str] = {
-        genai.Candidate.FinishReason.MAX_TOKENS: "Maximum token in context window reached",  # noqa: E501
+        genai.Candidate.FinishReason.MAX_TOKENS: (
+            "Maximum token in context window reached"
+        ),
         genai.Candidate.FinishReason.SAFETY: "Blocked because of safety",
         genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
     }
@@ -646,7 +658,8 @@ def _convert_to_metadata(metadata: Dict[str, Any]) -> List[genai.CustomMetadata]
         elif isinstance(value, (float, int)):
             c = genai.CustomMetadata(key=key, numeric_value=value)
         else:
-            raise ValueError(f"Metadata value {value} is not supported")
+            msg = f"Metadata value {value} is not supported"
+            raise ValueError(msg)
 
         cs.append(c)
     return cs
@@ -668,7 +681,8 @@ def _convert_filter(fs: Optional[Dict[str, Any]]) -> List[genai.MetadataFilter]:
                 operation=genai.Condition.Operator.EQUAL, numeric_value=value
             )
         else:
-            raise ValueError(f"Filter value {value} is not supported")
+            msg = f"Filter value {value} is not supported"
+            raise ValueError(msg)
 
         filters.append(genai.MetadataFilter(key=key, conditions=[condition]))
 

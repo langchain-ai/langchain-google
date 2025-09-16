@@ -1,9 +1,8 @@
 """Google GenerativeAI Attributed Question and Answering (AQA) service.
 
-The GenAI Semantic AQA API is a managed end to end service that allows
-developers to create responses grounded on specified passages based on
-a user query. For more information visit:
-https://developers.generativeai.google/guide
+The GenAI Semantic AQA API is a managed end to end service that allows developers to
+create responses grounded on specified passages based on a user query. For more
+information visit: https://developers.generativeai.google/guide
 """
 
 from typing import Any, List, Optional
@@ -21,8 +20,8 @@ class AqaInput(BaseModel):
 
     Attributes:
         prompt: The user's inquiry.
-        source_passages: A list of passage that the LLM should use only to
-            answer the user's inquiry.
+        source_passages: A list of passage that the LLM should use only to answer the
+            user's inquiry.
     """
 
     prompt: str
@@ -34,10 +33,10 @@ class AqaOutput(BaseModel):
 
     Attributes:
         answer: The answer to the user's inquiry.
-        attributed_passages: A list of passages that the LLM used to construct
-            the answer.
-        answerable_probability: The probability of the question being answered
-            from the provided passages.
+        attributed_passages: A list of passages that the LLM used to construct the
+            answer.
+        answerable_probability: The probability of the question being answered from the
+            provided passages.
     """
 
     answer: str
@@ -56,10 +55,12 @@ class _AqaModel(BaseModel):
     def __init__(
         self,
         answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-        safety_settings: List[genai.SafetySetting] = [],
+        safety_settings: Optional[List[genai.SafetySetting]] = None,
         temperature: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
+        if safety_settings is None:
+            safety_settings = []
         super().__init__(**kwargs)
         self._client = genaix.build_generative_service()
         self._answer_style = answer_style
@@ -84,9 +85,9 @@ class _AqaModel(BaseModel):
 class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
     """Google's Attributed Question and Answering service.
 
-    Given a user's query and a list of passages, Google's server will return
-    a response that is grounded to the provided list of passages. It will not
-    base the response on parametric memory.
+    Given a user's query and a list of passages, Google's server will return a response
+    that is grounded to the provided list of passages. It will not base the response on
+    parametric memory.
 
     Attributes:
         answer_style: keyword-only argument. See
@@ -120,7 +121,6 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
         self, input: AqaInput, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> AqaOutput:
         """Generates a grounded response using the provided passages."""
-
         response = self._client.generate_answer(
             prompt=input.prompt, passages=input.source_passages
         )
