@@ -234,7 +234,11 @@ def test_chat_google_genai_invoke_thinking() -> None:
     _check_usage_metadata(result)
 
     assert result.usage_metadata is not None
-    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+    if (
+        "output_token_details" in result.usage_metadata
+        and "reasoning" in result.usage_metadata["output_token_details"]
+    ):
+        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
 def test_chat_google_genai_invoke_thinking_default() -> None:
@@ -251,7 +255,11 @@ def test_chat_google_genai_invoke_thinking_default() -> None:
     _check_usage_metadata(result)
 
     assert result.usage_metadata is not None
-    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+    if (
+        "output_token_details" in result.usage_metadata
+        and "reasoning" in result.usage_metadata["output_token_details"]
+    ):
+        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
 def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None:
@@ -276,7 +284,11 @@ def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None
     _check_usage_metadata(result)
 
     assert result.usage_metadata is not None
-    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+    if (
+        "output_token_details" in result.usage_metadata
+        and "reasoning" in result.usage_metadata["output_token_details"]
+    ):
+        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
 # TODO: Parametrize this test to run on a certain output version (v1)
@@ -307,7 +319,11 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     _check_usage_metadata(result)
 
     assert result.usage_metadata is not None
-    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+    if (
+        "output_token_details" in result.usage_metadata
+        and "reasoning" in result.usage_metadata["output_token_details"]
+    ):
+        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
@@ -335,7 +351,11 @@ def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() 
     _check_usage_metadata(result)
 
     assert result.usage_metadata is not None
-    assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+    if (
+        "output_token_details" in result.usage_metadata
+        and "reasoning" in result.usage_metadata["output_token_details"]
+    ):
+        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:

@@ -136,9 +136,9 @@ _FunctionDeclarationType = Union[
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Custom exception class for errors associated with the `Google GenAI` API.
 
-    This exception is raised when there are specific issues related to the
-    Google genai API usage in the ChatGoogleGenerativeAI class, such as unsupported
-    message types or roles.
+    This exception is raised when there are specific issues related to the Google genai
+    API usage in the ChatGoogleGenerativeAI class, such as unsupported message types or
+    roles.
     """
 
 
@@ -150,9 +150,9 @@ def _create_retry_decorator(
 ) -> Callable[[Any], Any]:
     """Creates and returns a preconfigured tenacity retry decorator.
 
-    The retry decorator is configured to handle specific Google API exceptions
-    such as ResourceExhausted and ServiceUnavailable. It uses an exponential
-    backoff strategy for retries.
+    The retry decorator is configured to handle specific Google API exceptions such as
+    ResourceExhausted and ServiceUnavailable. It uses an exponential backoff strategy
+    for retries.
 
     Returns:
         Callable[[Any], Any]: A retry decorator configured for handling specific
@@ -178,9 +178,9 @@ def _create_retry_decorator(
 def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     """Executes a chat generation method with retry logic using tenacity.
 
-    This function is a wrapper that applies a retry mechanism to a provided
-    chat generation function. It is useful for handling intermittent issues
-    like network errors or temporary service unavailability.
+    This function is a wrapper that applies a retry mechanism to a provided chat
+    generation function. It is useful for handling intermittent issues like network
+    errors or temporary service unavailability.
 
     Args:
         generation_method (Callable): The chat generation method to be executed.
@@ -235,9 +235,9 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     """Executes a chat generation method with retry logic using tenacity.
 
-    This function is a wrapper that applies a retry mechanism to a provided
-    chat generation function. It is useful for handling intermittent issues
-    like network errors or temporary service unavailability.
+    This function is a wrapper that applies a retry mechanism to a provided chat
+    generation function. It is useful for handling intermittent issues like network
+    errors or temporary service unavailability.
 
     Args:
         generation_method (Callable): The chat generation method to be executed.
@@ -454,8 +454,10 @@ def _convert_tool_message_to_parts(
 def _get_ai_message_tool_messages_parts(
     tool_messages: Sequence[ToolMessage], ai_message: AIMessage
 ) -> list[Part]:
-    """Finds relevant tool messages for the AI message and converts them to a single
-    list of Parts.
+    """Conversion.
+
+    Finds relevant tool messages for the AI message and converts them to a single list
+    of Parts.
     """
     # We are interested only in the tool messages that are part of the AI message
     tool_calls_ids = {tool_call["id"]: tool_call for tool_call in ai_message.tool_calls}
@@ -696,7 +698,7 @@ def _parse_response_candidate(
     ):
         warnings.warn(
             """
-        ⚠️ Warning: Output may vary each run.
+        Warning: Output may vary each run.
         - 'executable_code': Always present.
         - 'execution_result' & 'image_url': May be absent for some queries.
 
@@ -843,7 +845,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         To use, you must have either:
 
             1. The ``GOOGLE_API_KEY`` environment variable set with your API key, or
-            2. Pass your API key using the ``google_api_key`` kwarg to the ChatGoogleGenerativeAI constructor.
+            2. Pass your API key using the ``google_api_key`` kwarg to the
+            ChatGoogleGenerativeAI constructor.
 
         .. code-block:: python
 
@@ -1009,9 +1012,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # await llm.abatch([messages])
 
     Context Caching:
-        Context caching allows you to store and reuse content (e.g., PDFs, images) for faster processing.
-        The ``cached_content`` parameter accepts a cache name created via the Google Generative AI API.
-        Below are two examples: caching a single file directly and caching multiple files using ``Part``.
+        Context caching allows you to store and reuse content (e.g., PDFs, images) for
+        faster processing. The ``cached_content`` parameter accepts a cache name created
+        via the Google Generative AI API. Below are two examples: caching a single file
+        directly and caching multiple files using ``Part``.
 
         Single File Example:
         This caches a single file and queries it.
@@ -1229,7 +1233,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            "The weather in this image appears to be sunny and pleasant. The sky is a bright blue with scattered white clouds, suggesting fair weather. The lush green grass and trees indicate a warm and possibly slightly breezy day. There are no signs of rain or storms."
+            "The weather in this image appears to be sunny and pleasant. The sky is a
+            bright blue with scattered white clouds, suggesting fair weather. The lush
+            green grass and trees indicate a warm and possibly slightly breezy day.
+            There are no signs of rain or storms."
 
     PDF input:
         .. code-block:: python
@@ -1256,7 +1263,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            "This research paper describes a system developed for SemEval-2025 Task 9, which aims to automate the detection of food hazards from recall reports, addressing the class imbalance problem by leveraging LLM-based data augmentation techniques and transformer-based models to improve performance."
+            "This research paper describes a system developed for SemEval-2025 Task 9,
+            which aims to automate the detection of food hazards from recall reports,
+            addressing the class imbalance problem by leveraging LLM-based data
+            augmentation techniques and transformer-based models to improve
+            performance."
 
     Video input:
         .. code-block:: python
@@ -1286,7 +1297,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            "Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed adventure involving a corn-on-the-cob chase, maze antics, and a disastrous attempt to prepare a turkey dinner."
+            "Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
+            adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
+            attempt to prepare a turkey dinner."
 
         You can also pass YouTube URLs directly:
 
@@ -1309,7 +1322,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            "The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is sharing his screen in AI Studio and asks if the AI can see it. The AI then reads text that is highlighted on the screen, defines the word “multimodal,” and summarizes everything that was seen and heard."
+            "The video is a demo of multimodal live streaming in Gemini 2.0. The
+            narrator is sharing his screen in AI Studio and asks if the AI can see it.
+            The AI then reads text that is highlighted on the screen, defines the word
+            “multimodal,” and summarizes everything that was seen and heard."
 
     Audio input:
         .. code-block:: python
@@ -1336,7 +1352,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            "In this episode of the Made by Google podcast, Stephen Johnson and Simon Tokumine discuss NotebookLM, a tool designed to help users understand complex material in various modalities, with a focus on its unexpected uses, the development of audio overviews, and the implementation of new features like mind maps and source discovery."
+            "In this episode of the Made by Google podcast, Stephen Johnson and Simon
+            Tokumine discuss NotebookLM, a tool designed to help users understand
+            complex material in various modalities, with a focus on its unexpected uses,
+            the development of audio overviews, and the implementation of new features
+            like mind maps and source discovery."
 
     File upload (URI-based):
         You can also upload files to Google's servers and reference them by URI.
@@ -1370,7 +1390,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         .. code-block:: python
 
-            "This research paper assesses and mitigates multi-turn jailbreak vulnerabilities in large language models using the Crescendo attack study, evaluating attack success rates and mitigation strategies like prompt hardening and LLM-as-guardrail."
+            "This research paper assesses and mitigates multi-turn jailbreak
+            vulnerabilities in large language models using the Crescendo attack study,
+            evaluating attack success rates and mitigation strategies like prompt
+            hardening and LLM-as-guardrail."
 
     Token usage:
         .. code-block:: python
@@ -1429,8 +1452,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     convert_system_message_to_human: bool = False
     """Whether to merge any leading SystemMessage into the following HumanMessage.
 
-    Gemini does not support system messages; any unsupported messages will
-    raise an error."""
+    Gemini does not support system messages; any unsupported messages will raise an
+    error.
+    """
 
     response_mime_type: Optional[str] = None
     """Optional. Output response mimetype of the generated candidate text. Only
@@ -1446,8 +1470,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     """
 
     response_schema: Optional[Dict[str, Any]] = None
-    """ Optional. Enforce an schema to the output.
-        The format of the dictionary should follow Open API schema.
+    """ Optional. Enforce an schema to the output. The format of the dictionary should
+    follow Open API schema.
     """
 
     cached_content: Optional[str] = None
@@ -2118,10 +2142,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Args:
             tools: A list of tool definitions to bind to this chat model.
-                Can be a pydantic model, callable, or BaseTool. Pydantic
-                models, callables, and BaseTools will be automatically converted to
-                their schema dictionary representation. Tools with Union types in
-                their arguments are now supported and converted to `anyOf` schemas.
+                Can be a pydantic model, callable, or BaseTool. Pydantic models,
+                callables, and BaseTools will be automatically converted to their schema
+                dictionary representation. Tools with Union types in their arguments are
+                now supported and converted to `anyOf` schemas.
             **kwargs: Any additional parameters to pass to the
                 :class:`~langchain.runnable.Runnable` constructor.
         """

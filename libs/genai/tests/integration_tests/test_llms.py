@@ -1,7 +1,6 @@
 """Test Google GenerativeAI API wrapper.
 
-Note: This test must be run with the GOOGLE_API_KEY environment variable set to a
-      valid API key.
+This test must be run with the GOOGLE_API_KEY env variable set to a valid API key.
 """
 
 from collections.abc import Generator

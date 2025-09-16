@@ -1,7 +1,7 @@
 """Temporary high-level library of the Google GenerativeAI API.
 
-The content of this file should eventually go into the Python package
-google.generativeai.
+(The content of this file should eventually go into the Python package
+google.generativeai.)
 """
 
 import datetime
@@ -636,7 +636,9 @@ def generate_answer(
 # For now, we derive this message from other existing fields.
 def _get_finish_message(candidate: genai.Candidate) -> str:
     finish_messages: Dict[int, str] = {
-        genai.Candidate.FinishReason.MAX_TOKENS: "Maximum token in context window reached",  # noqa: E501
+        genai.Candidate.FinishReason.MAX_TOKENS: (
+            "Maximum token in context window reached"
+        ),
         genai.Candidate.FinishReason.SAFETY: "Blocked because of safety",
         genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
     }
