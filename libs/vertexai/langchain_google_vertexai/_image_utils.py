@@ -15,7 +15,7 @@ from vertexai.generative_models import Image, Part  # type: ignore
 
 
 class Route(Enum):
-    """Image Loading Route"""
+    """Image Loading Route."""
 
     GOOGLE_CLOUD_STORAGE = 1
     BASE64 = 2
@@ -37,7 +37,7 @@ class ImageBytesLoader:
         self,
         project: Union[str, None] = None,
     ) -> None:
-        """Constructor
+        """Constructor.
 
         Args:
             project: Google Cloud project id. Defaults to none.
@@ -81,11 +81,12 @@ class ImageBytesLoader:
             )
             raise ValueError(msg)
 
-        raise ValueError(
+        msg = (  # type: ignore[unreachable, unused-ignore]
             "Image string must be one of: Google Cloud Storage URI, "
             "b64 encoded image string (data:image/...), valid image url. "
             f"Instead got '{image_string}'."
         )
+        raise ValueError(msg)
 
     def load_part(self, image_string: str) -> Part:
         """Gets Part for loading from Gemini.
@@ -144,11 +145,12 @@ class ImageBytesLoader:
         if os.path.exists(image_string):
             return Route.LOCAL_FILE
 
-        raise ValueError(
+        msg = (
             "Image string must be one of: Google Cloud Storage URI, "
             "b64 encoded image string (data:image/...), or valid image url. "
             f"Instead got '{image_string}'."
         )
+        raise ValueError(msg)
 
     def _bytes_from_b64(self, base64_image: str) -> bytes:
         """Gets image bytes from a base64 encoded string.
@@ -166,7 +168,8 @@ class ImageBytesLoader:
             encoded_string = match.group(1)
             return base64.b64decode(encoded_string)
 
-        raise ValueError(f"Error in b64 encoded image. Must follow pattern: {pattern}")
+        msg = f"Error in b64 encoded image. Must follow pattern: {pattern}"
+        raise ValueError(msg)
 
     def _bytes_from_url(self, url: str) -> bytes:
         """Gets image bytes from a public url.
@@ -247,10 +250,7 @@ def image_bytes_to_b64_string(
     Returns:
         B64 image encoded string.
     """
-    if image_format == "pdf":
-        image_type = "application"
-    else:
-        image_type = "image"
+    image_type = "application" if image_format == "pdf" else "image"
     encoded_bytes = base64.b64encode(image_bytes).decode(encoding)
     return f"data:{image_type}/{image_format};base64,{encoded_bytes}"
 

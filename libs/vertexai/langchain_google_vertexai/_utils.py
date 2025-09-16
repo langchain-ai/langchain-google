@@ -57,13 +57,12 @@ def create_retry_decorator(
         google.api_core.exceptions.DeadlineExceeded,
         google.api_core.exceptions.GoogleAPIError,
     ]
-    decorator = create_base_retry_decorator(
+    return create_base_retry_decorator(
         error_types=errors,
         max_retries=max_retries,
         run_manager=run_manager,
         wait_exponential_kwargs=wait_exponential_kwargs,
     )
-    return decorator
 
 
 def raise_vertex_import_error(minimum_expected_version: str = "1.44.0") -> None:
@@ -75,10 +74,11 @@ def raise_vertex_import_error(minimum_expected_version: str = "1.44.0") -> None:
     Raises:
         ImportError: an ImportError that mentions a required version of the SDK.
     """
-    raise ImportError(
+    msg = (
         "Please, install or upgrade the google-cloud-aiplatform library: "
         f"pip install google-cloud-aiplatform>={minimum_expected_version}"
     )
+    raise ImportError(msg)
 
 
 def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
@@ -136,7 +136,8 @@ def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
     pieces = path.split("/")
     blobs = list(gcs_client.list_blobs(pieces[2], prefix="/".join(pieces[3:])))
     if len(blobs) > 1:
-        raise ValueError(f"Found more than one candidate for {path}!")
+        msg = f"Found more than one candidate for {path}!"
+        raise ValueError(msg)
     return Image.from_bytes(blobs[0].download_as_bytes())
 
 
@@ -167,7 +168,7 @@ def get_generation_info(
 ) -> Dict[str, Any]:
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
     info = {
-        "is_blocked": any([rating.blocked for rating in candidate.safety_ratings]),
+        "is_blocked": any(rating.blocked for rating in candidate.safety_ratings),
         "safety_ratings": [
             {
                 "category": rating.category.name,
@@ -318,7 +319,7 @@ def _strip_nullable_anyof(schema: dict[str, Any]) -> dict[str, Any]:
     Works in place.
     """
 
-    def walk(node):
+    def walk(node) -> None:
         if not isinstance(node, dict):
             return
 

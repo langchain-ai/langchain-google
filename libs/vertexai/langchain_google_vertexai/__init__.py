@@ -1,4 +1,4 @@
-"""**LangChain Google Generative AI Integration**
+"""**LangChain Google Generative AI Integration**.
 
 This module contains the LangChain integrations for Vertex AI service - Google foundational models, third-party foundational modela available on Vertex Model Garden and.
 

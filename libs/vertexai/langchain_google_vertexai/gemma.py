@@ -38,18 +38,21 @@ def gemma_messages_to_prompt(history: List[BaseMessage]) -> str:
     if len(messages) == 1:
         content = cast("str", history[0].content)
         if isinstance(history[0], SystemMessage):
-            raise ValueError("Gemma currently doesn't support system message!")
+            msg = "Gemma currently doesn't support system message!"
+            raise ValueError(msg)
         return content
     for message in history:
         content = cast("str", message.content)
         if isinstance(message, SystemMessage):
-            raise ValueError("Gemma currently doesn't support system message!")
+            msg = "Gemma currently doesn't support system message!"
+            raise ValueError(msg)
         if isinstance(message, AIMessage):
             messages.append(MODEL_CHAT_TEMPLATE.format(prompt=content))
         elif isinstance(message, HumanMessage):
             messages.append(USER_CHAT_TEMPLATE.format(prompt=content))
         else:
-            raise ValueError(f"Unexpected message with type {type(message)}")
+            msg = f"Unexpected message with type {type(message)}"
+            raise ValueError(msg)
     messages.append("<start_of_turn>model\n")
     return "".join(messages)
 
@@ -88,7 +91,7 @@ class _GemmaBase(BaseModel):
             "top_p": self.top_p,
             "top_k": self.top_k,
         }
-        return {k: v for k, v in params.items()}
+        return dict(params.items())
 
     def _get_params(self, **kwargs) -> Dict[str, Any]:
         params = {k: kwargs.get(k, v) for k, v in self._default_params.items()}
@@ -176,7 +179,7 @@ class GemmaChatVertexAIModelGarden(_GemmaBase, _BaseVertexAIModelGarden, BaseCha
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        """Top Level call"""
+        """Top Level call."""
         request = self._get_params(**kwargs)
         request["prompt"] = gemma_messages_to_prompt(messages)
         output = await self.async_client.predict(
@@ -220,11 +223,12 @@ class _GemmaLocalKaggleBase(_GemmaBase):
             os.environ["KERAS_BACKEND"] = self.keras_backend
             from keras_nlp.models import GemmaCausalLM  # type: ignore
         except ImportError:
-            raise ImportError(
+            msg = (
                 "Could not import GemmaCausalLM library. "
                 "Please install the GemmaCausalLM library to "
                 "use this  model: pip install keras-nlp keras>=3 kaggle"
             )
+            raise ImportError(msg)
 
         self.client = GemmaCausalLM.from_preset(self.model_name)
         return self
@@ -325,11 +329,12 @@ class _GemmaLocalHFBase(_GemmaBase):
         try:
             from transformers import AutoTokenizer, GemmaForCausalLM  # type: ignore
         except ImportError:
-            raise ImportError(
+            msg = (
                 "Could not import GemmaForCausalLM library. "
                 "Please install the GemmaForCausalLM library to "
                 "use this  model: pip install transformers>=4.38.1"
             )
+            raise ImportError(msg)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name, token=self.hf_access_token

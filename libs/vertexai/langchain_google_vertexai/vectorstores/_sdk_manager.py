@@ -130,11 +130,9 @@ class VectorSearchSDKManager:
         """
         from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
 
-        ds_client = datastore.Client(
+        return datastore.Client(
             project=self._project_id,
             credentials=self._credentials,
             client_info=get_client_info(module="vertex-ai-matching-engine"),
             **kwargs,
         )
-
-        return ds_client

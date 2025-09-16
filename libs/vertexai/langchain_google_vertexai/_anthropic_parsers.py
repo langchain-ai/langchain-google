@@ -45,7 +45,7 @@ class ToolsOutputParser(BaseGenerationOutputParser):
 
         if self.first_tool_only:
             return tool_calls[0] if tool_calls else None
-        return [tool_call for tool_call in tool_calls]
+        return list(tool_calls)
 
     def _pydantic_parse(self, tool_call: dict) -> BaseModel:
         cls_ = {schema.__name__: schema for schema in self.pydantic_schemas or []}[

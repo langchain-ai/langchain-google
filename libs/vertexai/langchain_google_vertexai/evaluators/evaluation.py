@@ -110,10 +110,11 @@ def _prepare_request(
     metric_input: Dict[str, Any] = {"metric_spec": _METRICS_INPUTS.get(metric, {})}
     if _format_metric(metric) not in _METRICS_MULTIPLE_INSTANCES:
         if len(instances) > 1:
-            raise ValueError(
+            msg = (
                 f"Metric {metric} supports only a single instance per request, "
                 f"got {len(instances)}!"
             )
+            raise ValueError(msg)
         metric_input["instance"] = _format_instance(instances[0], metric=metric)
     else:
         metric_input["instances"] = [
@@ -141,7 +142,9 @@ class _EvaluatorBase(ABC):
         _, user_agent = get_user_agent(f"{type(self).__name__}_{self._metric}")
         return user_agent
 
-    def __init__(self, metric: str, project_id: str, location: str = "us-central1"):
+    def __init__(
+        self, metric: str, project_id: str, location: str = "us-central1"
+    ) -> None:
         self._metric = metric
         client_options = ClientOptions(
             api_endpoint=f"{location}-{constants.PREDICTION_API_BASE_PATH}"
@@ -177,10 +180,11 @@ class _EvaluatorBase(ABC):
 class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
     """Evaluate the perplexity of a predicted string."""
 
-    def __init__(self, metric: str, **kwargs):
+    def __init__(self, metric: str, **kwargs) -> None:
         super().__init__(metric, **kwargs)
         if _format_metric(metric) not in _METRICS:
-            raise ValueError(f"Metric {metric} is not supported yet!")
+            msg = f"Metric {metric} is not supported yet!"
+            raise ValueError(msg)
 
     def _evaluate_strings(
         self,
@@ -245,10 +249,11 @@ class VertexPairWiseStringEvaluator(_EvaluatorBase, PairwiseStringEvaluator):
         """Whether this evaluator requires a reference label."""
         return True
 
-    def __init__(self, metric: str, **kwargs):
+    def __init__(self, metric: str, **kwargs) -> None:
         super().__init__(metric, **kwargs)
         if _format_metric(metric) not in _PAIRWISE_METRICS:
-            raise ValueError(f"Metric {metric} is not supported yet!")
+            msg = f"Metric {metric} is not supported yet!"
+            raise ValueError(msg)
 
     def _evaluate_string_pairs(
         self,

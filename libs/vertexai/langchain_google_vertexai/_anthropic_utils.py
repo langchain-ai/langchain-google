@@ -124,11 +124,12 @@ def _format_image(image_url: str, project: Optional[str]) -> Dict:
             "media_type": mime_type,
             "data": base64.b64encode(image_data).decode("ascii"),
         }
-    raise ValueError(
+    msg = (
         "Anthropic only supports base64-encoded images and urls currently."
         " Example: data:image/png;base64,'/9j/4AAQSk'..."
         " Example: https://your-valid-image-url.png"
     )
+    raise ValueError(msg)
 
 
 def _get_cache_control(message: BaseMessage) -> Optional[Dict[str, Any]]:
@@ -180,7 +181,8 @@ def _format_message_anthropic(
                 content.append(_format_text_content(block))
             elif isinstance(block, dict):
                 if "type" not in block:
-                    raise ValueError("Dict content block must have a type key")
+                    msg = "Dict content block must have a type key"
+                    raise ValueError(msg)
 
                 new_block = {}
 
@@ -219,10 +221,11 @@ def _format_message_anthropic(
                             },
                         }
                     else:
-                        raise ValueError(
+                        msg = (
                             "Anthropic only supports 'url' and 'base64' source_type "
                             "for image content blocks."
                         )
+                        raise ValueError(msg)
                     content.append(formatted_block)
                     continue
 
@@ -278,7 +281,8 @@ def _format_message_anthropic(
 
                 content.append(block)
     else:
-        raise ValueError("Message should be a str, list of str or list of dicts")
+        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable, unused-ignore]
+        raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
         for tc in message.tool_calls:
@@ -305,7 +309,8 @@ def _format_messages_anthropic(
     for i, message in enumerate(merged_messages):
         if message.type == "system":
             if i != 0:
-                raise ValueError("System message must be at beginning of message list.")
+                msg = "System message must be at beginning of message list."
+                raise ValueError(msg)
             fm = _format_message_anthropic(message, project)
             if fm:
                 system_messages = fm
@@ -457,7 +462,7 @@ def _make_message_chunk_from_anthropic_event(
                 content_block["index"] = event.index
                 content_block["type"] = "text"
                 message_chunk = AIMessageChunk(content=[content_block])
-        elif event.delta.type == "thinking_delta" or event.delta.type == "signature_delta":
+        elif event.delta.type in {"thinking_delta", "signature_delta"}:
             content_block = event.delta.model_dump()
             if "text" in content_block and content_block["text"] is None:
                 content_block.pop("text")

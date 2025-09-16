@@ -93,7 +93,7 @@ def test_vertex_call_count_tokens() -> None:
 
 
 @pytest.mark.extended
-def test_structured_output_schema_json():
+def test_structured_output_schema_json() -> None:
     model = VertexAI(
         rate_limiter=rate_limiter,
         model_name="gemini-2.0-flash-001",

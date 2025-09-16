@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, NoReturn
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,7 +14,7 @@ from langchain_google_vertexai._utils import (
 )
 
 
-def test_valid_schema_path():
+def test_valid_schema_path() -> None:
     schema_path = "#/$defs/MyDefinition"
     expected_key = "MyDefinition"
     assert _get_def_key_from_schema_path(schema_path) == expected_key
@@ -24,24 +24,24 @@ def test_valid_schema_path():
     "schema_path",
     [123, "#/definitions/MyDefinition", "#/$defs/MyDefinition/extra", "#/$defs"],
 )
-def test_invalid_schema_path(schema_path: Any):
+def test_invalid_schema_path(schema_path: Any) -> None:
     with pytest.raises(ValueError):
         _get_def_key_from_schema_path(schema_path)
 
 
-def test_schema_no_defs():
+def test_schema_no_defs() -> None:
     schema = {"type": "integer"}
     expected_schema = {"type": "integer"}
     assert replace_defs_in_schema(schema) == expected_schema
 
 
-def test_schema_empty_defs():
+def test_schema_empty_defs() -> None:
     schema = {"$defs": {}, "type": "integer"}
     expected_schema = {"type": "integer"}
     assert replace_defs_in_schema(schema) == expected_schema
 
 
-def test_schema_simple_ref_replacement():
+def test_schema_simple_ref_replacement() -> None:
     schema = {
         "$defs": {"MyDefinition": {"type": "string"}},
         "property": {"$ref": "#/$defs/MyDefinition"},
@@ -50,7 +50,7 @@ def test_schema_simple_ref_replacement():
     assert replace_defs_in_schema(schema) == expected_schema
 
 
-def test_schema_nested_ref_replacement():
+def test_schema_nested_ref_replacement() -> None:
     schema = {
         "$defs": {
             "MyDefinition": {
@@ -67,7 +67,7 @@ def test_schema_nested_ref_replacement():
     assert replace_defs_in_schema(schema) == expected_schema
 
 
-def test_schema_recursive_error_self_reference():
+def test_schema_recursive_error_self_reference() -> None:
     schema = {
         "$defs": {
             "Node": {
@@ -84,7 +84,7 @@ def test_schema_recursive_error_self_reference():
         _ = replace_defs_in_schema(schema)
 
 
-def test_retry_decorator_for_google_api_call_error_and_subclass():
+def test_retry_decorator_for_google_api_call_error_and_subclass() -> None:
     google_api_call_error_retries = []
     client_error_retries = []
     max_retries = 3
@@ -92,22 +92,24 @@ def test_retry_decorator_for_google_api_call_error_and_subclass():
     retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
 
     @retry_decorator
-    def retry_for_google_api_call_error():
+    def retry_for_google_api_call_error() -> bool:
         google_api_call_error_retries.append("retried")
         if len(google_api_call_error_retries) == max_retries:
             # This method executes successfully in the last retry
             return True
 
-        raise GoogleAPICallError("")
+        msg = ""
+        raise GoogleAPICallError(msg)
 
     @retry_decorator
-    def retry_for_subclass_of_google_api_call_error():
+    def retry_for_subclass_of_google_api_call_error() -> bool:
         client_error_retries.append("retried")
         if len(client_error_retries) == max_retries:
             # This method executes successfully in the last retry
             return True
 
-        raise ClientError("")
+        msg = ""
+        raise ClientError(msg)
 
     google_api_call_error_retried = retry_for_google_api_call_error()
     client_error_retried = retry_for_subclass_of_google_api_call_error()
@@ -118,16 +120,17 @@ def test_retry_decorator_for_google_api_call_error_and_subclass():
     assert len(client_error_retries) == max_retries
 
 
-def test_retry_decorator_for_invalid_argument():
+def test_retry_decorator_for_invalid_argument() -> None:
     invalid_argument_retries = []
     max_retries = 3
 
     retry_decorator = create_base_retry_decorator([GoogleAPICallError], max_retries)
 
     @retry_decorator
-    def retry_for_invalid_argument_error():
+    def retry_for_invalid_argument_error() -> NoReturn:
         invalid_argument_retries.append("retried")
-        raise InvalidArgument("")
+        msg = ""
+        raise InvalidArgument(msg)
 
     try:
         retry_for_invalid_argument_error()
@@ -238,7 +241,7 @@ def test_strip_nullable_anyof() -> None:
     assert _strip_nullable_anyof(input_schema) == expected
 
 
-def test_get_generation_info_with_raw_int_finish_reason():
+def test_get_generation_info_with_raw_int_finish_reason() -> None:
     """Test that get_generation_info handles raw integer finish_reason values."""
     # Create a mock candidate with finish_reason as raw int (e.g., 15)
     mock_candidate = MagicMock()
@@ -255,7 +258,7 @@ def test_get_generation_info_with_raw_int_finish_reason():
     assert result["finish_reason"] == "UNKNOWN_15"
 
 
-def test_get_generation_info_with_enum_finish_reason():
+def test_get_generation_info_with_enum_finish_reason() -> None:
     """Test that get_generation_info handles normal enum finish_reason values."""
     # Create a mock candidate with finish_reason as enum with .name attribute
     mock_finish_reason = MagicMock()
@@ -274,7 +277,7 @@ def test_get_generation_info_with_enum_finish_reason():
     assert result["finish_reason"] == "STOP"
 
 
-def test_get_generation_info_with_none_finish_reason():
+def test_get_generation_info_with_none_finish_reason() -> None:
     """Test that get_generation_info handles None finish_reason values."""
     mock_candidate = MagicMock()
     mock_candidate.finish_reason = None

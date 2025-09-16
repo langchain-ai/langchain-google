@@ -1,5 +1,4 @@
-"""Tests configuration to be executed before tests execution.
-"""
+"""Tests configuration to be executed before tests execution."""
 
 from typing import List
 

@@ -75,7 +75,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
     )
 
     @classmethod
-    def is_lc_serializable(self) -> bool:
+    def is_lc_serializable(cls) -> bool:
         return True
 
     @classmethod

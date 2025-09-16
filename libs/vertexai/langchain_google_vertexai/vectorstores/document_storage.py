@@ -56,12 +56,12 @@ class GCSDocumentStorage(DocumentStorage):
         self._prefix = prefix
         self._threaded = threaded
         self._n_threads = n_threads
-        if threaded:
-            if not (int(n_threads) > 0 and int(n_threads) <= 50):
-                raise ValueError(
-                    "n_threads must be a valid integer,"
-                    " greater than 0 and lower than or equal to 50"
-                )
+        if threaded and not (int(n_threads) > 0 and int(n_threads) <= 50):
+            msg = (
+                "n_threads must be a valid integer,"
+                " greater than 0 and lower than or equal to 50"
+            )
+            raise ValueError(msg)
 
     def _prepare_doc_for_bulk_upload(
         self, key: str, value: Document
@@ -74,7 +74,7 @@ class GCSDocumentStorage(DocumentStorage):
         return doc_contents, blob
 
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
-        """Stores a series of documents using each keys
+        """Stores a series of documents using each keys.
 
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
@@ -113,9 +113,8 @@ class GCSDocumentStorage(DocumentStorage):
             data = raw_doc.decode("utf-8")
             data_json = json.loads(data)
             return Document(**data_json)
-        raise Exception(
-            "Unexpected result type when batch getting multiple files from GCS"
-        )
+        msg = "Unexpected result type when batch getting multiple files from GCS"
+        raise Exception(msg)
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
@@ -144,7 +143,7 @@ class GCSDocumentStorage(DocumentStorage):
                 worker_type="thread",
                 max_workers=self._n_threads,
             )
-            for i, result in enumerate(download_results):
+            for _i, result in enumerate(download_results):
                 if isinstance(result, Exception) and not isinstance(result, NotFound):
                     raise result
             return [
@@ -285,7 +284,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         ]
 
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
-        """Stores a series of documents using each keys
+        """Stores a series of documents using each keys.
 
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.

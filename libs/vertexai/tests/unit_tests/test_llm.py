@@ -152,7 +152,7 @@ def test_extract_response() -> None:
     model = FakeModelGarden(endpoint_id="123", result_arg=None, project="test-proj")
 
     class MyResult:
-        def __init__(self, result):
+        def __init__(self, result) -> None:
             self.result = result
 
     for original_result, result in prompts_results:

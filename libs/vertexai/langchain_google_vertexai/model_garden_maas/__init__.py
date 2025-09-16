@@ -13,7 +13,8 @@ def get_vertex_maas_model(model_name, **kwargs):
     A factory method based on model's name.
     """
     if model_name not in _MAAS_MODELS:
-        raise ValueError(f"model name {model_name} is not supported!")
+        msg = f"model name {model_name} is not supported!"
+        raise ValueError(msg)
     if model_name in _MISTRAL_MODELS:
         from langchain_google_vertexai.model_garden_maas.mistral import (
             VertexModelGardenMistral,

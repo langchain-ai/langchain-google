@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import sys
 from collections.abc import Sequence
@@ -43,7 +45,7 @@ from langchain_google_vertexai.functions_utils import (
 )
 
 
-def test_format_json_schema_to_gapic():
+def test_format_json_schema_to_gapic() -> None:
     # Simple case
     class RecordPerson(BaseModel):
         """Record some identifying information about a person."""
@@ -71,7 +73,7 @@ def test_format_json_schema_to_gapic():
         banana = "banana"
 
     class A(BaseModel):
-        """Class A"""
+        """Class A."""
 
         int_field: Optional[int]
 
@@ -101,7 +103,7 @@ def test_format_json_schema_to_gapic():
             },
             "array_field": {
                 "items": {
-                    "description": "Class A",
+                    "description": "Class A.",
                     "properties": {
                         "int_field": {"type": "INTEGER", "title": "Int Field"}
                     },
@@ -149,18 +151,42 @@ def test_format_json_schema_to_gapic():
     )
 
 
-def test_format_json_schema_to_gapic_v1():
+# Move class definitions outside function to avoid forward reference issues in Pydantic
+# V1
+class _RecordPersonV1(BaseModelV1):
+    """Record some identifying information about a person."""
+
+    name: str
+    age: Optional[int]
+
+
+class _StringEnumV1(str, Enum):
+    pear = "pear"
+    banana = "banana"
+
+
+class _AV1(BaseModelV1):
+    """Class A."""
+
+    int_field: Optional[int]
+
+
+class _BV1(BaseModelV1):
+    object_field: Optional[_AV1] = FieldV1(description="Class A")
+    array_field: Sequence[_AV1]
+    int_field: int = FieldV1(description="int field", minimum=1, maximum=10)
+    str_field: str = FieldV1(
+        min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", example="ABCD"
+    )
+    str_enum_field: _StringEnumV1
+
+
+def test_format_json_schema_to_gapic_v1() -> None:
     # Simple case
-    class RecordPerson(BaseModelV1):
-        """Record some identifying information about a person."""
-
-        name: str
-        age: Optional[int]
-
-    schema = RecordPerson.schema()
+    schema = _RecordPersonV1.schema()
     result = _format_json_schema_to_gapic_v1(schema)
     expected = {
-        "title": "RecordPerson",
+        "title": "_RecordPersonV1",
         "type": "OBJECT",
         "description": "Record some identifying information about a person.",
         "properties": {
@@ -172,42 +198,24 @@ def test_format_json_schema_to_gapic_v1():
     assert result == expected
 
     # Nested case
-    class StringEnum(str, Enum):
-        pear = "pear"
-        banana = "banana"
-
-    class A(BaseModelV1):
-        """Class A"""
-
-        int_field: Optional[int]
-
-    class B(BaseModelV1):
-        object_field: Optional[A] = FieldV1(description="Class A")
-        array_field: Sequence[A]
-        int_field: int = FieldV1(description="int field", minimum=1, maximum=10)
-        str_field: str = FieldV1(
-            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", example="ABCD"
-        )
-        str_enum_field: StringEnum
-
-    schema = B.schema()
+    schema = _BV1.schema()
     result = _format_json_schema_to_gapic_v1(dereference_refs(schema))
 
     expected = {
         "properties": {
             "object_field": {
-                "description": "Class A",
+                "description": "Class A.",
                 "properties": {"int_field": {"type": "INTEGER", "title": "Int Field"}},
-                "title": "A",
+                "title": "_AV1",
                 "type": "OBJECT",
             },
             "array_field": {
                 "items": {
-                    "description": "Class A",
+                    "description": "Class A.",
                     "properties": {
                         "int_field": {"type": "INTEGER", "title": "Int Field"}
                     },
-                    "title": "A",
+                    "title": "_AV1",
                     "type": "OBJECT",
                 },
                 "type": "ARRAY",
@@ -215,8 +223,8 @@ def test_format_json_schema_to_gapic_v1():
             },
             "int_field": {
                 "description": "int field",
-                "maximum": 10.0,
-                "minimum": 1.0,
+                "maximum": 10,
+                "minimum": 1,
                 "title": "Int Field",
                 "type": "INTEGER",
             },
@@ -231,12 +239,12 @@ def test_format_json_schema_to_gapic_v1():
             "str_enum_field": {
                 "description": "An enumeration.",
                 "enum": ["pear", "banana"],
-                "title": "StringEnum",
+                "title": "_StringEnumV1",
                 "type": "STRING",
             },
         },
         "type": "OBJECT",
-        "title": "B",
+        "title": "_BV1",
         "required": ["array_field", "int_field", "str_field", "str_enum_field"],
     }
     assert result == expected
@@ -275,17 +283,17 @@ def test_format_json_schema_to_gapic_union_types() -> None:
 
 # reusable test inputs
 def search(question: str) -> str:
-    """Search tool"""
+    """Search tool."""
     return question
 
 
 search_tool = tool(search)
 search_exp = gapic.FunctionDeclaration(
     name="search",
-    description="Search tool",
+    description="Search tool.",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
-        description="Search tool",
+        description="Search tool.",
         title="search",
         properties={"question": gapic.Schema(type=gapic.Type.STRING, title="Question")},
         required=["question"],
@@ -295,11 +303,11 @@ search_exp = gapic.FunctionDeclaration(
 search_vfd = vertexai.FunctionDeclaration.from_func(search)
 search_vfd_exp = gapic.FunctionDeclaration(
     name="search",
-    description="Search tool",
+    description="Search tool.",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
         title="search",
-        description="Search tool",
+        description="Search tool.",
         properties={"question": gapic.Schema(type=gapic.Type.STRING, title="Question")},
         required=["question"],
         property_ordering=["question"],
@@ -308,11 +316,11 @@ search_vfd_exp = gapic.FunctionDeclaration(
 
 
 class SearchBaseTool(BaseTool):
-    def _run(self):
+    def _run(self) -> None:
         pass
 
 
-search_base_tool = SearchBaseTool(name="search", description="Search tool")
+search_base_tool = SearchBaseTool(name="search", description="Search tool.")
 search_base_tool_exp = gapic.FunctionDeclaration(
     name=search_base_tool.name,
     description=search_base_tool.description,
@@ -327,7 +335,7 @@ search_base_tool_exp = gapic.FunctionDeclaration(
 
 
 class SearchModel(BaseModel):
-    """Search model"""
+    """Search model."""
 
     question: str
 
@@ -340,11 +348,11 @@ search_model_dict = {
 }
 search_model_exp = gapic.FunctionDeclaration(
     name="SearchModel",
-    description="Search model",
+    description="Search model.",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
         title="SearchModel",
-        description="Search model",
+        description="Search model.",
         properties={
             "question": gapic.Schema(type=gapic.Type.STRING, title="Question"),
         },
@@ -391,7 +399,7 @@ SRC_EXP_MOCKS_DESC: List[
     "langchain_google_vertexai.functions_utils._format_dict_to_function_declaration",
     new=mock_dict,
 )
-def test_format_to_gapic_function_declaration():
+def test_format_to_gapic_function_declaration() -> None:
     for src, exp, mocks, desc in SRC_EXP_MOCKS_DESC:
         res = _format_to_gapic_function_declaration(src)
         assert res == exp
@@ -409,14 +417,15 @@ def test_format_to_gapic_function_declaration():
             m.reset_mock()
 
 
-def test_format_to_gapic_tool():
+def test_format_to_gapic_tool() -> None:
     src = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
     fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
     expected = gapic.Tool(function_declarations=fds)
     result = _format_to_gapic_tool(src)
     assert result == expected
 
-    src_2 = src + [
+    src_2 = [
+        *src,
         gapic.Tool(function_declarations=[search_model_exp]),
         vertexai.Tool.from_function_declarations(
             [vertexai.FunctionDeclaration.from_func(search)]
@@ -424,7 +433,7 @@ def test_format_to_gapic_tool():
         {"function_declarations": [search_model_dict]},
     ]
     expected = gapic.Tool(
-        function_declarations=fds + [search_model_exp, search_vfd_exp, search_model_exp]
+        function_declarations=[*fds, search_model_exp, search_vfd_exp, search_model_exp]
     )
     result = _format_to_gapic_tool(src_2)
     assert result == expected
@@ -488,12 +497,12 @@ def test_format_to_gapic_tool():
     )
 
 
-def test_format_tool_config_invalid():
+def test_format_tool_config_invalid() -> None:
     with pytest.raises(ValueError):
         _format_tool_config({})  # type: ignore
 
 
-def test_format_tool_config():
+def test_format_tool_config() -> None:
     tool_config = _format_tool_config(
         {
             "function_calling_config": {
@@ -512,7 +521,7 @@ def test_format_tool_config():
 
 @pytest.mark.parametrize(
     "choice",
-    (True, "foo", ["foo"], "any", {"type": "function", "function": {"name": "foo"}}),
+    [True, "foo", ["foo"], "any", {"type": "function", "function": {"name": "foo"}}],
 )
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = GapicToolConfig(
@@ -526,7 +535,7 @@ def test__tool_choice_to_tool_config(choice: Any) -> None:
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="Requires Python 3.10 or higher")
-def test_nested_bind_tools():
+def test_nested_bind_tools() -> None:
     class Person(BaseModel):
         name: str = Field(description="The name.")
         hair_color: str | None = Field("Hair color, only if provided.")  # type: ignore[syntax, unused-ignore]
@@ -740,8 +749,7 @@ def test_tool_field_union_types() -> None:
         y: str = "1"
 
     class GetWeather(BaseModel):
-        """Get weather information for a location.
-        """
+        """Get weather information for a location."""
 
         location: str = Field(
             ..., description="The city and country, e.g. New York, USA"

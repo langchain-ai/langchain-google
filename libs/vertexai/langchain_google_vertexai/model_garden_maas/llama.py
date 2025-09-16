@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import uuid
 from collections.abc import AsyncIterator, Iterator, Sequence
@@ -72,7 +73,8 @@ def _parse_response_candidate_llama(
     content = response_candidate.get("content", "")
     role = response_candidate["role"]
     if role != "assistant":
-        raise ValueError(f"Role in response is {role}, expected 'assistant'!")
+        msg = f"Role in response is {role}, expected 'assistant'!"
+        raise ValueError(msg)
     tool_calls = []
     tool_call_chunks = []
 
@@ -103,10 +105,8 @@ def _parse_response_candidate_llama(
             function_name = tool_call["function"]["name"]
             function_args = tool_call["function"].get("arguments", None)
             if function_args is not None:
-                try:
+                with contextlib.suppress(ValueError):
                     function_args = json.loads(function_args)
-                except ValueError:
-                    pass
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
@@ -137,7 +137,7 @@ def _parse_response_candidate_llama(
 
 
 class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
-    """Integration for Llama 3.1 on Google Cloud Vertex AI Model-as-a-Service.
+    r"""Integration for Llama 3.1 on Google Cloud Vertex AI Model-as-a-Service.
 
     For more information, see:
         https://cloud.google.com/blog/products/ai-machine-learning/llama-3-1-on-vertex-ai
@@ -248,10 +248,11 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
     ) -> List[Dict[str, Any]]:
         converted_messages: List[Dict[str, Any]] = []
         if tools and not self.append_tools_to_system_message:
-            raise ValueError(
+            msg = (
                 "If providing tools, either format system message yourself or "
                 "append_tools_to_system_message to True!"
             )
+            raise ValueError(msg)
         if tools:
             tools_str = "\n".join(
                 [json.dumps(convert_to_openai_function(t)) for t in tools]
@@ -299,7 +300,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                 # we also need to format a previous message if we got a tool result
                 prev_message = messages[i - 1]
                 if not isinstance(prev_message, AIMessage):
-                    raise ValueError("ToolMessage should follow AIMessage only!")
+                    msg = "ToolMessage should follow AIMessage only!"
+                    raise ValueError(msg)
                 _ = converted_messages[-1].pop("content", None)
                 tool_calls = []
                 for tool_call in prev_message.tool_calls:
@@ -315,9 +317,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                     )
                 converted_messages[-1]["tool_calls"] = tool_calls
                 if len(tool_calls) > 1:
-                    raise ValueError(
-                        "Only a single function call per turn is supported!"
-                    )
+                    msg = "Only a single function call per turn is supported!"
+                    raise ValueError(msg)
                 converted_messages.append(
                     {
                         "role": "tool",
@@ -327,7 +328,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                     }
                 )
             else:
-                raise ValueError(f"Message type {type(message)} is not yet supported!")
+                msg = f"Message type {type(message)} is not yet supported!"
+                raise ValueError(msg)
         return converted_messages
 
     def _generate(
@@ -423,7 +425,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         chunk_delta = chunk["choices"][0]["delta"]
         content = chunk_delta.get("content", "")
         if chunk_delta.get("role") != "assistant":
-            raise ValueError(f"Got chunk with non-assistant role: {chunk_delta}")
+            msg = f"Got chunk with non-assistant role: {chunk_delta}"
+            raise ValueError(msg)
         additional_kwargs = {}
         if raw_tool_calls := chunk_delta.get("tool_calls"):
             additional_kwargs["tool_calls"] = raw_tool_calls

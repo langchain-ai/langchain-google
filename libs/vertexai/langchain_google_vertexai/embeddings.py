@@ -22,9 +22,6 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
-from vertexai.generative_models._generative_models import (  # type: ignore[import-untyped]
-    SafetySettingsType as SafetySettingsType,
-)
 from vertexai.language_models import (  # type: ignore
     TextEmbeddingInput,
     TextEmbeddingModel,
@@ -109,14 +106,12 @@ class GoogleEmbeddingModelVersion(str, Enum):
 
     @property
     def task_type_supported(self) -> bool:
-        """Checks if the model generation supports task type.
-        """
+        """Checks if the model generation supports task type."""
         return self != GoogleEmbeddingModelVersion.EMBEDDINGS_JUNE_2023
 
     @property
     def output_dimensionality_supported(self) -> bool:
-        """Checks if the model generation supports output dimensionality.
-        """
+        """Checks if the model generation supports output dimensionality."""
         supported = [
             GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2024,
             GoogleEmbeddingModelVersion.EMBEDDINGS_MAY_2025,
@@ -167,7 +162,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
         max_retries: int = 6,
         credentials: Optional[Any] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """Initialize the sentence_transformer."""
         if model_name:
             kwargs["model_name"] = model_name
@@ -303,8 +298,7 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             )
         if len(tasks) > 0:
             wait(tasks)
-        embeddings = [task.result().text_embedding for task in tasks]
-        return embeddings
+        return [task.result().text_embedding for task in tasks]
 
     def _get_text_embeddings_with_retry(
         self,
@@ -525,7 +519,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             that the result returned will be a list of image embeddings."
         )
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
-            raise NotImplementedError("Only supported for multimodal models")
+            msg = "Only supported for multimodal models"
+            raise NotImplementedError(msg)
 
         image_loader = self._image_bytes_loader_client
         bytes_image = image_loader.load_bytes(image_path)
@@ -552,7 +547,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             Embedding for the image.
         """
         if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
-            raise NotImplementedError("Only supported for multimodal models")
+            msg = "Only supported for multimodal models"
+            raise NotImplementedError(msg)
 
         image_loader = self._image_bytes_loader_client
 

@@ -86,7 +86,7 @@ class _VertexAIBase(BaseModel):
     api_endpoint: Optional[str] = Field(default=None, alias="base_url")
     "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
     api_transport: Optional[str] = None
-    """The desired API transport method, can be either 'grpc' or 'rest'. 
+    """The desired API transport method, can be either 'grpc' or 'rest'.
     Uses the default parameter in vertexai.init if defined.
     """
     default_metadata: Sequence[Tuple[str, str]] = Field(
@@ -103,7 +103,7 @@ class _VertexAIBase(BaseModel):
     "the environment."
     endpoint_version: Literal["v1", "v1beta1"] = "v1beta1"
     """Whether to use v1 or v1beta1 endpoint.
-    
+
     v1 is more performant, but v1beta1 might have some new features.
     """
 
@@ -216,9 +216,9 @@ class _VertexAICommon(_VertexAIBase):
     streaming: bool = False
     """Whether to stream the results or not."""
     safety_settings: Optional[SafetySettingsType] = None
-    """The default safety settings to use for all generations. 
-    
-        For example: 
+    """The default safety settings to use for all generations.
+
+        For example:
 
             from langchain_google_vertexai import HarmBlockThreshold, HarmCategory
 
@@ -330,9 +330,8 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
         if not self.project:
-            raise ValueError(
-                "A GCP project should be provided to run inference on Model Garden!"
-            )
+            msg = "A GCP project should be provided to run inference on Model Garden!"
+            raise ValueError(msg)
 
         client_options = ClientOptions(
             api_endpoint=f"{self.location}-aiplatform.googleapis.com"
@@ -368,10 +367,9 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
             instance[self.prompt_arg] = prompt
             instances.append(instance)
 
-        predict_instances = [
+        return [
             json_format.ParseDict(instance_dict, Value()) for instance_dict in instances
         ]
-        return predict_instances
 
     def _parse_response(self, predictions: Prediction) -> LLMResult:
         generations: List[List[Generation]] = []
@@ -411,6 +409,7 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
                         "initialization."
                     )
                     raise ValueError(error_desc)
-                raise ValueError(f"{self.result_arg} key not found in prediction!")
+                msg = f"{self.result_arg} key not found in prediction!"
+                raise ValueError(msg)
 
         return prediction

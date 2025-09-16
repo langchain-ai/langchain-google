@@ -149,11 +149,12 @@ class _BaseVertexAIVectorStore(VectorStore):
             Higher score represents more similarity.
         """
         if sparse_embedding is not None and not isinstance(sparse_embedding, dict):
-            raise ValueError(
+            msg = (  # type: ignore[unreachable]
                 "`sparse_embedding` should be a dictionary with the following format: "
                 "{'values': [0.7, 0.5, ...], 'dimensions': [10, 20, ...]}\n"
                 f"{type(sparse_embedding)} != {type({})}"
             )
+            raise ValueError(msg)
 
         sparse_embeddings = [sparse_embedding] if sparse_embedding is not None else None
         neighbors_list = self._searcher.find_neighbors(
@@ -206,10 +207,11 @@ class _BaseVertexAIVectorStore(VectorStore):
         """
         metadata = kwargs.get("metadata")
         if (not ids and not metadata) or (ids and metadata):
-            raise ValueError(
+            msg = (
                 "You should provide ids (as list of id's) or a metadata"
                 "filter for deleting documents."
             )
+            raise ValueError(msg)
         if metadata:
             ids = self._searcher.get_datapoints_by_filter(metadata=metadata)
             if not ids:
@@ -219,7 +221,8 @@ class _BaseVertexAIVectorStore(VectorStore):
             self._document_storage.mdelete(ids)  # type: ignore[arg-type]
             return True
         except Exception as e:
-            raise RuntimeError(f"Error during deletion: {e!s}") from e
+            msg = f"Error during deletion: {e!s}"
+            raise RuntimeError(msg) from e
 
     def similarity_search(
         self,
@@ -281,10 +284,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         """
         # Makes sure is a list and can get the length, should we support iterables?
         # metadata is a list so probably not?
-        if isinstance(texts, str):
-            texts = [texts]
-        else:
-            texts = list(texts)
+        texts = [texts] if isinstance(texts, str) else list(texts)
 
         embeddings = self._embeddings.embed_documents(texts)
 
@@ -311,22 +311,25 @@ class _BaseVertexAIVectorStore(VectorStore):
         **kwargs: Any,
     ) -> List[str]:
         if ids is not None and len(set(ids)) != len(ids):
-            raise ValueError(
+            msg = (
                 "All provided ids should be unique."
                 f"There are {len(ids) - len(set(ids))} duplicates."
             )
+            raise ValueError(msg)
 
         if ids is not None and len(ids) != len(texts):
-            raise ValueError(
+            msg = (
                 "The number of `ids` should match the number of `texts` "
                 f"{len(ids)} != {len(texts)}"
             )
+            raise ValueError(msg)
 
         if isinstance(embeddings, list) and len(embeddings) != len(texts):
-            raise ValueError(
+            msg = (
                 "The number of `embeddings` should match the number of `texts` "
                 f"{len(embeddings)} != {len(texts)}"
             )
+            raise ValueError(msg)
 
         if ids is None:
             ids = self._generate_unique_ids(len(texts))
@@ -335,10 +338,11 @@ class _BaseVertexAIVectorStore(VectorStore):
             metadatas = [{}] * len(texts)
 
         if len(metadatas) != len(texts):
-            raise ValueError(
+            msg = (
                 "`metadatas` should be the same length as `texts` "
                 f"{len(metadatas)} != {len(texts)}"
             )
+            raise ValueError(msg)
 
         documents = [
             Document(id=id_, page_content=text, metadata=metadata)
@@ -367,11 +371,12 @@ class _BaseVertexAIVectorStore(VectorStore):
         **kwargs: Any,
     ) -> "_BaseVertexAIVectorStore":
         """Use from components instead."""
-        raise NotImplementedError(
+        msg = (
             "This method is not implemented. Instead, you should initialize the class"
             " with `VertexAIVectorSearch.from_components(...)` and then call "
             "`add_texts`"
         )
+        raise NotImplementedError(msg)
 
     @classmethod
     def _get_default_embeddings(cls) -> Embeddings:
@@ -397,7 +402,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         return TensorflowHubEmbeddings()
 
     def _generate_unique_ids(self, number: int) -> List[str]:
-        """Generates a list of unique ids of length `number`
+        """Generates a list of unique ids of length `number`.
 
         Args:
             number: Number of ids to generate.

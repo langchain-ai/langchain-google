@@ -226,11 +226,9 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
             vertex_message = ChatMessage(content=message.content, author="user")
             vertex_messages.append(vertex_message)
         else:
-            raise ValueError(
-                f"Unexpected message with type {type(message)} at the position {i}."
-            )
-    chat_history = _ChatHistory(context=context, history=vertex_messages)
-    return chat_history
+            msg = f"Unexpected message with type {type(message)} at the position {i}."
+            raise ValueError(msg)
+    return _ChatHistory(context=context, history=vertex_messages)
 
 
 def _parse_chat_history_gemini(
@@ -243,9 +241,8 @@ def _parse_chat_history_gemini(
             return Part(text=part)
 
         if not isinstance(part, Dict):
-            raise ValueError(
-                f"Message's content is expected to be a dict, got {type(part)}!"
-            )
+            msg = f"Message's content is expected to be a dict, got {type(part)}!"  # type: ignore[unreachable, unused-ignore]
+            raise ValueError(msg)
         if part["type"] == "text":
             return Part(text=part["text"])
         if part["type"] == "tool_use":
@@ -254,10 +251,11 @@ def _parse_chat_history_gemini(
             return None
         if part["type"] == "executable_code":
             if "executable_code" not in part or "language" not in part:
-                raise ValueError(
+                msg = (
                     "Executable code part must have 'code' and 'language' keys, got "
                     f"{part}"
                 )
+                raise ValueError(msg)
             return Part(
                 executable_code=ExecutableCode(
                     language=part["language"], code=part["executable_code"]
@@ -265,10 +263,11 @@ def _parse_chat_history_gemini(
             )
         if part["type"] == "code_execution_result":
             if "code_execution_result" not in part or "outcome" not in part:
-                raise ValueError(
+                msg = (
                     "Code execution result part must have 'code_execution_result' and "
                     f"'outcome' keys, got {part}"
                 )
+                raise ValueError(msg)
             return Part(
                 code_execution_result=CodeExecutionResult(
                     output=part["code_execution_result"], outcome=part["outcome"]
@@ -284,7 +283,8 @@ def _parse_chat_history_gemini(
             if part["source_type"] == "base64":
                 bytes_ = base64.b64decode(part["data"])
             else:
-                raise ValueError("source_type must be url or base64.")
+                msg = "source_type must be url or base64."
+                raise ValueError(msg)
             inline_data: dict = {"data": bytes_}
             if "mime_type" in part:
                 inline_data["mime_type"] = part["mime_type"]
@@ -299,7 +299,8 @@ def _parse_chat_history_gemini(
         # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
         if part["type"] == "media":
             if "mime_type" not in part:
-                raise ValueError(f"Missing mime_type in media part: {part}")
+                msg = f"Missing mime_type in media part: {part}"  # type: ignore[unreachable, unused-ignore]
+                raise ValueError(msg)
             mime_type = part["mime_type"]
             proto_part = Part()
 
@@ -310,9 +311,8 @@ def _parse_chat_history_gemini(
                     file_uri=part["file_uri"], mime_type=mime_type
                 )
             else:
-                raise ValueError(
-                    f"Media part must have either data or file_uri: {part}"
-                )
+                msg = f"Media part must have either data or file_uri: {part}"  # type: ignore[unreachable, unused-ignore]
+                raise ValueError(msg)
 
             if "video_metadata" in part:
                 metadata = VideoMetadata(part["video_metadata"])
@@ -322,7 +322,8 @@ def _parse_chat_history_gemini(
         if part["type"] == "thinking":
             return Part(text=part["thinking"], thought=True)
 
-        raise ValueError("Only text, image_url, and media types are supported!")
+        msg = "Only text, image_url, and media types are supported!"  # type: ignore[unreachable, unused-ignore]
+        raise ValueError(msg)
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
         raw_content = message.content
@@ -348,7 +349,8 @@ def _parse_chat_history_gemini(
                 item if isinstance(item, dict) else str(item) for item in raw_content
             ]
         else:
-            raise TypeError(f"Unsupported type: {type(raw_content)}")
+            msg = f"Unsupported type: {type(raw_content)}"  # type: ignore[unreachable]
+            raise TypeError(msg)
         result = []
         for raw_part in raw_content:
             part = _convert_to_prompt(raw_part)
@@ -460,26 +462,20 @@ def _parse_chat_history_gemini(
 
             # message.name can be null for ToolMessage
             name = message.name
-            if name is None:
-                if prev_ai_message:
-                    tool_call_id = message.tool_call_id
-                    tool_call: ToolCall | None = next(
-                        (
-                            t
-                            for t in prev_ai_message.tool_calls
-                            if t["id"] == tool_call_id
-                        ),
-                        None,
+            if name is None and prev_ai_message:
+                tool_call_id = message.tool_call_id
+                tool_call: ToolCall | None = next(
+                    (t for t in prev_ai_message.tool_calls if t["id"] == tool_call_id),
+                    None,
+                )
+
+                if tool_call is None:
+                    msg = (
+                        "Message name is empty and can't find"
+                        f"corresponding tool call for id: '${tool_call_id}'"
                     )
-
-                    if tool_call is None:
-                        raise ValueError(
-
-                                "Message name is empty and can't find"
-                                 f"corresponding tool call for id: '${tool_call_id}'"
-
-                        )
-                    name = tool_call["name"]
+                    raise ValueError(msg)
+                name = tool_call["name"]
 
             def _parse_content(raw_content: str | Dict[Any, Any]) -> Dict[Any, Any]:
                 if isinstance(raw_content, dict):
@@ -535,33 +531,35 @@ def _parse_chat_history_gemini(
 
             vertex_messages.append(Content(role=role, parts=parts))
         else:
-            raise ValueError(
-                f"Unexpected message with type {type(message)} at the position {i}."
-            )
+            msg = f"Unexpected message with type {type(message)} at the position {i}."
+            raise ValueError(msg)
     return system_instruction, vertex_messages
 
 
 def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
     if len(examples) % 2 != 0:
-        raise ValueError(
+        msg = (
             f"Expect examples to have an even amount of messages, got {len(examples)}."
         )
+        raise ValueError(msg)
     example_pairs = []
     input_text = None
     for i, example in enumerate(examples):
         if i % 2 == 0:
             if not isinstance(example, HumanMessage):
-                raise ValueError(
+                msg = (
                     f"Expected the first message in a part to be from human, got "
                     f"{type(example)} for the {i}th message."
                 )
+                raise ValueError(msg)
             input_text = example.content
         if i % 2 == 1:
             if not isinstance(example, AIMessage):
-                raise ValueError(
+                msg = (
                     f"Expected the second message in a part to be from AI, got "
                     f"{type(example)} for the {i}th message."
                 )
+                raise ValueError(msg)
             pair = InputOutputTextPair(
                 input_text=input_text, output_text=example.content
             )
@@ -572,12 +570,12 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
 def _get_question(messages: List[BaseMessage]) -> HumanMessage:
     """Get the human message at the end of a list of input messages to a chat model."""
     if not messages:
-        raise ValueError("You should provide at least one message to start the chat!")
+        msg = "You should provide at least one message to start the chat!"
+        raise ValueError(msg)
     question = messages[-1]
     if not isinstance(question, HumanMessage):
-        raise ValueError(
-            f"Last message in the list should be from human, got {question.type}."
-        )
+        msg = f"Last message in the list should be from human, got {question.type}."
+        raise ValueError(msg)
     return question
 
 
@@ -597,7 +595,8 @@ def _append_to_content(
         return current_content
     # This case should ideally not be reached with proper type checking,
     # but it catches any unexpected types that might slip through.
-    raise TypeError(f"Unexpected content type: {type(current_content)}")
+    msg = f"Unexpected content type: {type(current_content)}"  # type: ignore[unreachable]
+    raise TypeError(msg)
 
 
 @overload
@@ -711,18 +710,21 @@ def _parse_response_candidate(
                 content = _append_to_content(content, code_message)
 
         if (
-            hasattr(part, "code_execution_result")
-            and part.code_execution_result is not None
+            (
+                hasattr(part, "code_execution_result")
+                and part.code_execution_result is not None
+            )
+            and part.code_execution_result.output
+            and part.code_execution_result.outcome
         ):
-            if part.code_execution_result.output and part.code_execution_result.outcome:
-                execution_result = {
-                    "type": "code_execution_result",
-                    # Name output -> code_execution_result for consistency with
-                    # langchain-google-genai
-                    "code_execution_result": part.code_execution_result.output,
-                    "outcome": part.code_execution_result.outcome,
-                }
-                content = _append_to_content(content, execution_result)
+            execution_result = {
+                "type": "code_execution_result",
+                # Name output -> code_execution_result for consistency with
+                # langchain-google-genai
+                "code_execution_result": part.code_execution_result.output,
+                "outcome": part.code_execution_result.outcome,
+            }
+            content = _append_to_content(content, execution_result)
 
         if part.inline_data.mime_type.startswith("image/"):
             image_format = part.inline_data.mime_type[6:]
@@ -813,7 +815,7 @@ async def _acompletion_with_retry(
 
 
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
-    """Google Cloud Vertex AI chat model integration.
+    r"""Google Cloud Vertex AI chat model integration.
 
     Setup:
         You must either:
@@ -1767,7 +1769,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     )
 
     @classmethod
-    def is_lc_serializable(self) -> bool:
+    def is_lc_serializable(cls) -> bool:
         return True
 
     @classmethod
@@ -1780,17 +1782,18 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     def build_extra(cls, values: dict[str, Any]) -> Any:
         """Build extra kwargs from additional params that were passed in."""
         all_required_field_names = get_pydantic_field_names(cls)
-        values = _build_model_kwargs(values, all_required_field_names)
-        return values
+        return _build_model_kwargs(values, all_required_field_names)
 
     @model_validator(mode="after")
     def validate_labels(self) -> Self:
         if self.labels:
             for key, value in self.labels.items():
                 if not re.match(r"^[a-z][a-z0-9-_]{0,62}$", key):
-                    raise ValueError(f"Invalid label key: {key}")
+                    msg = f"Invalid label key: {key}"
+                    raise ValueError(msg)
                 if value and len(value) > 63:
-                    raise ValueError(f"Label value too long: {value}")
+                    msg = f"Label value too long: {value}"
+                    raise ValueError(msg)
         return self
 
     @cached_property
@@ -1988,7 +1991,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                 )
             return formatted_safety_settings
-        raise ValueError("safety_settings should be either")
+        msg = "safety_settings should be either"
+        raise ValueError(msg)
 
     def _prepare_request_gemini(
         self,
@@ -2513,7 +2517,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """  # noqa: E501
         _ = kwargs.pop("strict", None)
         if kwargs:
-            raise ValueError(f"Received unsupported arguments {kwargs}")
+            msg = f"Received unsupported arguments {kwargs}"
+            raise ValueError(msg)
 
         parser: OutputParserLike
 
@@ -2530,7 +2535,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 elif isinstance(schema, dict):
                     schema_json = schema
                 else:
-                    raise ValueError(f"Unsupported schema type {type(schema)}")
+                    msg = f"Unsupported schema type {type(schema)}"
+                    raise ValueError(msg)
                 parser = JsonOutputParser()
 
             # Resolve refs in schema because they are not supported
@@ -2557,7 +2563,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     key_name=tool_name, first_tool_only=True
                 )
             else:
-                raise ValueError(f"Unsupported schema type {type(schema)}")
+                msg = f"Unsupported schema type {type(schema)}"
+                raise ValueError(msg)
             tool_choice = tool_name
 
             try:
@@ -2604,10 +2611,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 :class:`~langchain.runnable.Runnable` constructor.
         """
         if tool_choice and tool_config:
-            raise ValueError(
+            msg = (
                 "Must specify at most one of tool_choice and tool_config, received "
                 f"both:\n\n{tool_choice=}\n\n{tool_config=}"
             )
+            raise ValueError(msg)
         try:
             formatted_tools = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
         except Exception:
@@ -2729,4 +2737,4 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
 
 def _get_tool_name(tool: _ToolType) -> str:
     vertexai_tool = _format_to_gapic_tool([tool])
-    return [f.name for f in vertexai_tool.function_declarations][0]
+    return next(f.name for f in vertexai_tool.function_declarations)

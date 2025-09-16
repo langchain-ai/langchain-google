@@ -226,10 +226,11 @@ class VectorSearchSearcher(Searcher):
             stream_update_index(index=self._index, data_points=data_points)
         else:
             if self._staging_bucket is None:
-                raise ValueError(
+                msg = (
                     "In order to update a Vector Search index a staging bucket must"
                     " be defined."
                 )
+                raise ValueError(msg)
             batch_update_index(
                 index=self._index,
                 data_points=data_points,
@@ -281,10 +282,11 @@ class VectorSearchSearcher(Searcher):
                 queries = embeddings
             else:
                 if len(sparse_embeddings) != len(embeddings):
-                    raise ValueError(
+                    msg = (
                         "The number of `sparse_embeddings` should match the number of "
                         f"`embeddings` {len(sparse_embeddings)} != {len(embeddings)}"
                     )
+                    raise ValueError(msg)
                 queries = []
 
                 for embedding, sparse_embedding in zip(embeddings, sparse_embeddings):
@@ -316,8 +318,9 @@ class VectorSearchSearcher(Searcher):
             if index.index == self._index.resource_name:
                 return index.id
 
-        raise ValueError(
+        msg = (
             f"No index with id {self._index.resource_name} "
             f"deployed on endpoint "
             f"{self._endpoint.display_name}."
         )
+        raise ValueError(msg)

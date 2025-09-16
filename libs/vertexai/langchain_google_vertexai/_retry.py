@@ -74,7 +74,7 @@ def create_base_retry_decorator(
                     else:
                         asyncio.run(coro)
                 except Exception as e:
-                    logger.error(f"Error in on_retry: {e}")
+                    logger.exception(f"Error in on_retry: {e}")
             else:
                 run_manager.metadata.update({"retry_state": retry_d})
                 run_manager.on_retry(retry_state)

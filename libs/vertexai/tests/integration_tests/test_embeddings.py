@@ -39,7 +39,7 @@ def test_initialization() -> None:
     [1, 8],
 )
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_documents(
@@ -57,7 +57,7 @@ def test_langchain_google_vertexai_embedding_documents(
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_documents_with_task_type(
@@ -76,7 +76,7 @@ def test_langchain_google_vertexai_embedding_documents_with_task_type(
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -> None:
@@ -88,7 +88,7 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_query_with_task_type(
@@ -103,7 +103,7 @@ def test_langchain_google_vertexai_embedding_query_with_task_type(
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "dim, expected_dim",
+    ("dim", "expected_dim"),
     [(None, 1408), (512, 512)],
 )
 def test_langchain_google_vertexai_image_embeddings(
@@ -141,7 +141,7 @@ def test_langchain_google_vertexai_multimodal_model() -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     [
         ("gemini-embedding-001", 768),
         ("text-multilingual-embedding-002", 768),

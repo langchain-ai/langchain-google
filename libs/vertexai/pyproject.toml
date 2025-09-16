@@ -82,12 +82,12 @@ fix = true
 docstring-code-format = true
 
 [tool.ruff.lint]
-select = [ "ALL",]
-# TODO select = [
-#    "E", # pycodestyle
-#    "F", # pyflakes
-#    "I", # isort
-#]
+# TODO select = [ "ALL",]
+select = [
+    "E", # pycodestyle
+    "F", # pyflakes
+    "I", # isort
+]
 ignore = [
     "C90",     # McCabe complexity
     "COM812",  # Messes with the formatter
