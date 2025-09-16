@@ -66,7 +66,7 @@ class GCSDocumentStorage(DocumentStorage):
     def _prepare_doc_for_bulk_upload(
         self, key: str, value: Document
     ) -> Tuple[io.IOBase, Blob]:
-        document_json = value.dict()
+        document_json = value.model_dump()
         document_text = json.dumps(document_json).encode("utf-8")
         doc_contents = io.BytesIO(document_text)
         blob_name = self._get_blob_name(key)
@@ -201,7 +201,7 @@ class GCSDocumentStorage(DocumentStorage):
         blob_name = self._get_blob_name(key)
         new_blow = self._bucket.blob(blob_name)
 
-        document_json = value.dict()
+        document_json = value.model_dump()
         document_text = json.dumps(document_json)
         new_blow.upload_from_string(document_text)
 

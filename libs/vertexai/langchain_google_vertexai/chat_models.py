@@ -2392,8 +2392,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 top_candidate,
                 usage_metadata={},
             )
-            # add model name if final chunk
-            if generation_info.get("finish_reason"):
+            # add model name if final chunk (when we have a definitive finish reason)
+            finish_reason = generation_info.get("finish_reason")
+            if finish_reason and finish_reason != "FINISH_REASON_UNSPECIFIED":
                 message.response_metadata["model_name"] = self.model_name
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
