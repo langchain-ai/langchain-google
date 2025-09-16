@@ -20,7 +20,7 @@ from typing import (
 
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
-import proto  # type: ignore[import]
+import proto
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -195,7 +195,7 @@ def convert_to_genai_function_declarations(
             if "code_execution" in tool:
                 gapic_tool.code_execution = gapic.CodeExecution(tool["code_execution"])
         else:
-            fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
+            fd = _format_to_gapic_function_declaration(tool)
             gapic_tool.function_declarations.append(fd)
     return gapic_tool
 

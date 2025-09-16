@@ -104,14 +104,14 @@ def test_initialization_inside_threadpool() -> None:
         executor.submit(
             ChatGoogleGenerativeAI,
             model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+            google_api_key=SecretStr("secret-api-key"),
         ).result()
 
 
 def test_initalization_without_async() -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("secret-api-key"),
     )
     assert chat.async_client is None
 
@@ -120,7 +120,7 @@ def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         model = ChatGoogleGenerativeAI(
             model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+            google_api_key=SecretStr("secret-api-key"),
         )
         _ = model.async_client
         return model
@@ -132,7 +132,7 @@ def test_initialization_with_async() -> None:
 def test_api_key_is_string() -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(chat.google_api_key, SecretStr)
 
@@ -142,7 +142,7 @@ def test_api_key_masked_when_passed_via_constructor(
 ) -> None:
     chat = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("secret-api-key"),
     )
     print(chat.google_api_key, end="")  # noqa: T201
     captured = capsys.readouterr()
@@ -348,7 +348,7 @@ def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
     ):
         chat = ChatGoogleGenerativeAI(
             model="gemini-pro",
-            google_api_key=param_secret_api_key,  # type: ignore[call-arg]
+            google_api_key=param_secret_api_key,
             client_options=param_client_options,
             transport=param_transport,
             additional_headers=headers,
@@ -386,7 +386,7 @@ def test_default_metadata_field_alias() -> None:
     # This is the main issue: LangSmith Playground passes None to default_metadata_input
     chat1 = ChatGoogleGenerativeAI(
         model="gemini-pro",
-        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("test-key"),
         default_metadata_input=None,
     )
     # When None is passed to alias, it should use the default factory and be overridden
@@ -397,7 +397,7 @@ def test_default_metadata_field_alias() -> None:
     # error)
     chat2 = ChatGoogleGenerativeAI(
         model="gemini-pro",
-        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("test-key"),
         default_metadata_input=[],
     )
     # Empty list should be accepted and overridden by validator
@@ -406,7 +406,7 @@ def test_default_metadata_field_alias() -> None:
     # Test with tuple for default_metadata_input (should not cause validation error)
     chat3 = ChatGoogleGenerativeAI(
         model="gemini-pro",
-        google_api_key=SecretStr("test-key"),  # type: ignore[call-arg]
+        google_api_key=SecretStr("test-key"),
         default_metadata_input=[("X-Test", "test")],
     )
     # The validator will override this with additional_headers, so it should be empty
@@ -714,7 +714,7 @@ def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> N
 
 
 def test_serialize() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")  # type: ignore[call-arg]
+    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")
     serialized = dumps(llm)
     llm_loaded = loads(
         serialized,
@@ -760,7 +760,7 @@ def test_temperature_range_pydantic_validation() -> None:
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        google_api_key=SecretStr("..."),
         temperature=1.5,
     )
     ls_params = llm._get_ls_params()

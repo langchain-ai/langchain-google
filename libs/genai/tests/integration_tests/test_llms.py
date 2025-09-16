@@ -23,7 +23,7 @@ def test_google_generativeai_call(model_name: str) -> None:
     if model_name:
         llm = GoogleGenerativeAI(max_tokens=10, model=model_name)
     else:
-        llm = GoogleGenerativeAI(max_tokens=10)  # type: ignore[call-arg]
+        llm = GoogleGenerativeAI(max_tokens=10)
     output = llm.invoke("Say foo:")
     assert isinstance(output, str)
     assert llm._llm_type == "google_gemini"

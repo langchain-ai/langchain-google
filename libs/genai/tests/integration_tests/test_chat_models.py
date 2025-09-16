@@ -158,7 +158,7 @@ def test_chat_google_genai_invoke_with_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with modalities."""
     llm = ChatGoogleGenerativeAI(
         model=_IMAGE_OUTPUT_MODEL,
-        response_modalities=[Modality.TEXT, Modality.IMAGE],  # type: ignore[list-item]
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
     )
 
     for _ in range(3):
@@ -379,7 +379,7 @@ def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> No
     """
     llm = ChatGoogleGenerativeAI(
         model=_IMAGE_OUTPUT_MODEL,
-        response_modalities=[Modality.TEXT],  # type: ignore[list-item]
+        response_modalities=[Modality.TEXT],
     )
     result = llm.invoke(
         "Generate an image of a cat. Then, say meow!",
