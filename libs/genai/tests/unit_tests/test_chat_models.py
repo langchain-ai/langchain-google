@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, Mock, patch
@@ -81,13 +82,15 @@ def test_integration_initialization() -> None:
 
     # test initialization with an invalid argument to check warning
     with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-nano",
-            google_api_key=SecretStr("..."),  # type: ignore[call-arg]
-            safety_setting={
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
-            },  # Invalid arg
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-nano",
+                google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+                safety_setting={
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+                },  # Invalid arg
+            )
         assert llm.model == "models/gemini-nano"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
