@@ -43,7 +43,7 @@ def test_integration_initialization() -> None:
     """Test chat model initialization."""
     llm = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        google_api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
         temperature=0.7,
@@ -59,7 +59,7 @@ def test_integration_initialization() -> None:
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-nano",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        google_api_key=SecretStr("..."),
         max_output_tokens=10,
     )
     ls_params = llm._get_ls_params()
@@ -85,7 +85,7 @@ def test_integration_initialization() -> None:
             warnings.simplefilter("ignore", UserWarning)
             llm = ChatGoogleGenerativeAI(
                 model="gemini-nano",
-                google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+                google_api_key=SecretStr("..."),
                 safety_setting={
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
@@ -806,7 +806,8 @@ def test_model_kwargs() -> None:
 def test_retry_decorator_with_custom_parameters() -> None:
     # Mock the generation method
     mock_generation_method = Mock()
-    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")
+    # TODO: remove ignore once google-auth has types.
+    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")  # type: ignore[no-untyped-call]
 
     # Call the function with custom retry parameters
     with pytest.raises(ResourceExhausted):

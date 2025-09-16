@@ -152,7 +152,8 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
         ``google.api_core.gapic_v1.client_info.ClientInfo``
     """
     client_library_version, user_agent = get_user_agent(module)
-    return ClientInfo(
+    # TODO: remove ignore once google-auth has types.
+    return ClientInfo(  # type: ignore[no-untyped-call]
         client_library_version=client_library_version,
         user_agent=user_agent,
     )

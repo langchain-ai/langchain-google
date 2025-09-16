@@ -20,7 +20,7 @@ from typing import (
 
 import google.ai.generativelanguage as glm
 import google.ai.generativelanguage_v1beta.types as gapic
-import proto
+import proto  # type: ignore[import-untyped]
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -527,7 +527,7 @@ def _tool_choice_to_tool_config(
 def is_basemodel_subclass_safe(tool: Type) -> bool:
     if safe_import("langchain_core.utils.pydantic", "is_basemodel_subclass"):
         from langchain_core.utils.pydantic import (
-            is_basemodel_subclass,  # type: ignore[import]
+            is_basemodel_subclass,
         )
 
         return is_basemodel_subclass(tool)

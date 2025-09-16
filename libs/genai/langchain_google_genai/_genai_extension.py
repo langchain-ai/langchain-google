@@ -22,7 +22,7 @@ from google.ai.generativelanguage_v1beta import (
 from google.api_core import client_options as client_options_lib
 from google.api_core import exceptions as gapi_exception
 from google.api_core import gapic_v1
-from google.auth import credentials, exceptions  # type: ignore
+from google.auth import credentials, exceptions
 from google.protobuf import timestamp_pb2
 
 _logger = logging.getLogger(__name__)
@@ -190,7 +190,8 @@ class TestCredentials(credentials.Credentials):
         refreshed.
         """
         msg = "Test credentials cannot be refreshed."
-        raise exceptions.InvalidOperation(msg)
+        # TODO: remove ignore once google-auth has types.
+        raise exceptions.InvalidOperation(msg)  # type: ignore[no-untyped-call]
 
     def apply(self, headers: Any, token: Any = None) -> None:
         """Anonymous credentials do nothing to the request.
@@ -202,7 +203,8 @@ class TestCredentials(credentials.Credentials):
         """
         if token is not None:
             msg = "Test credentials don't support tokens."
-            raise exceptions.InvalidValue(msg)
+            # TODO: remove ignore once google-auth has types.
+            raise exceptions.InvalidValue(msg)  # type: ignore[no-untyped-call]
 
     def before_request(self, request: Any, method: Any, url: Any, headers: Any) -> None:
         """Test credentials do nothing to the request."""
@@ -219,7 +221,8 @@ def _get_credentials() -> Optional[credentials.Credentials]:
     inferred by the rules specified in google.auth package.
     """
     if _config.testing:
-        return TestCredentials()
+        # TODO: remove ignore once google-auth has types.
+        return TestCredentials()  # type: ignore[no-untyped-call]
     if _config.auth_credentials:
         return _config.auth_credentials
     return None
@@ -229,7 +232,8 @@ def build_semantic_retriever() -> genai.RetrieverServiceClient:
     credentials = _get_credentials()
     return genai.RetrieverServiceClient(
         credentials=credentials,
-        client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),
+        # TODO: remove ignore once google-auth has types.
+        client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),  # type: ignore[no-untyped-call]
         client_options=client_options_lib.ClientOptions(
             api_endpoint=_config.api_endpoint
         ),
@@ -253,7 +257,8 @@ def _prepare_config(
     client_info = (
         client_info
         if client_info
-        else gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT)
+        # TODO: remove ignore once google-auth has types.
+        else gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT)  # type: ignore[no-untyped-call]
     )
     config = {
         "credentials": credentials,

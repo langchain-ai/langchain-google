@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Dict
 from urllib.parse import urlparse
 
-import filetype
+import filetype  # type: ignore[import-untyped]
 import requests
 from google.ai.generativelanguage_v1beta.types import Part
 

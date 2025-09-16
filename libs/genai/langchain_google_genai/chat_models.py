@@ -26,11 +26,9 @@ from typing import (
     cast,
 )
 
-import filetype  # type: ignore[import]
+import filetype  # type: ignore[import-untyped]
 import google.api_core
-
-# TODO: remove ignore once the Google package is published with types
-import proto  # type: ignore[import]
+import proto  # type: ignore[import-untyped]
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
 )
@@ -58,8 +56,8 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.language_models.chat_models import BaseChatModel, LangSmithParams
+from langchain_core.language_models import LangSmithParams, LanguageModelInput
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -249,7 +247,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         Any: The result from the chat generation method.
     """
     retry_decorator = _create_retry_decorator()
-    from google.api_core.exceptions import InvalidArgument  # type: ignore
+    from google.api_core.exceptions import InvalidArgument
 
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
@@ -708,13 +706,13 @@ def _parse_response_candidate(
 
     if streaming:
         return AIMessageChunk(
-            content=cast("Union[str, List[Union[str, Dict[Any, Any]]]]", content),
+            content=content,
             additional_kwargs=additional_kwargs,
             tool_call_chunks=tool_call_chunks,
         )
 
     return AIMessage(
-        content=cast("Union[str, List[Union[str, Dict[Any, Any]]]]", content),
+        content=content,
         additional_kwargs=additional_kwargs,
         tool_calls=tool_calls,
         invalid_tool_calls=invalid_tool_calls,
@@ -2134,7 +2132,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
             raise ValueError(msg)
         try:
-            formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
+            formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]
         except Exception:
             formatted_tools = [
                 tool_to_dict(convert_to_genai_function_declarations(tools))
