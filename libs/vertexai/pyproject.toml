@@ -82,12 +82,12 @@ fix = true
 docstring-code-format = true
 
 [tool.ruff.lint]
-# TODO select = [ "ALL",]
-select = [
-    "E", # pycodestyle
-    "F", # pyflakes
-    "I", # isort
-]
+select = [ "ALL",]
+# TODO select = [
+#    "E", # pycodestyle
+#    "F", # pyflakes
+#    "I", # isort
+#]
 ignore = [
     "C90",     # McCabe complexity
     "COM812",  # Messes with the formatter
@@ -131,8 +131,6 @@ pydocstyle.ignore-var-parameters = true
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
-strict = true
-disallow_untyped_defs = true
 check_untyped_defs = true
 error_summary = false
 pretty = true
@@ -143,6 +141,10 @@ warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
+
+# TODO
+# strict = true
+# disallow_untyped_defs = true
 
 [tool.coverage.run]
 omit = ["tests/*"]

@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterator,
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     Union,
     cast,
@@ -254,7 +252,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                 "If providing tools, either format system message yourself or "
                 "append_tools_to_system_message to True!"
             )
-        elif tools:
+        if tools:
             tools_str = "\n".join(
                 [json.dumps(convert_to_openai_function(t)) for t in tools]
             )
@@ -460,7 +458,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
             content=content,
             additional_kwargs=additional_kwargs,
             tool_call_chunks=tool_call_chunks,
-            usage_metadata=usage_metadata,  # type: ignore[arg-type]
+            usage_metadata=usage_metadata,
         )
 
     def _stream(
@@ -484,7 +482,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
             gen_chunk = ChatGenerationChunk(message=message)
             if run_manager:
                 run_manager.on_llm_new_token(
-                    token=cast(str, message.content), chunk=gen_chunk
+                    token=cast("str", message.content), chunk=gen_chunk
                 )
             yield gen_chunk
 
@@ -509,7 +507,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
             gen_chunk = ChatGenerationChunk(message=message)
             if run_manager:
                 await run_manager.on_llm_new_token(
-                    token=cast(str, message.content), chunk=gen_chunk
+                    token=cast("str", message.content), chunk=gen_chunk
                 )
             yield gen_chunk
 

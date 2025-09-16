@@ -1,9 +1,9 @@
 import copy
+from collections.abc import AsyncIterator
 from enum import Enum, auto
 from typing import (
     Any,
     AsyncContextManager,
-    AsyncIterator,
     Callable,
     Dict,
     List,
@@ -189,7 +189,6 @@ def _create_retry_decorator(
     ] = None,
 ) -> Callable[[Any], Any]:
     """Returns a tenacity retry decorator, preconfigured to handle exceptions"""
-
     errors = [httpx.RequestError, httpx.StreamError]
     return create_base_retry_decorator(
         error_types=errors, max_retries=llm.max_retries, run_manager=run_manager
@@ -223,10 +222,9 @@ async def acompletion_with_retry(
                 headers=headers,
             )
             return _aiter_sse(event_source)
-        else:
-            response = await llm.async_client.post(url=llm._get_url_part(), json=kwargs)
-            await _araise_on_error(response)
-            return response.json()
+        response = await llm.async_client.post(url=llm._get_url_part(), json=kwargs)
+        await _araise_on_error(response)
+        return response.json()
 
     kwargs = llm._enrich_params(kwargs)
     return await _completion_with_retry(**kwargs)

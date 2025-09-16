@@ -1,6 +1,7 @@
 import uuid
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (
     Namespace,
@@ -99,7 +100,6 @@ class _BaseVertexAIVectorStore(VectorStore):
             the query text and cosine distance in float for each.
             Higher score represents more similarity.
         """
-
         embedding = self._embeddings.embed_query(query)
 
         return self.similarity_search_by_vector_with_score(
@@ -185,20 +185,21 @@ class _BaseVertexAIVectorStore(VectorStore):
             # in documents there is no possibility to have None values with the
             # check above.
             return list(zip(documents, distances))  # type: ignore
-        else:
-            missing_docs = [key for key, doc in zip(keys, documents) if doc is None]
-            message = f"Documents with ids: {missing_docs} not found in the storage"
-            raise ValueError(message)
+        missing_docs = [key for key, doc in zip(keys, documents) if doc is None]
+        message = f"Documents with ids: {missing_docs} not found in the storage"
+        raise ValueError(message)
 
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
-        """
-        Delete by vector ID.
+        """Delete by vector ID.
+
         Args:
             ids (Optional[List[str]]): List of ids to delete.
             **kwargs (Any): If added metadata={}, deletes the documents
             that match the metadata filter and the parameter ids is not needed.
+
         Returns:
             Optional[bool]: True if deletion is successful.
+
         Raises:
             ValueError: If ids is None or an empty list.
             RuntimeError: If an error occurs during the deletion process.
@@ -218,7 +219,7 @@ class _BaseVertexAIVectorStore(VectorStore):
             self._document_storage.mdelete(ids)  # type: ignore[arg-type]
             return True
         except Exception as e:
-            raise RuntimeError(f"Error during deletion: {str(e)}") from e
+            raise RuntimeError(f"Error during deletion: {e!s}") from e
 
     def similarity_search(
         self,
@@ -278,7 +279,6 @@ class _BaseVertexAIVectorStore(VectorStore):
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
-
         # Makes sure is a list and can get the length, should we support iterables?
         # metadata is a list so probably not?
         if isinstance(texts, str):
@@ -380,7 +380,6 @@ class _BaseVertexAIVectorStore(VectorStore):
         Returns:
             Default TensorflowHubEmbeddings to use.
         """
-
         warnings.warn(
             message=(
                 "`TensorflowHubEmbeddings` as a default embeddings is deprecated."
@@ -454,7 +453,6 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         Returns:
             A configured VertexAIVectorSearch.
         """
-
         sdk_manager = VectorSearchSDKManager(
             project_id=project_id,
             region=region,
@@ -535,7 +533,6 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
         Returns:
             A configured VectorSearchVectorStoreDatastore.
         """
-
         sdk_manager = VectorSearchSDKManager(
             project_id=project_id,
             region=region,

@@ -50,7 +50,6 @@ def create_context_cache(
     Returns:
         String with the identificator of the created cache.
     """
-
     system_instruction, contents = _parse_chat_history_gemini(
         messages, ImageBytesLoader(project=model.project)
     )

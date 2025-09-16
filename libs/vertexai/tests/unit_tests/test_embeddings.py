@@ -81,8 +81,7 @@ def test_embed_query_with_question_answering_task(mock_embed) -> None:
 
 
 class MockVertexAIEmbeddings(VertexAIEmbeddings):
-    """
-    A mock class for avoiding instantiating VertexAI and the EmbeddingModel client
+    """A mock class for avoiding instantiating VertexAI and the EmbeddingModel client
     instance during init
     """
 

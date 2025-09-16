@@ -64,15 +64,13 @@ class _BaseImageTextModel(BaseModel):
         Returns:
             Image is successful otherwise None.
         """
-
         image_str = get_image_str_from_content_part(message_part)
 
         if isinstance(image_str, str):
             loader = self._image_bytes_loader_client
             image_bytes = loader.load_bytes(image_str)
             return Image(image_bytes=image_bytes)
-        else:
-            return None
+        return None
 
     def _get_text_from_message_part(self, message_part: str | Dict) -> str | None:
         """Given a message part obtain a text if the part represents it.
@@ -159,7 +157,6 @@ class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
         Returns:
             Captions generated from every prompt.
         """
-
         generations = [
             self._generate_one(prompt=prompt, **kwargs) for prompt in prompts
         ]
@@ -210,7 +207,6 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
                 - Local file path
                 - Remote url
         """
-
         image = None
 
         is_valid = (
@@ -266,7 +262,6 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
                     - Remote url
                 There has to be at least other message with the first question.
         """
-
         image = None
         user_question = None
 
@@ -429,7 +424,6 @@ class _BaseVertexAIImageGenerator(BaseModel):
         Returns:
             b64 encoded string of the image.
         """
-
         # This is a hack because at the moment, GeneratedImage doesn't provide
         # a way to get the bytes of the image (or anything else). There is
         # only private methods that are not reliable.
@@ -466,12 +460,10 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        """Args:
+        messages: The message must be a list of only one element with one part:
+            The user prompt.
         """
-        Args:
-            messages: The message must be a list of only one element with one part:
-                The user prompt.
-        """
-
         # Only one message allowed with one text part.
         user_query = None
 
@@ -515,15 +507,13 @@ class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        """Args:
+        messages: The message must be a list of only one element with two part:
+            - The image as a dict {
+                'type': 'image_url', 'image_url': {'url': <message_str>}
+                }
+            - The user prompt.
         """
-        Args:
-            messages: The message must be a list of only one element with two part:
-                - The image as a dict {
-                    'type': 'image_url', 'image_url': {'url': <message_str>}
-                    }
-                - The user prompt.
-        """
-
         # Only one message allowed with two parts: the image and the text.
         user_query = None
         is_valid = len(messages) == 1 and len(messages[0].content) == 2

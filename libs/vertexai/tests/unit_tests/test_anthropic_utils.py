@@ -957,7 +957,6 @@ def test_ai_message_empty_content_with_tool_calls():
 
     Addresses the issue where tool_calls were being trimmed out when content was empty.
     """
-
     # Empty string content
     message_empty_string = AIMessage(
         content="",
@@ -1051,7 +1050,6 @@ def test_ai_message_empty_content_with_tool_calls():
 
 def test_ai_message_empty_content_without_tool_calls():
     """Test AIMessage with empty content and no tool_calls properly returns None."""
-
     # Empty string content without tool_calls
     message_empty_string = AIMessage(content="")
     result_empty_string = _format_message_anthropic(

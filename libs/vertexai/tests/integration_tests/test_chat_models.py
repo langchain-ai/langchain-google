@@ -116,13 +116,13 @@ async def test_vertexai_agenerate() -> None:
     message = HumanMessage(content="Hello")
     response = await model.agenerate([[message]])
     assert isinstance(response, LLMResult)
-    async_generation = cast(ChatGeneration, response.generations[0][0])
+    async_generation = cast("ChatGeneration", response.generations[0][0])
     output_message = async_generation.message
     assert isinstance(output_message, AIMessage)
     _check_usage_metadata(output_message)
 
     sync_response = model.generate([[message]])
-    sync_generation = cast(ChatGeneration, sync_response.generations[0][0])
+    sync_generation = cast("ChatGeneration", sync_response.generations[0][0])
 
     usage_metadata = sync_generation.generation_info["usage_metadata"]  # type: ignore
     assert int(usage_metadata["prompt_token_count"]) > 0
@@ -481,8 +481,8 @@ def test_vertexai_single_call_with_no_system_messages() -> None:
 @pytest.mark.release
 def test_vertexai_single_call_previous_blocked_response() -> None:
     """If a previous call was blocked, the AIMessage will have empty content which
-    should be ignored."""
-
+    should be ignored.
+    """
     model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
     text_question2 = "How much is 3+3?"
     # Previous blocked response included in history. This can happen with a LangGraph
@@ -568,7 +568,6 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     # Test .bind_tools with function
     def my_model(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
@@ -582,7 +581,6 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     @tool
     def my_tool(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
@@ -773,8 +771,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     def search(
         question: str,
     ) -> str:
-        """
-        Useful for when you need to answer questions or visit websites.
+        """Useful for when you need to answer questions or visit websites.
         You should ask targeted questions.
         """
         return "brown"

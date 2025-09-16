@@ -12,13 +12,10 @@ from operator import itemgetter
 import uuid
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterator,
     List,
     Optional,
-    Sequence,
     Type,
     Union,
     cast,
@@ -27,6 +24,7 @@ from typing import (
     TypedDict,
     overload,
 )
+from collections.abc import AsyncIterator, Iterator, Sequence
 
 import proto  # type: ignore[import-untyped]
 
@@ -208,16 +206,17 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
 
     Args:
         history: The list of messages to re-create the history of the chat.
+
     Returns:
         A parsed chat history.
+
     Raises:
         ValueError: If a sequence of message has a SystemMessage not at the
         first place.
     """
-
     vertex_messages, context = [], None
     for i, message in enumerate(history):
-        content = cast(str, message.content)
+        content = cast("str", message.content)
         if i == 0 and isinstance(message, SystemMessage):
             context = content
         elif isinstance(message, AIMessage):
@@ -252,8 +251,7 @@ def _parse_chat_history_gemini(
         if part["type"] == "tool_use":
             if part.get("text"):
                 return Part(text=part["text"])
-            else:
-                return None
+            return None
         if part["type"] == "executable_code":
             if "executable_code" not in part or "language" not in part:
                 raise ValueError(
@@ -283,7 +281,7 @@ def _parse_chat_history_gemini(
                 oai_content_block = convert_to_openai_image_block(part)
                 url = oai_content_block["image_url"]["url"]
                 return imageBytesLoader.load_gapic_part(url)
-            elif part["source_type"] == "base64":
+            if part["source_type"] == "base64":
                 bytes_ = base64.b64decode(part["data"])
             else:
                 raise ValueError("source_type must be url or base64.")
@@ -424,7 +422,7 @@ def _parse_chat_history_gemini(
                     )
                 )
 
-            if len(vertex_messages):
+            if vertex_messages:
                 prev_content = vertex_messages[-1]
                 prev_content_is_model = prev_content and prev_content.role == "model"
                 if prev_content_is_model:
@@ -444,7 +442,7 @@ def _parse_chat_history_gemini(
                 )
             )
             parts = [part]
-            if len(vertex_messages):
+            if vertex_messages:
                 prev_content = vertex_messages[-1]
                 prev_content_is_function = (
                     prev_content and prev_content.role == "function"
@@ -476,10 +474,10 @@ def _parse_chat_history_gemini(
 
                     if tool_call is None:
                         raise ValueError(
-                            (
+
                                 "Message name is empty and can't find"
-                                + f"corresponding tool call for id: '${tool_call_id}'"
-                            )
+                                 f"corresponding tool call for id: '${tool_call_id}'"
+
                         )
                     name = tool_call["name"]
 
@@ -590,33 +588,32 @@ def _append_to_content(
     """Appends a new item to the content, handling different initial content types."""
     if current_content is None and isinstance(new_item, str):
         return new_item
-    elif current_content is None:
+    if current_content is None:
         return [new_item]
-    elif isinstance(current_content, str):
+    if isinstance(current_content, str):
         return [current_content, new_item]
-    elif isinstance(current_content, list):
+    if isinstance(current_content, list):
         current_content.append(new_item)
         return current_content
-    else:
-        # This case should ideally not be reached with proper type checking,
-        # but it catches any unexpected types that might slip through.
-        raise TypeError(f"Unexpected content type: {type(current_content)}")
+    # This case should ideally not be reached with proper type checking,
+    # but it catches any unexpected types that might slip through.
+    raise TypeError(f"Unexpected content type: {type(current_content)}")
 
 
 @overload
 def _parse_response_candidate(
-    response_candidate: "Candidate", streaming: Literal[False] = False
+    response_candidate: Candidate, streaming: Literal[False] = False
 ) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
-    response_candidate: "Candidate", streaming: Literal[True]
+    response_candidate: Candidate, streaming: Literal[True]
 ) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
-    response_candidate: "Candidate", streaming: bool = False
+    response_candidate: Candidate, streaming: bool = False
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict[str, Any]]]] = None
     additional_kwargs = {}
@@ -1144,7 +1141,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         The ``cached_content`` parameter accepts a cache name created via the Google Generative AI API with Vertex AI.
         Below is an example of caching content from GCS and querying it.
 
-        Example:
+    Example:
         This caches content from GCS and queries it.
 
         .. code-block:: python
@@ -1803,20 +1800,19 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-
         if self.full_model_name is not None:
             pass
         elif self.tuned_model_name is not None:
             self.full_model_name = _format_model_name(
                 self.tuned_model_name,
                 location=self.location,
-                project=cast(str, self.project),
+                project=cast("str", self.project),
             )
         else:
             self.full_model_name = _format_model_name(
                 self.model_name,
                 location=self.location,
-                project=cast(str, self.project),
+                project=cast("str", self.project),
             )
 
         return self
@@ -2252,7 +2248,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast(_ToolConfigDict, tool_config))
+            return _format_tool_config(cast("_ToolConfigDict", tool_config))
         return None
 
     async def _agenerate(
@@ -2515,7 +2511,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 #    -------------------------
 
         """  # noqa: E501
-
         _ = kwargs.pop("strict", None)
         if kwargs:
             raise ValueError(f"Received unsupported arguments {kwargs}")
@@ -2585,8 +2580,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 exception_key="parsing_error",
             )
             return {"raw": llm} | parser_with_fallback
-        else:
-            return llm | parser
+        return llm | parser
 
     def bind_tools(
         self,
@@ -2717,22 +2711,20 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
         for count in [input_tokens, output_tokens, total_tokens, cache_read_tokens]
     ):
         return None
-    else:
-        if thought_tokens > 0:
-            return UsageMetadata(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=total_tokens,
-                input_token_details={"cache_read": cache_read_tokens},
-                output_token_details={"reasoning": thought_tokens},
-            )
-        else:
-            return UsageMetadata(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=total_tokens,
-                input_token_details={"cache_read": cache_read_tokens},
-            )
+    if thought_tokens > 0:
+        return UsageMetadata(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            input_token_details={"cache_read": cache_read_tokens},
+            output_token_details={"reasoning": thought_tokens},
+        )
+    return UsageMetadata(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
+        input_token_details={"cache_read": cache_read_tokens},
+    )
 
 
 def _get_tool_name(tool: _ToolType) -> str:

@@ -1,6 +1,7 @@
 import base64
 import re
 import warnings
+from collections.abc import Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -9,7 +10,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Sequence,
     Tuple,
     Type,
     TypedDict,
@@ -77,12 +77,11 @@ def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
             total_tokens=input_tokens + output_tokens,
             input_token_details=InputTokenDetails(**filtered_details),
         )
-    else:
-        return UsageMetadata(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
-        )
+    return UsageMetadata(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=input_tokens + output_tokens,
+    )
 
 
 def _format_image(image_url: str, project: Optional[str]) -> Dict:
@@ -95,7 +94,7 @@ def _format_image(image_url: str, project: Optional[str]) -> Dict:
             "media_type": match.group("media_type"),
             "data": match.group("data"),
         }
-    elif validators.url(image_url):
+    if validators.url(image_url):
         loader = ImageBytesLoader(project=project)
         image_bytes = loader.load_bytes(image_url)
         raw_mime_type = image_url.split(".")[-1].lower()
@@ -110,7 +109,7 @@ def _format_image(image_url: str, project: Optional[str]) -> Dict:
             "media_type": mime_type,
             "data": base64.b64encode(image_bytes).decode("ascii"),
         }
-    elif image_url.startswith("gs://"):
+    if image_url.startswith("gs://"):
         # Gets image and encodes to base64.
         loader = ImageBytesLoader(project=project)
         part = loader.load_part(image_url)
@@ -125,12 +124,11 @@ def _format_image(image_url: str, project: Optional[str]) -> Dict:
             "media_type": mime_type,
             "data": base64.b64encode(image_data).decode("ascii"),
         }
-    else:
-        raise ValueError(
-            "Anthropic only supports base64-encoded images and urls currently."
-            " Example: data:image/png;base64,'/9j/4AAQSk'..."
-            " Example: https://your-valid-image-url.png"
-        )
+    raise ValueError(
+        "Anthropic only supports base64-encoded images and urls currently."
+        " Example: data:image/png;base64,'/9j/4AAQSk'..."
+        " Example: https://your-valid-image-url.png"
+    )
 
 
 def _get_cache_control(message: BaseMessage) -> Optional[Dict[str, Any]]:
@@ -284,7 +282,7 @@ def _format_message_anthropic(
 
     if isinstance(message, AIMessage) and message.tool_calls:
         for tc in message.tool_calls:
-            tu = cast(Dict[str, Any], _lc_tool_call_to_anthropic_tool_use_block(tc))
+            tu = cast("Dict[str, Any]", _lc_tool_call_to_anthropic_tool_use_block(tc))
             content.append(tu)
 
     if not content:
@@ -292,8 +290,7 @@ def _format_message_anthropic(
 
     if message.type == "system":
         return content
-    else:
-        return {"role": _message_type_lookups[message.type], "content": content}
+    return {"role": _message_type_lookups[message.type], "content": content}
 
 
 def _format_messages_anthropic(
@@ -336,13 +333,12 @@ def convert_to_anthropic_tool(
         k in tool for k in ("name", "description", "input_schema")
     ):
         return AnthropicTool(tool)  # type: ignore
-    else:
-        formatted = convert_to_openai_tool(tool)["function"]
-        return AnthropicTool(
-            name=formatted["name"],
-            description=formatted["description"],
-            input_schema=formatted["parameters"],
-        )
+    formatted = convert_to_openai_tool(tool)["function"]
+    return AnthropicTool(
+        name=formatted["name"],
+        description=formatted["description"],
+        input_schema=formatted["parameters"],
+    )
 
 
 def _merge_messages(
@@ -398,7 +394,7 @@ def _lc_tool_call_to_anthropic_tool_use_block(
         type="tool_use",
         name=tool_call["name"],
         input=tool_call["args"],
-        id=cast(str, tool_call["id"]),
+        id=cast("str", tool_call["id"]),
     )
 
 
@@ -449,7 +445,7 @@ def _make_message_chunk_from_anthropic_event(
         }
         message_chunk = AIMessageChunk(
             content=[content_block],
-            tool_call_chunks=[tool_call_chunk],  # type: ignore
+            tool_call_chunks=[tool_call_chunk],
         )
     elif event.type == "content_block_delta":
         if event.delta.type == "text_delta":
@@ -461,14 +457,7 @@ def _make_message_chunk_from_anthropic_event(
                 content_block["index"] = event.index
                 content_block["type"] = "text"
                 message_chunk = AIMessageChunk(content=[content_block])
-        elif event.delta.type == "thinking_delta":
-            content_block = event.delta.model_dump()
-            if "text" in content_block and content_block["text"] is None:
-                content_block.pop("text")
-            content_block["index"] = event.index
-            content_block["type"] = "thinking"
-            message_chunk = AIMessageChunk(content=[content_block])
-        elif event.delta.type == "signature_delta":
+        elif event.delta.type == "thinking_delta" or event.delta.type == "signature_delta":
             content_block = event.delta.model_dump()
             if "text" in content_block and content_block["text"] is None:
                 content_block.pop("text")
@@ -487,7 +476,7 @@ def _make_message_chunk_from_anthropic_event(
             }
             message_chunk = AIMessageChunk(
                 content=[content_block],
-                tool_call_chunks=[tool_call_chunk],  # type: ignore
+                tool_call_chunks=[tool_call_chunk],
             )
     elif event.type == "message_delta" and stream_usage:
         # Follow official langchain_anthropic pattern - NO cache tokens for delta

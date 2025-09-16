@@ -50,23 +50,25 @@ class _EvalArgsMixin:
         Args:
             reference (Optional[str], optional): The reference label.
             input (Optional[str], optional): The input string.
+
         Raises:
             ValueError: If the evaluator requires an input string but none is provided,
                 or if the evaluator requires a reference label but none is provided.
         """
         if self.requires_input and input is None:
             raise ValueError(f"{self.__class__.__name__} requires an input string.")
-        elif input is not None and not self.requires_input:
+        if input is not None and not self.requires_input:
             warn(self._skip_input_warning)
         if self.requires_reference and reference is None:
             raise ValueError(f"{self.__class__.__name__} requires a reference string.")
-        elif reference is not None and not self.requires_reference:
+        if reference is not None and not self.requires_reference:
             warn(self._skip_reference_warning)
 
 
 class StringEvaluator(_EvalArgsMixin, ABC):
     """Grade, tag, or otherwise evaluate predictions relative to their inputs
-    and/or reference labels."""
+    and/or reference labels.
+    """
 
     @property
     def evaluation_name(self) -> str:
@@ -94,6 +96,7 @@ class StringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
+
         Returns:
             dict: The evaluation results containing the score or value.
                 It is recommended that the dictionary contain the following keys:
@@ -117,6 +120,7 @@ class StringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
+
         Returns:
             dict: The evaluation results containing the score or value.
                 It is recommended that the dictionary contain the following keys:
@@ -148,6 +152,7 @@ class StringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
+
         Returns:
             dict: The evaluation results containing the score or value.
         """  # noqa: E501
@@ -171,6 +176,7 @@ class StringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
+
         Returns:
             dict: The evaluation results containing the score or value.
         """  # noqa: E501
@@ -201,6 +207,7 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.
+
         Returns:
             dict: A dictionary containing the preference, scores, and/or other information.
         """  # noqa: E501
@@ -222,6 +229,7 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.
+
         Returns:
             dict: A dictionary containing the preference, scores, and/or other information.
         """  # noqa: E501
@@ -252,6 +260,7 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.
+
         Returns:
             dict: A dictionary containing the preference, scores, and/or other information.
         """  # noqa: E501
@@ -281,6 +290,7 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.
+
         Returns:
             dict: A dictionary containing the preference, scores, and/or other information.
         """  # noqa: E501

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from concurrent.futures import Executor
 from typing import (
     Any,
@@ -9,7 +10,6 @@ from typing import (
     Dict,
     List,
     Optional,
-    Sequence,
     Tuple,
     Union,
     cast,
@@ -80,7 +80,7 @@ class _VertexAIBase(BaseModel):
         default=None, exclude=True
     )  #: :meta private:
     "The full name of the model's endpoint."
-    client_options: Optional["ClientOptions"] = Field(
+    client_options: Optional[ClientOptions] = Field(
         default=None, exclude=True
     )  #: :meta private:
     api_endpoint: Optional[str] = Field(default=None, alias="base_url")
@@ -171,7 +171,7 @@ class _VertexAIBase(BaseModel):
             self.async_client = _get_async_prediction_client(
                 endpoint_version=self.endpoint_version,
                 credentials=self.credentials,
-                client_options=cast(ClientOptions, self.client_options),
+                client_options=cast("ClientOptions", self.client_options),
                 user_agent=self._user_agent,
             )
         return self.async_client
@@ -215,7 +215,7 @@ class _VertexAICommon(_VertexAIBase):
     """Random seed for the generation."""
     streaming: bool = False
     """Whether to stream the results or not."""
-    safety_settings: Optional["SafetySettingsType"] = None
+    safety_settings: Optional[SafetySettingsType] = None
     """The default safety settings to use for all generations. 
     
         For example: 
@@ -261,7 +261,7 @@ class _VertexAICommon(_VertexAIBase):
     @property
     def _identifying_params(self) -> Dict[str, Any]:
         """Gets the identifying parameters."""
-        return {**{"model_name": self.model_name}, **self._default_params}
+        return {"model_name": self.model_name, **self._default_params}
 
     @property
     def _default_params(self) -> Dict[str, Any]:
@@ -295,7 +295,6 @@ class _VertexAICommon(_VertexAIBase):
             api_endpoint=values.get("api_endpoint"),
             request_metadata=values.get("default_metadata"),
         )
-        return None
 
     def _prepare_params(
         self,
@@ -330,7 +329,6 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-
         if not self.project:
             raise ValueError(
                 "A GCP project should be provided to run inference on Model Garden!"
@@ -358,7 +356,7 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
     def _llm_type(self) -> str:
         return "vertexai_model_garden"
 
-    def _prepare_request(self, prompts: List[str], **kwargs: Any) -> List["Value"]:
+    def _prepare_request(self, prompts: List[str], **kwargs: Any) -> List[Value]:
         instances = []
         for prompt in prompts:
             if self.allowed_model_args:
@@ -375,7 +373,7 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
         ]
         return predict_instances
 
-    def _parse_response(self, predictions: "Prediction") -> LLMResult:
+    def _parse_response(self, predictions: Prediction) -> LLMResult:
         generations: List[List[Generation]] = []
         for result in predictions.predictions:
             if isinstance(result, str):
@@ -413,7 +411,6 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
                         "initialization."
                     )
                     raise ValueError(error_desc)
-                else:
-                    raise ValueError(f"{self.result_arg} key not found in prediction!")
+                raise ValueError(f"{self.result_arg} key not found in prediction!")
 
         return prediction

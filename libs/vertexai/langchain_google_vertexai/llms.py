@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator, Iterator
 from difflib import get_close_matches
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
+from typing import Any, Dict, List, Optional
 
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -210,7 +211,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
                 text=stream_chunk.message.content,
                 generation_info={
                     **stream_chunk.generation_info,
-                    **{"usage_metadata": usage_metadata},
+                    "usage_metadata": usage_metadata,
                 },
             )
             yield chunk

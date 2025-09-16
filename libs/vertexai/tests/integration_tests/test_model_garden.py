@@ -231,7 +231,6 @@ def test_anthropic_tool_calling() -> None:
     # Test .bind_tools with function
     def my_model(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
     model_with_tools = model.bind_tools(
         [my_model], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
@@ -243,7 +242,6 @@ def test_anthropic_tool_calling() -> None:
     @tool
     def my_tool(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
     model_with_tools = model.bind_tools(
         [my_tool], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME

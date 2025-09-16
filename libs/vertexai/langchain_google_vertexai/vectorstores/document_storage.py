@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Iterator, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
-    Iterator,
     List,
     Optional,
-    Sequence,
     Tuple,
     Union,
 )
@@ -47,6 +46,7 @@ class GCSDocumentStorage(DocumentStorage):
         n_threads=8,
     ) -> None:
         """Constructor.
+
         Args:
             bucket: Bucket where the documents will be stored.
             prefix: Prefix that is prepended to all document names.
@@ -107,24 +107,25 @@ class GCSDocumentStorage(DocumentStorage):
     ) -> Union[Document, None]:
         if isinstance(result, NotFound):
             return None
-        elif result is None:
+        if result is None:
             doc.seek(0)
             raw_doc = doc.read()
             data = raw_doc.decode("utf-8")
             data_json = json.loads(data)
             return Document(**data_json)
-        else:
-            raise Exception(
-                "Unexpected result type when batch getting multiple files from GCS"
-            )
+        raise Exception(
+            "Unexpected result type when batch getting multiple files from GCS"
+        )
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
         The default implementation only loops `get_by_id`.
         Subclasses that have faster ways to retrieve data by batch should implement
         this method.
+
         Args:
             ids: List of ids for the text.
+
         Returns:
             List of documents. If the key id is not found for any id record returns a
                 None instead.
@@ -150,8 +151,7 @@ class GCSDocumentStorage(DocumentStorage):
                 self._convert_bytes_to_doc(doc[1], result)
                 for doc, result in zip(download_docs, download_results)
             ]
-        else:
-            return [self._get_one(key) for key in keys]
+        return [self._get_one(key) for key in keys]
 
     def mdelete(self, keys: Sequence[str]) -> None:
         """Deletes a batch of documents by id.
@@ -176,12 +176,13 @@ class GCSDocumentStorage(DocumentStorage):
 
     def _get_one(self, key: str) -> Document | None:
         """Gets the text of a document by its id. If not found, returns None.
+
         Args:
             key: Id of the document to get from the storage.
+
         Returns:
             Document if found, otherwise None.
         """
-
         blob_name = self._get_blob_name(key)
         existing_blob = self._bucket.get_blob(blob_name)
 
@@ -194,6 +195,7 @@ class GCSDocumentStorage(DocumentStorage):
 
     def _set_one(self, key: str, value: Document) -> None:
         """Stores a document text associated to a document_id.
+
         Args:
             key: Id of the document to be stored.
             document: Document to be stored.
@@ -217,8 +219,10 @@ class GCSDocumentStorage(DocumentStorage):
 
     def _get_blob_name(self, document_id: str) -> str:
         """Builds a blob name using the prefix and the document_id.
+
         Args:
             document_id: Id of the document.
+
         Returns:
             Name of the blob that the document will be/is stored in
         """
@@ -237,6 +241,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         exclude_from_indexes: Optional[List[str]] = None,
     ) -> None:
         """Constructor.
+
         Args:
             bucket: Bucket where the documents will be stored.
             prefix: Prefix that is prepended to all document names.
@@ -250,8 +255,10 @@ class DataStoreDocumentStorage(DocumentStorage):
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
+
         Args:
             ids: List of ids for the text.
+
         Returns:
             List of texts. If the key id is not found for any id record returns a None
                 instead.

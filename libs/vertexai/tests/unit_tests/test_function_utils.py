@@ -1,7 +1,8 @@
 import json
 import sys
+from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from unittest.mock import Mock, patch
 
 import google.cloud.aiplatform_v1beta1.types as gapic
@@ -138,7 +139,7 @@ def test_format_json_schema_to_gapic():
     }
     assert result == expected
 
-    gapic_schema = cast(gapic.Schema, gapic.Schema.from_json(json.dumps(result)))
+    gapic_schema = cast("gapic.Schema", gapic.Schema.from_json(json.dumps(result)))
     assert gapic_schema.type_ == gapic.Type.OBJECT
     assert gapic_schema.title == expected["title"]
     assert gapic_schema.required == expected["required"]
@@ -240,7 +241,7 @@ def test_format_json_schema_to_gapic_v1():
     }
     assert result == expected
 
-    gapic_schema = cast(gapic.Schema, gapic.Schema.from_json(json.dumps(result)))
+    gapic_schema = cast("gapic.Schema", gapic.Schema.from_json(json.dumps(result)))
     assert gapic_schema.type_ == gapic.Type.OBJECT
     assert gapic_schema.title == expected["title"]
     assert gapic_schema.required == expected["required"]
@@ -535,16 +536,15 @@ def test_nested_bind_tools():
         data: list[Person] = Field(description="The people.")
 
     tool = convert_to_openai_tool(People)
-    function = convert_to_openai_tool(cast(dict, tool))["function"]
+    function = convert_to_openai_tool(cast("dict", tool))["function"]
     converted_tool = _format_dict_to_function_declaration(
-        cast(FunctionDescription, function)
+        cast("FunctionDescription", function)
     )
     assert converted_tool.name == "People"
 
 
 def test_tool_with_union_types() -> None:
-    """
-    Test that validates tools with Union types in function declarations
+    """Test that validates tools with Union types in function declarations
     are correctly converted to 'anyOf' in the schema.
     """
 
@@ -600,8 +600,7 @@ def test_tool_with_union_types() -> None:
 
 
 def test_tool_with_union_primitive_types() -> None:
-    """
-    Test that validates tools with Union types that include primitive types
+    """Test that validates tools with Union types that include primitive types
     are correctly converted to 'anyOf' in the schema.
     """
 
@@ -654,8 +653,7 @@ def test_tool_with_union_primitive_types() -> None:
 
 
 def test_tool_with_nested_union_types() -> None:
-    """
-    Test that validates tools with nested Union types are correctly converted
+    """Test that validates tools with nested Union types are correctly converted
     to nested 'anyOf' structures in the schema.
     """
 
@@ -727,8 +725,7 @@ def test_tool_with_nested_union_types() -> None:
 
 
 def test_tool_field_union_types() -> None:
-    """
-    Test that validates Field with Union types in Pydantic models
+    """Test that validates Field with Union types in Pydantic models
     are correctly converted to 'anyOf' in the schema.
     """
 
@@ -743,8 +740,7 @@ def test_tool_field_union_types() -> None:
         y: str = "1"
 
     class GetWeather(BaseModel):
-        """
-        Get weather information for a location.
+        """Get weather information for a location.
         """
 
         location: str = Field(
@@ -801,8 +797,7 @@ def test_tool_field_union_types() -> None:
 
 
 def test_union_nullable_types() -> None:
-    """
-    Test that validates the handling of Union types with null (None/Optional)
+    """Test that validates the handling of Union types with null (None/Optional)
     are correctly handled by removing them from required fields.
     """
 

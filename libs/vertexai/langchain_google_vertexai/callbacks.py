@@ -40,11 +40,9 @@ class VertexAICallbackHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
     ) -> None:
         """Runs when LLM starts running."""
-        pass
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         """Runs on new LLM token. Only available when streaming is enabled."""
-        pass
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Collects token usage."""

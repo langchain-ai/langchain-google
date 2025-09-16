@@ -1,5 +1,6 @@
 from abc import ABC
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any, Dict, List, Optional
 
 from google.api_core.client_options import ClientOptions
 from google.cloud.aiplatform.constants import base as constants
@@ -221,8 +222,7 @@ class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
             )
             response = self._client.evaluate_instances(request)
             return _parse_response(response, metric=self._metric)
-        else:
-            return [self._evaluate_strings(**i) for i in instances]
+        return [self._evaluate_strings(**i) for i in instances]
 
     async def _aevaluate_strings(
         self,

@@ -43,7 +43,6 @@ def batch_update_index(
         file_name: File name of the staging embeddings. By default 'documents.json'.
         is_complete_overwrite: Whether is an append or overwrite operation.
     """
-
     if prefix is None:
         prefix = str(uuid.uuid4())
 
@@ -78,7 +77,6 @@ def to_data_points(
         embeddings: List of feature representatitons.
         metadatas: List of metadatas.
     """
-
     if metadatas is None:
         metadatas = [{}] * len(ids)
 
@@ -155,7 +153,6 @@ def data_points_to_batch_update_records(
     Returns:
         List of records with the format needed to do a batch update.
     """
-
     records = []
 
     for data_point in data_points:

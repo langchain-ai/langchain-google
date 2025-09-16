@@ -60,7 +60,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes.
         """
-
         route = self._route(image_string)
 
         if route == Route.GOOGLE_CLOUD_STORAGE:
@@ -160,7 +159,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         pattern = r"data:\w+/\w{2,4};base64,(.*)"
         match = re.search(pattern, base64_image)
 
@@ -182,7 +180,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         response = requests.get(url)
 
         if not response.ok:
@@ -202,7 +199,6 @@ class ImageBytesLoader:
         Returns:
             storage.Blob
         """
-
         gcs_client = self._storage_client
         blob = storage.Blob.from_string(gcs_uri, gcs_client)
         blob.reload(client=gcs_client)
@@ -227,7 +223,6 @@ class ImageBytesLoader:
         """Checks weather the image needs other mimetype. Currently only identifies
         pdfs, otherwise it will return None and it will be treated as an image.
         """
-
         # For local files or urls
         if image_url.endswith(".pdf"):
             return "application/pdf"
@@ -297,7 +292,6 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
     Returns:
         Image string if the dictionary has the correct format otherwise None.
     """
-
     if isinstance(content_part, str):
         return None
 
@@ -308,8 +302,7 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
 
     if isinstance(image_str, str):
         return image_str
-    else:
-        return None
+    return None
 
 
 def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
@@ -322,7 +315,6 @@ def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
         String if the dictionary has the correct format or the input is an string,
         otherwise None.
     """
-
     if isinstance(content_part, str):
         return content_part
 
@@ -333,5 +325,4 @@ def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
 
     if isinstance(text, str):
         return text
-    else:
-        return None
+    return None

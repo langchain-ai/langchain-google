@@ -36,15 +36,15 @@ def gemma_messages_to_prompt(history: List[BaseMessage]) -> str:
     """Converts a list of messages to a chat prompt for Gemma."""
     messages: List[str] = []
     if len(messages) == 1:
-        content = cast(str, history[0].content)
+        content = cast("str", history[0].content)
         if isinstance(history[0], SystemMessage):
             raise ValueError("Gemma currently doesn't support system message!")
         return content
     for message in history:
-        content = cast(str, message.content)
+        content = cast("str", message.content)
         if isinstance(message, SystemMessage):
             raise ValueError("Gemma currently doesn't support system message!")
-        elif isinstance(message, AIMessage):
+        if isinstance(message, AIMessage):
             messages.append(MODEL_CHAT_TEMPLATE.format(prompt=content))
         elif isinstance(message, HumanMessage):
             messages.append(USER_CHAT_TEMPLATE.format(prompt=content))

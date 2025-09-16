@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator, Iterator, Sequence
 from operator import itemgetter
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterator,
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     Union,
 )
@@ -452,7 +450,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         """Bind tool-like objects to this chat model"""
-
         formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
         if not tool_choice:
             pass
@@ -477,7 +474,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema."""
-
         tool_name = convert_to_anthropic_tool(schema)["name"]
         llm = self.bind_tools([schema], tool_choice=tool_name)
         if isinstance(schema, type) and issubclass(schema, BaseModel):
@@ -496,5 +492,4 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 [parser_none], exception_key="parsing_error"
             )
             return RunnableMap(raw=llm) | parser_with_fallback
-        else:
-            return llm | output_parser
+        return llm | output_parser
