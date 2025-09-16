@@ -5,14 +5,18 @@ import google.ai.generativelanguage as glm
 import pytest
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import (
+    convert_to_openai_function,
+    convert_to_openai_tool,
+)
 from pydantic import BaseModel, Field
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Literal
 
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
     _format_base_tool_to_function_declaration,
     _format_dict_to_function_declaration,
+    _format_to_gapic_function_declaration,
     _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
     _ToolConfigDict,
@@ -447,123 +451,165 @@ def test_tool_with_annotated_optional_args() -> None:
             "name": "split_documents",
             "description": "Tool.",
             "parameters": {
-                "any_of": [],
                 "type_": 6,
                 "properties": {
-                    "chunk_overlap": {
-                        "any_of": [],
-                        "type_": 3,
-                        "description": "chunk overlap.",
-                        "format_": "",
-                        "nullable": True,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "properties": {},
-                        "property_ordering": [],
-                        "required": [],
-                        "title": "",
-                    },
                     "chunk_size": {
-                        "any_of": [],
                         "type_": 3,
                         "description": "chunk size.",
                         "format_": "",
+                        "title": "",
                         "nullable": False,
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
                         "properties": {},
-                        "property_ordering": [],
                         "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
+                    },
+                    "chunk_overlap": {
+                        "type_": 3,
+                        "description": "chunk overlap.",
+                        "nullable": True,
+                        "format_": "",
                         "title": "",
+                        "enum": [],
+                        "max_items": "0",
+                        "min_items": "0",
+                        "properties": {},
+                        "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                 },
-                "property_ordering": [],
                 "required": ["chunk_size"],
-                "title": "",
                 "format_": "",
+                "title": "",
                 "description": "",
                 "nullable": False,
                 "enum": [],
                 "max_items": "0",
                 "min_items": "0",
+                "min_properties": "0",
+                "max_properties": "0",
+                "min_length": "0",
+                "max_length": "0",
+                "pattern": "",
+                "any_of": [],
+                "property_ordering": [],
             },
+            "behavior": 0,
         },
         {
             "name": "search_web",
             "description": "Tool.",
             "parameters": {
-                "any_of": [],
                 "type_": 6,
                 "properties": {
                     "truncate_threshold": {
-                        "any_of": [],
                         "type_": 3,
                         "description": "truncate threshold.",
-                        "format_": "",
                         "nullable": True,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "property_ordering": [],
-                        "properties": {},
-                        "required": [],
-                        "title": "",
-                    },
-                    "query": {
-                        "any_of": [],
-                        "type_": 1,
-                        "description": "query.",
                         "format_": "",
-                        "nullable": False,
+                        "title": "",
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
                         "properties": {},
-                        "property_ordering": [],
                         "required": [],
-                        "title": "",
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                     "engine": {
-                        "any_of": [],
                         "type_": 1,
                         "description": "engine.",
                         "format_": "",
+                        "title": "",
                         "nullable": False,
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
-                        "property_ordering": [],
                         "properties": {},
                         "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
+                    },
+                    "query": {
+                        "type_": 1,
+                        "description": "query.",
+                        "format_": "",
                         "title": "",
+                        "nullable": False,
+                        "enum": [],
+                        "max_items": "0",
+                        "min_items": "0",
+                        "properties": {},
+                        "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                     "num_results": {
-                        "any_of": [],
                         "type_": 3,
                         "description": "number of results.",
                         "format_": "",
+                        "title": "",
                         "nullable": False,
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
                         "properties": {},
-                        "property_ordering": [],
                         "required": [],
-                        "title": "",
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                 },
-                "property_ordering": [],
                 "required": ["query"],
-                "title": "",
                 "format_": "",
+                "title": "",
                 "description": "",
                 "nullable": False,
                 "enum": [],
                 "max_items": "0",
                 "min_items": "0",
+                "min_properties": "0",
+                "max_properties": "0",
+                "min_length": "0",
+                "max_length": "0",
+                "pattern": "",
+                "any_of": [],
+                "property_ordering": [],
             },
+            "behavior": 0,
         },
     ]
     actual = tool_to_dict(convert_to_genai_function_declarations(oai_tools))[
@@ -679,80 +725,106 @@ def test_tool_to_dict_pydantic_nested() -> None:
     assert tool_dict == {
         "function_declarations": [
             {
-                "description": "",
                 "name": "Models",
                 "parameters": {
-                    "any_of": [],
-                    "description": "",
-                    "enum": [],
-                    "format_": "",
-                    "max_items": "0",
-                    "min_items": "0",
-                    "nullable": False,
+                    "type_": 6,
                     "properties": {
                         "models": {
-                            "any_of": [],
-                            "description": "",
-                            "enum": [],
-                            "format_": "",
+                            "type_": 5,
                             "items": {
-                                "any_of": [],
+                                "type_": 6,
                                 "description": "MyModel",
-                                "enum": [],
-                                "format_": "",
-                                "max_items": "0",
-                                "min_items": "0",
-                                "nullable": False,
                                 "properties": {
                                     "age": {
-                                        "any_of": [],
-                                        "description": "",
-                                        "enum": [],
+                                        "type_": 3,
                                         "format_": "",
+                                        "title": "",
+                                        "description": "",
+                                        "nullable": False,
+                                        "enum": [],
                                         "max_items": "0",
                                         "min_items": "0",
-                                        "nullable": False,
                                         "properties": {},
-                                        "property_ordering": [],
                                         "required": [],
-                                        "title": "",
-                                        "type_": 3,
+                                        "min_properties": "0",
+                                        "max_properties": "0",
+                                        "min_length": "0",
+                                        "max_length": "0",
+                                        "pattern": "",
+                                        "any_of": [],
+                                        "property_ordering": [],
                                     },
                                     "name": {
-                                        "any_of": [],
-                                        "description": "",
-                                        "enum": [],
+                                        "type_": 1,
                                         "format_": "",
+                                        "title": "",
+                                        "description": "",
+                                        "nullable": False,
+                                        "enum": [],
                                         "max_items": "0",
                                         "min_items": "0",
-                                        "nullable": False,
                                         "properties": {},
-                                        "property_ordering": [],
                                         "required": [],
-                                        "title": "",
-                                        "type_": 1,
+                                        "min_properties": "0",
+                                        "max_properties": "0",
+                                        "min_length": "0",
+                                        "max_length": "0",
+                                        "pattern": "",
+                                        "any_of": [],
+                                        "property_ordering": [],
                                     },
                                 },
-                                "property_ordering": [],
                                 "required": ["name", "age"],
+                                "format_": "",
                                 "title": "",
-                                "type_": 6,
+                                "nullable": False,
+                                "enum": [],
+                                "max_items": "0",
+                                "min_items": "0",
+                                "min_properties": "0",
+                                "max_properties": "0",
+                                "min_length": "0",
+                                "max_length": "0",
+                                "pattern": "",
+                                "any_of": [],
+                                "property_ordering": [],
                             },
+                            "format_": "",
+                            "title": "",
+                            "description": "",
+                            "nullable": False,
+                            "enum": [],
                             "max_items": "0",
                             "min_items": "0",
-                            "nullable": False,
                             "properties": {},
-                            "property_ordering": [],
                             "required": [],
-                            "title": "",
-                            "type_": 5,
+                            "min_properties": "0",
+                            "max_properties": "0",
+                            "min_length": "0",
+                            "max_length": "0",
+                            "pattern": "",
+                            "any_of": [],
+                            "property_ordering": [],
                         }
                     },
-                    "property_ordering": [],
                     "required": ["models"],
+                    "format_": "",
                     "title": "",
-                    "type_": 6,
+                    "description": "",
+                    "nullable": False,
+                    "enum": [],
+                    "max_items": "0",
+                    "min_items": "0",
+                    "min_properties": "0",
+                    "max_properties": "0",
+                    "min_length": "0",
+                    "max_length": "0",
+                    "pattern": "",
+                    "any_of": [],
+                    "property_ordering": [],
                 },
+                "description": "",
+                "behavior": 0,
             }
         ]
     }
@@ -1241,3 +1313,94 @@ def test_tool_field_union_types() -> None:
     required_fields = parameters.get("required", [])
     assert "location" in required_fields, "Expected 'location' to be required"
     assert "date" in required_fields, "Expected 'date' to be required"
+
+
+def test_union_type_schema_validation() -> None:
+    """Test that Union types get proper type_ assignment for Gemini compatibility."""
+
+    class Response(BaseModel):
+        """Response to user."""
+
+        response: str
+
+    class Plan(BaseModel):
+        """Plan to perform."""
+
+        plan: str
+
+    class Act(BaseModel):
+        """Action to perform."""
+
+        action: Union[Response, Plan] = Field(description="Action to perform.")
+
+    # Convert to GenAI function declaration
+    openai_func = convert_to_openai_function(Act)
+    genai_func = _format_to_gapic_function_declaration(openai_func)
+
+    # The action property should have a valid type (not 0) for Gemini compatibility
+    action_prop = genai_func.parameters.properties["action"]
+    assert action_prop.type_ == glm.Type.OBJECT, (
+        f"Union type should have OBJECT type, got {action_prop.type_}"
+    )
+    assert action_prop.type_ != 0, "Union type should not have type_ = 0"
+
+
+def test_optional_dict_schema_validation() -> None:
+    """Test that Optional types get proper OBJECT type for Gemini compatibility."""
+
+    class RequestsGetToolInput(BaseModel):
+        url: str = Field(description="The URL to send the GET request to")
+        params: Optional[Dict[str, str]] = Field(
+            default={}, description="Query parameters for the GET request"
+        )
+        output_instructions: str = Field(
+            description="Instructions on what information to extract from the response"
+        )
+
+    # Convert to GenAI function declaration
+    openai_func = convert_to_openai_function(RequestsGetToolInput)
+    genai_func = _format_to_gapic_function_declaration(openai_func)
+
+    # The params property should have OBJECT type, not STRING
+    params_prop = genai_func.parameters.properties["params"]
+    assert params_prop.type_ == glm.Type.OBJECT, (
+        f"Optional[Dict] should have OBJECT type, got {params_prop.type_}"
+    )
+    assert params_prop.type_ != glm.Type.STRING, (
+        "Optional[Dict] should not be converted to STRING type"
+    )
+    assert params_prop.nullable is True, "Optional[Dict] should be nullable"
+    assert params_prop.description == "Query parameters for the GET request", (
+        "Description should be preserved"
+    )
+
+
+def test_tool_field_enum_array() -> None:
+    class ToolInfo(BaseModel):
+        kind: List[Literal["foo", "bar"]]
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(ToolInfo)
+
+    # Convert to GenAI
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    # Get function declaration
+    function_declarations = genai_tool_dict.get("function_declarations", [])
+    assert len(function_declarations) > 0, "Expected at least one function declaration"
+    fn_decl = function_declarations[0]
+
+    # Check parameters
+    parameters = fn_decl.get("parameters", {})  # type: ignore
+    properties = parameters.get("properties", {})
+
+    # Check location property
+    assert "kind" in properties
+    kind_property = properties["kind"]
+    assert kind_property["type_"] == glm.Type.ARRAY
+
+    assert "items" in kind_property
+    items_property = kind_property["items"]
+    assert items_property["type_"] == glm.Type.STRING
+    assert items_property["enum"] == ["foo", "bar"]

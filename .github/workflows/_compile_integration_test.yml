@@ -8,6 +8,8 @@ on:
         type: string
         description: "From which folder this pipeline executes"
 
+permissions:
+  contents: read
 
 jobs:
   build:

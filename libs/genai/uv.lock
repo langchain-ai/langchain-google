@@ -242,7 +242,7 @@ wheels = [
 
 [[package]]
 name = "google-ai-generativelanguage"
-version = "0.6.18"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core", extra = ["grpc"] },
@@ -250,9 +250,9 @@ dependencies = [
     { name = "proto-plus" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/eb/77/3e89a4c4200135eac74eca2f6c9153127e3719a825681ad55f5a4a58b422/google_ai_generativelanguage-0.6.18.tar.gz", hash = "sha256:274ba9fcf69466ff64e971d565884434388e523300afd468fc8e3033cd8e606e", size = 1444757, upload-time = "2025-04-29T15:45:45.527Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/35/af6c759bfde70386c741309df0cba6a1cb09b8bbd1d02c841df51f4c672d/google_ai_generativelanguage-0.7.0.tar.gz", hash = "sha256:207fed3089949e2e99f7cbd513e2d0ea5f2babdfa5a8f2f239c3ddffe6bd4297", size = 1475859, upload-time = "2025-09-02T15:39:53.46Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/77/ca2889903a2d93b3072a49056d48b3f55410219743e338a1d7f94dc6455e/google_ai_generativelanguage-0.6.18-py3-none-any.whl", hash = "sha256:13d8174fea90b633f520789d32df7b422058fd5883b022989c349f1017db7fcf", size = 1372256, upload-time = "2025-04-29T15:45:43.601Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/e7/b670b2d5b53f18ae51d331283278595fea93a156ea79baf59d4098effaec/google_ai_generativelanguage-0.7.0-py3-none-any.whl", hash = "sha256:3241215c16e669f37054f6111c84cca50fdb7a8e10a62933b9e68086ce71eefe", size = 1394333, upload-time = "2025-09-02T15:39:06.14Z" },
 ]
 
 [[package]]
@@ -471,7 +471,7 @@ wheels = [
 
 [[package]]
 name = "langchain-google-genai"
-version = "2.1.10"
+version = "2.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "filetype" },
@@ -519,7 +519,7 @@ typing = [
 [package.metadata]
 requires-dist = [
     { name = "filetype", specifier = ">=1.2,<2" },
-    { name = "google-ai-generativelanguage", specifier = ">=0.6.18,<1" },
+    { name = "google-ai-generativelanguage", specifier = ">=0.7,<1" },
     { name = "langchain-core", specifier = ">=0.3.75" },
     { name = "pydantic", specifier = ">=2,<3" },
 ]

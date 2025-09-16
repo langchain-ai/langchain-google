@@ -35,6 +35,8 @@ jobs:
   build:
     if: github.ref == 'refs/heads/main' || inputs.dangerous-nonmaster-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     outputs:
       pkg-name: ${{ steps.check-version.outputs.pkg-name }}
@@ -90,6 +92,8 @@ jobs:
     needs:
       - build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       release-body: ${{ steps.generate-release-body.outputs.release-body }}
     steps:
@@ -226,6 +230,9 @@ jobs:
       - release-notes
       - test-pypi-publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v5
 
