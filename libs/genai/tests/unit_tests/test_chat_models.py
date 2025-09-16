@@ -457,7 +457,7 @@ def test_default_metadata_field_alias() -> None:
                         "type": "image_url",
                         "image_url": {
                             "url": "data:image/bmp;base64,"
-                            + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                            "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     }
                 ]
@@ -486,7 +486,7 @@ def test_default_metadata_field_alias() -> None:
                         "type": "image_url",
                         "image_url": {
                             "url": "data:image/bmp;base64,"
-                            + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                            "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     },
                 ]
@@ -751,7 +751,6 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 
 def test_temperature_range_pydantic_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]"""
-
     with pytest.raises(ValidationError):
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.1)
 
@@ -774,7 +773,6 @@ def test_temperature_range_pydantic_validation() -> None:
 
 def test_temperature_range_model_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]"""
-
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.5)
 

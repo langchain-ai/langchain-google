@@ -257,6 +257,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             titles: An optional list of titles for texts provided.
               Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
             output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
+
         Returns:
             List of embeddings, one for each text.
         """
@@ -345,6 +346,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             titles: An optional list of titles for texts provided.
                 Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
             output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
+
         Returns:
             List of embeddings, one for each text.
         """

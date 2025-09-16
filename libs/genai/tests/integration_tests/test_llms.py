@@ -4,7 +4,8 @@ Note: This test must be run with the GOOGLE_API_KEY environment variable set to 
       valid API key.
 """
 
-from typing import Dict, Generator
+from collections.abc import Generator
+from typing import Dict
 
 import pytest
 from langchain_core.outputs import LLMResult

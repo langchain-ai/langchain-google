@@ -2,7 +2,8 @@
 
 import asyncio
 import json
-from typing import Dict, Generator, List, Literal, Optional
+from collections.abc import Generator
+from typing import Dict, List, Literal, Optional
 
 import pytest
 from langchain_core.messages import (
@@ -33,8 +34,7 @@ _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJ
 
 
 def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
-    """
-    Determines if the given bytes represent a WAV file
+    """Determines if the given bytes represent a WAV file
     by inspecting the header.
 
     Args:
@@ -157,7 +157,8 @@ def test_chat_google_genai_invoke_with_image() -> None:
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
-    modalities."""
+    modalities.
+    """
     llm = ChatGoogleGenerativeAI(
         model=_IMAGE_OUTPUT_MODEL,
         response_modalities=[Modality.TEXT, Modality.IMAGE],  # type: ignore[list-item]
@@ -221,7 +222,8 @@ def test_chat_google_genai_invoke_with_audio_genconfig() -> None:
 
 def test_chat_google_genai_invoke_thinking() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config"""
+    default thinking config
+    """
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=100)
 
     result = llm.invoke(
@@ -239,7 +241,8 @@ def test_chat_google_genai_invoke_thinking() -> None:
 
 def test_chat_google_genai_invoke_thinking_default() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config"""
+    default thinking config
+    """
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
 
     result = llm.invoke(
@@ -257,7 +260,8 @@ def test_chat_google_genai_invoke_thinking_default() -> None:
 
 def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config"""
+    default thinking config
+    """
     llm = ChatGoogleGenerativeAI(
         model=_THINKING_MODEL, thinking_budget=100, include_thoughts=True
     )
@@ -285,7 +289,8 @@ def test_chat_google_genai_invoke_thinking_configured_include_thoughts() -> None
 # e.g. @pytest.mark.parametrize("output_version", ["v0", "responses/v1", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config"""
+    default thinking config
+    """
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
 
     input_message = {
@@ -319,7 +324,8 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
 
 def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config"""
+    default thinking config
+    """
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
 
     result = llm.invoke(
@@ -344,7 +350,8 @@ def test_chat_google_genai_invoke_thinking_include_thoughts_genreation_config() 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
     """Test invoke thinking model from ChatGoogleGenerativeAI with
-    default thinking config"""
+    default thinking config
+    """
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=0)
 
     result = llm.invoke(
@@ -363,7 +370,8 @@ def test_chat_google_genai_invoke_thinking_disabled() -> None:
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI without response
-    modalities."""
+    modalities.
+    """
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
 
     result = llm.invoke(
@@ -381,7 +389,8 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> No
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_image_generation_with_modalities_merge() -> None:
     """Test invoke tokens with image from ChatGoogleGenerativeAI with response
-    modalities specified in both modal init and invoke generation_config."""
+    modalities specified in both modal init and invoke generation_config.
+    """
     llm = ChatGoogleGenerativeAI(
         model=_IMAGE_OUTPUT_MODEL,
         response_modalities=[Modality.TEXT],  # type: ignore[list-item]
@@ -561,8 +570,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     def search(
         question: str,
     ) -> str:
-        """
-        Useful for when you need to answer questions or visit websites.
+        """Useful for when you need to answer questions or visit websites.
         You should ask targeted questions.
         """
         return "brown"
@@ -669,7 +677,6 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     # Test .bind_tools with function
     def my_model(name: str, age: int, likes: list[str]) -> None:
         """Invoke this with names and age and likes."""
-        pass
 
     model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
         [my_model]
@@ -681,7 +688,6 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     @tool
     def my_tool(name: str, age: int, likes: list[str]) -> None:
         """Invoke this with names and age and likes."""
-        pass
 
     model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
         [my_tool]

@@ -40,7 +40,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes.
         """
-
         route = self._route(image_string)
 
         if route == Route.BASE64:
@@ -125,7 +124,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         pattern = r"data:image/\w{2,4};base64,(.*)"
         match = re.search(pattern, base64_image)
 
@@ -147,7 +145,6 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-
         response = requests.get(url)
 
         if not response.ok:

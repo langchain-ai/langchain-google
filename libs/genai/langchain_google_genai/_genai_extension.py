@@ -7,8 +7,9 @@ google.generativeai.
 import datetime
 import logging
 import re
+from collections.abc import Iterator, MutableSequence
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, MutableSequence, Optional
+from typing import Any, Dict, List, Optional
 
 import google.ai.generativelanguage as genai
 import langchain_core
@@ -215,7 +216,7 @@ def _get_credentials() -> Optional[credentials.Credentials]:
     """
     if _config.testing:
         return TestCredentials()
-    elif _config.auth_credentials:
+    if _config.auth_credentials:
         return _config.auth_credentials
     return None
 

@@ -4,6 +4,7 @@ import collections
 import importlib
 import json
 import logging
+from collections.abc import Sequence
 from typing import (
     Any,
     Callable,
@@ -11,7 +12,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     TypedDict,
     Union,
@@ -89,7 +89,7 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in schema.items():
         if key == "definitions":
             continue
-        elif key == "items":
+        if key == "items":
             converted_schema["items"] = _format_json_schema_to_gapic(value)
         elif key == "properties":
             converted_schema["properties"] = _get_properties_from_schema(value)
@@ -171,7 +171,7 @@ def convert_to_genai_function_declarations(
                 gapic_tool.function_declarations.append(fd)
                 continue
             # _ToolDictLike
-            tool = cast(_ToolDict, tool)
+            tool = cast("_ToolDict", tool)
             if "function_declarations" in tool:
                 function_declarations = tool["function_declarations"]
                 if not isinstance(
@@ -221,28 +221,29 @@ def _format_to_gapic_function_declaration(
 ) -> gapic.FunctionDeclaration:
     if isinstance(tool, BaseTool):
         return _format_base_tool_to_function_declaration(tool)
-    elif isinstance(tool, type) and is_basemodel_subclass_safe(tool):
+    if isinstance(tool, type) and is_basemodel_subclass_safe(tool):
         return _convert_pydantic_to_genai_function(tool)
-    elif isinstance(tool, dict):
+    if isinstance(tool, dict):
         if all(k in tool for k in ("type", "function")) and tool["type"] == "function":
             function = tool["function"]
         elif (
             all(k in tool for k in ("name", "description")) and "parameters" not in tool
         ):
-            function = cast(dict, tool)
+            function = cast("dict", tool)
+        elif (
+            "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
+        ):
+            function = convert_to_openai_tool(cast("dict", tool))["function"]
         else:
-            if (
-                "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
-            ):
-                function = convert_to_openai_tool(cast(dict, tool))["function"]
-            else:
-                function = cast(dict, tool)
+            function = cast("dict", tool)
         function["parameters"] = function.get("parameters") or {}
         # Empty 'properties' field not supported.
         if not function["parameters"].get("properties"):
             function["parameters"] = {}
-        return _format_dict_to_function_declaration(cast(FunctionDescription, function))
-    elif callable(tool):
+        return _format_dict_to_function_declaration(
+            cast("FunctionDescription", function)
+        )
+    if callable(tool):
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
     raise ValueError(f"Unsupported tool type {tool}")
 
@@ -444,8 +445,6 @@ def _get_nullable_type_from_schema(schema: Dict[str, Any]) -> Optional[int]:
         types = [t for t in types if t is not None]  # Remove None values
         if types:
             return types[-1]  # TODO: update FunctionDeclaration and pass all types?
-        else:
-            pass
     elif "type" in schema or "type_" in schema:
         type_ = schema["type"] if "type" in schema else schema["type_"]
         if isinstance(type_, int):
@@ -463,20 +462,16 @@ def _is_nullable_schema(schema: Dict[str, Any]) -> bool:
             _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
         ]
         return any(t is None for t in types)
-    elif "type" in schema or "type_" in schema:
+    if "type" in schema or "type_" in schema:
         type_ = schema["type"] if "type" in schema else schema["type_"]
         if isinstance(type_, int):
             return False
         stype = str(schema["type"]) if "type" in schema else str(schema["type_"])
         return TYPE_ENUM.get(stype, glm.Type.STRING) is None
-    else:
-        pass
     return False
 
 
-_ToolChoiceType = Union[
-    dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
-]
+_ToolChoiceType = Union[Literal["auto", "none", "any", True], dict, List[str], str]
 
 
 class _FunctionCallingConfigDict(TypedDict):
@@ -537,8 +532,7 @@ def is_basemodel_subclass_safe(tool: Type) -> bool:
         )
 
         return is_basemodel_subclass(tool)
-    else:
-        return issubclass(tool, BaseModel)
+    return issubclass(tool, BaseModel)
 
 
 def safe_import(module_name: str, attribute_name: str = "") -> bool:
@@ -562,7 +556,6 @@ def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -
     Returns:
         Schema with refs replaced.
     """
-
     new_defs = defs or original_schema.get("$defs")
 
     if new_defs is None or not isinstance(new_defs, dict):
@@ -576,20 +569,19 @@ def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -
 
         if not isinstance(value, dict):
             resulting_schema[key] = value
+        elif "$ref" in value:
+            new_value = value.copy()
+
+            path = new_value.pop("$ref")
+            def_key = _get_def_key_from_schema_path(path)
+            new_item = new_defs.get(def_key)
+
+            assert isinstance(new_item, dict)
+            new_value.update(new_item)
+
+            resulting_schema[key] = replace_defs_in_schema(new_value, defs=new_defs)
         else:
-            if "$ref" in value:
-                new_value = value.copy()
-
-                path = new_value.pop("$ref")
-                def_key = _get_def_key_from_schema_path(path)
-                new_item = new_defs.get(def_key)
-
-                assert isinstance(new_item, dict)
-                new_value.update(new_item)
-
-                resulting_schema[key] = replace_defs_in_schema(new_value, defs=new_defs)
-            else:
-                resulting_schema[key] = replace_defs_in_schema(value, defs=new_defs)
+            resulting_schema[key] = replace_defs_in_schema(value, defs=new_defs)
 
     return resulting_schema
 

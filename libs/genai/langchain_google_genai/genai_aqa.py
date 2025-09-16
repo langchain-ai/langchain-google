@@ -120,7 +120,6 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
         self, input: AqaInput, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> AqaOutput:
         """Generates a grounded response using the provided passages."""
-
         response = self._client.generate_answer(
             prompt=input.prompt, passages=input.source_passages
         )

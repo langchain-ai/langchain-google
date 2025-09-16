@@ -1,4 +1,5 @@
-from typing import Any, Dict, Generator, List, Optional, Tuple, Union
+from collections.abc import Generator
+from typing import Annotated, Any, Dict, List, Optional, Tuple, Union
 from unittest.mock import MagicMock, patch
 
 import google.ai.generativelanguage as glm
@@ -10,7 +11,7 @@ from langchain_core.utils.function_calling import (
     convert_to_openai_tool,
 )
 from pydantic import BaseModel, Field
-from typing_extensions import Annotated, Literal
+from typing_extensions import Literal
 
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
@@ -27,17 +28,17 @@ from langchain_google_genai._function_utils import (
 
 
 def test_tool_with_anyof_nullable_param() -> None:
-    """
-    Example test that checks a string parameter marked as Optional,
-    verifying it's recognized as a 'string' & 'nullable'.
+    """Example test.
+
+    Checks a string parameter marked as Optional, verifying it's recognized as a
+    'string' & 'nullable'.
     """
 
     @tool(parse_docstring=True)
     def possibly_none(
         a: Optional[str] = None,
     ) -> str:
-        """
-        A test function whose argument can be a string or None.
+        """A test function whose argument can be a string or None.
 
         Args:
           a: Possibly none.
@@ -73,8 +74,7 @@ def test_tool_with_anyof_nullable_param() -> None:
 
 
 def test_tool_with_array_anyof_nullable_param() -> None:
-    """
-    Checks an array parameter marked as Optional, verifying it's recognized
+    """Checks an array parameter marked as Optional, verifying it's recognized
     as an 'array' & 'nullable', and that the items are correctly typed.
     """
 
@@ -82,8 +82,7 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     def possibly_none_list(
         items: Optional[List[str]] = None,
     ) -> str:
-        """
-        A test function whose argument can be a list of strings or None.
+        """A test function whose argument can be a list of strings or None.
 
         Args:
           items: Possibly a list of strings or None.
@@ -127,8 +126,7 @@ def test_tool_with_array_anyof_nullable_param() -> None:
 
 
 def test_tool_with_nested_object_anyof_nullable_param() -> None:
-    """
-    Checks an object parameter (dict) marked as Optional, verifying it's recognized
+    """Checks an object parameter (dict) marked as Optional, verifying it's recognized
     as an 'object' but defaults to string if there are no real properties,
     and that it is 'nullable'.
     """
@@ -137,8 +135,7 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
     def possibly_none_dict(
         data: Optional[dict] = None,
     ) -> str:
-        """
-        A test function whose argument can be an object (dict) or None.
+        """A test function whose argument can be an object (dict) or None.
 
         Args:
           data: Possibly a dict or None.
@@ -176,8 +173,7 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
-    """
-    Checks a parameter with an enum, marked as Optional, verifying it's recognized
+    """Checks a parameter with an enum, marked as Optional, verifying it's recognized
     as 'string' & 'nullable', and that the 'enum' field is captured.
     """
 
@@ -185,8 +181,7 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     def possibly_none_enum(
         status: Optional[str] = None,
     ) -> str:
-        """
-        A test function whose argument can be an enum string or None.
+        """A test function whose argument can be an enum string or None.
 
         Args:
           status: Possibly one of ("active", "inactive", "pending") or None.
@@ -414,8 +409,7 @@ def test_tool_with_annotated_optional_args() -> None:
         chunk_overlap: Optional[int] = None,
         tokenizer_name: Annotated[Optional[str], InjectedToolArg] = "model",
     ) -> list[Document]:
-        """
-        Tool.
+        """Tool.
 
         Args:
           chunk_size: chunk size.
@@ -432,8 +426,7 @@ def test_tool_with_annotated_optional_args() -> None:
         num_results: int = 5,
         truncate_threshold: Optional[int] = None,
     ) -> list[Document]:
-        """
-        Tool.
+        """Tool.
 
         Args:
           query: query.
@@ -843,17 +836,16 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
 
 
 def test_tool_with_doubly_nested_list_param() -> None:
-    """
-    Tests a tool parameter with a doubly nested list (List[List[str]]),
-    verifying that the GAPIC schema correctly represents the nested items.
+    """Tests a tool parameter with a doubly nested list (List[List[str]]).
+
+    Verifying that the GAPIC schema correctly represents the nested items.
     """
 
     @tool(parse_docstring=True)
     def process_nested_data(
         matrix: List[List[str]],
     ) -> str:
-        """
-        Processes a matrix (list of lists of strings).
+        """Processes a matrix (list of lists of strings).
 
         Args:
           matrix: The nested list data.
@@ -958,9 +950,10 @@ def test_schema_recursive_error_self_reference() -> None:
 
 
 def test_tool_with_union_types() -> None:
-    """
-    Test that validates tools with Union types in function declarations
-    are correctly converted to 'anyOf' in the schema.
+    """Test union types with tools.
+
+    Tests that validates tools with Union types in function declarations are correctly
+    converted to 'anyOf' in the schema.
     """
 
     class Helper1(BaseModel):
@@ -1028,9 +1021,10 @@ def test_tool_with_union_types() -> None:
 
 
 def test_tool_with_union_primitive_types() -> None:
-    """
-    Test that validates tools with Union types that include primitive types
-    are correctly converted to 'anyOf' in the schema.
+    """Test union primitive types for tools.
+
+    Tests that validates tools with Union types that include primitive types are
+    correctly converted to 'anyOf' in the schema.
     """
 
     class Helper(BaseModel):
@@ -1094,9 +1088,10 @@ def test_tool_with_union_primitive_types() -> None:
 
 
 def test_tool_with_nested_union_types() -> None:
-    """
-    Test that validates tools with nested Union types are correctly converted
-    to nested 'anyOf' structures in the schema.
+    """Test nested union types.
+
+    Tests that validates tools with nested Union types are correctly converted to nested
+    'anyOf' structures in the schema.
     """
 
     class Address(BaseModel):
@@ -1159,9 +1154,10 @@ def test_tool_with_nested_union_types() -> None:
 
 
 def test_tool_invocation_with_union_types() -> None:
-    """
-    Test that validates tools with Union types can be correctly invoked
-    with either type from the union.
+    """Test invocation with union types.
+
+    Tests that validates tools with Union types can be correctly invoked with either
+    type from the union.
     """
 
     class Configuration(BaseModel):
@@ -1171,8 +1167,7 @@ def test_tool_invocation_with_union_types() -> None:
 
     @tool
     def configure_service(service_name: str, config: Union[str, Configuration]) -> str:
-        """
-        Configure a service with either a configuration string or object.
+        """Configure a service with either a configuration string or object.
 
         Args:
             service_name: The name of the service to configure
@@ -1231,9 +1226,10 @@ def test_tool_invocation_with_union_types() -> None:
 
 
 def test_tool_field_union_types() -> None:
-    """
-    Test that validates Field with Union types in Pydantic models
-    are correctly converted to 'anyOf' in the schema.
+    """Test field union types.
+
+    Test that validates Field with Union types in Pydantic models are correctly
+    converted to 'anyOf' in the schema.
     """
 
     class Helper1(BaseModel):
@@ -1247,9 +1243,7 @@ def test_tool_field_union_types() -> None:
         y: str = "1"
 
     class GetWeather(BaseModel):
-        """
-        Get weather information for a location.
-        """
+        """Get weather information for a location."""
 
         location: str = Field(
             ..., description="The city and country, e.g. New York, USA"

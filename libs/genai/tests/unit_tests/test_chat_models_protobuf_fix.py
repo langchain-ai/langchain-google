@@ -14,8 +14,7 @@ from langchain_google_genai.chat_models import _parse_response_candidate
 
 
 def test_parse_response_candidate_corrects_integer_like_floats() -> None:
-    """
-    Test that _parse_response_candidate correctly handles integer-like floats
+    """Test that _parse_response_candidate correctly handles integer-like floats
     in tool call arguments from the Gemini API response.
 
     This test addresses a bug where proto.Message.to_dict() converts integers

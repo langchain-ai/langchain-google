@@ -36,7 +36,7 @@ def test_function_call() -> None:
     assert res
     assert res.additional_kwargs
     assert "function_call" in res.additional_kwargs
-    assert "get_weather" == res.additional_kwargs["function_call"]["name"]
+    assert res.additional_kwargs["function_call"]["name"] == "get_weather"
     arguments_str = res.additional_kwargs["function_call"]["arguments"]
     assert isinstance(arguments_str, str)
     arguments = json.loads(arguments_str)

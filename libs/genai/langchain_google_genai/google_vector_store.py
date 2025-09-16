@@ -7,12 +7,12 @@ https://developers.generativeai.google/guide
 """
 
 import asyncio
+from collections.abc import Iterable
 from functools import partial
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     List,
     Optional,
     Tuple,
@@ -446,8 +446,7 @@ class GoogleVectorStore(VectorStore):
         )
 
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
-        """
-        TODO: Check with the team about this!
+        """TODO: Check with the team about this!
         The underlying vector store already returns a "score proper",
         i.e. one in [0, 1] where higher means more *similar*.
         """

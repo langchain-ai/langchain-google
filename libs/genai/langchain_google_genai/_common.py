@@ -13,9 +13,7 @@ _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
 
 class GoogleGenerativeAIError(Exception):
-    """
-    Custom exception class for errors associated with the `Google GenAI` API.
-    """
+    """Custom exception class for errors associated with the `Google GenAI` API."""
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
@@ -127,6 +125,7 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     Args:
         module (Optional[str]):
             Optional. The module for a custom user agent header.
+
     Returns:
         Tuple[str, str]
     """
@@ -148,6 +147,7 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     Args:
         module (Optional[str]):
             Optional. The module for a custom user agent header.
+
     Returns:
         ``google.api_core.gapic_v1.client_info.ClientInfo``
     """
