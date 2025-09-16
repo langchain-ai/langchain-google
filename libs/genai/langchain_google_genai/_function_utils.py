@@ -294,6 +294,10 @@ def _convert_pydantic_to_genai_function(model: BaseModel, function_name: str = N
 
     Returns:
         A dictionary formatted as a Gemini function tool.
+
+    Notes:
+        This follows the Gemini function tool schema:
+        https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling#schema
     """
     if function_name is None:
         # Convert CamelCase Pydantic model name to snake_case function name
@@ -308,6 +312,7 @@ def _convert_pydantic_to_genai_function(model: BaseModel, function_name: str = N
             }
         ]
     }
+
 
 
 def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
