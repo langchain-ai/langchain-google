@@ -1538,7 +1538,7 @@ wheels = [
 
 [[package]]
 name = "langchain-google-community"
-version = "2.0.9"
+version = "2.0.10"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-core" },
@@ -1662,8 +1662,8 @@ requires-dist = [
     { name = "google-cloud-documentai", marker = "extra == 'docai'", specifier = ">=2.26,<3" },
     { name = "google-cloud-documentai-toolbox", marker = "extra == 'docai'", specifier = ">=0.13.3a0,<1" },
     { name = "google-cloud-modelarmor", specifier = ">=0.2.8" },
-    { name = "google-cloud-speech", marker = "extra == 'speech'", specifier = ">=2.26.0,<3" },
-    { name = "google-cloud-storage", marker = "extra == 'gcs'", specifier = ">=2.16.0,<3" },
+    { name = "google-cloud-speech", marker = "extra == 'speech'", specifier = ">=2.26,<3" },
+    { name = "google-cloud-storage", marker = "extra == 'gcs'", specifier = ">=2.16,<3" },
     { name = "google-cloud-texttospeech", marker = "extra == 'texttospeech'", specifier = ">=2.16.3,<3" },
     { name = "google-cloud-translate", marker = "extra == 'translate'", specifier = ">=3.15.3,<4" },
     { name = "google-cloud-vision", marker = "extra == 'vision'", specifier = ">=3.7.2,<4" },
