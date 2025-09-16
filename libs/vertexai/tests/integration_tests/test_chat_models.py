@@ -89,7 +89,7 @@ def test_vertexai_single_call(model_name: Optional[str], endpoint_version: str) 
         endpoint_version=endpoint_version,
     )
     message = HumanMessage(content="Hello")
-    response = model([message])
+    response = model.invoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     _check_usage_metadata(response)
@@ -242,7 +242,7 @@ def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
         "text": "Describe the attached media in 5 words!",
     }
     message = HumanMessage(content=[text_message, media_message])
-    output = llm([message])
+    output = llm.invoke([message])
     assert isinstance(output.content, str)
 
 
@@ -264,7 +264,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
         "text": "Describe the attached media in 5 words!",
     }
     message = HumanMessage(content=[text_message, media_message])
-    output = llm([message])
+    output = llm.invoke([message])
     assert isinstance(output.content, str)
 
 
@@ -433,7 +433,7 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
     }
 
     message = HumanMessage(content=[text_message, media_message])
-    output = llm([message])
+    output = llm.invoke([message])
     assert isinstance(output.content, str)
 
 
@@ -446,7 +446,7 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model([message1, message2, message3])
+    response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -458,7 +458,7 @@ def test_vertexai_system_message() -> None:
     text_question1 = "Where is Cymbal located? Provide only the name of the city."
     sys_message = SystemMessage(content=system_instruction)
     message1 = HumanMessage(content=text_question1)
-    response = model([sys_message, message1])
+    response = model.invoke([sys_message, message1])
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -473,7 +473,7 @@ def test_vertexai_single_call_with_no_system_messages() -> None:
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model([message1, message2, message3])
+    response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -505,7 +505,7 @@ def test_vertexai_single_call_previous_blocked_response() -> None:
         },
     )
     message2 = HumanMessage(content=text_question2)
-    response = model([message1, message2])
+    response = model.invoke([message1, message2])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -1553,7 +1553,7 @@ def test_vertexai_global_location_single_call(
     )
     assert model.location == "global"
     message = HumanMessage(content="Hello")
-    response = model([message])
+    response = model.invoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     _check_usage_metadata(response)
