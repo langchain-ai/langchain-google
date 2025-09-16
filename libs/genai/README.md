@@ -86,8 +86,14 @@ llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 message = HumanMessage(
     content=[
-        {"type": "text", "text": "What's in this image?"},
-        {"type": "image_url", "image_url": "https://picsum.photos/seed/picsum/200/300"},
+        {
+            "type": "text",
+            "text": "What's in this image?"
+        },
+        {
+            "type": "image_url",
+            "image_url": "https://picsum.photos/seed/picsum/200/300"
+        },
     ]
 )
 

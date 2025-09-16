@@ -32,7 +32,7 @@ To use, you should have a Google Cloud project with APIs enabled, and configured
 ```python
 from langchain_google_vertexai import ChatVertexAI
 
-llm = ChatVertexAI(model_name="gemini-pro")
+llm = ChatVertexAI(model_name="gemini-2.5-flash")
 llm.invoke("Sing a ballad of LangChain.")
 ```
 
@@ -51,10 +51,13 @@ message = HumanMessage(
             "type": "text",
             "text": "What's in this image?",
         },
-        {"type": "image_url", "image_url": {"url": "https://picsum.photos/seed/picsum/200/300"}},
+        {
+            "type": "image_url",
+            "image_url": {"url": "https://picsum.photos/seed/picsum/200/300"}
+        },
     ]
 )
-llm.invoke([message])
+response = llm.invoke([message])
 ```
 
 The value of `image_url` can be:
@@ -71,7 +74,7 @@ Gemini supports image output. Example:
 from langchain_core.messages import HumanMessage
 from langchain_google_vertexai import ChatVertexAI, Modality
 
-llm = ChatVertexAI(model_name="gemini-2.0-flash-preview-image-generation",
+llm = ChatVertexAI(model_name="imagen-3.0-generate-002",
                    response_modalities = [Modality.TEXT, Modality.IMAGE])
 message = HumanMessage(
     content=[
@@ -81,7 +84,7 @@ message = HumanMessage(
         },
     ]
 )
-llm.invoke([message])
+response = llm.invoke([message])
 ```
 
 ## Embeddings
@@ -97,7 +100,7 @@ embeddings.embed_query("hello, world!")
 
 ## LLMs
 
-Use Google Cloud's generative AI models as LangChain LLMs:
+Use Google Cloud's generative AI models as old-style LangChain LLMs:
 
 ```python
 from langchain_core.prompts import PromptTemplate
@@ -108,7 +111,7 @@ template = """Question: {question}
 Answer: Let's think step by step."""
 prompt = PromptTemplate.from_template(template)
 
-llm = ChatVertexAI(model_name="gemini-pro")
+llm = ChatVertexAI(model_name="gemini-2.5-flash")
 chain = prompt | llm
 
 question = "Who was the president of the USA in 1994?"
@@ -124,7 +127,7 @@ You can use Gemini models for code generation tasks to generate code snippets, f
 ```python
 from langchain_google_vertexai import ChatVertexAI
 
-llm = ChatVertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
+llm = ChatVertexAI(model_name="gemini-2.5-flash", temperature=0.3, max_output_tokens=1000)
 
 prompt = "Write a Python function that checks if a string is a valid email address."
 
@@ -137,7 +140,7 @@ print(generated_code)
 ```python
 from langchain_google_vertexai import ChatVertexAI
 
-llm = ChatVertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
+llm = ChatVertexAI(model_name="gemini-2.5-flash", temperature=0.3, max_output_tokens=1000)
 prompt_js = "Write a JavaScript function that returns the factorial of a number."
 
 print(llm.invoke(prompt_js))
