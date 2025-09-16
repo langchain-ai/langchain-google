@@ -145,7 +145,10 @@ from pydantic import ConfigDict
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self, is_typeddict
 from difflib import get_close_matches
-
+from langchain_google_vertexai.functions_utils import (
+    _dict_to_gapic_schema_utils,
+    _check_v2,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2226,8 +2229,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
+                    pydantic_version = "v1"
                 else:
                     schema_json = schema.model_json_schema()
+                    pydantic_version = "v2"
+                schema_json = _dict_to_gapic_schema_utils(
+                    schema_json, pydantic_version=pydantic_version
+                )
                 parser = PydanticOutputParser(pydantic_object=schema)
             else:
                 if is_typeddict(schema):
@@ -2236,6 +2244,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     schema_json = schema
                 else:
                     raise ValueError(f"Unsupported schema type {type(schema)}")
+
+                pydantic_version_v2 = _check_v2(schema_json)
+                if pydantic_version_v2:
+                    schema_json = _dict_to_gapic_schema_utils(
+                        schema_json, pydantic_version="v2"
+                    )
+                else:
+                    schema_json = _dict_to_gapic_schema_utils(schema_json)
                 parser = JsonOutputParser()
 
             # Resolve refs in schema because they are not supported
