@@ -44,7 +44,7 @@ from langchain_google_genai.chat_models import (
 def test_integration_initialization() -> None:
     """Test chat model initialization."""
     llm = ChatGoogleGenerativeAI(
-        model="gemini-nano",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
@@ -54,27 +54,27 @@ def test_integration_initialization() -> None:
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-nano",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-nano",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("..."),
         max_output_tokens=10,
     )
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-nano",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
         "ls_max_tokens": 10,
     }
 
     ChatGoogleGenerativeAI(
-        model="gemini-nano",
+        model="gemini-2.5-flash",
         api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
@@ -86,13 +86,13 @@ def test_integration_initialization() -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             llm = ChatGoogleGenerativeAI(
-                model="gemini-nano",
+                model="gemini-2.5-flash",
                 google_api_key=SecretStr("..."),
                 safety_setting={
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
             )
-        assert llm.model == "models/gemini-nano"
+        assert llm.model == "models/gemini-2.5-flash"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
@@ -105,14 +105,14 @@ def test_initialization_inside_threadpool() -> None:
     with ThreadPoolExecutor() as executor:
         executor.submit(
             ChatGoogleGenerativeAI,
-            model="gemini-nano",
+            model="gemini-2.5-flash",
             google_api_key=SecretStr("secret-api-key"),
         ).result()
 
 
 def test_initalization_without_async() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("secret-api-key"),
     )
     assert chat.async_client is None
@@ -121,7 +121,7 @@ def test_initalization_without_async() -> None:
 def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         model = ChatGoogleGenerativeAI(
-            model="gemini-nano",
+            model="gemini-2.5-flash",
             google_api_key=SecretStr("secret-api-key"),
         )
         _ = model.async_client
@@ -133,7 +133,7 @@ def test_initialization_with_async() -> None:
 
 def test_api_key_is_string() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(chat.google_api_key, SecretStr)
@@ -143,7 +143,7 @@ def test_api_key_masked_when_passed_via_constructor(
     capsys: pytest.CaptureFixture,
 ) -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("secret-api-key"),
     )
     print(chat.google_api_key, end="")  # noqa: T201
@@ -349,7 +349,7 @@ def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
         mock_client,
     ):
         chat = ChatGoogleGenerativeAI(
-            model="gemini-pro",
+            model="gemini-2.5-flash",
             google_api_key=param_secret_api_key,
             client_options=param_client_options,
             transport=param_transport,
@@ -387,7 +387,7 @@ def test_default_metadata_field_alias() -> None:
     # error
     # This is the main issue: LangSmith Playground passes None to default_metadata_input
     chat1 = ChatGoogleGenerativeAI(
-        model="gemini-pro",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("test-key"),
         default_metadata_input=None,
     )
@@ -398,7 +398,7 @@ def test_default_metadata_field_alias() -> None:
     # Test with empty list for default_metadata_input (should not cause validation
     # error)
     chat2 = ChatGoogleGenerativeAI(
-        model="gemini-pro",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("test-key"),
         default_metadata_input=[],
     )
@@ -407,7 +407,7 @@ def test_default_metadata_field_alias() -> None:
 
     # Test with tuple for default_metadata_input (should not cause validation error)
     chat3 = ChatGoogleGenerativeAI(
-        model="gemini-pro",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("test-key"),
         default_metadata_input=[("X-Test", "test")],
     )
@@ -716,7 +716,7 @@ def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> N
 
 
 def test_serialize() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="test-key")
     serialized = dumps(llm)
     llm_loaded = loads(
         serialized,
@@ -1114,3 +1114,21 @@ async def test_max_retries_parameter_handling(
             assert call_kwargs_actual["max_retries"] == expected_max_retries
         else:
             assert "max_retries" not in call_kwargs_actual
+
+
+def test_with_structured_output_json_schema_alias() -> None:
+    """Test that json_schema method works as alias for json_mode."""
+    from pydantic import BaseModel
+
+    class TestModel(BaseModel):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key="fake-key")
+
+    structured_llm = llm.with_structured_output(TestModel, method="json_schema")
+    assert structured_llm is not None
+
+    schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
+    structured_llm_dict = llm.with_structured_output(schema_dict, method="json_schema")
+    assert structured_llm_dict is not None

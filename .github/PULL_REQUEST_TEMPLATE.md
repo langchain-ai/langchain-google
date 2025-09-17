@@ -5,11 +5,10 @@
 <!--
 ## Checklist for PR Creation
 
-- [ ] PR Title: "[package]: [brief description]"
+- [ ] PR Title: "<type>[optional scope]: <description>"
 
-  - Where "package" is genai, vertexai, or community
-  - Use "docs: ..." for purely docs changes, "templates: ..." for template changes, "infra: ..." for CI changes
-  - Example: "community: add foobar LLM"
+  - Where type is one of: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, release
+  - Scope is used to specifiy the package targeted. Options are: genai, vertex, community, infra (repo-level)
 
 - [ ] PR Description and Relevant issues:
 
@@ -41,7 +40,7 @@
   - Changes are backwards compatible
 -->
 
-## PR Description
+## Description
 
 <!-- e.g. "Implement user authentication feature" -->
 

@@ -724,11 +724,12 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         (_MODEL, None),
         (_MODEL, "function_calling"),
         (_MODEL, "json_mode"),
+        (_MODEL, "json_schema"),
     ],
 )
 def test_chat_google_genai_with_structured_output(
     model_name: str,
-    method: Optional[Literal["function_calling", "json_mode"]],
+    method: Optional[Literal["function_calling", "json_mode", "json_schema"]],
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -756,7 +757,8 @@ def test_chat_google_genai_with_structured_output(
     expected = {"name": "Erick", "age": 27}
     assert response == expected
 
-    if method is None:  # This won't work with json_schema as it expects an OpenAPI dict
+    # This won't work with json_schema/json_mode as it expects an OpenAPI dict
+    if method is None:
         model = llm.with_structured_output(
             {
                 "name": "MyModel",
@@ -831,6 +833,25 @@ def test_astream_without_eventloop() -> None:
     result = asyncio.run(model_astream("How can you help me?"))
     assert len(result) > 0
     assert isinstance(result[0], AIMessageChunk)
+
+
+@pytest.mark.extended
+def test_prediction_client_transport() -> None:
+    model = ChatGoogleGenerativeAI(model=_MODEL)
+    assert model.client.transport.kind == "grpc"
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, transport="rest")
+    assert model.client.transport.kind == "rest"
+
+    async def check_async_client() -> None:
+        model = ChatGoogleGenerativeAI(model=_MODEL)
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+        # test auto conversion of transport to "grpc_asyncio" from "rest"
+        model = ChatGoogleGenerativeAI(model=_MODEL, transport="rest")
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+    asyncio.run(check_async_client())
 
 
 def test_search_builtin() -> None:

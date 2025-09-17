@@ -18,7 +18,7 @@
       }),
       'max_output_tokens': 100,
       'max_retries': 2,
-      'model': 'models/gemini-1.5-pro-001',
+      'model': 'models/gemini-2.5-flash',
       'n': 1,
       'stop': list([
       ]),
@@ -49,7 +49,7 @@
       }),
       'max_output_tokens': 100,
       'max_retries': 2,
-      'model': 'models/gemini-1.0-pro-001',
+      'model': 'models/gemini-2.5-flash',
       'n': 1,
       'stop': list([
       ]),
