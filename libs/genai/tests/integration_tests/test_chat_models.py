@@ -833,6 +833,25 @@ def test_astream_without_eventloop() -> None:
     assert isinstance(result[0], AIMessageChunk)
 
 
+@pytest.mark.extended
+def test_prediction_client_transport() -> None:
+    model = ChatGoogleGenerativeAI(model=_MODEL)
+    assert model.client.transport.kind == "grpc"
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, transport="rest")
+    assert model.client.transport.kind == "rest"
+
+    async def check_async_client() -> None:
+        model = ChatGoogleGenerativeAI(model=_MODEL)
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+        # test auto conversion of transport to "grpc_asyncio" from "rest"
+        model = ChatGoogleGenerativeAI(model=_MODEL, transport="rest")
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+    asyncio.run(check_async_client())
+
+
 def test_search_builtin() -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
         [{"google_search": {}}]
