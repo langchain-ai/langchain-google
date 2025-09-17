@@ -1776,6 +1776,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
             **kwargs,
@@ -1824,6 +1828,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
             **kwargs,
@@ -1859,6 +1867,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
             generation_method=self.client.stream_generate_content,
@@ -1925,6 +1937,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tool_choice=tool_choice,
                 **kwargs,
             )
+            if self.timeout is not None and "timeout" not in kwargs:
+                kwargs["timeout"] = self.timeout
+            if "max_retries" not in kwargs:
+                kwargs["max_retries"] = self.max_retries
             prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
             async for chunk in await _achat_with_retry(
                 request=request,
