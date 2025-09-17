@@ -220,10 +220,10 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise ChatGoogleGenerativeAIError(msg) from e
         except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
-            if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
+            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
-                time.sleep(e.retry_after)
+                time.sleep(getattr(e, "retry_after"))
             raise
         except Exception:
             raise
@@ -267,6 +267,13 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             # Do not retry for these errors.
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
+        except ResourceExhausted as e:
+            # Handle quota-exceeded error with recommended retry delay
+            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
+                "wait_exponential_max", 60.0
+            ):
+                time.sleep(getattr(e, "retry_after"))
+            raise
         except Exception:
             raise
 
