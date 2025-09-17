@@ -23,7 +23,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         ...,
         description="""The name of the model to use.
 Examples:
-    - gemini-2.5-pro
+    - gemini-2.5-flash
     - models/text-bison-001""",
     )
     """Model name to use."""
@@ -32,28 +32,37 @@ Examples:
     )
     """Google AI API key.
     If not specified will be read from env var ``GOOGLE_API_KEY``."""
+
     credentials: Any = None
     "The default custom credentials (google.auth.credentials.Credentials) to use "
     "when making API calls. If not provided, credentials will be ascertained from "
     "the GOOGLE_API_KEY envvar"
+
     temperature: float = 0.7
-    """Run inference with this temperature. Must be within ``[0.0, 2.0]``."""
+    """Run inference with this temperature. Must be within ``[0.0, 2.0]``. If unset,
+    will default to ``0.7``."""
+
     top_p: Optional[float] = None
     """Decode using nucleus sampling: consider the smallest set of tokens whose
-       probability sum is at least ``top_p``. Must be within ``[0.0, 1.0]``."""
+    probability sum is at least ``top_p``. Must be within ``[0.0, 1.0]``."""
+
     top_k: Optional[int] = None
     """Decode using top-k sampling: consider the set of ``top_k`` most probable tokens.
-       Must be positive."""
+    Must be positive."""
+
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     """Maximum number of tokens to include in a candidate. Must be greater than zero.
-       If unset, will default to ``64``."""
+    If unset, will default to ``64``."""
+
     n: int = 1
     """Number of chat completions to generate for each prompt. Note that the API may
-       not return the full ``n`` completions if duplicates are generated."""
-    max_retries: int = 6
-    """The maximum number of retries to make when generating."""
+    not return the full ``n`` completions if duplicates are generated."""
 
-    timeout: Optional[float] = None
+    max_retries: int = Field(default=6, alias="retries")
+    """The maximum number of retries to make when generating. If unset, will default
+    to ``6``."""
+
+    timeout: Optional[float] = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
 
     client_options: Optional[Dict] = Field(
@@ -66,6 +75,7 @@ Examples:
     transport: Optional[str] = Field(
         default=None,
         description="A string, one of: [`rest`, `grpc`, `grpc_asyncio`].",
+        alias="api_transport",
     )
     additional_headers: Optional[Dict[str, str]] = Field(
         default=None,
