@@ -633,7 +633,7 @@ def _parse_response_candidate(
         except AttributeError:
             pass
 
-        if part.thought:
+        if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
@@ -692,7 +692,9 @@ def _parse_response_candidate(
 
             if getattr(part, "thought_signature", None):
                 # store dict of {tool_call_id: thought_signature}
-                if isinstance(part.thought_signature, bytes):
+                if hasattr(part, "thought_signature") and isinstance(
+                    part.thought_signature, bytes
+                ):
                     thought_signature = _bytes_to_base64(part.thought_signature)
                     if (
                         _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
@@ -1996,8 +1998,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                 )
             return formatted_safety_settings
-        msg = "safety_settings should be either"
-        raise ValueError(msg)
+        # This should be unreachable as all cases are handled above
+        raise ValueError("Unexpected safety_settings type")
 
     def _prepare_request_gemini(
         self,
@@ -2090,10 +2092,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 v1_tools = [v1Tool(**proto.Message.to_dict(t)) for t in formatted_tools]
 
             if tool_config:
-                v1_tool_config = v1ToolConfig(
-                    function_calling_config=v1FunctionCallingConfig(
-                        **proto.Message.to_dict(tool_config.function_calling_config)
+                v1_tool_config = (
+                    v1ToolConfig(
+                        function_calling_config=v1FunctionCallingConfig(
+                            **proto.Message.to_dict(tool_config.function_calling_config)
+                        )
                     )
+                    if hasattr(tool_config, "function_calling_config")
+                    else v1ToolConfig()
                 )
 
             if formatted_safety_settings:
@@ -2257,7 +2263,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast("_ToolConfigDict", tool_config))
+            return _format_tool_config(tool_config)
         return None
 
     async def _agenerate(

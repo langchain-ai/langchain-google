@@ -168,8 +168,9 @@ def get_generation_info(
 ) -> Dict[str, Any]:
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
     # Handle different response types - Candidate has different attributes than
-    # TextGenerationResponse
-    if isinstance(candidate, Candidate):
+    # TextGenerationResponse. Check for attributes rather than isinstance to
+    # support mocks in tests.
+    if hasattr(candidate, "safety_ratings") and hasattr(candidate, "citation_metadata"):
         info = {
             "is_blocked": any(rating.blocked for rating in candidate.safety_ratings),
             "safety_ratings": [
@@ -192,9 +193,13 @@ def get_generation_info(
                 else None
             ),
             "usage_metadata": usage_metadata,
-            "finish_reason": _get_finish_reason_string(candidate.finish_reason),
+            "finish_reason": _get_finish_reason_string(candidate.finish_reason)
+            if hasattr(candidate, "finish_reason")
+            else None,
             "finish_message": (
-                candidate.finish_message if candidate.finish_message else None
+                candidate.finish_message
+                if hasattr(candidate, "finish_message") and candidate.finish_message
+                else None
             ),
         }
     else:  # TextGenerationResponse
