@@ -298,7 +298,7 @@ def _is_lc_content_block(part: dict) -> bool:
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts a list of LangChain messages into a Google parts."""
+    """Converts a list of LangChain messages into Google parts."""
     parts = []
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
