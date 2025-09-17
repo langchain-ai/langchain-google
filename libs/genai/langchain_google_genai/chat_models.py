@@ -291,10 +291,6 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     return await _achat_with_retry(**params)
 
 
-def _is_lc_content_block(part: dict) -> bool:
-    return "type" in part
-
-
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
@@ -307,7 +303,7 @@ def _convert_to_parts(
         if isinstance(part, str):
             parts.append(Part(text=part))
         elif isinstance(part, Mapping):
-            if _is_lc_content_block(part):
+            if "type" in part:
                 if part["type"] == "text":
                     parts.append(Part(text=part["text"]))
                 elif is_data_content_block(part):
