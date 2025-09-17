@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from google.ai.generativelanguage_v1beta.types import (
     BatchEmbedContentsRequest,
     BatchEmbedContentsResponse,
@@ -10,7 +11,6 @@ from google.ai.generativelanguage_v1beta.types import (
     EmbedContentResponse,
 )
 from pydantic import SecretStr
-from pytest import CaptureFixture
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
@@ -21,7 +21,7 @@ def test_integration_initialization() -> None:
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         _ = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
+            model="models/gemini-embedding-001",
             google_api_key=SecretStr("..."),
         )
         mock_prediction_service.assert_called_once()
@@ -34,7 +34,7 @@ def test_integration_initialization() -> None:
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         _ = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
+            model="models/gemini-embedding-001",
             google_api_key=SecretStr("..."),
             task_type="retrieval_document",
         )
@@ -43,15 +43,17 @@ def test_integration_initialization() -> None:
 
 def test_api_key_is_string() -> None:
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
+        model="models/gemini-embedding-001",
         google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(embeddings.google_api_key, SecretStr)
 
 
-def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> None:
+def test_api_key_masked_when_passed_via_constructor(
+    capsys: pytest.CaptureFixture,
+) -> None:
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
+        model="models/gemini-embedding-001",
         google_api_key=SecretStr("secret-api-key"),
     )
     print(embeddings.google_api_key, end="")  # noqa: T201
@@ -121,14 +123,14 @@ def test_embed_documents() -> None:
 
 
 def test_embed_documents_with_numerous_texts() -> None:
-    TEST_CORPUS_SIZE = 100
-    TEST_BATCH_SIZE = 20
+    test_corpus_size = 100
+    test_batch_size = 20
     with patch(
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         mock_embed = MagicMock()
         mock_embed.return_value = BatchEmbedContentsResponse(
-            embeddings=[ContentEmbedding(values=[1.0 for _ in range(TEST_BATCH_SIZE)])]
+            embeddings=[ContentEmbedding(values=[1.0 for _ in range(test_batch_size)])]
         )
         mock_prediction_service.return_value.batch_embed_contents = mock_embed
 
@@ -138,9 +140,9 @@ def test_embed_documents_with_numerous_texts() -> None:
         )
 
         llm.embed_documents(
-            ["test text" for _ in range(TEST_CORPUS_SIZE)],
-            batch_size=TEST_BATCH_SIZE,
-            titles=["title1" for _ in range(TEST_CORPUS_SIZE)],
+            ["test text" for _ in range(test_corpus_size)],
+            batch_size=test_batch_size,
+            titles=["title1" for _ in range(test_corpus_size)],
         )
         request = BatchEmbedContentsRequest(
             model="models/embedding-test",
@@ -151,8 +153,8 @@ def test_embed_documents_with_numerous_texts() -> None:
                     task_type="RETRIEVAL_DOCUMENT",
                     title="title1",
                 )
-                for _ in range(TEST_BATCH_SIZE)
+                for _ in range(test_batch_size)
             ],
         )
         mock_embed.assert_called_with(request)
-        assert mock_embed.call_count == TEST_CORPUS_SIZE / TEST_BATCH_SIZE
+        assert mock_embed.call_count == test_corpus_size / test_batch_size

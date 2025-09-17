@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Iterator, List, Optional
+import logging
+from collections.abc import Iterator
+from difflib import get_close_matches
+from typing import Any, Optional
 
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -17,6 +20,8 @@ from langchain_google_genai._common import (
 )
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 
+logger = logging.getLogger(__name__)
+
 
 class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     """Google GenerativeAI models.
@@ -25,7 +30,8 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         .. code-block:: python
 
             from langchain_google_genai import GoogleGenerativeAI
-            llm = GoogleGenerativeAI(model="gemini-pro")
+
+            llm = GoogleGenerativeAI(model="gemini-2.5-pro")
     """
 
     client: Any = None  #: :meta private:
@@ -33,9 +39,33 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         populate_by_name=True,
     )
 
+    def __init__(self, **kwargs: Any) -> None:
+        """Needed for arg validation."""
+        # Get all valid field names, including aliases
+        valid_fields = set()
+        for field_name, field_info in self.__class__.model_fields.items():
+            valid_fields.add(field_name)
+            if hasattr(field_info, "alias") and field_info.alias is not None:
+                valid_fields.add(field_info.alias)
+
+        # Check for unrecognized arguments
+        for arg in kwargs:
+            if arg not in valid_fields:
+                suggestions = get_close_matches(arg, valid_fields, n=1)
+                suggestion = (
+                    f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
+                )
+                logger.warning(
+                    f"Unexpected argument '{arg}' "
+                    f"provided to GoogleGenerativeAI.{suggestion}"
+                )
+        super().__init__(**kwargs)
+
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
+        if not any(self.model.startswith(prefix) for prefix in ("models/",)):
+            self.model = f"models/{self.model}"
 
         self.client = ChatGoogleGenerativeAI(
             api_key=self.google_api_key,
@@ -55,19 +85,28 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         return self
 
     def _get_ls_params(
-        self, stop: Optional[List[str]] = None, **kwargs: Any
+        self, stop: Optional[list[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         ls_params = super()._get_ls_params(stop=stop, **kwargs)
         ls_params["ls_provider"] = "google_genai"
+
+        models_prefix = "models/"
+        ls_model_name = (
+            self.model[len(models_prefix) :]
+            if self.model and self.model.startswith(models_prefix)
+            else self.model
+        )
+        ls_params["ls_model_name"] = ls_model_name
+
         if ls_max_tokens := kwargs.get("max_output_tokens", self.max_output_tokens):
             ls_params["ls_max_tokens"] = ls_max_tokens
         return ls_params
 
     def _generate(
         self,
-        prompts: List[str],
-        stop: Optional[List[str]] = None,
+        prompts: list[str],
+        stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> LLMResult:
@@ -85,7 +124,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                         text=g.message.content,
                         generation_info={
                             **g.generation_info,
-                            **{"usage_metadata": g.message.usage_metadata},
+                            "usage_metadata": g.message.usage_metadata,
                         },
                     )
                     for g in chat_result.generations
@@ -96,7 +135,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     def _stream(
         self,
         prompt: str,
-        stop: Optional[List[str]] = None,
+        stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[GenerationChunk]:

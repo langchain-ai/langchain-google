@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import uuid
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterator,
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     Union,
     cast,
@@ -59,15 +58,13 @@ from langchain_google_vertexai.model_garden_maas._base import (
 @overload
 def _parse_response_candidate_llama(
     response_candidate: Dict[str, str], streaming: Literal[False] = False
-) -> AIMessage:
-    ...
+) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate_llama(
     response_candidate: Dict[str, str], streaming: Literal[True]
-) -> AIMessageChunk:
-    ...
+) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate_llama(
@@ -76,7 +73,8 @@ def _parse_response_candidate_llama(
     content = response_candidate.get("content", "")
     role = response_candidate["role"]
     if role != "assistant":
-        raise ValueError(f"Role in response is {role}, expected 'assistant'!")
+        msg = f"Role in response is {role}, expected 'assistant'!"
+        raise ValueError(msg)
     tool_calls = []
     tool_call_chunks = []
 
@@ -107,10 +105,8 @@ def _parse_response_candidate_llama(
             function_name = tool_call["function"]["name"]
             function_args = tool_call["function"].get("arguments", None)
             if function_args is not None:
-                try:
+                with contextlib.suppress(ValueError):
                     function_args = json.loads(function_args)
-                except ValueError:
-                    pass
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
@@ -141,7 +137,7 @@ def _parse_response_candidate_llama(
 
 
 class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
-    """Integration for Llama 3.1 on Google Cloud Vertex AI Model-as-a-Service.
+    r"""Integration for Llama 3.1 on Google Cloud Vertex AI Model-as-a-Service.
 
     For more information, see:
         https://cloud.google.com/blog/products/ai-machine-learning/llama-3-1-on-vertex-ai
@@ -200,14 +196,20 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         .. code-block:: python
 
             messages = [
-                ("system", "You are a helpful translator. Translate the user sentence to French."),
+                (
+                    "system",
+                    "You are a helpful translator. Translate the user sentence to French.",
+                ),
                 ("human", "I love programming."),
             ]
             llm.invoke(messages)
 
         .. code-block:: python
 
-            AIMessage(content="J'adore programmer. \n", id='run-925ce305-2268-44c4-875f-dde9128520ad-0')
+            AIMessage(
+                content="J'adore programmer. \n",
+                id="run-925ce305-2268-44c4-875f-dde9128520ad-0",
+            )
 
     Stream:
         .. code-block:: python
@@ -217,9 +219,12 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessageChunk(content='J', id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
-            AIMessageChunk(content="'adore programmer. \n", id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
-            AIMessageChunk(content='', id='run-9df01d73-84d9-42db-9d6b-b1466a019e89')
+            AIMessageChunk(content="J", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
+            AIMessageChunk(
+                content="'adore programmer. \n",
+                id="run-9df01d73-84d9-42db-9d6b-b1466a019e89",
+            )
+            AIMessageChunk(content="", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
 
         .. code-block:: python
 
@@ -231,7 +236,10 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
         .. code-block:: python
 
-            AIMessageChunk(content="J'adore programmer. \n", id='run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb')
+            AIMessageChunk(
+                content="J'adore programmer. \n",
+                id="run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb",
+            )
 
     """  # noqa: E501
 
@@ -240,11 +248,12 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
     ) -> List[Dict[str, Any]]:
         converted_messages: List[Dict[str, Any]] = []
         if tools and not self.append_tools_to_system_message:
-            raise ValueError(
+            msg = (
                 "If providing tools, either format system message yourself or "
                 "append_tools_to_system_message to True!"
             )
-        elif tools:
+            raise ValueError(msg)
+        if tools:
             tools_str = "\n".join(
                 [json.dumps(convert_to_openai_function(t)) for t in tools]
             )
@@ -291,7 +300,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                 # we also need to format a previous message if we got a tool result
                 prev_message = messages[i - 1]
                 if not isinstance(prev_message, AIMessage):
-                    raise ValueError("ToolMessage should follow AIMessage only!")
+                    msg = "ToolMessage should follow AIMessage only!"
+                    raise ValueError(msg)
                 _ = converted_messages[-1].pop("content", None)
                 tool_calls = []
                 for tool_call in prev_message.tool_calls:
@@ -307,9 +317,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                     )
                 converted_messages[-1]["tool_calls"] = tool_calls
                 if len(tool_calls) > 1:
-                    raise ValueError(
-                        "Only a single function call per turn is supported!"
-                    )
+                    msg = "Only a single function call per turn is supported!"
+                    raise ValueError(msg)
                 converted_messages.append(
                     {
                         "role": "tool",
@@ -319,7 +328,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                     }
                 )
             else:
-                raise ValueError(f"Message type {type(message)} is not yet supported!")
+                msg = f"Message type {type(message)} is not yet supported!"
+                raise ValueError(msg)
         return converted_messages
 
     def _generate(
@@ -415,7 +425,8 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         chunk_delta = chunk["choices"][0]["delta"]
         content = chunk_delta.get("content", "")
         if chunk_delta.get("role") != "assistant":
-            raise ValueError(f"Got chunk with non-assistant role: {chunk_delta}")
+            msg = f"Got chunk with non-assistant role: {chunk_delta}"
+            raise ValueError(msg)
         additional_kwargs = {}
         if raw_tool_calls := chunk_delta.get("tool_calls"):
             additional_kwargs["tool_calls"] = raw_tool_calls
@@ -450,7 +461,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
             content=content,
             additional_kwargs=additional_kwargs,
             tool_call_chunks=tool_call_chunks,
-            usage_metadata=usage_metadata,  # type: ignore[arg-type]
+            usage_metadata=usage_metadata,
         )
 
     def _stream(
@@ -474,7 +485,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
             gen_chunk = ChatGenerationChunk(message=message)
             if run_manager:
                 run_manager.on_llm_new_token(
-                    token=cast(str, message.content), chunk=gen_chunk
+                    token=cast("str", message.content), chunk=gen_chunk
                 )
             yield gen_chunk
 
@@ -499,7 +510,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
             gen_chunk = ChatGenerationChunk(message=message)
             if run_manager:
                 await run_manager.on_llm_new_token(
-                    token=cast(str, message.content), chunk=gen_chunk
+                    token=cast("str", message.content), chunk=gen_chunk
                 )
             yield gen_chunk
 

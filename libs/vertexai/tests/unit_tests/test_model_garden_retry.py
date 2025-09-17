@@ -22,7 +22,7 @@ def create_api_error():
     )
 
 
-def test_retry_on_errors():
+def test_retry_on_errors() -> None:
     """Test that the retry decorator works with sync functions."""
     max_retries = 2
     wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
@@ -38,7 +38,7 @@ def test_retry_on_errors():
     assert mock_function.call_count == 2
 
 
-def test_max_retries_exceeded():
+def test_max_retries_exceeded() -> None:
     """Test that the retry decorator fails after max retries."""
     max_retries = 2
     wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
@@ -55,13 +55,13 @@ def test_max_retries_exceeded():
 
 
 @pytest.mark.asyncio
-async def test_async_retry_on_errors():
+async def test_async_retry_on_errors() -> None:
     """Test that the retry decorator works with async functions."""
     max_retries = 2
     wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
 
     class AsyncMock:
-        def __init__(self):
+        def __init__(self) -> None:
             self.call_count = 0
 
         async def __call__(self):
@@ -83,13 +83,13 @@ async def test_async_retry_on_errors():
 
 
 @pytest.mark.asyncio
-async def test_async_max_retries_exceeded():
+async def test_async_max_retries_exceeded() -> None:
     """Test that the async retry decorator fails after max retries."""
     max_retries = 2
     wait_exponential_kwargs = {"multiplier": 1.0, "min": 1.0, "max": 10.0}
 
     class AsyncMock:
-        def __init__(self):
+        def __init__(self) -> None:
             self.call_count = 0
 
         async def __call__(self):

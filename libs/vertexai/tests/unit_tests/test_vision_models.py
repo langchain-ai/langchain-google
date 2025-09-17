@@ -4,7 +4,7 @@ from vertexai.vision_models import Image  # type: ignore[import-untyped]
 from langchain_google_vertexai.vision_models import _BaseImageTextModel
 
 
-def test_get_image_from_message_part(base64_image: str):
+def test_get_image_from_message_part(base64_image: str) -> None:
     model = _BaseImageTextModel()
 
     # Should work with a well formatted dictionary:
@@ -23,8 +23,8 @@ def test_get_image_from_message_part(base64_image: str):
     assert image is None
 
 
-def test_get_text_from_message_part():
-    DUMMY_MESSAGE = "Some message"
+def test_get_text_from_message_part() -> None:
+    dummy_message = "Some message"
     model = _BaseImageTextModel()
 
     # Should not work with an image
@@ -33,14 +33,14 @@ def test_get_text_from_message_part():
     assert text is None
 
     # Should work with a simple string
-    simple_message = DUMMY_MESSAGE
+    simple_message = dummy_message
     text = model._get_text_from_message_part(simple_message)
-    assert text == DUMMY_MESSAGE
+    assert text == dummy_message
 
     # Should work with a text message
-    message = {"type": "text", "text": DUMMY_MESSAGE}
+    message = {"type": "text", "text": dummy_message}
     text = model._get_text_from_message_part(message)
-    assert text == DUMMY_MESSAGE
+    assert text == dummy_message
 
 
 @pytest.fixture

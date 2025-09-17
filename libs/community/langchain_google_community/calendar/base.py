@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
-from langchain_google_community.calendar.utils import build_resource_service
+from langchain_google_community.calendar.utils import build_calendar_service
 
 if TYPE_CHECKING:
     # This is for linting and IDE typehints
@@ -23,7 +23,7 @@ else:
 class CalendarBaseTool(BaseTool):  # type: ignore[override]
     """Base class for Google Calendar tools."""
 
-    api_resource: Resource = Field(default_factory=build_resource_service)
+    api_resource: Resource = Field(default_factory=build_calendar_service)
 
     @classmethod
     def from_api_resource(cls, api_resource: Resource) -> "CalendarBaseTool":

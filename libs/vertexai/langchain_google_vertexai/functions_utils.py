@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from typing import (
     Any,
     Callable,
@@ -9,7 +10,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     TypedDict,
     Union,
@@ -32,6 +32,7 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel
+from typing_extensions import NotRequired
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,17 @@ _GoogleSearchRetrievalLike = Union[
     gapic.GoogleSearchRetrieval,
     Dict[str, Any],
 ]
+_GoogleSearchLike = Union[gapic.Tool.GoogleSearch, Dict[str, Any]]
 _RetrievalLike = Union[gapic.Retrieval, Dict[str, Any]]
+_CodeExecutionLike = Union[gapic.Tool.CodeExecution, Dict[str, Any]]
 
 
 class _ToolDictLike(TypedDict):
     function_declarations: Optional[List[_FunctionDeclarationLike]]
     google_search_retrieval: Optional[_GoogleSearchRetrievalLike]
+    google_search: Optional[_GoogleSearchLike]
     retrieval: Optional[_RetrievalLike]
+    code_execution: NotRequired[_CodeExecutionLike]
 
 
 _ToolType = Union[gapic.Tool, vertexai.Tool, _ToolDictLike, _FunctionDeclarationLike]
@@ -62,12 +67,7 @@ _ToolsType = Sequence[_ToolType]
 _ALLOWED_SCHEMA_FIELDS = []
 _ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
 _ALLOWED_SCHEMA_FIELDS.extend(
-    [
-        f
-        for f in gapic.Schema.to_dict(
-            gapic.Schema(), preserving_proto_field_name=False
-        ).keys()
-    ]
+    list(gapic.Schema.to_dict(gapic.Schema(), preserving_proto_field_name=False).keys())
 )
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
@@ -78,7 +78,7 @@ def _format_json_schema_to_gapic_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in schema.items():
         if key == "definitions":
             continue
-        elif key == "items":
+        if key == "items":
             converted_schema["items"] = _format_json_schema_to_gapic_v1(value)
         elif key == "properties":
             if "properties" not in converted_schema:
@@ -97,6 +97,10 @@ def _format_json_schema_to_gapic_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
                     f"Got {len(value)}, ignoring other than first value!"
                 )
             return _format_json_schema_to_gapic_v1(value[0])
+        elif key == "anyOf":
+            converted_schema["anyOf"] = [
+                _format_json_schema_to_gapic_v1(anyOf_type) for anyOf_type in value
+            ]
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
@@ -112,9 +116,9 @@ def _format_json_schema_to_gapic(
     """Format a JSON schema from a Pydantic V2 BaseModel to gapic."""
     converted_schema: Dict[str, Any] = {}
     for key, value in schema.items():
-        if key == "definitions":
+        if key == "$defs":
             continue
-        elif key == "items":
+        if key == "items":
             converted_schema["items"] = _format_json_schema_to_gapic(
                 value, parent_key, required_fields
             )
@@ -147,6 +151,12 @@ def _format_json_schema_to_gapic(
                 if required_fields and parent_key in required_fields:
                     required_fields.remove(parent_key)
                 continue
+            converted_schema["anyOf"] = [
+                _format_json_schema_to_gapic(
+                    anyOf_type, "anyOf", schema.get("required", [])
+                )
+                for anyOf_type in value
+            ]
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
@@ -157,7 +167,10 @@ def _format_json_schema_to_gapic(
 def _dict_to_gapic_schema(
     schema: Dict[str, Any], pydantic_version: str = "v1"
 ) -> gapic.Schema:
+    # Resolve refs in schema because $refs and $defs are not supported
+    # by the Gemini API.
     dereferenced_schema = dereference_refs(schema)
+
     if pydantic_version == "v1":
         formatted_schema = _format_json_schema_to_gapic_v1(dereferenced_schema)
     else:
@@ -169,7 +182,7 @@ def _dict_to_gapic_schema(
 def _format_base_tool_to_function_declaration(
     tool: BaseTool,
 ) -> gapic.FunctionDeclaration:
-    "Format tool into the Vertex function API."
+    """Format tool into the Vertex function API."""
     if not tool.args_schema:
         return gapic.FunctionDeclaration(
             name=tool.name,
@@ -219,16 +232,26 @@ def _format_pydantic_to_function_declaration(
 def _format_dict_to_function_declaration(
     tool: Union[FunctionDescription, Dict[str, Any]],
 ) -> gapic.FunctionDeclaration:
+    pydantic_version_v2 = False
+
     # Ensure we send "anyOf" parameters through pydantic v2 schema parsing
-    pydantic_version = None
-    if isinstance(tool, dict):
-        properties = tool.get("parameters", {}).get("properties", {}).values()
+    def _check_v2(parameters) -> bool:
+        properties = parameters.get("properties", {}).values()
         for property in properties:
             if "anyOf" in property:
-                pydantic_version = "v2"
-    if pydantic_version:
+                return True
+            if "parameters" in property:
+                if _check_v2(property["parameters"]):
+                    return True
+            if "items" in property and _check_v2(property["items"]):
+                return True
+        return False
+
+    if isinstance(tool, dict):
+        pydantic_version_v2 = _check_v2(tool.get("parameters", {}))
+    if pydantic_version_v2:
         parameters = _dict_to_gapic_schema(
-            tool.get("parameters", {}), pydantic_version=pydantic_version
+            tool.get("parameters", {}), pydantic_version="v2"
         )
     else:
         parameters = _dict_to_gapic_schema(tool.get("parameters", {}))
@@ -250,36 +273,39 @@ def _format_vertex_to_function_declaration(
 def _format_to_gapic_function_declaration(
     tool: _FunctionDeclarationLike,
 ) -> gapic.FunctionDeclaration:
-    "Format tool into the Vertex function declaration."
+    """Format tool into the Vertex function declaration."""
     if isinstance(tool, BaseTool):
         return _format_base_tool_to_function_declaration(tool)
-    elif isinstance(tool, type) and issubclass(tool, BaseModel):
+    if isinstance(tool, type) and issubclass(tool, BaseModel):
         return _format_pydantic_to_function_declaration(tool)
-    elif callable(tool) and not (
+    if callable(tool) and not (
         isinstance(tool, type) and hasattr(tool, "__annotations__")
     ):
         return _format_base_tool_to_function_declaration(callable_as_lc_tool()(tool))
-    elif isinstance(tool, vertexai.FunctionDeclaration):
+    if isinstance(tool, vertexai.FunctionDeclaration):
         return _format_vertex_to_function_declaration(tool)
-    elif isinstance(tool, dict) or (
+    if isinstance(tool, dict) or (
         isinstance(tool, type) and hasattr(tool, "__annotations__")
     ):
         # this could come from
         # 'langchain_core.utils.function_calling.convert_to_openai_tool'
-        function = convert_to_openai_tool(cast(dict, tool))["function"]
-        return _format_dict_to_function_declaration(cast(FunctionDescription, function))
-    else:
-        raise ValueError(f"Unsupported tool call type {tool}")
+        function = convert_to_openai_tool(cast("dict", tool))["function"]
+        return _format_dict_to_function_declaration(
+            cast("FunctionDescription", function)
+        )
+    msg = f"Unsupported tool call type {tool}"
+    raise ValueError(msg)
 
 
 def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
     gapic_tool = gapic.Tool()
     for tool in tools:
         if any(f in gapic_tool for f in ["google_search_retrieval", "retrieval"]):
-            raise ValueError(
+            msg = (
                 "Providing multiple retrieval, google_search_retrieval"
                 " or mixing with function_declarations is not supported"
             )
+            raise ValueError(msg)
         if isinstance(tool, (gapic.Tool, vertexai.Tool)):
             rt: gapic.Tool = (
                 tool if isinstance(tool, gapic.Tool) else tool._raw_tool  # type: ignore
@@ -292,6 +318,8 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 gapic_tool.function_declarations.extend(rt.function_declarations)
             if "google_search" in rt:
                 gapic_tool.google_search = rt.google_search
+            if "code_execution" in rt:
+                gapic_tool.code_execution = rt.code_execution
         elif isinstance(tool, dict):
             # not _ToolDictLike
             if not any(
@@ -299,21 +327,24 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 for f in [
                     "function_declarations",
                     "google_search_retrieval",
+                    "google_search",
                     "retrieval",
+                    "code_execution",
                 ]
             ):
                 fd = _format_to_gapic_function_declaration(tool)
                 gapic_tool.function_declarations.append(fd)
                 continue
             # _ToolDictLike
-            tool = cast(_ToolDictLike, tool)
+            tool = cast("_ToolDictLike", tool)
             if "function_declarations" in tool:
                 function_declarations = tool["function_declarations"]
                 if not isinstance(tool["function_declarations"], list):
-                    raise ValueError(
+                    msg = (
                         "function_declarations should be a list"
                         f"got '{type(function_declarations)}'"
                     )
+                    raise ValueError(msg)
                 if function_declarations:
                     fds = [
                         _format_to_gapic_function_declaration(fd)
@@ -324,8 +355,16 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                 gapic_tool.google_search_retrieval = gapic.GoogleSearchRetrieval(
                     tool["google_search_retrieval"]
                 )
+            if "google_search" in tool:
+                gapic_tool.google_search = gapic.Tool.GoogleSearch(
+                    tool["google_search"]
+                )
             if "retrieval" in tool:
                 gapic_tool.retrieval = gapic.Retrieval(tool["retrieval"])
+            if "code_execution" in tool:
+                gapic_tool.code_execution = gapic.Tool.CodeExecution(
+                    tool["code_execution"]
+                )
         else:
             fd = _format_to_gapic_function_declaration(tool)
             gapic_tool.function_declarations.append(fd)
@@ -345,7 +384,6 @@ class PydanticFunctionsOutputParser(BaseOutputParser):
     the provided schema.
 
     Example:
-
         ... code-block:: python
 
             message = AIMessage(
@@ -379,7 +417,8 @@ class PydanticFunctionsOutputParser(BaseOutputParser):
         self, result: List[Generation], *, partial: bool = False
     ) -> BaseModel:
         if not isinstance(result[0], ChatGeneration):
-            raise ValueError("This output parser only works on ChatGeneration output")
+            msg = "This output parser only works on ChatGeneration output"
+            raise ValueError(msg)
         message = result[0].message
         function_call = message.additional_kwargs.get("function_call", {})
         if function_call:
@@ -390,11 +429,12 @@ class PydanticFunctionsOutputParser(BaseOutputParser):
             else:
                 schema = self.pydantic_schema
             return schema(**json.loads(tool_input))
-        else:
-            raise OutputParserException(f"Could not parse function call: {message}")
+        msg = f"Could not parse function call: {message}"
+        raise OutputParserException(msg)
 
     def parse(self, text: str) -> BaseModel:
-        raise ValueError("Can only parse messages")
+        msg = "Can only parse messages"
+        raise ValueError(msg)
 
 
 class _FunctionCallingConfigDict(TypedDict):
@@ -406,17 +446,16 @@ class _ToolConfigDict(TypedDict):
     function_calling_config: _FunctionCallingConfigDict
 
 
-_ToolChoiceType = Union[
-    dict, List[str], str, Literal["auto", "none", "any"], Literal[True]
-]
+_ToolChoiceType = Union[Literal["auto", "none", "any", True], dict, List[str], str]
 
 
 def _format_tool_config(tool_config: _ToolConfigDict) -> Union[gapic.ToolConfig, None]:
     if "function_calling_config" not in tool_config:
-        raise ValueError(
+        msg = (  # type: ignore[unreachable, unused-ignore]
             "Invalid ToolConfig, missing 'function_calling_config' key. Received:\n\n"
             f"{tool_config=}"
         )
+        raise ValueError(msg)
     return gapic.ToolConfig(
         function_calling_config=gapic.FunctionCallingConfig(
             **tool_config["function_calling_config"]
@@ -460,12 +499,14 @@ def _tool_choice_to_tool_config(
             mode = gapic.FunctionCallingConfig.Mode.ANY
             allowed_function_names = [tool_choice["function"]["name"]]
         else:
-            raise ValueError(
+            msg = (  # type: ignore[unreachable, unused-ignore]
                 f"Unrecognized tool choice format:\n\n{tool_choice=}\n\nShould match "
                 f"VertexAI ToolConfig or FunctionCallingConfig format."
             )
+            raise ValueError(msg)
     else:
-        raise ValueError(f"Unrecognized tool choice format:\n\n{tool_choice=}")
+        msg = f"Unrecognized tool choice format:\n\n{tool_choice=}"  # type: ignore[unreachable, unused-ignore]
+        raise ValueError(msg)
     tool_config = _ToolConfigDict(
         function_calling_config=_FunctionCallingConfigDict(
             mode=mode,

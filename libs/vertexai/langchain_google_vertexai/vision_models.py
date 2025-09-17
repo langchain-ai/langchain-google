@@ -29,7 +29,7 @@ from langchain_google_vertexai._utils import get_user_agent
 
 
 class _BaseImageTextModel(BaseModel):
-    """Base class for all integrations that use ImageTextModel"""
+    """Base class for all integrations that use ImageTextModel."""
 
     cached_client: Any = Field(default=None, exclude=True)
     model_name: str = Field(default="imagetext@001")
@@ -64,15 +64,13 @@ class _BaseImageTextModel(BaseModel):
         Returns:
             Image is successful otherwise None.
         """
-
         image_str = get_image_str_from_content_part(message_part)
 
         if isinstance(image_str, str):
             loader = self._image_bytes_loader_client
             image_bytes = loader.load_bytes(image_str)
             return Image(image_bytes=image_bytes)
-        else:
-            return None
+        return None
 
     def _get_text_from_message_part(self, message_part: str | Dict) -> str | None:
         """Given a message part obtain a text if the part represents it.
@@ -87,7 +85,7 @@ class _BaseImageTextModel(BaseModel):
 
     @property
     def _llm_type(self) -> str:
-        """Returns the type of LLM"""
+        """Returns the type of LLM."""
         return "vertexai-vision"
 
     @property
@@ -132,8 +130,7 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
             params = self._prepare_params(
                 number_of_results=number_of_results, language=language, **kwargs
             )
-            captions = self.client.get_captions(image=image, **params)
-            return captions
+            return self.client.get_captions(image=image, **params)
 
 
 class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
@@ -159,7 +156,6 @@ class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
         Returns:
             Captions generated from every prompt.
         """
-
         generations = [
             self._generate_one(prompt=prompt, **kwargs) for prompt in prompts
         ]
@@ -210,7 +206,6 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
                 - Local file path
                 - Remote url
         """
-
         image = None
 
         is_valid = (
@@ -224,12 +219,13 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
             image = self._get_image_from_message_part(content)
 
         if image is None:
-            raise ValueError(
+            msg = (
                 f"{self.__class__.__name__} messages should be a list with "
                 "only one message. This message content must be a list with "
                 "one dictionary with the format: "
                 "{'type': 'image_url', 'image_url': {'image': <image_str>}}"
             )
+            raise ValueError(msg)
 
         captions = self._get_captions(image, **messages[0].additional_kwargs, **kwargs)
 
@@ -241,7 +237,7 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
 
 
 class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
-    """Chat implementation of a visual QnA model"""
+    """Chat implementation of a visual QnA model."""
 
     @property
     def _default_params(self) -> Dict[str, Any]:
@@ -266,7 +262,6 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
                     - Remote url
                 There has to be at least other message with the first question.
         """
-
         image = None
         user_question = None
 
@@ -283,7 +278,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
             user_question = self._get_text_from_message_part(user_question_part)
 
         if (image is None) or (user_question is None):
-            raise ValueError(
+            msg = (
                 f"{self.__class__.__name__} messages should be a list with "
                 "only one message. The message content should be a list with "
                 "two elements. The first element should be the image, a dictionary "
@@ -292,6 +287,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
                 "The second one should be the user question. Either a simple string"
                 "or a dictionary with format {'type': 'text', 'text': <message>}"
             )
+            raise ValueError(msg)
 
         answers = self._ask_questions(
             image=image, query=user_question, **messages[0].additional_kwargs, **kwargs
@@ -317,15 +313,14 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
         """
         with telemetry.tool_context_manager(self._user_agent):
             params = self._prepare_params(number_of_results=number_of_results)
-            answers = self.client.ask_question(image=image, question=query, **params)
-            return answers
+            return self.client.ask_question(image=image, question=query, **params)
 
 
 class _BaseVertexAIImageGenerator(BaseModel):
     """Base class form generation and edition of images."""
 
     cached_client: Any = Field(default=None, exclude=True)
-    model_name: str = Field(default="imagegeneration@002")
+    model_name: str = Field(default="imagen-3.0-generate-002")
     """Name of the base model"""
     negative_prompt: Union[str, None] = Field(default=None)
     """A description of what you want to omit in
@@ -335,8 +330,8 @@ class _BaseVertexAIImageGenerator(BaseModel):
     guidance_scale: Union[float, None] = Field(default=None)
     """Controls the strength of the prompt"""
     language: Union[str, None] = Field(default=None)
-    """Language of the text prompt for the image Supported values are "en" for English, 
-    "hi" for Hindi, "ja" for Japanese, "ko" for Korean, and "auto" for automatic 
+    """Language of the text prompt for the image Supported values are "en" for English,
+    "hi" for Hindi, "ja" for Japanese, "ko" for Korean, and "auto" for automatic
     language detection"""
     seed: Union[int, None] = Field(default=None)
     """Random seed for the image generation"""
@@ -390,11 +385,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
                 prompt=prompt, **self._prepare_params(**kwargs)
             )
 
-        image_str_list = [
-            self._to_b64_string(image) for image in generation_result.images
-        ]
-
-        return image_str_list
+        return [self._to_b64_string(image) for image in generation_result.images]
 
     def _edit_images(self, image_str: str, prompt: str, **kwargs: Any) -> List[str]:
         """Edit an image given a image and a prompt.
@@ -414,11 +405,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
                 prompt=prompt, base_image=image, **self._prepare_params(**kwargs)
             )
 
-        image_str_list = [
-            self._to_b64_string(image) for image in generation_result.images
-        ]
-
-        return image_str_list
+        return [self._to_b64_string(image) for image in generation_result.images]
 
     def _to_b64_string(self, image: GeneratedImage) -> str:
         """Transforms a generated image into a b64 encoded string.
@@ -429,7 +416,6 @@ class _BaseVertexAIImageGenerator(BaseModel):
         Returns:
             b64 encoded string of the image.
         """
-
         # This is a hack because at the moment, GeneratedImage doesn't provide
         # a way to get the bytes of the image (or anything else). There is
         # only private methods that are not reliable.
@@ -446,7 +432,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
 
     @property
     def _llm_type(self) -> str:
-        """Returns the type of LLM"""
+        """Returns the type of LLM."""
         return "vertexai-vision"
 
     @property
@@ -466,12 +452,10 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        """Args:
+        messages: The message must be a list of only one element with one part:
+            The user prompt.
         """
-        Args:
-            messages: The message must be a list of only one element with one part:
-                The user prompt.
-        """
-
         # Only one message allowed with one text part.
         user_query = None
 
@@ -482,10 +466,11 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
                 user_query = get_text_str_from_content_part(messages[0].content[0])
 
         if user_query is None:
-            raise ValueError(
+            msg = (
                 "Only one message with one text part allowed for image generation"
                 " Must The prompt of the image"
             )
+            raise ValueError(msg)
 
         image_str_list = self._generate_images(
             prompt=user_query, **messages[0].additional_kwargs, **kwargs
@@ -515,15 +500,13 @@ class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        """Args:
+        messages: The message must be a list of only one element with two part:
+            - The image as a dict {
+                'type': 'image_url', 'image_url': {'url': <message_str>}
+                }
+            - The user prompt.
         """
-        Args:
-            messages: The message must be a list of only one element with two part:
-                - The image as a dict {
-                    'type': 'image_url', 'image_url': {'url': <message_str>}
-                    }
-                - The user prompt.
-        """
-
         # Only one message allowed with two parts: the image and the text.
         user_query = None
         is_valid = len(messages) == 1 and len(messages[0].content) == 2
@@ -531,10 +514,11 @@ class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
             image_str = get_image_str_from_content_part(messages[0].content[0])
             user_query = get_text_str_from_content_part(messages[0].content[1])
         if (user_query is None) or (image_str is None):
-            raise ValueError(
+            msg = (
                 "Only one message allowed for image edition. The message must have"
                 "two parts: First the image and then the user prompt."
             )
+            raise ValueError(msg)
 
         image_str_list = self._edit_images(
             image_str=image_str,

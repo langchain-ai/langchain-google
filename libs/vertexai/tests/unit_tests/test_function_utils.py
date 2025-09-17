@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import json
+import sys
+from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from unittest.mock import Mock, patch
 
 import google.cloud.aiplatform_v1beta1.types as gapic
@@ -13,6 +17,10 @@ from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
 )
 from langchain_core.tools import BaseTool, tool
+from langchain_core.utils.function_calling import (
+    FunctionDescription,
+    convert_to_openai_tool,
+)
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel, Field
 from pydantic.v1 import (
@@ -37,7 +45,7 @@ from langchain_google_vertexai.functions_utils import (
 )
 
 
-def test_format_json_schema_to_gapic():
+def test_format_json_schema_to_gapic() -> None:
     # Simple case
     class RecordPerson(BaseModel):
         """Record some identifying information about a person."""
@@ -65,7 +73,7 @@ def test_format_json_schema_to_gapic():
         banana = "banana"
 
     class A(BaseModel):
-        """Class A"""
+        """Class A."""
 
         int_field: Optional[int]
 
@@ -95,7 +103,7 @@ def test_format_json_schema_to_gapic():
             },
             "array_field": {
                 "items": {
-                    "description": "Class A",
+                    "description": "Class A.",
                     "properties": {
                         "int_field": {"type": "INTEGER", "title": "Int Field"}
                     },
@@ -133,7 +141,7 @@ def test_format_json_schema_to_gapic():
     }
     assert result == expected
 
-    gapic_schema = cast(gapic.Schema, gapic.Schema.from_json(json.dumps(result)))
+    gapic_schema = cast("gapic.Schema", gapic.Schema.from_json(json.dumps(result)))
     assert gapic_schema.type_ == gapic.Type.OBJECT
     assert gapic_schema.title == expected["title"]
     assert gapic_schema.required == expected["required"]
@@ -143,18 +151,42 @@ def test_format_json_schema_to_gapic():
     )
 
 
-def test_format_json_schema_to_gapic_v1():
+# Move class definitions outside function to avoid forward reference issues in Pydantic
+# V1
+class _RecordPersonV1(BaseModelV1):
+    """Record some identifying information about a person."""
+
+    name: str
+    age: Optional[int]
+
+
+class _StringEnumV1(str, Enum):
+    pear = "pear"
+    banana = "banana"
+
+
+class _AV1(BaseModelV1):
+    """Class A."""
+
+    int_field: Optional[int]
+
+
+class _BV1(BaseModelV1):
+    object_field: Optional[_AV1] = FieldV1(description="Class A")
+    array_field: Sequence[_AV1]
+    int_field: int = FieldV1(description="int field", minimum=1, maximum=10)
+    str_field: str = FieldV1(
+        min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", example="ABCD"
+    )
+    str_enum_field: _StringEnumV1
+
+
+def test_format_json_schema_to_gapic_v1() -> None:
     # Simple case
-    class RecordPerson(BaseModelV1):
-        """Record some identifying information about a person."""
-
-        name: str
-        age: Optional[int]
-
-    schema = RecordPerson.schema()
+    schema = _RecordPersonV1.schema()
     result = _format_json_schema_to_gapic_v1(schema)
     expected = {
-        "title": "RecordPerson",
+        "title": "_RecordPersonV1",
         "type": "OBJECT",
         "description": "Record some identifying information about a person.",
         "properties": {
@@ -166,42 +198,24 @@ def test_format_json_schema_to_gapic_v1():
     assert result == expected
 
     # Nested case
-    class StringEnum(str, Enum):
-        pear = "pear"
-        banana = "banana"
-
-    class A(BaseModelV1):
-        """Class A"""
-
-        int_field: Optional[int]
-
-    class B(BaseModelV1):
-        object_field: Optional[A] = FieldV1(description="Class A")
-        array_field: Sequence[A]
-        int_field: int = FieldV1(description="int field", minimum=1, maximum=10)
-        str_field: str = FieldV1(
-            min_length=1, max_length=10, pattern="^[A-Z]{1,10}$", example="ABCD"
-        )
-        str_enum_field: StringEnum
-
-    schema = B.schema()
+    schema = _BV1.schema()
     result = _format_json_schema_to_gapic_v1(dereference_refs(schema))
 
     expected = {
         "properties": {
             "object_field": {
-                "description": "Class A",
+                "description": "Class A.",
                 "properties": {"int_field": {"type": "INTEGER", "title": "Int Field"}},
-                "title": "A",
+                "title": "_AV1",
                 "type": "OBJECT",
             },
             "array_field": {
                 "items": {
-                    "description": "Class A",
+                    "description": "Class A.",
                     "properties": {
                         "int_field": {"type": "INTEGER", "title": "Int Field"}
                     },
-                    "title": "A",
+                    "title": "_AV1",
                     "type": "OBJECT",
                 },
                 "type": "ARRAY",
@@ -209,8 +223,8 @@ def test_format_json_schema_to_gapic_v1():
             },
             "int_field": {
                 "description": "int field",
-                "maximum": 10.0,
-                "minimum": 1.0,
+                "maximum": 10,
+                "minimum": 1,
                 "title": "Int Field",
                 "type": "INTEGER",
             },
@@ -225,17 +239,17 @@ def test_format_json_schema_to_gapic_v1():
             "str_enum_field": {
                 "description": "An enumeration.",
                 "enum": ["pear", "banana"],
-                "title": "StringEnum",
+                "title": "_StringEnumV1",
                 "type": "STRING",
             },
         },
         "type": "OBJECT",
-        "title": "B",
+        "title": "_BV1",
         "required": ["array_field", "int_field", "str_field", "str_enum_field"],
     }
     assert result == expected
 
-    gapic_schema = cast(gapic.Schema, gapic.Schema.from_json(json.dumps(result)))
+    gapic_schema = cast("gapic.Schema", gapic.Schema.from_json(json.dumps(result)))
     assert gapic_schema.type_ == gapic.Type.OBJECT
     assert gapic_schema.title == expected["title"]
     assert gapic_schema.required == expected["required"]
@@ -258,29 +272,28 @@ def test_format_json_schema_to_gapic_union_types() -> None:
 
     schema_v1 = RecordPerson_v1.schema()
     schema_v2 = RecordPerson.model_json_schema()
-    del schema_v2
 
     result_v1 = _format_json_schema_to_gapic_v1(schema_v1)
-    # result_v2 = _format_json_schema_to_gapic(schema_v2)
     result_v1["title"] = "RecordPerson"
 
-    # TODO: add a proper support for Union since it has finally arrived!
-    # assert result_v1 == result_v2
+    result_v2 = _format_json_schema_to_gapic(schema_v2)
+
+    assert result_v1 == result_v2
 
 
 # reusable test inputs
 def search(question: str) -> str:
-    """Search tool"""
+    """Search tool."""
     return question
 
 
 search_tool = tool(search)
 search_exp = gapic.FunctionDeclaration(
     name="search",
-    description="Search tool",
+    description="Search tool.",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
-        description="Search tool",
+        description="Search tool.",
         title="search",
         properties={"question": gapic.Schema(type=gapic.Type.STRING, title="Question")},
         required=["question"],
@@ -290,11 +303,11 @@ search_exp = gapic.FunctionDeclaration(
 search_vfd = vertexai.FunctionDeclaration.from_func(search)
 search_vfd_exp = gapic.FunctionDeclaration(
     name="search",
-    description="Search tool",
+    description="Search tool.",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
         title="search",
-        description="Search tool",
+        description="Search tool.",
         properties={"question": gapic.Schema(type=gapic.Type.STRING, title="Question")},
         required=["question"],
         property_ordering=["question"],
@@ -303,11 +316,11 @@ search_vfd_exp = gapic.FunctionDeclaration(
 
 
 class SearchBaseTool(BaseTool):
-    def _run(self):
+    def _run(self) -> None:
         pass
 
 
-search_base_tool = SearchBaseTool(name="search", description="Search tool")
+search_base_tool = SearchBaseTool(name="search", description="Search tool.")
 search_base_tool_exp = gapic.FunctionDeclaration(
     name=search_base_tool.name,
     description=search_base_tool.description,
@@ -322,7 +335,7 @@ search_base_tool_exp = gapic.FunctionDeclaration(
 
 
 class SearchModel(BaseModel):
-    """Search model"""
+    """Search model."""
 
     question: str
 
@@ -335,11 +348,11 @@ search_model_dict = {
 }
 search_model_exp = gapic.FunctionDeclaration(
     name="SearchModel",
-    description="Search model",
+    description="Search model.",
     parameters=gapic.Schema(
         type=gapic.Type.OBJECT,
         title="SearchModel",
-        description="Search model",
+        description="Search model.",
         properties={
             "question": gapic.Schema(type=gapic.Type.STRING, title="Question"),
         },
@@ -386,7 +399,7 @@ SRC_EXP_MOCKS_DESC: List[
     "langchain_google_vertexai.functions_utils._format_dict_to_function_declaration",
     new=mock_dict,
 )
-def test_format_to_gapic_function_declaration():
+def test_format_to_gapic_function_declaration() -> None:
     for src, exp, mocks, desc in SRC_EXP_MOCKS_DESC:
         res = _format_to_gapic_function_declaration(src)
         assert res == exp
@@ -404,14 +417,15 @@ def test_format_to_gapic_function_declaration():
             m.reset_mock()
 
 
-def test_format_to_gapic_tool():
+def test_format_to_gapic_tool() -> None:
     src = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
     fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
     expected = gapic.Tool(function_declarations=fds)
     result = _format_to_gapic_tool(src)
     assert result == expected
 
-    src_2 = src + [
+    src_2 = [
+        *src,
         gapic.Tool(function_declarations=[search_model_exp]),
         vertexai.Tool.from_function_declarations(
             [vertexai.FunctionDeclaration.from_func(search)]
@@ -419,7 +433,7 @@ def test_format_to_gapic_tool():
         {"function_declarations": [search_model_dict]},
     ]
     expected = gapic.Tool(
-        function_declarations=fds + [search_model_exp, search_vfd_exp, search_model_exp]
+        function_declarations=[*fds, search_model_exp, search_vfd_exp, search_model_exp]
     )
     result = _format_to_gapic_tool(src_2)
     assert result == expected
@@ -483,12 +497,12 @@ def test_format_to_gapic_tool():
     )
 
 
-def test_format_tool_config_invalid():
+def test_format_tool_config_invalid() -> None:
     with pytest.raises(ValueError):
         _format_tool_config({})  # type: ignore
 
 
-def test_format_tool_config():
+def test_format_tool_config() -> None:
     tool_config = _format_tool_config(
         {
             "function_calling_config": {
@@ -507,7 +521,7 @@ def test_format_tool_config():
 
 @pytest.mark.parametrize(
     "choice",
-    (True, "foo", ["foo"], "any", {"type": "function", "function": {"name": "foo"}}),
+    [True, "foo", ["foo"], "any", {"type": "function", "function": {"name": "foo"}}],
 )
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = GapicToolConfig(
@@ -518,3 +532,317 @@ def test__tool_choice_to_tool_config(choice: Any) -> None:
     )
     actual = _tool_choice_to_tool_config(choice, ["foo"])
     assert expected == actual
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="Requires Python 3.10 or higher")
+def test_nested_bind_tools() -> None:
+    class Person(BaseModel):
+        name: str = Field(description="The name.")
+        hair_color: str | None = Field("Hair color, only if provided.")  # type: ignore[syntax, unused-ignore]
+
+    class People(BaseModel):
+        group_ids: list[int] = Field(description="The group ids.")
+        data: list[Person] = Field(description="The people.")
+
+    tool = convert_to_openai_tool(People)
+    function = convert_to_openai_tool(cast("dict", tool))["function"]
+    converted_tool = _format_dict_to_function_declaration(
+        cast("FunctionDescription", function)
+    )
+    assert converted_tool.name == "People"
+
+
+def test_tool_with_union_types() -> None:
+    """Test that validates tools with Union types in function declarations
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper1(BaseModel):
+        """Test helper class 1."""
+
+        x: bool = False
+
+    class Helper2(BaseModel):
+        """Test helper class 2."""
+
+        y: str = "1"
+
+    class GetWeather(BaseModel):
+        """Get weather information."""
+
+        location: str = "New York, USA"
+        date: Union[Helper1, Helper2] = Helper1()
+
+    # Convert the model schema
+    schema = GetWeather.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "location" in result["properties"]
+    assert "date" in result["properties"]
+
+    # Verify that anyOf is present in the date property
+    date_property = result["properties"]["date"]
+    assert "anyOf" in date_property
+    assert isinstance(date_property["anyOf"], list)
+    assert len(date_property["anyOf"]) == 2
+
+    # Check first option (Helper1)
+    helper1 = date_property["anyOf"][0]
+    assert "properties" in helper1
+    assert "x" in helper1["properties"]
+    assert helper1["properties"]["x"]["type"] == "BOOLEAN"
+
+    # Check second option (Helper2)
+    helper2 = date_property["anyOf"][1]
+    assert "properties" in helper2
+    assert "y" in helper2["properties"]
+    assert helper2["properties"]["y"]["type"] == "STRING"
+
+    # Test with conversion to gapic.Schema
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    date_prop = gapic_schema.properties["date"]
+    assert hasattr(date_prop, "any_of")
+    assert len(date_prop.any_of) == 2
+
+
+def test_tool_with_union_primitive_types() -> None:
+    """Test that validates tools with Union types that include primitive types
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper(BaseModel):
+        """Test helper class."""
+
+        value: int = 42
+
+    class SearchQuery(BaseModel):
+        """Search query model with a union parameter."""
+
+        query: str = "default query"
+        filter: Union[str, Helper] = "default filter"
+
+    # Convert the model schema
+    schema = SearchQuery.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "filter" in result["properties"]
+
+    # Verify that anyOf is present in the filter property
+    filter_property = result["properties"]["filter"]
+    assert "anyOf" in filter_property
+    assert isinstance(filter_property["anyOf"], list)
+    assert len(filter_property["anyOf"]) == 2
+
+    # One option should be a string
+    string_option = next(
+        (opt for opt in filter_property["anyOf"] if opt.get("type") == "STRING"), None
+    )
+    assert string_option is not None
+
+    # One option should be an object (Helper)
+    object_option = next(
+        (opt for opt in filter_property["anyOf"] if opt.get("type") == "OBJECT"), None
+    )
+    assert object_option is not None
+    assert "properties" in object_option
+    assert "value" in object_option["properties"]
+    assert object_option["properties"]["value"]["type"] == "INTEGER"
+
+    # Test with conversion to gapic.Schema
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    filter_prop = gapic_schema.properties["filter"]
+    assert hasattr(filter_prop, "any_of")
+    assert len(filter_prop.any_of) == 2
+
+
+def test_tool_with_nested_union_types() -> None:
+    """Test that validates tools with nested Union types are correctly converted
+    to nested 'anyOf' structures in the schema.
+    """
+
+    class Address(BaseModel):
+        """Address model."""
+
+        street: str = "123 Main St"
+        city: str = "Anytown"
+
+    class Contact(BaseModel):
+        """Contact model."""
+
+        email: str = "user@example.com"
+        phone: Optional[str] = None
+
+    class Person(BaseModel):
+        """Person model with complex nested unions."""
+
+        name: str
+        location: Union[str, Address] = "Unknown"
+        contacts: List[Union[str, Contact]] = []
+
+    # Convert the model schema
+    schema = Person.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "name" in result["properties"]
+    assert "location" in result["properties"]
+    assert "contacts" in result["properties"]
+
+    # Check location property (direct Union)
+    location_property = result["properties"]["location"]
+    assert "anyOf" in location_property
+    location_any_of = location_property["anyOf"]
+    assert len(location_any_of) == 2
+
+    # One option should be a string
+    string_option = next(
+        (opt for opt in location_any_of if opt.get("type") == "STRING"), None
+    )
+    assert string_option is not None
+
+    # One option should be an object (Address)
+    address_option = next(
+        (opt for opt in location_any_of if opt.get("type") == "OBJECT"), None
+    )
+    assert address_option is not None
+    assert "properties" in address_option
+    assert "city" in address_option["properties"]
+
+    # Check contacts property (List of Union types)
+    contacts_property = result["properties"]["contacts"]
+    assert "type" in contacts_property
+    assert contacts_property["type"] == "ARRAY"
+    assert "items" in contacts_property
+
+    # The items should have anyOf for the union types
+    items = contacts_property["items"]
+    assert "anyOf" in items
+    assert len(items["anyOf"]) == 2
+
+    # Convert to gapic.Schema to ensure it's valid
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    assert gapic_schema.properties["location"].any_of is not None
+    assert len(gapic_schema.properties["location"].any_of) == 2
+
+
+def test_tool_field_union_types() -> None:
+    """Test that validates Field with Union types in Pydantic models
+    are correctly converted to 'anyOf' in the schema.
+    """
+
+    class Helper1(BaseModel):
+        """Helper class 1."""
+
+        x: bool = False
+
+    class Helper2(BaseModel):
+        """Helper class 2."""
+
+        y: str = "1"
+
+    class GetWeather(BaseModel):
+        """Get weather information for a location."""
+
+        location: str = Field(
+            ..., description="The city and country, e.g. New York, USA"
+        )
+        date: Union[Helper1, Helper2] = Field(description="Test field")
+
+    # Convert the model schema
+    schema = GetWeather.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that the properties exist
+    assert "properties" in result
+    assert "location" in result["properties"]
+    assert "date" in result["properties"]
+
+    # Check location property
+    location_property = result["properties"]["location"]
+    assert "description" in location_property
+    assert (
+        location_property["description"] == "The city and country, e.g. New York, USA"
+    )
+
+    # Check date property (the union type)
+    date_property = result["properties"]["date"]
+    assert "anyOf" in date_property
+    assert "description" in date_property
+    assert date_property["description"] == "Test field"
+
+    any_of = date_property["anyOf"]
+    assert len(any_of) == 2
+
+    # Extract the titles of the models in the anyOf
+    model_titles = []
+    for option in any_of:
+        if "title" in option:
+            model_titles.append(option["title"])
+
+    assert "Helper1" in model_titles
+    assert "Helper2" in model_titles
+
+    # Check that the required fields include both location and date
+    assert "required" in result
+    required_fields = result["required"]
+    assert "location" in required_fields
+    assert "date" in required_fields
+
+    # Convert to gapic.Schema to ensure it's valid
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    date_prop = gapic_schema.properties["date"]
+    assert hasattr(date_prop, "any_of")
+    assert len(date_prop.any_of) == 2
+
+
+def test_union_nullable_types() -> None:
+    """Test that validates the handling of Union types with null (None/Optional)
+    are correctly handled by removing them from required fields.
+    """
+
+    class Config(BaseModel):
+        """Config model with nullable fields."""
+
+        required_field: str
+        optional_primitive: Optional[int] = None
+        optional_complex: Optional[Dict[str, str]] = None
+
+    schema = Config.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    # Check that only the required_field is in required
+    assert "required" in result
+    assert "required_field" in result["required"]
+    assert "optional_primitive" not in result["required"]
+    assert "optional_complex" not in result["required"]
+
+    # Check that the nullable fields have the correct schema
+    assert "properties" in result
+
+    # Optional primitive field should have INTEGER type (not anyOf)
+    assert "optional_primitive" in result["properties"]
+    optional_primitive = result["properties"]["optional_primitive"]
+    assert "type" in optional_primitive
+    assert optional_primitive["type"] == "INTEGER"
+
+    # Optional complex field should have OBJECT type
+    assert "optional_complex" in result["properties"]
+    optional_complex = result["properties"]["optional_complex"]
+    assert "type" in optional_complex
+    assert optional_complex["type"] == "OBJECT"
+
+    # Convert to gapic.Schema to ensure it's valid
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    assert "required_field" in gapic_schema.required
+    assert "optional_primitive" not in gapic_schema.required
+    assert "optional_complex" not in gapic_schema.required

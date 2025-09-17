@@ -5,8 +5,10 @@ Your end-user credentials would be used to make the calls (make sure you've run
 """
 
 import pytest
-from vertexai.language_models import TextEmbeddingModel  # type: ignore
-from vertexai.vision_models import MultiModalEmbeddingModel  # type: ignore
+from vertexai.language_models import TextEmbeddingModel  # type: ignore[import-untyped]
+from vertexai.vision_models import (  # type: ignore[import-untyped]
+    MultiModalEmbeddingModel,
+)
 
 from langchain_google_vertexai.embeddings import (
     GoogleEmbeddingModelType,
@@ -14,7 +16,7 @@ from langchain_google_vertexai.embeddings import (
 )
 
 _EMBEDDING_MODELS = [
-    ("text-embedding-004", 768),
+    ("gemini-embedding-001", 3072),
     ("multimodalembedding@001", 1408),
 ]
 
@@ -24,11 +26,11 @@ def test_initialization() -> None:
     """Test embedding model initialization."""
     for embeddings in [
         VertexAIEmbeddings(
-            model_name="text-embedding-004",
+            model_name="gemini-embedding-001",
         ),
-        VertexAIEmbeddings(model="text-embedding-004"),
+        VertexAIEmbeddings(model="gemini-embedding-001"),
     ]:
-        assert embeddings.model_name == "text-embedding-004"
+        assert embeddings.model_name == "gemini-embedding-001"
 
 
 @pytest.mark.release
@@ -37,7 +39,7 @@ def test_initialization() -> None:
     [1, 8],
 )
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_documents(
@@ -55,7 +57,7 @@ def test_langchain_google_vertexai_embedding_documents(
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_documents_with_task_type(
@@ -74,7 +76,7 @@ def test_langchain_google_vertexai_embedding_documents_with_task_type(
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -> None:
@@ -86,7 +88,7 @@ def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
+    ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
 def test_langchain_google_vertexai_embedding_query_with_task_type(
@@ -101,7 +103,7 @@ def test_langchain_google_vertexai_embedding_query_with_task_type(
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "dim, expected_dim",
+    ("dim", "expected_dim"),
     [(None, 1408), (512, 512)],
 )
 def test_langchain_google_vertexai_image_embeddings(
@@ -118,7 +120,14 @@ def test_langchain_google_vertexai_image_embeddings(
 
 @pytest.mark.release
 def test_langchain_google_vertexai_text_model() -> None:
-    embeddings_model = VertexAIEmbeddings(model_name="text-embedding-004")
+    embeddings_model = VertexAIEmbeddings(model_name="gemini-embedding-001")
+    assert isinstance(embeddings_model.client, TextEmbeddingModel)
+    assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
+
+
+@pytest.mark.release
+def test_langchain_google_vertexai_text_gemini_model() -> None:
+    embeddings_model = VertexAIEmbeddings(model_name="gemini-embedding-001")
     assert isinstance(embeddings_model.client, TextEmbeddingModel)
     assert embeddings_model.model_type == GoogleEmbeddingModelType.TEXT
 
@@ -132,8 +141,12 @@ def test_langchain_google_vertexai_multimodal_model() -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize(
-    "model_name, embeddings_dim",
-    [("text-embedding-004", 768), ("text-multilingual-embedding-002", 768)],
+    ("model_name", "embeddings_dim"),
+    [
+        ("gemini-embedding-001", 768),
+        ("text-multilingual-embedding-002", 768),
+        ("gemini-embedding-001", 3072),
+    ],
 )
 def test_langchain_google_vertexai_embedding_with_output_dimensionality(
     model_name: str, embeddings_dim: int
@@ -142,6 +155,7 @@ def test_langchain_google_vertexai_embedding_with_output_dimensionality(
     output = model.embed(
         texts=["foo bar"],
         dimensions=embeddings_dim,
+        batch_size=1,
     )
     assert len(output) == 1
     for embedding in output:

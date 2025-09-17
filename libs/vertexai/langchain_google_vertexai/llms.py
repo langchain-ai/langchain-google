@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
+import logging
+from collections.abc import AsyncIterator, Iterator
+from difflib import get_close_matches
+from typing import Any, Dict, List, Optional
 
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -12,8 +15,10 @@ from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from pydantic import ConfigDict, Field, model_validator
 from typing_extensions import Self
 
-from langchain_google_vertexai._base import GoogleModelFamily, _VertexAICommon
+from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai.chat_models import ChatVertexAI
+
+logger = logging.getLogger(__name__)
 
 
 class VertexAI(_VertexAICommon, BaseLLM):
@@ -40,9 +45,29 @@ class VertexAI(_VertexAICommon, BaseLLM):
     """
 
     def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
-        """Needed for mypy typing to recognize model_name as a valid arg."""
+        """Needed for mypy typing to recognize model_name as a valid arg
+        and for arg validation.
+        """
         if model_name:
             kwargs["model_name"] = model_name
+
+        # Get all valid field names, including aliases
+        valid_fields = set()
+        for field_name, field_info in self.__class__.model_fields.items():
+            valid_fields.add(field_name)
+            if hasattr(field_info, "alias") and field_info.alias is not None:
+                valid_fields.add(field_info.alias)
+
+        # Check for unrecognized arguments
+        for arg in kwargs:
+            if arg not in valid_fields:
+                suggestions = get_close_matches(arg, valid_fields, n=1)
+                suggestion = (
+                    f" Did you mean: '{suggestions[0]}'?" if suggestions else ""
+                )
+                logger.warning(
+                    f"Unexpected argument '{arg}' provided to VertexAI.{suggestion}"
+                )
         super().__init__(**kwargs)
 
     model_config = ConfigDict(
@@ -50,7 +75,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
     )
 
     @classmethod
-    def is_lc_serializable(self) -> bool:
+    def is_lc_serializable(cls) -> bool:
         return True
 
     @classmethod
@@ -61,12 +86,6 @@ class VertexAI(_VertexAICommon, BaseLLM):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validate that the python package exists in environment."""
-        if "medlm" in self.model_name and self.model_family == GoogleModelFamily.PALM:
-            err = (
-                "MedLM on Palm is not supported any more! Please, use Gemini or "
-                "switch to langchain-google-vertexai==2.0.13"
-            )
-            raise ValueError(err)
         self.client = ChatVertexAI(
             model_name=self.model_name,
             tuned_model_name=self.tuned_model_name,
@@ -192,7 +211,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
                 text=stream_chunk.message.content,
                 generation_info={
                     **stream_chunk.generation_info,
-                    **{"usage_metadata": usage_metadata},
+                    "usage_metadata": usage_metadata,
                 },
             )
             yield chunk

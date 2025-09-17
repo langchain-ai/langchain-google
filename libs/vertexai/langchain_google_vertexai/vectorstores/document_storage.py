@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Iterator, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
-    Iterator,
     List,
     Optional,
-    Sequence,
     Tuple,
     Union,
 )
@@ -47,6 +46,7 @@ class GCSDocumentStorage(DocumentStorage):
         n_threads=8,
     ) -> None:
         """Constructor.
+
         Args:
             bucket: Bucket where the documents will be stored.
             prefix: Prefix that is prepended to all document names.
@@ -56,17 +56,17 @@ class GCSDocumentStorage(DocumentStorage):
         self._prefix = prefix
         self._threaded = threaded
         self._n_threads = n_threads
-        if threaded:
-            if not (int(n_threads) > 0 and int(n_threads) <= 50):
-                raise ValueError(
-                    "n_threads must be a valid integer,"
-                    " greater than 0 and lower than or equal to 50"
-                )
+        if threaded and not (int(n_threads) > 0 and int(n_threads) <= 50):
+            msg = (
+                "n_threads must be a valid integer,"
+                " greater than 0 and lower than or equal to 50"
+            )
+            raise ValueError(msg)
 
     def _prepare_doc_for_bulk_upload(
         self, key: str, value: Document
     ) -> Tuple[io.IOBase, Blob]:
-        document_json = value.dict()
+        document_json = value.model_dump()
         document_text = json.dumps(document_json).encode("utf-8")
         doc_contents = io.BytesIO(document_text)
         blob_name = self._get_blob_name(key)
@@ -74,7 +74,7 @@ class GCSDocumentStorage(DocumentStorage):
         return doc_contents, blob
 
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
-        """Stores a series of documents using each keys
+        """Stores a series of documents using each keys.
 
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
@@ -107,24 +107,24 @@ class GCSDocumentStorage(DocumentStorage):
     ) -> Union[Document, None]:
         if isinstance(result, NotFound):
             return None
-        elif result is None:
+        if result is None:
             doc.seek(0)
             raw_doc = doc.read()
             data = raw_doc.decode("utf-8")
             data_json = json.loads(data)
             return Document(**data_json)
-        else:
-            raise Exception(
-                "Unexpected result type when batch getting multiple files from GCS"
-            )
+        msg = "Unexpected result type when batch getting multiple files from GCS"
+        raise Exception(msg)
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
         The default implementation only loops `get_by_id`.
         Subclasses that have faster ways to retrieve data by batch should implement
         this method.
+
         Args:
             ids: List of ids for the text.
+
         Returns:
             List of documents. If the key id is not found for any id record returns a
                 None instead.
@@ -143,15 +143,14 @@ class GCSDocumentStorage(DocumentStorage):
                 worker_type="thread",
                 max_workers=self._n_threads,
             )
-            for i, result in enumerate(download_results):
+            for _i, result in enumerate(download_results):
                 if isinstance(result, Exception) and not isinstance(result, NotFound):
                     raise result
             return [
                 self._convert_bytes_to_doc(doc[1], result)
                 for doc, result in zip(download_docs, download_results)
             ]
-        else:
-            return [self._get_one(key) for key in keys]
+        return [self._get_one(key) for key in keys]
 
     def mdelete(self, keys: Sequence[str]) -> None:
         """Deletes a batch of documents by id.
@@ -176,12 +175,13 @@ class GCSDocumentStorage(DocumentStorage):
 
     def _get_one(self, key: str) -> Document | None:
         """Gets the text of a document by its id. If not found, returns None.
+
         Args:
             key: Id of the document to get from the storage.
+
         Returns:
             Document if found, otherwise None.
         """
-
         blob_name = self._get_blob_name(key)
         existing_blob = self._bucket.get_blob(blob_name)
 
@@ -194,6 +194,7 @@ class GCSDocumentStorage(DocumentStorage):
 
     def _set_one(self, key: str, value: Document) -> None:
         """Stores a document text associated to a document_id.
+
         Args:
             key: Id of the document to be stored.
             document: Document to be stored.
@@ -201,7 +202,7 @@ class GCSDocumentStorage(DocumentStorage):
         blob_name = self._get_blob_name(key)
         new_blow = self._bucket.blob(blob_name)
 
-        document_json = value.dict()
+        document_json = value.model_dump()
         document_text = json.dumps(document_json)
         new_blow.upload_from_string(document_text)
 
@@ -217,8 +218,10 @@ class GCSDocumentStorage(DocumentStorage):
 
     def _get_blob_name(self, document_id: str) -> str:
         """Builds a blob name using the prefix and the document_id.
+
         Args:
             document_id: Id of the document.
+
         Returns:
             Name of the blob that the document will be/is stored in
         """
@@ -237,6 +240,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         exclude_from_indexes: Optional[List[str]] = None,
     ) -> None:
         """Constructor.
+
         Args:
             bucket: Bucket where the documents will be stored.
             prefix: Prefix that is prepended to all document names.
@@ -250,8 +254,10 @@ class DataStoreDocumentStorage(DocumentStorage):
 
     def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
         """Gets a batch of documents by id.
+
         Args:
             ids: List of ids for the text.
+
         Returns:
             List of texts. If the key id is not found for any id record returns a None
                 instead.
@@ -278,7 +284,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         ]
 
     def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
-        """Stores a series of documents using each keys
+        """Stores a series of documents using each keys.
 
         Args:
             key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.
