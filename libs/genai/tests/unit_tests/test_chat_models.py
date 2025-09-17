@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import warnings
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Union
 from unittest.mock import ANY, Mock, patch
@@ -20,6 +21,7 @@ from google.api_core.exceptions import ResourceExhausted
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -917,3 +919,198 @@ def test_response_to_result_grounding_metadata(
             else {}
         )
         assert grounding_metadata == expected_grounding_metadata
+
+
+@pytest.mark.parametrize(
+    "is_async,mock_target,method_name",
+    [
+        (False, "_chat_with_retry", "_generate"),  # Sync
+        (True, "_achat_with_retry", "_agenerate"),  # Async
+    ],
+)
+@pytest.mark.parametrize(
+    "instance_timeout,call_timeout,expected_timeout,should_have_timeout",
+    [
+        (5.0, None, 5.0, True),  # Instance-level timeout
+        (5.0, 10.0, 10.0, True),  # Call-level overrides instance
+        (None, None, None, False),  # No timeout anywhere
+    ],
+)
+async def test_timeout_parameter_handling(
+    is_async: bool,
+    mock_target: str,
+    method_name: str,
+    instance_timeout: Optional[float],
+    call_timeout: Optional[float],
+    expected_timeout: Optional[float],
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for sync and async methods."""
+    with patch(f"langchain_google_genai.chat_models.{mock_target}") as mock_retry:
+        mock_retry.return_value = GenerateContentResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "finish_reason": "STOP",
+                    }
+                ]
+            }
+        )
+
+        # Create LLM with optional instance-level timeout
+        llm_kwargs = {
+            "model": "gemini-2.5-flash",
+            "google_api_key": SecretStr("test-key"),
+        }
+        if instance_timeout is not None:
+            llm_kwargs["timeout"] = instance_timeout
+
+        llm = ChatGoogleGenerativeAI(**llm_kwargs)
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+        # Call the appropriate method with optional call-level timeout
+        method = getattr(llm, method_name)
+        call_kwargs = {}
+        if call_timeout is not None:
+            call_kwargs["timeout"] = call_timeout
+
+        if is_async:
+            await method(messages, **call_kwargs)
+        else:
+            method(messages, **call_kwargs)
+
+        # Verify timeout was passed correctly
+        mock_retry.assert_called_once()
+        call_kwargs_actual = mock_retry.call_args[1]
+
+        if should_have_timeout:
+            assert "timeout" in call_kwargs_actual
+            assert call_kwargs_actual["timeout"] == expected_timeout
+        else:
+            assert "timeout" not in call_kwargs_actual
+
+
+@pytest.mark.parametrize(
+    "instance_timeout,expected_timeout,should_have_timeout",
+    [
+        (5.0, 5.0, True),  # Instance-level timeout
+        (None, None, False),  # No timeout
+    ],
+)
+@patch("langchain_google_genai.chat_models._chat_with_retry")
+def test_timeout_streaming_parameter_handling(
+    mock_retry: Mock,
+    instance_timeout: Optional[float],
+    expected_timeout: Optional[float],
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for streaming methods."""
+
+    # Mock the return value for _chat_with_retry to return an iterator
+    def mock_stream() -> Iterator[GenerateContentResponse]:
+        yield GenerateContentResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "chunk1"}]},
+                        "finish_reason": "STOP",
+                    }
+                ]
+            }
+        )
+
+    mock_retry.return_value = mock_stream()
+
+    # Create LLM with optional instance-level timeout
+    llm_kwargs = {
+        "model": "gemini-2.5-flash",
+        "google_api_key": SecretStr("test-key"),
+    }
+    if instance_timeout is not None:
+        llm_kwargs["timeout"] = instance_timeout
+
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+
+    # Call _stream (which should pass timeout to _chat_with_retry)
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    list(llm._stream(messages))  # Convert generator to list to trigger execution
+
+    # Verify timeout was passed correctly
+    mock_retry.assert_called_once()
+    call_kwargs = mock_retry.call_args[1]
+
+    if should_have_timeout:
+        assert "timeout" in call_kwargs
+        assert call_kwargs["timeout"] == expected_timeout
+    else:
+        assert "timeout" not in call_kwargs
+
+
+@pytest.mark.parametrize(
+    "is_async,mock_target,method_name",
+    [
+        (False, "_chat_with_retry", "_generate"),  # Sync
+        (True, "_achat_with_retry", "_agenerate"),  # Async
+    ],
+)
+@pytest.mark.parametrize(
+    "instance_max_retries,call_max_retries,expected_max_retries,should_have_max_retries",
+    [
+        (1, None, 1, True),  # Instance-level max_retries
+        (3, 5, 5, True),  # Call-level overrides instance
+        (6, None, 6, True),  # Default instance value
+    ],
+)
+async def test_max_retries_parameter_handling(
+    is_async: bool,
+    mock_target: str,
+    method_name: str,
+    instance_max_retries: int,
+    call_max_retries: Optional[int],
+    expected_max_retries: int,
+    should_have_max_retries: bool,
+) -> None:
+    """Test max_retries parameter handling for sync and async methods."""
+    with patch(f"langchain_google_genai.chat_models.{mock_target}") as mock_retry:
+        mock_retry.return_value = GenerateContentResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "finish_reason": "STOP",
+                    }
+                ]
+            }
+        )
+
+        # Instance-level max_retries
+        llm_kwargs = {
+            "model": "gemini-2.5-flash",
+            "google_api_key": SecretStr("test-key"),
+            "max_retries": instance_max_retries,
+        }
+
+        llm = ChatGoogleGenerativeAI(**llm_kwargs)
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+        # Call the appropriate method with optional call-level max_retries
+        method = getattr(llm, method_name)
+        call_kwargs = {}
+        if call_max_retries is not None:
+            call_kwargs["max_retries"] = call_max_retries
+
+        if is_async:
+            await method(messages, **call_kwargs)
+        else:
+            method(messages, **call_kwargs)
+
+        # Verify max_retries was passed correctly
+        mock_retry.assert_called_once()
+        call_kwargs_actual = mock_retry.call_args[1]
+
+        if should_have_max_retries:
+            assert "max_retries" in call_kwargs_actual
+            assert call_kwargs_actual["max_retries"] == expected_max_retries
+        else:
+            assert "max_retries" not in call_kwargs_actual

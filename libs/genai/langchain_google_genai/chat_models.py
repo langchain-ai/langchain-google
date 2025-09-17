@@ -220,10 +220,10 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise ChatGoogleGenerativeAIError(msg) from e
         except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
-            if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
+            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
-                time.sleep(e.retry_after)
+                time.sleep(getattr(e, "retry_after"))
             raise
         except Exception:
             raise
@@ -267,6 +267,13 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             # Do not retry for these errors.
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
+        except ResourceExhausted as e:
+            # Handle quota-exceeded error with recommended retry delay
+            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
+                "wait_exponential_max", 60.0
+            ):
+                time.sleep(getattr(e, "retry_after"))
+            raise
         except Exception:
             raise
 
@@ -1776,6 +1783,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
             **kwargs,
@@ -1824,6 +1835,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
             **kwargs,
@@ -1859,6 +1874,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
             generation_method=self.client.stream_generate_content,
@@ -1925,6 +1944,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tool_choice=tool_choice,
                 **kwargs,
             )
+            if self.timeout is not None and "timeout" not in kwargs:
+                kwargs["timeout"] = self.timeout
+            if "max_retries" not in kwargs:
+                kwargs["max_retries"] = self.max_retries
             prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
             async for chunk in await _achat_with_retry(
                 request=request,
