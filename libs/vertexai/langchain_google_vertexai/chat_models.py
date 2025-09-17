@@ -2031,7 +2031,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        safety_settings = self._safety_settings_gemini(safety_settings)
+        formatted_safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -2096,12 +2096,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                 )
 
-            if safety_settings:
+            if formatted_safety_settings:
                 v1_safety_settings = [
                     v1SafetySetting(
                         category=s.category, method=s.method, threshold=s.threshold
                     )
-                    for s in safety_settings
+                    for s in formatted_safety_settings
                 ]
 
         if (self.cached_content is not None) or (cached_content is not None):
