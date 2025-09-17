@@ -755,20 +755,20 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 def test_temperature_range_pydantic_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValidationError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.1)
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=2.1)
 
     with pytest.raises(ValidationError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.1)
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=-0.1)
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         google_api_key=SecretStr("..."),
         temperature=1.5,
     )
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-2.0-flash",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_model_type": "chat",
         "ls_temperature": 1.5,
     }
@@ -777,10 +777,10 @@ def test_temperature_range_pydantic_validation() -> None:
 def test_temperature_range_model_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValueError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.5)
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=2.5)
 
     with pytest.raises(ValueError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.5)
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=-0.5)
 
 
 def test_model_kwargs() -> None:
