@@ -1,10 +1,13 @@
 from typing import Any
 
+import pytest
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from langchain_core.prompts import PromptTemplate
 
 from langchain_google_genai import ChatGoogleGenerativeAI
+
+model_names = ["gemini-2.5-flash"]
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
@@ -20,10 +23,14 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         self.generations.append(response.generations[0][0].text)
 
 
-def test_streaming_callback() -> None:
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+def test_streaming_callback(model_name: str) -> None:
     prompt_template = "Tell me details about the Company {name} with 2 bullet point?"
     cb = StreamingLLMCallbackHandler()
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001", callbacks=[cb])
+    llm = ChatGoogleGenerativeAI(model=model_name, callbacks=[cb])
     llm_chain = PromptTemplate.from_template(prompt_template) | llm
     for _t in llm_chain.stream({"name": "Google"}):
         pass

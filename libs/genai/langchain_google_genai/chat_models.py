@@ -1232,8 +1232,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
 
 
+            # Default method uses function calling
             structured_llm = llm.with_structured_output(Joke)
-            structured_llm.invoke("Tell me a joke about cats")
+
+            # For more reliable output, use json_schema with native responseSchema
+            structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
+            structured_llm_json.invoke("Tell me a joke about cats")
 
         .. code-block:: python
 
@@ -1242,6 +1246,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 punchline="They have nine lives on the internet",
                 rating=None,
             )
+
+        Two methods are supported for structured output:
+
+        * ``method="function_calling"`` (default): Uses tool calling to extract
+        structured data. Compatible with all models.
+        * ``method="json_schema"``: Uses Gemini's native structured output with
+        responseSchema. More reliable but requires Gemini 1.5+ models.
+        ``method="json_mode"`` also works for backwards compatibility but is a misnomer.
+
+        The ``json_schema`` method is recommended for better reliability as it
+        constrains the model's generation process directly rather than relying on
+        post-processing tool calls.
 
     Image input:
         .. code-block:: python
@@ -2104,7 +2120,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def with_structured_output(
         self,
         schema: Union[Dict, Type[BaseModel]],
-        method: Optional[Literal["function_calling", "json_mode"]] = "function_calling",
+        method: Optional[
+            Literal["function_calling", "json_mode", "json_schema"]
+        ] = "function_calling",
         *,
         include_raw: bool = False,
         **kwargs: Any,
@@ -2116,7 +2134,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        if method == "json_mode":
+        if method in ("json_mode", "json_schema"):  # `json_schema` preferred
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()

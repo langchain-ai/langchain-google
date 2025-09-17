@@ -172,7 +172,14 @@ _allowed_params = [
 _allowed_beta_params = [
     "media_resolution",
 ]
-_allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
+_allowed_params_prediction_service = [
+    "request",
+    "timeout",
+    "metadata",
+    "labels",
+    # Allow controlling GAPIC client retries from callers.
+    "retry",
+]
 
 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
@@ -782,6 +789,10 @@ def _completion_with_retry(
     def _completion_with_retry_inner(generation_method: Callable, **kwargs: Any) -> Any:
         return generation_method(**kwargs)
 
+    # If user requested 0 retries, disable GAPIC retries too unless explicitly set.
+    if max_retries <= 0 and "retry" not in kwargs:
+        kwargs["retry"] = None
+
     params = {
         k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service
     }
@@ -811,6 +822,10 @@ async def _acompletion_with_retry(
         generation_method: Callable, **kwargs: Any
     ) -> Any:
         return await generation_method(**kwargs)
+
+    # If user requested 0 retries, disable GAPIC retries too unless explicitly set.
+    if max_retries <= 0 and "retry" not in kwargs:
+        kwargs["retry"] = None
 
     params = {
         k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service

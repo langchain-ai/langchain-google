@@ -10,7 +10,7 @@ from langchain_core.outputs import LLMResult
 
 from langchain_google_genai import GoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 
-model_names = ["gemini-1.5-flash-latest"]
+model_names = ["gemini-2.5-flash"]
 
 
 @pytest.mark.parametrize(
@@ -45,27 +45,43 @@ def test_google_generativeai_generate(model_name: str) -> None:
     assert len(generation_info.get("usage_metadata", {})) > 0
 
 
-async def test_google_generativeai_agenerate() -> None:
-    llm = GoogleGenerativeAI(temperature=0, model="models/gemini-2.0-flash-001")
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+async def test_google_generativeai_agenerate(model_name: str) -> None:
+    llm = GoogleGenerativeAI(temperature=0, model=model_name)
     output = await llm.agenerate(["Please say foo:"])
     assert isinstance(output, LLMResult)
 
 
-def test_generativeai_stream() -> None:
-    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-latest")
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+def test_generativeai_stream(model_name: str) -> None:
+    llm = GoogleGenerativeAI(temperature=0, model=model_name)
     outputs = list(llm.stream("Please say foo:"))
     assert isinstance(outputs[0], str)
 
 
-def test_generativeai_get_num_tokens_gemini() -> None:
-    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-latest")
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+def test_generativeai_get_num_tokens_gemini(model_name: str) -> None:
+    llm = GoogleGenerativeAI(temperature=0, model=model_name)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
 
 
-def test_safety_settings_gemini() -> None:
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+def test_safety_settings_gemini(model_name: str) -> None:
     # test with blocked prompt
-    llm = GoogleGenerativeAI(temperature=0, model="gemini-1.5-flash-latest")
+    llm = GoogleGenerativeAI(temperature=0, model=model_name)
     output = llm.generate(prompts=["how to make a bomb?"])
     assert isinstance(output, LLMResult)
     assert len(output.generations[0]) > 0
@@ -88,7 +104,7 @@ def test_safety_settings_gemini() -> None:
 
     # test  with safety filters on instantiation
     llm = GoogleGenerativeAI(
-        model="gemini-1.5-flash-latest",
+        model=model_name,
         safety_settings=safety_settings,
         temperature=0,
     )
