@@ -58,11 +58,11 @@ Examples:
     """Number of chat completions to generate for each prompt. Note that the API may
     not return the full ``n`` completions if duplicates are generated."""
 
-    max_retries: int = 6
+    max_retries: int = Field(default=6, alias="retries")
     """The maximum number of retries to make when generating. If unset, will default
     to ``6``."""
 
-    timeout: Optional[float] = None
+    timeout: Optional[float] = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
 
     client_options: Optional[Dict] = Field(
