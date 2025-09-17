@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from langchain_core.messages import BaseMessage
 from vertexai.preview import caching
@@ -66,11 +66,11 @@ def create_context_cache(
     cached_content = caching.CachedContent.create(
         model_name=model.full_model_name,
         system_instruction=system_instruction,
-        contents=contents,
+        contents=cast("list[Any] | None", contents),
         ttl=time_to_live,
         expire_time=expire_time,
         tool_config=tool_config,
-        tools=tools,
+        tools=cast("list[Any] | None", tools),
     )
 
     return cached_content.name
