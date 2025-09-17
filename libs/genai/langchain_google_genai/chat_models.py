@@ -1649,7 +1649,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         code_execution: Optional[bool] = None,
         stop: Optional[list[str]] = None,
         **kwargs: Any,
-    ) -> BaseMessage:
+    ) -> AIMessage:
         """Enable code execution. Supported on: gemini-1.5-pro, gemini-1.5-flash,
         gemini-2.0-flash, and gemini-2.0-pro. When enabled, the model can execute
         code to solve problems.
@@ -2168,7 +2168,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
 
         Assumes model is compatible with google-generativeAI tool-calling API.
