@@ -117,7 +117,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             transport=self.transport,
         )
         # Always defer async client initialization to first async call.
-        # This avoids creating event loops implicitly and aligns with lazy init in chat models.
+        # Avoids implicit event loop creation and aligns with lazy init
+        # in chat models.
         self.async_client = None
         return self
 
