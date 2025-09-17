@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Type,
     Union,
     cast,
@@ -24,7 +25,7 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
 
@@ -76,6 +77,7 @@ from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from vertexai.generative_models import (
     Tool as VertexTool,
+    Candidate as VertexCandidate,
 )
 from vertexai.generative_models._generative_models import (
     ToolConfig,
@@ -552,7 +554,7 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"{type(example)} for the {i}th message."
                 )
                 raise ValueError(msg)
-            input_text = example.content
+            input_text = cast("str", example.content)
         if i % 2 == 1:
             if not isinstance(example, AIMessage):
                 msg = (
@@ -560,8 +562,10 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"{type(example)} for the {i}th message."
                 )
                 raise ValueError(msg)
+            # input_text is guaranteed to be set in the previous iteration
+            assert input_text is not None
             pair = InputOutputTextPair(
-                input_text=input_text, output_text=example.content
+                input_text=input_text, output_text=cast("str", example.content)
             )
             example_pairs.append(pair)
     return example_pairs
@@ -601,18 +605,19 @@ def _append_to_content(
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[False] = False
+    response_candidate: Union[Candidate, VertexCandidate],
+    streaming: Literal[False] = False,
 ) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[True]
+    response_candidate: Union[Candidate, VertexCandidate], streaming: Literal[True]
 ) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Union[Candidate, VertexCandidate], streaming: bool = False
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict[str, Any]]]] = None
     additional_kwargs = {}
@@ -1975,7 +1980,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 return self._safety_settings_gemini(self.safety_settings)
             return None
         if isinstance(safety_settings, list):
-            return safety_settings
+            return cast("Sequence[SafetySetting]", safety_settings)
         if isinstance(safety_settings, dict):
             formatted_safety_settings = []
             for category, threshold in safety_settings.items():
