@@ -1114,3 +1114,21 @@ async def test_max_retries_parameter_handling(
             assert call_kwargs_actual["max_retries"] == expected_max_retries
         else:
             assert "max_retries" not in call_kwargs_actual
+
+
+def test_with_structured_output_json_schema_alias() -> None:
+    """Test that json_schema method works as alias for json_mode."""
+    from pydantic import BaseModel
+
+    class TestModel(BaseModel):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key="fake-key")
+
+    structured_llm = llm.with_structured_output(TestModel, method="json_schema")
+    assert structured_llm is not None
+
+    schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
+    structured_llm_dict = llm.with_structured_output(schema_dict, method="json_schema")
+    assert structured_llm_dict is not None

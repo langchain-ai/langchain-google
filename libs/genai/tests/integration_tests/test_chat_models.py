@@ -724,11 +724,12 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         (_MODEL, None),
         (_MODEL, "function_calling"),
         (_MODEL, "json_mode"),
+        (_MODEL, "json_schema"),
     ],
 )
 def test_chat_google_genai_with_structured_output(
     model_name: str,
-    method: Optional[Literal["function_calling", "json_mode"]],
+    method: Optional[Literal["function_calling", "json_mode", "json_schema"]],
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -756,7 +757,8 @@ def test_chat_google_genai_with_structured_output(
     expected = {"name": "Erick", "age": 27}
     assert response == expected
 
-    if method is None:  # This won't work with json_schema as it expects an OpenAPI dict
+    # This won't work with json_schema/json_mode as it expects an OpenAPI dict
+    if method is None:
         model = llm.with_structured_output(
             {
                 "name": "MyModel",
