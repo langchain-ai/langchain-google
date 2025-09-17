@@ -167,33 +167,46 @@ def get_generation_info(
     logprobs: Union[bool, int] = False,
 ) -> Dict[str, Any]:
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
-    info = {
-        "is_blocked": any(rating.blocked for rating in candidate.safety_ratings),
-        "safety_ratings": [
-            {
-                "category": rating.category.name,
-                "probability_label": rating.probability.name,
-                "probability_score": rating.probability_score,
-                "blocked": rating.blocked,
-                "severity": rating.severity.name,
-                "severity_score": rating.severity_score,
-            }
-            # Image generation models sometime return ratings that are not
-            # included in the proto.
-            for rating in candidate.safety_ratings
-            if hasattr(rating.category, "name")
-        ],
-        "citation_metadata": (
-            proto.Message.to_dict(candidate.citation_metadata)
-            if candidate.citation_metadata
-            else None
-        ),
-        "usage_metadata": usage_metadata,
-        "finish_reason": _get_finish_reason_string(candidate.finish_reason),
-        "finish_message": (
-            candidate.finish_message if candidate.finish_message else None
-        ),
-    }
+    # Handle different response types - Candidate has different attributes than
+    # TextGenerationResponse
+    if isinstance(candidate, Candidate):
+        info = {
+            "is_blocked": any(rating.blocked for rating in candidate.safety_ratings),
+            "safety_ratings": [
+                {
+                    "category": rating.category.name,
+                    "probability_label": rating.probability.name,
+                    "probability_score": rating.probability_score,
+                    "blocked": rating.blocked,
+                    "severity": rating.severity.name,
+                    "severity_score": rating.severity_score,
+                }
+                # Image generation models sometime return ratings that are not
+                # included in the proto.
+                for rating in candidate.safety_ratings
+                if hasattr(rating.category, "name")
+            ],
+            "citation_metadata": (
+                proto.Message.to_dict(candidate.citation_metadata)
+                if candidate.citation_metadata
+                else None
+            ),
+            "usage_metadata": usage_metadata,
+            "finish_reason": _get_finish_reason_string(candidate.finish_reason),
+            "finish_message": (
+                candidate.finish_message if candidate.finish_message else None
+            ),
+        }
+    else:  # TextGenerationResponse
+        # TextGenerationResponse doesn't have the same attributes as Candidate
+        info = {
+            "is_blocked": False,  # TextGenerationResponse doesn't have safety_ratings
+            "safety_ratings": [],
+            "citation_metadata": None,
+            "usage_metadata": usage_metadata,
+            "finish_reason": None,  # TextGenerationResponse doesn't have finish_reason
+            "finish_message": None,
+        }
     if hasattr(candidate, "avg_logprobs") and candidate.avg_logprobs is not None:
         if (
             isinstance(candidate.avg_logprobs, float)
