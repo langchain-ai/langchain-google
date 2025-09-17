@@ -467,7 +467,8 @@ def test_format_to_gapic_tool() -> None:
     assert result == src_5
 
     with pytest.raises(ValueError) as exc_info1:
-        _ = _format_to_gapic_tool(["fake_tool"])
+        # type: ignore since we're testing invalid input
+        _ = _format_to_gapic_tool(["fake_tool"])  # type: ignore[list-item]
     assert str(exc_info1.value).startswith("Unsupported tool")
 
     with pytest.raises(Exception) as exc_info:
