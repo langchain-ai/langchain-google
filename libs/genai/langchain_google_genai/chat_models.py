@@ -27,7 +27,6 @@ from typing import (
 )
 
 import filetype  # type: ignore[import-untyped]
-import google.api_core
 import proto  # type: ignore[import-untyped]
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
@@ -52,6 +51,13 @@ from google.ai.generativelanguage_v1beta.types import (
     VideoMetadata,
 )
 from google.ai.generativelanguage_v1beta.types import Tool as GoogleTool
+from google.api_core.exceptions import (
+    FailedPrecondition,
+    GoogleAPIError,
+    InvalidArgument,
+    ResourceExhausted,
+    ServiceUnavailable,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -167,9 +173,9 @@ def _create_retry_decorator(
             max=wait_exponential_max,
         ),
         retry=(
-            retry_if_exception_type(google.api_core.exceptions.ResourceExhausted)
-            | retry_if_exception_type(google.api_core.exceptions.ServiceUnavailable)
-            | retry_if_exception_type(google.api_core.exceptions.GoogleAPIError)
+            retry_if_exception_type(ResourceExhausted)
+            | retry_if_exception_type(ServiceUnavailable)
+            | retry_if_exception_type(GoogleAPIError)
         ),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
@@ -200,7 +206,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     def _chat_with_retry(**kwargs: Any) -> Any:
         try:
             return generation_method(**kwargs)
-        except google.api_core.exceptions.FailedPrecondition as exc:
+        except FailedPrecondition as exc:
             if "location is not supported" in exc.message:
                 error_msg = (
                     "Your location is not supported by google-generativeai "
@@ -209,10 +215,10 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                 )
                 raise ValueError(error_msg)
 
-        except google.api_core.exceptions.InvalidArgument as e:
+        except InvalidArgument as e:
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
-        except google.api_core.exceptions.ResourceExhausted as e:
+        except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
             if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
                 "wait_exponential_max", 60.0
@@ -247,7 +253,6 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         Any: The result from the chat generation method.
     """
     retry_decorator = _create_retry_decorator()
-    from google.api_core.exceptions import InvalidArgument
 
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
