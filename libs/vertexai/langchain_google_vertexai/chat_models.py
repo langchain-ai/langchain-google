@@ -220,10 +220,10 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         if i == 0 and isinstance(message, SystemMessage):
             context = content
         elif isinstance(message, AIMessage):
-            vertex_message = ChatMessage(content=message.content, author="bot")
+            vertex_message = ChatMessage(content=content, author="bot")
             vertex_messages.append(vertex_message)
         elif isinstance(message, HumanMessage):
-            vertex_message = ChatMessage(content=message.content, author="user")
+            vertex_message = ChatMessage(content=content, author="user")
             vertex_messages.append(vertex_message)
         else:
             msg = f"Unexpected message with type {type(message)} at the position {i}."
