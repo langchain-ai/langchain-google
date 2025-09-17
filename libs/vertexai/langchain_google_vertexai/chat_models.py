@@ -74,17 +74,17 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from vertexai.generative_models import (  # type: ignore
+from vertexai.generative_models import (
     Tool as VertexTool,
 )
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (
     ToolConfig,
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
     _convert_schema_dict_to_gapic,
 )
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     ChatMessage,
     InputOutputTextPair,
 )

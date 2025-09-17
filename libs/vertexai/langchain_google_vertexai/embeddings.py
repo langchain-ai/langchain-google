@@ -22,11 +22,11 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     TextEmbeddingInput,
     TextEmbeddingModel,
 )
-from vertexai.vision_models import (  # type: ignore
+from vertexai.vision_models import (
     Image,
     MultiModalEmbeddingModel,
     MultiModalEmbeddingResponse,

@@ -14,11 +14,11 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from vertexai.generative_models import (  # type: ignore[import-untyped]
+from vertexai.generative_models import (
     Candidate,
     Image,
 )
-from vertexai.language_models import (  # type: ignore[import-untyped]
+from vertexai.language_models import (
     TextGenerationResponse,
 )
 
