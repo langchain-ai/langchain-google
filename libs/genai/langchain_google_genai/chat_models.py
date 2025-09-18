@@ -793,7 +793,16 @@ def _response_to_result(
     for candidate in response.candidates:
         generation_info = {}
         if candidate.finish_reason:
-            generation_info["finish_reason"] = candidate.finish_reason.name
+            # Handle enum-like objects and raw ints/strings defensively
+            try:
+                finish_reason_value = candidate.finish_reason
+                finish_reason_name = getattr(finish_reason_value, "name", None)
+                generation_info["finish_reason"] = (
+                    finish_reason_name if finish_reason_name is not None else str(finish_reason_value)
+                )
+            except Exception:
+                # Fallback quietly if unexpected type
+                generation_info["finish_reason"] = str(candidate.finish_reason)
             # Add model_name in last chunk
             generation_info["model_name"] = response.model_version
         generation_info["safety_ratings"] = [
