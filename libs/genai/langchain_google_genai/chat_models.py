@@ -605,10 +605,15 @@ def _append_to_content(
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Candidate,
+    streaming: bool = False,
+    model_name: Optional[str] = None,
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs: Dict[str, Any] = {}
+    response_metadata: Dict[str, Any] = {"model_provider": "google_genai"}
+    if model_name:
+        response_metadata["model_name"] = model_name
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
@@ -743,12 +748,14 @@ def _parse_response_candidate(
         return AIMessageChunk(
             content=content,
             additional_kwargs=additional_kwargs,
+            response_metadata=response_metadata,
             tool_call_chunks=tool_call_chunks,
         )
 
     return AIMessage(
         content=content,
         additional_kwargs=additional_kwargs,
+        response_metadata=response_metadata,
         tool_calls=tool_calls,
         invalid_tool_calls=invalid_tool_calls,
     )
@@ -823,7 +830,9 @@ def _response_to_result(
                 )
         except AttributeError:
             pass
-        message = _parse_response_candidate(candidate, streaming=stream)
+        message = _parse_response_candidate(
+            candidate, streaming=stream, model_name=response.model_version
+        )
         message.usage_metadata = lc_usage
         if stream:
             generations.append(
