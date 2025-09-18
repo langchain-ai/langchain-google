@@ -8,13 +8,13 @@ version = "2.0.10"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=0.3,<1",
-    "langchain-community>=0.3,<1",
+    "langchain-core>=1.0.0a3",
+    "langchain-community>=0.3.29",
     "google-api-core>=2.25,<3",
     "google-api-python-client>=2.161,<3",
     "google-cloud-core>=2.4.3,<3",
@@ -100,6 +100,11 @@ select = [
 [tool.mypy]
 disallow_untyped_defs = "True"
 ignore_missing_imports = "True"
+
+[tool.uv]
+constraint-dependencies = [
+    "llvmlite!=0.45.0; sys_platform == 'darwin' and platform_machine == 'arm64'"
+]
 
 [tool.coverage.run]
 omit = ["tests/*"]
