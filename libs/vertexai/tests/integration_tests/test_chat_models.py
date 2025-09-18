@@ -347,12 +347,9 @@ def test_multimodal_media_inline_base64_agent() -> None:
         tools=tools,
         prompt=prompt_template,
     )
-    output = agent.invoke({
-        "messages": [{
-            "role": "user",
-            "content": [text_message, media_message]
-        }]
-    })
+    output = agent.invoke(
+        {"messages": [{"role": "user", "content": [text_message, media_message]}]}
+    )
     assert "messages" in output
     assert len(output["messages"]) > 0
 
