@@ -15,7 +15,7 @@ from typing import (
     cast,
 )
 
-import vertexai  # type: ignore[import-untyped]
+import vertexai
 from google.api_core.client_options import ClientOptions
 from google.cloud.aiplatform import initializer
 from google.cloud.aiplatform.constants import base as constants
