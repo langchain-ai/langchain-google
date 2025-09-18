@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import google.cloud.aiplatform_v1beta1.types as gapic
 import pytest
-import vertexai.generative_models as vertexai  # type: ignore
+import vertexai.generative_models as vertexai  # TODO: migrate to google-genai
 from google.cloud.aiplatform_v1beta1.types import (
     FunctionCallingConfig as GapicFunctionCallingConfig,
 )

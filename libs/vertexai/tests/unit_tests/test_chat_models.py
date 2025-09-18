@@ -33,11 +33,11 @@ from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
 from pydantic import BaseModel
-from vertexai.generative_models import (  # type: ignore
-    SafetySetting as VertexSafetySetting,
+from vertexai.generative_models import (
+    SafetySetting as VertexSafetySetting,  # TODO: migrate to google-genai
 )
-from vertexai.language_models import (  # type: ignore
-    ChatMessage,
+from vertexai.language_models import (
+    ChatMessage,  # TODO: migrate to google-genai since this is deprecated
     InputOutputTextPair,
 )
 

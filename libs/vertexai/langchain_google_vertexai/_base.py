@@ -42,8 +42,8 @@ from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Literal, Self
-from vertexai.generative_models._generative_models import (  # type: ignore
-    SafetySettingsType,
+from vertexai.generative_models._generative_models import (
+    SafetySettingsType,  # TODO: migrate to google-genai since this is deprecated
 )
 
 from langchain_google_vertexai._client_utils import (

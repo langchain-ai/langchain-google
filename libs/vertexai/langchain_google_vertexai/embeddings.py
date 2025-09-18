@@ -22,12 +22,12 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
-from vertexai.language_models import (  # type: ignore
-    TextEmbeddingInput,
+from vertexai.language_models import (
+    TextEmbeddingInput,  # TODO: migrate to google-genai since this is deprecated
     TextEmbeddingModel,
 )
-from vertexai.vision_models import (  # type: ignore
-    Image,
+from vertexai.vision_models import (
+    Image,  # TODO: migrate to google-genai since this is deprecated
     MultiModalEmbeddingModel,
     MultiModalEmbeddingResponse,
 )

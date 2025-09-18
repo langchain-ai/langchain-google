@@ -13,6 +13,8 @@ from google.cloud import storage
 from google.cloud.aiplatform_v1beta1.types.content import Part as GapicPart
 from vertexai.generative_models import Image, Part  # type: ignore
 
+# TODO: migrate to google-genai since vertexai.generative_models is deprecated
+
 
 class Route(Enum):
     """Image Loading Route."""
