@@ -450,7 +450,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.0a2"
+version = "1.0.0a3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -461,9 +461,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/ec/acd33568eb913857a24440151b84415b5db813f46db01c44d8a9103948ec/langchain_core-1.0.0a2.tar.gz", hash = "sha256:fd2d363071311729e1c4cc126f203dc4d31e3328ec78241a8d4cddbe42bb7170", size = 603627, upload-time = "2025-09-02T17:54:05.265Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d9/b9/f91b9c749c00c55951175f22ec26c477f5c252026f8fa9c4ade3a632fc29/langchain_core-1.0.0a3.tar.gz", hash = "sha256:1551f7440caf36f0e41d4f3a89bb59a2a5dae7aca4920299bdb8ebd8ac80b0d2", size = 607692, upload-time = "2025-09-18T15:09:45.012Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/02/efbb0662f0536e53619e72fbbc1b9335d7b0481d9a2338da89af8a22ddb0/langchain_core-1.0.0a2-py3-none-any.whl", hash = "sha256:2ad57d708b37905eda3fabbb804d92cbde79b72a20be2f0d92497728410912d0", size = 473052, upload-time = "2025-09-02T17:54:03.951Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/6f/588e1f256a64c8897e0c357e3fcbd6e8758b8d867f864e36df5f675d55cf/langchain_core-1.0.0a3-py3-none-any.whl", hash = "sha256:55532ae74b8bb1b15d06f5d0ce843c73d5a9f8466c91a9f24e9bdf866d9e68b9", size = 475162, upload-time = "2025-09-18T15:09:43.154Z" },
 ]
 
 [[package]]
@@ -516,7 +516,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2,<2" },
     { name = "google-ai-generativelanguage", specifier = ">=0.7,<1" },
-    { name = "langchain-core", specifier = ">=1.0.0a2" },
+    { name = "langchain-core", specifier = ">=1.0.0a3" },
     { name = "pydantic", specifier = ">=2,<3" },
 ]
 
