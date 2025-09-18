@@ -17,7 +17,7 @@ from typing import (
 )
 
 import google.cloud.aiplatform_v1beta1.types as gapic
-import vertexai.generative_models as vertexai
+import vertexai.generative_models as vertexai  # TODO: migrate to google-genai
 from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
 )

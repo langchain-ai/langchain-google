@@ -147,6 +147,11 @@ warn_unused_ignores = true
 # strict = true
 # disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# TODO: remove after migrating to google-genai
+module = "vertexai.*"
+ignore_missing_imports = true
+
 [tool.coverage.run]
 omit = ["tests/*"]
 
