@@ -11,7 +11,7 @@ from langchain_core.outputs import ChatResult, LLMResult
 from langchain_core.outputs.chat_generation import ChatGeneration
 from langchain_core.outputs.generation import Generation
 from pydantic import BaseModel, ConfigDict, Field
-from vertexai.vision_models import (  # type: ignore[import-untyped]
+from vertexai.vision_models import (  # TODO: migrate to google-genai
     GeneratedImage,
     Image,
     ImageGenerationModel,

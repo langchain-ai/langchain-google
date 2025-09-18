@@ -1,26 +1,35 @@
+import warnings
+
 import pytest
-from vertexai.vision_models import Image  # type: ignore[import-untyped]
+from vertexai.vision_models import (
+    Image,  # TODO: migrate to google-genai since this is deprecated
+)
 
 from langchain_google_vertexai.vision_models import _BaseImageTextModel
 
 
 def test_get_image_from_message_part(base64_image: str) -> None:
-    model = _BaseImageTextModel()
+    # TODO: Remove this warning suppression when migrating to google-genai
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message=".*deprecated.*", category=UserWarning
+        )
+        model = _BaseImageTextModel()
 
-    # Should work with a well formatted dictionary:
-    message = {"type": "image_url", "image_url": {"url": base64_image}}
-    image = model._get_image_from_message_part(message)
-    assert isinstance(image, Image)
+        # Should work with a well formatted dictionary:
+        message = {"type": "image_url", "image_url": {"url": base64_image}}
+        image = model._get_image_from_message_part(message)
+        assert isinstance(image, Image)
 
-    # Should not work with a simple string
-    simple_string = base64_image
-    image = model._get_image_from_message_part(simple_string)
-    assert image is None
+        # Should not work with a simple string
+        simple_string = base64_image
+        image = model._get_image_from_message_part(simple_string)
+        assert image is None
 
-    # Should not work with a string message
-    message = {"type": "text", "text": "I'm a text message"}
-    image = model._get_image_from_message_part(message)
-    assert image is None
+        # Should not work with a string message
+        message = {"type": "text", "text": "I'm a text message"}
+        image = model._get_image_from_message_part(message)
+        assert image is None
 
 
 def test_get_text_from_message_part() -> None:

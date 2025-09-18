@@ -5,9 +5,9 @@ Your end-user credentials would be used to make the calls (make sure you've run
 """
 
 import pytest
-from vertexai.language_models import TextEmbeddingModel  # type: ignore[import-untyped]
-from vertexai.vision_models import (  # type: ignore[import-untyped]
-    MultiModalEmbeddingModel,
+from vertexai.language_models import TextEmbeddingModel  # TODO: migrate to google-genai
+from vertexai.vision_models import (
+    MultiModalEmbeddingModel,  # TODO: migrate to google-genai since this is deprecated
 )
 
 from langchain_google_vertexai.embeddings import (

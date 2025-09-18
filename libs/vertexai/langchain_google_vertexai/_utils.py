@@ -14,12 +14,12 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from vertexai.generative_models import (  # type: ignore[import-untyped]
-    Candidate,
+from vertexai.generative_models import (
+    Candidate,  # TODO: migrate to google-genai since this is deprecated
     Image,
 )
-from vertexai.language_models import (  # type: ignore[import-untyped]
-    TextGenerationResponse,
+from vertexai.language_models import (
+    TextGenerationResponse,  # TODO: migrate to google-genai since this is deprecated
 )
 
 from langchain_google_vertexai._retry import create_base_retry_decorator
