@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Type,
     Union,
     cast,
@@ -24,7 +25,7 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
 
@@ -74,17 +75,18 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from vertexai.generative_models import (  # type: ignore
+from vertexai.generative_models import (
     Tool as VertexTool,
+    Candidate as VertexCandidate,
 )
-from vertexai.generative_models._generative_models import (  # type: ignore
+from vertexai.generative_models._generative_models import (
     ToolConfig,
     SafetySettingsType,
     GenerationConfigType,
     GenerationResponse,
     _convert_schema_dict_to_gapic,
 )
-from vertexai.language_models import (  # type: ignore
+from vertexai.language_models import (
     ChatMessage,
     InputOutputTextPair,
 )
@@ -227,10 +229,10 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         if i == 0 and isinstance(message, SystemMessage):
             context = content
         elif isinstance(message, AIMessage):
-            vertex_message = ChatMessage(content=message.content, author="bot")
+            vertex_message = ChatMessage(content=content, author="bot")
             vertex_messages.append(vertex_message)
         elif isinstance(message, HumanMessage):
-            vertex_message = ChatMessage(content=message.content, author="user")
+            vertex_message = ChatMessage(content=content, author="user")
             vertex_messages.append(vertex_message)
         else:
             msg = f"Unexpected message with type {type(message)} at the position {i}."
@@ -559,7 +561,7 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"{type(example)} for the {i}th message."
                 )
                 raise ValueError(msg)
-            input_text = example.content
+            input_text = cast("str", example.content)
         if i % 2 == 1:
             if not isinstance(example, AIMessage):
                 msg = (
@@ -567,8 +569,10 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"{type(example)} for the {i}th message."
                 )
                 raise ValueError(msg)
+            # input_text is guaranteed to be set in the previous iteration
+            assert input_text is not None
             pair = InputOutputTextPair(
-                input_text=input_text, output_text=example.content
+                input_text=input_text, output_text=cast("str", example.content)
             )
             example_pairs.append(pair)
     return example_pairs
@@ -608,18 +612,19 @@ def _append_to_content(
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[False] = False
+    response_candidate: Union[Candidate, VertexCandidate],
+    streaming: Literal[False] = False,
 ) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[True]
+    response_candidate: Union[Candidate, VertexCandidate], streaming: Literal[True]
 ) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Union[Candidate, VertexCandidate], streaming: bool = False
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict[str, Any]]]] = None
     additional_kwargs = {}
@@ -635,7 +640,7 @@ def _parse_response_candidate(
         except AttributeError:
             pass
 
-        if part.thought:
+        if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
@@ -694,7 +699,9 @@ def _parse_response_candidate(
 
             if getattr(part, "thought_signature", None):
                 # store dict of {tool_call_id: thought_signature}
-                if isinstance(part.thought_signature, bytes):
+                if hasattr(part, "thought_signature") and isinstance(
+                    part.thought_signature, bytes
+                ):
                     thought_signature = _bytes_to_base64(part.thought_signature)
                     if (
                         _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
@@ -1990,7 +1997,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 return self._safety_settings_gemini(self.safety_settings)
             return None
         if isinstance(safety_settings, list):
-            return safety_settings
+            return cast("Sequence[SafetySetting]", safety_settings)
         if isinstance(safety_settings, dict):
             formatted_safety_settings = []
             for category, threshold in safety_settings.items():
@@ -2006,8 +2013,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                 )
             return formatted_safety_settings
-        msg = "safety_settings should be either"
-        raise ValueError(msg)
+        # This should be unreachable as all cases are handled above
+        raise ValueError("Unexpected safety_settings type")
 
     def _prepare_request_gemini(
         self,
@@ -2041,7 +2048,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        safety_settings = self._safety_settings_gemini(safety_settings)
+        formatted_safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -2100,18 +2107,22 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 v1_tools = [v1Tool(**proto.Message.to_dict(t)) for t in formatted_tools]
 
             if tool_config:
-                v1_tool_config = v1ToolConfig(
-                    function_calling_config=v1FunctionCallingConfig(
-                        **proto.Message.to_dict(tool_config.function_calling_config)
+                v1_tool_config = (
+                    v1ToolConfig(
+                        function_calling_config=v1FunctionCallingConfig(
+                            **proto.Message.to_dict(tool_config.function_calling_config)
+                        )
                     )
+                    if hasattr(tool_config, "function_calling_config")
+                    else v1ToolConfig()
                 )
 
-            if safety_settings:
+            if formatted_safety_settings:
                 v1_safety_settings = [
                     v1SafetySetting(
                         category=s.category, method=s.method, threshold=s.threshold
                     )
-                    for s in safety_settings
+                    for s in formatted_safety_settings
                 ]
 
         if (self.cached_content is not None) or (cached_content is not None):
@@ -2267,7 +2278,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast("_ToolConfigDict", tool_config))
+            return _format_tool_config(tool_config)
         return None
 
     async def _agenerate(
