@@ -27,7 +27,6 @@ from typing import (
 )
 
 import filetype  # type: ignore[import-untyped]
-import google.api_core
 import proto  # type: ignore[import-untyped]
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
@@ -52,6 +51,13 @@ from google.ai.generativelanguage_v1beta.types import (
     VideoMetadata,
 )
 from google.ai.generativelanguage_v1beta.types import Tool as GoogleTool
+from google.api_core.exceptions import (
+    FailedPrecondition,
+    GoogleAPIError,
+    InvalidArgument,
+    ResourceExhausted,
+    ServiceUnavailable,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -167,9 +173,9 @@ def _create_retry_decorator(
             max=wait_exponential_max,
         ),
         retry=(
-            retry_if_exception_type(google.api_core.exceptions.ResourceExhausted)
-            | retry_if_exception_type(google.api_core.exceptions.ServiceUnavailable)
-            | retry_if_exception_type(google.api_core.exceptions.GoogleAPIError)
+            retry_if_exception_type(ResourceExhausted)
+            | retry_if_exception_type(ServiceUnavailable)
+            | retry_if_exception_type(GoogleAPIError)
         ),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
@@ -200,7 +206,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     def _chat_with_retry(**kwargs: Any) -> Any:
         try:
             return generation_method(**kwargs)
-        except google.api_core.exceptions.FailedPrecondition as exc:
+        except FailedPrecondition as exc:
             if "location is not supported" in exc.message:
                 error_msg = (
                     "Your location is not supported by google-generativeai "
@@ -209,15 +215,15 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                 )
                 raise ValueError(error_msg)
 
-        except google.api_core.exceptions.InvalidArgument as e:
+        except InvalidArgument as e:
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
-        except google.api_core.exceptions.ResourceExhausted as e:
+        except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
-            if hasattr(e, "retry_after") and e.retry_after < kwargs.get(
+            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
-                time.sleep(e.retry_after)
+                time.sleep(getattr(e, "retry_after"))
             raise
         except Exception:
             raise
@@ -246,8 +252,12 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     Returns:
         Any: The result from the chat generation method.
     """
-    retry_decorator = _create_retry_decorator()
-    from google.api_core.exceptions import InvalidArgument
+    retry_decorator = _create_retry_decorator(
+        max_retries=kwargs.get("max_retries", 6),
+        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
+        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
+        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
+    )
 
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
@@ -257,6 +267,13 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             # Do not retry for these errors.
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
+        except ResourceExhausted as e:
+            # Handle quota-exceeded error with recommended retry delay
+            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
+                "wait_exponential_max", 60.0
+            ):
+                time.sleep(getattr(e, "retry_after"))
+            raise
         except Exception:
             raise
 
@@ -1199,8 +1216,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
 
 
+            # Default method uses function calling
             structured_llm = llm.with_structured_output(Joke)
-            structured_llm.invoke("Tell me a joke about cats")
+
+            # For more reliable output, use json_schema with native responseSchema
+            structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
+            structured_llm_json.invoke("Tell me a joke about cats")
 
         .. code-block:: python
 
@@ -1209,6 +1230,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 punchline="They have nine lives on the internet",
                 rating=None,
             )
+
+        Two methods are supported for structured output:
+
+        * ``method="function_calling"`` (default): Uses tool calling to extract
+        structured data. Compatible with all models.
+        * ``method="json_schema"``: Uses Gemini's native structured output with
+        responseSchema. More reliable but requires Gemini 1.5+ models.
+        ``method="json_mode"`` also works for backwards compatibility but is a misnomer.
+
+        The ``json_schema`` method is recommended for better reliability as it
+        constrains the model's generation process directly rather than relying on
+        post-processing tool calls.
 
     Image input:
         .. code-block:: python
@@ -1766,6 +1799,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
             **kwargs,
@@ -1814,6 +1851,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = await _achat_with_retry(
             request=request,
             **kwargs,
@@ -1849,6 +1890,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        if self.timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self.timeout
+        if "max_retries" not in kwargs:
+            kwargs["max_retries"] = self.max_retries
         response: GenerateContentResponse = _chat_with_retry(
             request=request,
             generation_method=self.client.stream_generate_content,
@@ -1915,6 +1960,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 tool_choice=tool_choice,
                 **kwargs,
             )
+            if self.timeout is not None and "timeout" not in kwargs:
+                kwargs["timeout"] = self.timeout
+            if "max_retries" not in kwargs:
+                kwargs["max_retries"] = self.max_retries
             prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
             async for chunk in await _achat_with_retry(
                 request=request,
@@ -2055,7 +2104,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def with_structured_output(
         self,
         schema: Union[Dict, Type[BaseModel]],
-        method: Optional[Literal["function_calling", "json_mode"]] = "function_calling",
+        method: Optional[
+            Literal["function_calling", "json_mode", "json_schema"]
+        ] = "function_calling",
         *,
         include_raw: bool = False,
         **kwargs: Any,
@@ -2067,7 +2118,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        if method == "json_mode":
+        if method in ("json_mode", "json_schema"):  # `json_schema` preferred
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()

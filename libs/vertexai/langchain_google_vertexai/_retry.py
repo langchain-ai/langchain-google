@@ -113,9 +113,12 @@ def create_base_retry_decorator(
         else:
             retry_instance = (retry_instance) | (retry_if_exception_type(error))
 
+    # Interpret max_retries=0 as "no retries" which still allows 1 attempt.
+    attempts = 1 if max_retries is None or max_retries <= 0 else max_retries
+
     return retry(
         reraise=True,
-        stop=stop_after_attempt(max_retries),
+        stop=stop_after_attempt(attempts),
         wait=wait_exponential(**wait_params),
         retry=retry_instance,
         before_sleep=_before_sleep,

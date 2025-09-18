@@ -11,7 +11,7 @@ class TestGeminiAIStandard(ChatModelUnitTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model": "models/gemini-1.0-pro-001"}
+        return {"model": "gemini-2.5-flash"}
 
     @property
     def init_from_env_params(self) -> tuple[dict, dict, dict]:
@@ -29,7 +29,7 @@ class TestGemini15AIStandard(ChatModelUnitTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model": "models/gemini-1.5-pro-001"}
+        return {"model": "gemini-2.5-flash"}
 
     @property
     def init_from_env_params(self) -> tuple[dict, dict, dict]:

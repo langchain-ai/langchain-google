@@ -116,22 +116,10 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             client_options=self.client_options,
             transport=self.transport,
         )
-        # Only initialize async client if there's an event loop running
-        # to avoid RuntimeError during synchronous initialization
-        if _is_event_loop_running():
-            # async clients don't support "rest" transport
-            transport = self.transport
-            if transport == "rest":
-                transport = "grpc_asyncio"
-            self.async_client = build_generative_async_service(
-                credentials=self.credentials,
-                api_key=google_api_key,
-                client_info=client_info,
-                client_options=self.client_options,
-                transport=transport,
-            )
-        else:
-            self.async_client = None
+        # Always defer async client initialization to first async call.
+        # Avoids implicit event loop creation and aligns with lazy init
+        # in chat models.
+        self.async_client = None
         return self
 
     @property
