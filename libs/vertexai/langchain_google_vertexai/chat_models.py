@@ -2622,7 +2622,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
 
         Assumes model is compatible with Vertex tool-calling API.

@@ -17,7 +17,7 @@ from typing import (
 )
 
 import google.cloud.aiplatform_v1beta1.types as gapic
-import vertexai.generative_models as vertexai  # type: ignore
+import vertexai.generative_models as vertexai
 from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
 )
@@ -332,7 +332,11 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                     "code_execution",
                 ]
             ):
-                fd = _format_to_gapic_function_declaration(tool)
+                # Cast needed: when dict lacks tool-specific fields, it's a function
+                # declaration
+                fd = _format_to_gapic_function_declaration(
+                    cast("_FunctionDeclarationLike", tool)
+                )
                 gapic_tool.function_declarations.append(fd)
                 continue
             # _ToolDictLike
