@@ -8,7 +8,7 @@ version = "2.0.10"
 description = "An integration package connecting miscellaneous Google's products and LangChain"
 authors = []
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
@@ -87,6 +87,7 @@ dev = [
 ]
 
 [tool.ruff]
+target-version = "py39"
 fix = true
 
 [tool.ruff.lint]
