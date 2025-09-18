@@ -5,7 +5,12 @@ import io
 import json
 import os
 import re
-from typing import List, Literal, Optional, cast
+from typing import Any, List, Literal, Optional, cast
+
+try:
+    from langgraph.graph.state import CompiledStateGraph
+except ImportError:
+    CompiledStateGraph = Any  # type: ignore[misc,assignment]
 
 import pytest
 import requests
@@ -317,7 +322,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
     )
     prompt_template = ChatPromptTemplate.from_messages(
         [
-            ("human", "{input}"),
+            ("placeholder", "{messages}"),
             ("placeholder", "{agent_scratchpad}"),
         ]
     )
@@ -336,20 +341,20 @@ def test_multimodal_media_inline_base64_agent() -> None:
         "mime_type": mime_type,
     }
     text_message = {"type": "text", "text": "Describe the attached media in 5 words."}
-    message = [media_message, text_message]
     tools = [get_climate_info]
-    agent = agents.create_tool_calling_agent(
-        llm=llm,
+    agent: CompiledStateGraph[Any, Any] = agents.create_agent(
+        model=llm,
         tools=tools,
         prompt=prompt_template,
     )
-    agent_executor = agents.AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=False,
-    )
-    output = agent_executor.invoke({"input": message})
-    assert isinstance(output["output"], str)
+    output = agent.invoke({
+        "messages": [{
+            "role": "user",
+            "content": [text_message, media_message]
+        }]
+    })
+    assert "messages" in output
+    assert len(output["messages"]) > 0
 
 
 @pytest.mark.flaky(retries=3)
@@ -1247,18 +1252,20 @@ def test_context_catching_tools() -> None:
 
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("human", "{input}"),
+            ("placeholder", "{messages}"),
             ("placeholder", "{agent_scratchpad}"),
         ]
     )
-    agent = agents.create_tool_calling_agent(
-        llm=chat,
+    agent: CompiledStateGraph[Any, Any] = agents.create_agent(
+        model=chat,
         tools=tools,
         prompt=prompt,
     )
-    agent_executor = agents.AgentExecutor(agent=agent, tools=tools, verbose=False)
-    response = agent_executor.invoke({"input": "what is the secret number?"})
-    assert isinstance(response["output"], str)
+    response = agent.invoke(
+        {"messages": [{"role": "user", "content": "what is the secret number?"}]}
+    )
+    assert "messages" in response
+    assert len(response["messages"]) > 0
 
 
 @pytest.mark.release
