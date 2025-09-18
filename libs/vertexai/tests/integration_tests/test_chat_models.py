@@ -1324,7 +1324,7 @@ def test_langgraph_example() -> None:
         [
             *messages,
             step1,
-            ToolMessage(content="9", tool_call_id=step1.tool_calls[0]["id"]),  # type: ignore[attr-defined]
+            ToolMessage(content="9", tool_call_id=step1.tool_calls[0]["id"]),
         ],
         tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
     )
