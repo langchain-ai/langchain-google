@@ -76,6 +76,7 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from vertexai.generative_models import (
+    Candidate as VertexCandidate,
     Tool as VertexTool,  # TODO: migrate to google-genai since this is deprecated
 )
 from vertexai.generative_models._generative_models import (
