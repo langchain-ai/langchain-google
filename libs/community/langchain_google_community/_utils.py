@@ -79,7 +79,7 @@ def import_google() -> Tuple[Request, Credentials, ServiceCredentials]:
         ).Credentials,
         guard_import(
             module_name="google.oauth2.service_account", pip_name="google-auth"
-        ).ServiceCredentials,
+        ).Credentials,
     )
 
 
