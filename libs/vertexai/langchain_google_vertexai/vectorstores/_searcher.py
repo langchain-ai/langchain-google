@@ -39,6 +39,7 @@ class Searcher(ABC):
             List[Dict[str, Union[List[int], List[float]]]]
         ] = None,
         rrf_ranking_alpha: float = 1,
+        **kwargs: Any,
     ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.
 
@@ -249,6 +250,7 @@ class VectorSearchSearcher(Searcher):
             List[Dict[str, Union[List[int], List[float]]]]
         ] = None,
         rrf_ranking_alpha: float = 1,
+        **kwargs: Any,
     ) -> List[List[Dict[str, Any]]]:
         """Finds the k closes neighbors of each instance of embeddings.
 
@@ -304,6 +306,7 @@ class VectorSearchSearcher(Searcher):
                 num_neighbors=k,
                 filter=filter_,
                 numeric_filter=numeric_filter,
+                **kwargs,
             )
 
         return self._postprocess_response(response)
