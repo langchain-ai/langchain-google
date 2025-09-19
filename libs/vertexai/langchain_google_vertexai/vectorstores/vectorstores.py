@@ -76,6 +76,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         k: int = 4,
         filter: Optional[List[Namespace]] = None,
         numeric_filter: Optional[List[NumericNamespace]] = None,
+        **kwargs: Any,
     ) -> List[Tuple[Document, Union[float, Dict[str, float]]]]:
         """Return docs most similar to query and their cosine distance from the query.
 
@@ -103,7 +104,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         embedding = self._embeddings.embed_query(query)
 
         return self.similarity_search_by_vector_with_score(
-            embedding=embedding, k=k, filter=filter, numeric_filter=numeric_filter
+            embedding=embedding, k=k, filter=filter, numeric_filter=numeric_filter, **kwargs
         )
 
     def similarity_search_by_vector_with_score(
@@ -114,6 +115,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         rrf_ranking_alpha: float = 1,
         filter: Optional[List[Namespace]] = None,
         numeric_filter: Optional[List[NumericNamespace]] = None,
+        **kwargs: Any,
     ) -> List[Tuple[Document, Union[float, Dict[str, float]]]]:
         """Return docs most similar to the embedding and their cosine distance.
 
@@ -164,6 +166,7 @@ class _BaseVertexAIVectorStore(VectorStore):
             rrf_ranking_alpha=rrf_ranking_alpha,
             filter_=filter,
             numeric_filter=numeric_filter,
+            **kwargs,
         )
         if not neighbors_list:
             return []
@@ -255,7 +258,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         return [
             document
             for document, _ in self.similarity_search_with_score(
-                query, k, filter, numeric_filter
+                query, k, filter, numeric_filter, **kwargs
             )
         ]
 
