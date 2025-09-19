@@ -104,7 +104,8 @@ class _BaseVertexAIVectorStore(VectorStore):
         embedding = self._embeddings.embed_query(query)
 
         return self.similarity_search_by_vector_with_score(
-            embedding=embedding, k=k, filter=filter, numeric_filter=numeric_filter, **kwargs
+            embedding=embedding, k=k, filter=filter, numeric_filter=numeric_filter, 
+            **kwargs
         )
 
     def similarity_search_by_vector_with_score(
