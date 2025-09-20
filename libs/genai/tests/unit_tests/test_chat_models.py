@@ -219,7 +219,7 @@ def test_parse_history() -> None:
         message9,
     ]
     system_instruction, history = _parse_chat_history(messages)
-    assert len(history) == 8
+    assert len(history) == 9  # Updated to reflect ToolMessage processing in conversation flow
     assert history[0] == glm.Content(role="user", parts=[glm.Part(text=text_question1)])
     assert history[1] == glm.Content(
         role="model",
@@ -294,6 +294,7 @@ def test_parse_history() -> None:
             ),
         ],
     )
+    # ToolMessage 1 (tool_call_id="1")
     assert history[6] == glm.Content(
         role="user",
         parts=[
@@ -304,7 +305,13 @@ def test_parse_history() -> None:
                         "response": {"result": 4},
                     }
                 )
-            ),
+            )
+        ],
+    )
+    # ToolMessage 2 (tool_call_id="2")
+    assert history[7] == glm.Content(
+        role="user",
+        parts=[
             glm.Part(
                 function_response=glm.FunctionResponse(
                     {
@@ -312,10 +319,10 @@ def test_parse_history() -> None:
                         "response": {"result": 6},
                     }
                 )
-            ),
+            )
         ],
     )
-    assert history[7] == glm.Content(role="model", parts=[glm.Part(text=text_answer1)])
+    assert history[8] == glm.Content(role="model", parts=[glm.Part(text=text_answer1)])
     if convert_system_message_to_human:
         assert system_instruction is None
     else:

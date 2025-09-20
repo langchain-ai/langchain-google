@@ -217,15 +217,21 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
         except InvalidArgument as e:
             # Check if this is a cached content permission error
-            if "CachedContent not found" in str(e) or "permission denied" in str(e).lower():
+            if (
+                "CachedContent not found" in str(e)
+                or "permission denied" in str(e).lower()
+            ):
                 msg = (
                     f"Cached content access error: {e}\n\n"
                     "This error typically occurs when:\n"
-                    "1. The cached content was created with a different authentication method (API key vs Service Account)\n"
+                    "1. The cached content was created with a different authentication "
+                    "method (API key vs Service Account)\n"
                     "2. The cached content has expired or been deleted\n"
-                    "3. The authentication credentials don't have permission to access the cached content\n\n"
+                    "3. The authentication credentials don't have permission to access "
+                    "the cached content\n\n"
                     "To resolve this:\n"
-                    "- Ensure you're using the same authentication method (API key or Service Account) that was used to create the cached content\n"
+                    "- Ensure you're using the same authentication method (API key or "
+                    "Service Account) that was used to create the cached content\n"
                     "- Verify the cached content name is correct and still exists\n"
                     "- Check that your credentials have the necessary permissions"
                 )
@@ -280,15 +286,21 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         except InvalidArgument as e:
             # Do not retry for these errors.
             # Check if this is a cached content permission error
-            if "CachedContent not found" in str(e) or "permission denied" in str(e).lower():
+            if (
+                "CachedContent not found" in str(e)
+                or "permission denied" in str(e).lower()
+            ):
                 msg = (
                     f"Cached content access error: {e}\n\n"
                     "This error typically occurs when:\n"
-                    "1. The cached content was created with a different authentication method (API key vs Service Account)\n"
+                    "1. The cached content was created with a different authentication "
+                    "method (API key vs Service Account)\n"
                     "2. The cached content has expired or been deleted\n"
-                    "3. The authentication credentials don't have permission to access the cached content\n\n"
+                    "3. The authentication credentials don't have permission to access "
+                    "the cached content\n\n"
                     "To resolve this:\n"
-                    "- Ensure you're using the same authentication method (API key or Service Account) that was used to create the cached content\n"
+                    "- Ensure you're using the same authentication method (API key or "
+                    "Service Account) that was used to create the cached content\n"
                     "- Verify the cached content name is correct and still exists\n"
                     "- Check that your credentials have the necessary permissions"
                 )
@@ -820,7 +832,9 @@ def _response_to_result(
                 finish_reason_value = candidate.finish_reason
                 finish_reason_name = getattr(finish_reason_value, "name", None)
                 generation_info["finish_reason"] = (
-                    finish_reason_name if finish_reason_name is not None else str(finish_reason_value)
+                    finish_reason_name
+                    if finish_reason_name is not None
+                    else str(finish_reason_value)
                 )
             except Exception:
                 # Fallback quietly if unexpected type
@@ -1935,7 +1949,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 else add_usage(prev_usage_metadata, message.usage_metadata)
             )
 
-            if run_manager:
+            if run_manager and isinstance(message.content, str):
                 run_manager.on_llm_new_token(message.content, chunk=gen)
             yield gen
 
@@ -2003,7 +2017,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     else add_usage(prev_usage_metadata, message.usage_metadata)
                 )
 
-                if run_manager:
+                if run_manager and isinstance(message.content, str):
                     await run_manager.on_llm_new_token(message.content, chunk=gen)
                 yield gen
 
