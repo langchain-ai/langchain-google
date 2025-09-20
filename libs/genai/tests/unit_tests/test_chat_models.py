@@ -219,7 +219,8 @@ def test_parse_history() -> None:
         message9,
     ]
     system_instruction, history = _parse_chat_history(messages)
-    assert len(history) == 9  # Updated to reflect ToolMessage processing in conversation flow
+    # Updated to reflect ToolMessage processing in conversation flow
+    assert len(history) == 9
     assert history[0] == glm.Content(role="user", parts=[glm.Part(text=text_question1)])
     assert history[1] == glm.Content(
         role="model",
