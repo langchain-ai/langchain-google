@@ -55,6 +55,7 @@ from google.api_core.exceptions import (
     FailedPrecondition,
     GoogleAPIError,
     InvalidArgument,
+    PermissionDenied,
     ResourceExhausted,
     ServiceUnavailable,
 )
@@ -238,6 +239,24 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                 raise ChatGoogleGenerativeAIError(msg) from e
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
+        except PermissionDenied as e:
+            if "insufficient authentication scopes" in str(e).lower():
+                msg = (
+                    f"Authentication scope error: {e}\n\n"
+                    "This error occurs when using Service Account credentials that don't "
+                    "have the required scopes for the Generative AI API.\n\n"
+                    "To resolve this:\n"
+                    "1. Ensure your Service Account has the 'Generative Language API User' "
+                    "role, or\n"
+                    "2. Add the scope 'https://www.googleapis.com/auth/generative-language' "
+                    "to your credentials, or\n"
+                    "3. Use an API key instead of Service Account credentials\n\n"
+                    "For Google Cloud Build, ensure the build service account has the "
+                    "proper IAM roles and scopes configured."
+                )
+                raise ChatGoogleGenerativeAIError(msg) from e
+            msg = f"Permission denied: {e}"
+            raise ChatGoogleGenerativeAIError(msg) from e
         except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
             if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
@@ -306,6 +325,24 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                 )
                 raise ChatGoogleGenerativeAIError(msg) from e
             msg = f"Invalid argument provided to Gemini: {e}"
+            raise ChatGoogleGenerativeAIError(msg) from e
+        except PermissionDenied as e:
+            if "insufficient authentication scopes" in str(e).lower():
+                msg = (
+                    f"Authentication scope error: {e}\n\n"
+                    "This error occurs when using Service Account credentials that don't "
+                    "have the required scopes for the Generative AI API.\n\n"
+                    "To resolve this:\n"
+                    "1. Ensure your Service Account has the 'Generative Language API User' "
+                    "role, or\n"
+                    "2. Add the scope 'https://www.googleapis.com/auth/generative-language' "
+                    "to your credentials, or\n"
+                    "3. Use an API key instead of Service Account credentials\n\n"
+                    "For Google Cloud Build, ensure the build service account has the "
+                    "proper IAM roles and scopes configured."
+                )
+                raise ChatGoogleGenerativeAIError(msg) from e
+            msg = f"Permission denied: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
         except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay

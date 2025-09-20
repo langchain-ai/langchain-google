@@ -254,6 +254,18 @@ def _prepare_config(
         formatted_client_options["api_key"] = api_key
     elif not credentials and not api_key:
         credentials = _get_credentials()
+    
+    # Ensure credentials have proper scopes for Generative AI API
+    if credentials and hasattr(credentials, 'with_scopes'):
+        # Add the required scope for Generative AI API
+        required_scopes = [
+            "https://www.googleapis.com/auth/generative-language"
+        ]
+        try:
+            credentials = credentials.with_scopes(required_scopes)
+        except Exception as e:
+            _logger.warning(f"Failed to set scopes on credentials: {e}")
+    
     client_info = (
         client_info
         if client_info
