@@ -216,6 +216,20 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                 raise ValueError(error_msg)
 
         except InvalidArgument as e:
+            # Check if this is a cached content permission error
+            if "CachedContent not found" in str(e) or "permission denied" in str(e).lower():
+                msg = (
+                    f"Cached content access error: {e}\n\n"
+                    "This error typically occurs when:\n"
+                    "1. The cached content was created with a different authentication method (API key vs Service Account)\n"
+                    "2. The cached content has expired or been deleted\n"
+                    "3. The authentication credentials don't have permission to access the cached content\n\n"
+                    "To resolve this:\n"
+                    "- Ensure you're using the same authentication method (API key or Service Account) that was used to create the cached content\n"
+                    "- Verify the cached content name is correct and still exists\n"
+                    "- Check that your credentials have the necessary permissions"
+                )
+                raise ChatGoogleGenerativeAIError(msg) from e
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
         except ResourceExhausted as e:
@@ -265,6 +279,20 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             return await generation_method(**kwargs)
         except InvalidArgument as e:
             # Do not retry for these errors.
+            # Check if this is a cached content permission error
+            if "CachedContent not found" in str(e) or "permission denied" in str(e).lower():
+                msg = (
+                    f"Cached content access error: {e}\n\n"
+                    "This error typically occurs when:\n"
+                    "1. The cached content was created with a different authentication method (API key vs Service Account)\n"
+                    "2. The cached content has expired or been deleted\n"
+                    "3. The authentication credentials don't have permission to access the cached content\n\n"
+                    "To resolve this:\n"
+                    "- Ensure you're using the same authentication method (API key or Service Account) that was used to create the cached content\n"
+                    "- Verify the cached content name is correct and still exists\n"
+                    "- Check that your credentials have the necessary permissions"
+                )
+                raise ChatGoogleGenerativeAIError(msg) from e
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
         except ResourceExhausted as e:
@@ -507,13 +535,8 @@ def _parse_chat_history(
         )
 
     system_instruction: Optional[Content] = None
-    messages_without_tool_messages = [
-        message for message in input_messages if not isinstance(message, ToolMessage)
-    ]
-    tool_messages = [
-        message for message in input_messages if isinstance(message, ToolMessage)
-    ]
-    for i, message in enumerate(messages_without_tool_messages):
+    # Process messages in order, handling ToolMessages as they appear
+    for i, message in enumerate(input_messages):
         if isinstance(message, SystemMessage):
             system_parts = _convert_to_parts(message.content)
             if i == 0:
@@ -535,11 +558,7 @@ def _parse_chat_history(
                         }
                     )
                     ai_message_parts.append(Part(function_call=function_call))
-                tool_messages_parts = _get_ai_message_tool_messages_parts(
-                    tool_messages=tool_messages, ai_message=message
-                )
                 messages.append(Content(role=role, parts=ai_message_parts))
-                messages.append(Content(role="user", parts=tool_messages_parts))
                 continue
             if raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
@@ -558,6 +577,9 @@ def _parse_chat_history(
                 parts = list(system_instruction.parts) + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
+            role = "user"
+            parts = _convert_tool_message_to_parts(message)
+        elif isinstance(message, ToolMessage):
             role = "user"
             parts = _convert_tool_message_to_parts(message)
         else:
@@ -1506,6 +1528,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Note: only used in explicit caching, where users can have control over caching
     (e.g. what content to cache) and enjoy guaranteed cost savings. Format:
     ``cachedContents/{cachedContent}``.
+    
+    Important: Cached content is tied to the authentication method used to create it.
+    If you create cached content with API key authentication, you must use the same
+    API key to access it. Similarly, if created with Service Account credentials,
+    you must use the same Service Account credentials to access it.
     """
 
     stop: Optional[List[str]] = None
@@ -1909,7 +1936,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             if run_manager:
-                run_manager.on_llm_new_token(gen.text, chunk=gen)
+                run_manager.on_llm_new_token(message.content, chunk=gen)
             yield gen
 
     async def _astream(
@@ -1977,7 +2004,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
 
                 if run_manager:
-                    await run_manager.on_llm_new_token(gen.text, chunk=gen)
+                    await run_manager.on_llm_new_token(message.content, chunk=gen)
                 yield gen
 
     def _prepare_request(
