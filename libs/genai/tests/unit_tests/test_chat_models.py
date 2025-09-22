@@ -28,9 +28,11 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
+from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
+from langchain_google_genai import HarmBlockThreshold, HarmCategory
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     _chat_with_retry,
@@ -99,6 +101,26 @@ def test_integration_initialization() -> None:
         assert "Did you mean: 'safety_settings'?" in call_args
 
 
+def test_safety_settings_initialization() -> None:
+    """Test chat model initialization with safety_settings parameter."""
+    safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
+    }
+
+    # Test initialization with safety_settings
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("test-key"),
+        temperature=0.7,
+        safety_settings=safety_settings,
+    )
+
+    # Verify the safety_settings are stored correctly
+    assert llm.safety_settings == safety_settings
+    assert llm.temperature == 0.7
+    assert llm.model == "models/gemini-2.5-flash"
+
+
 def test_initialization_inside_threadpool() -> None:
     # new threads don't have a running event loop,
     # thread pool executor easiest way to create one
@@ -108,6 +130,31 @@ def test_initialization_inside_threadpool() -> None:
             model="gemini-2.5-flash",
             google_api_key=SecretStr("secret-api-key"),
         ).result()
+
+
+def test_client_transport() -> None:
+    """Test client transport configuration."""
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="fake-key")
+    assert model.client.transport.kind == "grpc"
+
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash", google_api_key="fake-key", transport="rest"
+    )
+    assert model.client.transport.kind == "rest"
+
+    async def check_async_client() -> None:
+        model = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash", google_api_key="fake-key"
+        )
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+        # Test auto conversion of transport to "grpc_asyncio" from "rest"
+        model = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash", google_api_key="fake-key", transport="rest"
+        )
+        assert model.async_client.transport.kind == "grpc_asyncio"
+
+    asyncio.run(check_async_client())
 
 
 def test_initalization_without_async() -> None:
@@ -1116,6 +1163,72 @@ async def test_max_retries_parameter_handling(
             assert "max_retries" not in call_kwargs_actual
 
 
+def test_thinking_config_merging_with_generation_config() -> None:
+    """Test that thinking_config is properly merged when passed in generation_config."""
+    with patch("langchain_google_genai.chat_models._chat_with_retry") as mock_retry:
+        # Mock response with thinking content followed by regular text
+        mock_response = GenerateContentResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                Part(text="Let me think about this...", thought=True),
+                                Part(text="There are 2 O's in Google."),
+                            ]
+                        },
+                        "finish_reason": "STOP",
+                    }
+                ],
+                "usage_metadata": {
+                    "prompt_token_count": 20,
+                    "candidates_token_count": 15,
+                    "total_token_count": 35,
+                    "cached_content_token_count": 0,
+                },
+            }
+        )
+        mock_retry.return_value = mock_response
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=SecretStr("test-key"),
+        )
+
+        result = llm.invoke(
+            "How many O's are in Google?",
+            generation_config={"thinking_config": {"include_thoughts": True}},
+        )
+
+        # Verify the call was made with merged config
+        mock_retry.assert_called_once()
+        call_args = mock_retry.call_args
+        request = call_args.kwargs["request"]
+        assert hasattr(request, "generation_config")
+        assert hasattr(request.generation_config, "thinking_config")
+        assert request.generation_config.thinking_config.include_thoughts is True
+
+        # Verify response structure
+        assert isinstance(result, AIMessage)
+        content = result.content
+
+        # Should have thinking content first
+        assert isinstance(content[0], dict)
+        assert content[0].get("type") == "thinking"
+        assert isinstance(content[0].get("thinking"), str)
+        assert content[0]["thinking"] == "Let me think about this..."
+
+        # Should have regular text content second
+        assert isinstance(content[1], str)
+        assert content[1] == "There are 2 O's in Google."
+
+        # Verify usage metadata
+        assert result.usage_metadata is not None
+        assert result.usage_metadata["input_tokens"] == 20
+        assert result.usage_metadata["output_tokens"] == 15
+        assert result.usage_metadata["total_tokens"] == 35
+
+
 def test_with_structured_output_json_schema_alias() -> None:
     """Test that json_schema method works as alias for json_mode."""
     from pydantic import BaseModel
@@ -1132,3 +1245,119 @@ def test_with_structured_output_json_schema_alias() -> None:
     schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
     structured_llm_dict = llm.with_structured_output(schema_dict, method="json_schema")
     assert structured_llm_dict is not None
+
+
+def test_modalities_override_in_generation_config() -> None:
+    """Test response modalities in invoke generation_config override model-defined."""
+    from langchain_google_genai import Modality
+
+    # Mock response with both image and text content
+    mock_response = Mock()
+    mock_response.candidates = [
+        Candidate(
+            content=Content(
+                parts=[
+                    Part(
+                        inline_data=glm.Blob(
+                            mime_type="image/jpeg",
+                            data=base64.b64decode(
+                                "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+                            ),
+                        )
+                    ),
+                    Part(text="Meow! Here's a cat image for you."),
+                ]
+            ),
+            finish_reason=Candidate.FinishReason.STOP,
+        )
+    ]
+    # Create proper usage metadata using dict approach
+    from google.ai.generativelanguage_v1beta.types import UsageMetadata
+
+    mock_response.usage_metadata = UsageMetadata(
+        {
+            "prompt_token_count": 10,
+            "response_token_count": 5,
+            "total_token_count": 15,
+        }
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash-exp-image-generation",
+        google_api_key="fake-key",
+        response_modalities=[Modality.TEXT],  # Initially only TEXT
+    )
+
+    with patch.object(llm, "_generate") as mock_generate:
+        mock_generate.return_value = ChatResult(
+            generations=[
+                ChatGeneration(
+                    message=AIMessage(
+                        content=[
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": (
+                                        "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA"
+                                        "YEEBQYFBAYGEBQYEHBWIEHCKCKJCHQDWQFXQYGBCUFHYAHSUFGHJSHB"
+                                        "YWICWGIYYNKSOPGR8TMC0OMCUOKSI/2WBDAQCHBWICHKMCHMOGBYA"
+                                        "KCGOKCGOKSOKCGOKCGOKCGOKCGOKCGOKSOKCGOKSOKCGOKSOKCGOKS"
+                                        "OKCGOKSOKCGOKSOKCGJ/WAARICAABAAEDAISIAAHEBAEB/8QAFQABAAAAAA"
+                                        "AAAAAAAAAAAAAAAV/XAAUEUAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAA"
+                                        "AAAAAAAAAAAAAAAAAX/XAAUEQUAAAAAAAAAAAAAAAAAAAA/9OADAMB"
+                                        "AAIRAXEAPWCDABMX/9K="
+                                    )
+                                },
+                            },
+                            "Meow! Here's a cat image for you.",
+                        ],
+                        usage_metadata={
+                            "input_tokens": 10,
+                            "output_tokens": 5,
+                            "total_tokens": 15,
+                        },
+                    )
+                )
+            ]
+        )
+
+        # Invoke with generation_config that should override the model's
+        # response_modalities
+        result = llm.invoke(
+            "Generate an image of a cat. Then, say meow!",
+            config={"tags": ["meow"]},
+            generation_config={
+                "top_k": 2,
+                "top_p": 1,
+                "temperature": 0.7,
+                "response_modalities": ["TEXT", "IMAGE"],  # Override to include IMAGE
+            },
+        )
+
+        # Verify the response structure matches expected multimodal output
+        assert isinstance(result, AIMessage)
+        assert isinstance(result.content, list)
+        assert len(result.content) == 2
+
+        # First item should be the image
+        assert isinstance(result.content[0], dict)
+        assert result.content[0].get("type") == "image_url"
+        assert "url" in result.content[0].get("image_url", {})
+
+        # Second item should be the text
+        assert isinstance(result.content[1], str)
+        assert not result.content[1].startswith(" ")
+        assert "Meow" in result.content[1]
+
+        # Verify usage metadata is present and valid
+        assert result.usage_metadata is not None
+        assert result.usage_metadata["input_tokens"] > 0
+        assert result.usage_metadata["output_tokens"] > 0
+        assert result.usage_metadata["total_tokens"] > 0
+        assert (
+            result.usage_metadata["input_tokens"]
+            + result.usage_metadata["output_tokens"]
+        ) == result.usage_metadata["total_tokens"]
+
+        # Verify that the _generate method was called
+        mock_generate.assert_called_once()
