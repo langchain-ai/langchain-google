@@ -769,13 +769,16 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
                     "start_index": getattr(support.segment, "start_index", 0),
                     "end_index": getattr(support.segment, "end_index", 0),
                     "text": getattr(support.segment, "text", ""),
+                    "part_index": getattr(support.segment, "part_index", 0),
                 }
             if hasattr(support, "grounding_chunk_indices"):
                 support_data["grounding_chunk_indices"] = list(
                     support.grounding_chunk_indices
                 )
             if hasattr(support, "confidence_scores"):
-                support_data["confidence_scores"] = list(support.confidence_scores)
+                support_data["confidence_scores"] = [
+                    round(score, 6) for score in support.confidence_scores
+                ]
             grounding_supports.append(support_data)
         result["grounding_supports"] = grounding_supports
 
