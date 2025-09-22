@@ -639,7 +639,7 @@ def _get_finish_message(candidate: genai.Candidate) -> str:
     to a manual mapping of finish reasons to descriptive messages.
     """
     # Use the official field when available
-    if hasattr(candidate, 'finish_message') and candidate.finish_message:
+    if hasattr(candidate, "finish_message") and candidate.finish_message:
         return candidate.finish_message
 
     # Fallback to manual mapping for all known finish reasons
@@ -652,13 +652,17 @@ def _get_finish_message(candidate: genai.Candidate) -> str:
         genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
         genai.Candidate.FinishReason.LANGUAGE: "Unsupported language detected",
         genai.Candidate.FinishReason.BLOCKLIST: "Content hit forbidden terms",
-        genai.Candidate.FinishReason.PROHIBITED_CONTENT: "Inappropriate content detected",
+        genai.Candidate.FinishReason.PROHIBITED_CONTENT: (
+            "Inappropriate content detected"
+        ),
         genai.Candidate.FinishReason.SPII: "Sensitive personal information detected",
         genai.Candidate.FinishReason.IMAGE_SAFETY: "Image safety violation",
         genai.Candidate.FinishReason.MALFORMED_FUNCTION_CALL: "Malformed function call",
         genai.Candidate.FinishReason.UNEXPECTED_TOOL_CALL: "Unexpected tool call",
         genai.Candidate.FinishReason.OTHER: "Other generation issue",
-        genai.Candidate.FinishReason.FINISH_REASON_UNSPECIFIED: "Unspecified finish reason",
+        genai.Candidate.FinishReason.FINISH_REASON_UNSPECIFIED: (
+            "Unspecified finish reason"
+        ),
     }
 
     finish_reason = candidate.finish_reason
