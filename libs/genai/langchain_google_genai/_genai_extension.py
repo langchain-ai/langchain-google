@@ -632,22 +632,41 @@ def generate_answer(
     )
 
 
-# TODO: Use candidate.finish_message when that field is launched.
-# For now, we derive this message from other existing fields.
 def _get_finish_message(candidate: genai.Candidate) -> str:
+    """Get a human-readable finish message from the candidate.
+
+    Uses the official finish_message field if available, otherwise falls back
+    to a manual mapping of finish reasons to descriptive messages.
+    """
+    # Use the official field when available
+    if hasattr(candidate, "finish_message") and candidate.finish_message:
+        return candidate.finish_message
+
+    # Fallback to manual mapping for all known finish reasons
     finish_messages: Dict[int, str] = {
+        genai.Candidate.FinishReason.STOP: "Generation completed successfully",
         genai.Candidate.FinishReason.MAX_TOKENS: (
             "Maximum token in context window reached"
         ),
         genai.Candidate.FinishReason.SAFETY: "Blocked because of safety",
         genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
+        genai.Candidate.FinishReason.LANGUAGE: "Unsupported language detected",
+        genai.Candidate.FinishReason.BLOCKLIST: "Content hit forbidden terms",
+        genai.Candidate.FinishReason.PROHIBITED_CONTENT: (
+            "Inappropriate content detected"
+        ),
+        genai.Candidate.FinishReason.SPII: "Sensitive personal information detected",
+        genai.Candidate.FinishReason.IMAGE_SAFETY: "Image safety violation",
+        genai.Candidate.FinishReason.MALFORMED_FUNCTION_CALL: "Malformed function call",
+        genai.Candidate.FinishReason.UNEXPECTED_TOOL_CALL: "Unexpected tool call",
+        genai.Candidate.FinishReason.OTHER: "Other generation issue",
+        genai.Candidate.FinishReason.FINISH_REASON_UNSPECIFIED: (
+            "Unspecified finish reason"
+        ),
     }
 
     finish_reason = candidate.finish_reason
-    if finish_reason not in finish_messages:
-        return "Unexpected generation error"
-
-    return finish_messages[finish_reason]
+    return finish_messages.get(finish_reason, "Unexpected generation error")
 
 
 def _convert_to_metadata(metadata: Dict[str, Any]) -> List[genai.CustomMetadata]:
