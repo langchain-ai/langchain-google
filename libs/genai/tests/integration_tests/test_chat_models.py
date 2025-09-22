@@ -3,7 +3,7 @@
 import asyncio
 import json
 from collections.abc import Generator, Sequence
-from typing import Literal, Optional, cast
+from typing import Literal, Optional, Union, cast
 
 import pytest
 from langchain_core.messages import (
@@ -107,7 +107,7 @@ async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
         "This is a test. Say 'foo'",
         "This is a test, say 'bar'",
     ]
-    config: RunnableConfig | None = {"tags": ["foo"]} if with_tags else None
+    config: Union[RunnableConfig, None] = {"tags": ["foo"]} if with_tags else None
 
     if is_async:
         result = await llm.abatch(cast(list, messages), config=config)
