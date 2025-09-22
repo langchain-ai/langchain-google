@@ -738,19 +738,19 @@ def _parse_response_candidate(
     )
 
 
-def _extract_grounding_metadata(candidate):
+def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
     """Extract grounding metadata from candidate."""
     if not hasattr(candidate, "grounding_metadata") or not candidate.grounding_metadata:
         return {}
 
     grounding_metadata = candidate.grounding_metadata
-    result = {}
+    result: Dict[str, Any] = {}
 
     # Extract grounding chunks
     if hasattr(grounding_metadata, "grounding_chunks"):
         grounding_chunks = []
         for chunk in grounding_metadata.grounding_chunks:
-            chunk_data = {}
+            chunk_data: Dict[str, Any] = {}
             if hasattr(chunk, "web") and chunk.web:
                 chunk_data["web"] = {
                     "uri": chunk.web.uri if hasattr(chunk.web, "uri") else "",
@@ -763,7 +763,7 @@ def _extract_grounding_metadata(candidate):
     if hasattr(grounding_metadata, "grounding_supports"):
         grounding_supports = []
         for support in grounding_metadata.grounding_supports:
-            support_data = {}
+            support_data: Dict[str, Any] = {}
             if hasattr(support, "segment") and support.segment:
                 support_data["segment"] = {
                     "start_index": getattr(support.segment, "start_index", 0),
