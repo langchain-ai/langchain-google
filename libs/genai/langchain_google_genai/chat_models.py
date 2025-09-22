@@ -740,47 +740,49 @@ def _parse_response_candidate(
 
 def _extract_grounding_metadata(candidate):
     """Extract grounding metadata from candidate."""
-    if not hasattr(candidate, 'grounding_metadata') or not candidate.grounding_metadata:
+    if not hasattr(candidate, "grounding_metadata") or not candidate.grounding_metadata:
         return {}
-    
+
     grounding_metadata = candidate.grounding_metadata
     result = {}
-    
+
     # Extract grounding chunks
-    if hasattr(grounding_metadata, 'grounding_chunks'):
+    if hasattr(grounding_metadata, "grounding_chunks"):
         grounding_chunks = []
         for chunk in grounding_metadata.grounding_chunks:
             chunk_data = {}
-            if hasattr(chunk, 'web') and chunk.web:
-                chunk_data['web'] = {
-                    'uri': chunk.web.uri if hasattr(chunk.web, 'uri') else '',
-                    'title': chunk.web.title if hasattr(chunk.web, 'title') else ''
+            if hasattr(chunk, "web") and chunk.web:
+                chunk_data["web"] = {
+                    "uri": chunk.web.uri if hasattr(chunk.web, "uri") else "",
+                    "title": chunk.web.title if hasattr(chunk.web, "title") else "",
                 }
             grounding_chunks.append(chunk_data)
-        result['grounding_chunks'] = grounding_chunks
-    
+        result["grounding_chunks"] = grounding_chunks
+
     # Extract grounding supports
-    if hasattr(grounding_metadata, 'grounding_supports'):
+    if hasattr(grounding_metadata, "grounding_supports"):
         grounding_supports = []
         for support in grounding_metadata.grounding_supports:
             support_data = {}
-            if hasattr(support, 'segment') and support.segment:
-                support_data['segment'] = {
-                    'start_index': getattr(support.segment, 'start_index', 0),
-                    'end_index': getattr(support.segment, 'end_index', 0),
-                    'text': getattr(support.segment, 'text', '')
+            if hasattr(support, "segment") and support.segment:
+                support_data["segment"] = {
+                    "start_index": getattr(support.segment, "start_index", 0),
+                    "end_index": getattr(support.segment, "end_index", 0),
+                    "text": getattr(support.segment, "text", ""),
                 }
-            if hasattr(support, 'grounding_chunk_indices'):
-                support_data['grounding_chunk_indices'] = list(support.grounding_chunk_indices)
-            if hasattr(support, 'confidence_scores'):
-                support_data['confidence_scores'] = list(support.confidence_scores)
+            if hasattr(support, "grounding_chunk_indices"):
+                support_data["grounding_chunk_indices"] = list(
+                    support.grounding_chunk_indices
+                )
+            if hasattr(support, "confidence_scores"):
+                support_data["confidence_scores"] = list(support.confidence_scores)
             grounding_supports.append(support_data)
-        result['grounding_supports'] = grounding_supports
-    
+        result["grounding_supports"] = grounding_supports
+
     # Extract web search queries
-    if hasattr(grounding_metadata, 'web_search_queries'):
-        result['web_search_queries'] = list(grounding_metadata.web_search_queries)
-    
+    if hasattr(grounding_metadata, "web_search_queries"):
+        result["web_search_queries"] = list(grounding_metadata.web_search_queries)
+
     return result
 
 
@@ -850,10 +852,10 @@ def _response_to_result(
         message = _parse_response_candidate(candidate, streaming=stream)
         message.usage_metadata = lc_usage
 
-        if not hasattr(message, 'response_metadata'):
+        if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
         message.response_metadata["grounding_metadata"] = grounding_metadata
-        
+
         if stream:
             generations.append(
                 ChatGenerationChunk(
@@ -1853,7 +1855,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
             generation_method=self.client.generate_content,
             metadata=self.default_metadata,
-            
         )
         return _response_to_result(response)
 
