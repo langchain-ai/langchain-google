@@ -849,6 +849,7 @@ def _response_to_result(
             for safety_rating in candidate.safety_ratings
         ]
         grounding_metadata = _extract_grounding_metadata(candidate)
+        generation_info["grounding_metadata"] = grounding_metadata
         message = _parse_response_candidate(candidate, streaming=stream)
         message.usage_metadata = lc_usage
 
