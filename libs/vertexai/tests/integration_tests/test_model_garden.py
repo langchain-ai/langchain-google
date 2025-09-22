@@ -19,10 +19,13 @@ from langchain_google_vertexai.model_garden import (
     VertexAIModelGarden,
 )
 
+_ANTHROPIC_LOCATION = "us-east5"
+_ANTHROPIC_CLAUDE35_MODEL_NAME = "claude-3-5-sonnet-v2@20241022"
+
 
 @pytest.mark.extended
 @pytest.mark.parametrize(
-    "endpoint_os_variable_name,result_arg",
+    ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 def test_model_garden(
@@ -44,15 +47,14 @@ def test_model_garden(
         result_arg=result_arg,
         location=location,
     )
-    output = llm("What is the meaning of life?")
+    output = llm.invoke("What is the meaning of life?")
     assert isinstance(output, str)
-    print(output)
     assert llm._llm_type == "vertexai_model_garden"
 
 
 @pytest.mark.extended
 @pytest.mark.parametrize(
-    "endpoint_os_variable_name,result_arg",
+    ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 def test_model_garden_generate(
@@ -83,7 +85,7 @@ def test_model_garden_generate(
 @pytest.mark.asyncio
 @pytest.mark.first
 @pytest.mark.parametrize(
-    "endpoint_os_variable_name,result_arg",
+    ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 async def test_model_garden_agenerate(
@@ -106,7 +108,7 @@ async def test_model_garden_agenerate(
 @pytest.mark.extended
 def test_anthropic() -> None:
     project = os.environ["PROJECT_ID"]
-    location = "us-central1"
+    location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
         project=project,
         location=location,
@@ -120,7 +122,9 @@ def test_anthropic() -> None:
     )
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
-    response = model.invoke([context, message], model_name="claude-3-sonnet@20240229")
+    response = model.invoke(
+        [context, message], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+    )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -128,7 +132,7 @@ def test_anthropic() -> None:
 @pytest.mark.extended
 def test_anthropic_stream() -> None:
     project = os.environ["PROJECT_ID"]
-    location = "us-central1"
+    location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
         project=project,
         location=location,
@@ -137,7 +141,7 @@ def test_anthropic_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message], model="claude-3-sonnet@20240229")
+    sync_response = model.stream([message], model=_ANTHROPIC_CLAUDE35_MODEL_NAME)
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
@@ -169,7 +173,7 @@ def test_anthropic_thinking_stream() -> None:
 @pytest.mark.extended
 async def test_anthropic_async() -> None:
     project = os.environ["PROJECT_ID"]
-    location = "us-central1"
+    location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
         project=project,
         location=location,
@@ -184,7 +188,7 @@ async def test_anthropic_async() -> None:
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
     response = await model.ainvoke(
-        [context, message], model_name="claude-3-sonnet@20240229", temperature=0.2
+        [context, message], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME, temperature=0.2
     )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -205,7 +209,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 @pytest.mark.flaky(retries=3)
 def test_anthropic_tool_calling() -> None:
     project = os.environ["PROJECT_ID"]
-    location = "us-east5"
+    location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
         project=project,
         location=location,
@@ -217,16 +221,19 @@ def test_anthropic_tool_calling() -> None:
 
     # Test .bind_tools with BaseModel
     message = HumanMessage(content="My name is Erick and I am 27 years old")
-    model_with_tools = model.bind_tools([MyModel], model_name="claude-3-opus@20240229")
+    model_with_tools = model.bind_tools(
+        [MyModel], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+    )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "MyModel")
 
     # Test .bind_tools with function
     def my_model(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
-    model_with_tools = model.bind_tools([my_model], model_name="claude-3-opus@20240229")
+    model_with_tools = model.bind_tools(
+        [my_model], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+    )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "my_model")
 
@@ -234,9 +241,10 @@ def test_anthropic_tool_calling() -> None:
     @tool
     def my_tool(name: str, age: int) -> None:
         """Invoke this with names and ages."""
-        pass
 
-    model_with_tools = model.bind_tools([my_tool], model_name="claude-3-opus@20240229")
+    model_with_tools = model.bind_tools(
+        [my_tool], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+    )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "my_tool")
 
@@ -261,11 +269,11 @@ def test_anthropic_tool_calling() -> None:
 @pytest.mark.extended
 def test_anthropic_with_structured_output() -> None:
     project = os.environ["PROJECT_ID"]
-    location = "us-east5"
+    location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
         project=project,
         location=location,
-        model="claude-3-opus@20240229",
+        model=_ANTHROPIC_CLAUDE35_MODEL_NAME,
     )
 
     class MyModel(BaseModel):

@@ -5,26 +5,26 @@ from langchain_google_genai.llms import GoogleGenerativeAI
 
 def test_tracing_params() -> None:
     # Test standard tracing params
-    llm = GoogleGenerativeAI(model="gemini-pro", google_api_key="foo")  # type: ignore[call-arg]
+    llm = GoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="foo")
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
         "ls_model_type": "llm",
-        "ls_model_name": "gemini-pro",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_temperature": 0.7,
     }
 
     llm = GoogleGenerativeAI(
-        model="gemini-pro",
+        model="gemini-2.5-flash",
         temperature=0.1,
         max_output_tokens=10,
-        google_api_key="foo",  # type: ignore[call-arg]
+        google_api_key="foo",
     )
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
         "ls_model_type": "llm",
-        "ls_model_name": "gemini-pro",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_temperature": 0.1,
         "ls_max_tokens": 10,
     }
@@ -32,15 +32,15 @@ def test_tracing_params() -> None:
     # Test initialization with an invalid argument to check warning
     with patch("langchain_google_genai.llms.logger.warning") as mock_warning:
         llm = GoogleGenerativeAI(
-            model="gemini-pro",
-            google_api_key="foo",  # type: ignore[call-arg]
+            model="gemini-2.5-flash",
+            google_api_key="foo",
             safety_setting={
                 "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
             },  # Invalid arg
         )
-        assert llm.model == "gemini-pro"
+        assert llm.model == "models/gemini-2.5-flash"
         ls_params = llm._get_ls_params()
-        assert ls_params["ls_model_name"] == "gemini-pro"
+        assert ls_params.get("ls_model_name") == "gemini-2.5-flash"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args

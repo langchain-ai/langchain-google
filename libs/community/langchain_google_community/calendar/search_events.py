@@ -3,10 +3,10 @@
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type
+from zoneinfo import ZoneInfo
 
 from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
-from zoneinfo import ZoneInfo
 
 from langchain_google_community.calendar.base import CalendarBaseTool
 
@@ -118,12 +118,12 @@ class CalendarSearchEvents(CalendarBaseTool):  # type: ignore[override, override
                 calendar_tz = ZoneInfo(tz_name) if tz_name else None
                 time_min = (
                     datetime.strptime(min_datetime, "%Y-%m-%d %H:%M:%S")
-                    .astimezone(calendar_tz)
+                    .replace(tzinfo=calendar_tz)
                     .isoformat()
                 )
                 time_max = (
                     datetime.strptime(max_datetime, "%Y-%m-%d %H:%M:%S")
-                    .astimezone(calendar_tz)
+                    .replace(tzinfo=calendar_tz)
                     .isoformat()
                 )
                 events_result = (

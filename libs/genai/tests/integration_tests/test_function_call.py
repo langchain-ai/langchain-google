@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel
@@ -10,8 +11,14 @@ from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
 )
 
+model_names = ["gemini-2.5-flash"]
 
-def test_function_call() -> None:
+
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+def test_function_call(model_name: str) -> None:
     functions = [
         {
             "name": "get_weather",
@@ -29,29 +36,29 @@ def test_function_call() -> None:
             },
         }
     ]
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind(
-        functions=functions
-    )
+    llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=functions)
     res = llm.invoke("what weather is today in san francisco?")
     assert res
     assert res.additional_kwargs
     assert "function_call" in res.additional_kwargs
-    assert "get_weather" == res.additional_kwargs["function_call"]["name"]
+    assert res.additional_kwargs["function_call"]["name"] == "get_weather"
     arguments_str = res.additional_kwargs["function_call"]["arguments"]
     assert isinstance(arguments_str, str)
     arguments = json.loads(arguments_str)
     assert "location" in arguments
 
 
-def test_tool_call() -> None:
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+def test_tool_call(model_name: str) -> None:
     @tool
     def search_tool(query: str) -> str:
         """Searches the web for `query` and returns the result."""
         raise NotImplementedError
 
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind(
-        functions=[search_tool]
-    )
+    llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=[search_tool])
     response = llm.invoke("weather in san francisco")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -70,10 +77,12 @@ class MyModel(BaseModel):
     age: int
 
 
-def test_pydantic_call() -> None:
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind(
-        functions=[MyModel]
-    )
+@pytest.mark.parametrize(
+    "model_name",
+    model_names,
+)
+def test_pydantic_call(model_name: str) -> None:
+    llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=[MyModel])
     response = llm.invoke("my name is Erick and I am 27 years old")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)

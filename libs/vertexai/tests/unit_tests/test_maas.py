@@ -120,7 +120,7 @@ def test_parse_history_llama_tools(mock_auth: Any) -> None:
     assert parsed_history == expected_parsed_history
 
 
-def test_parse_response():
+def test_parse_response() -> None:
     candidate: Dict[str, Any] = {
         "content": "London is the capital of Great Britain",
         "role": "assistant",

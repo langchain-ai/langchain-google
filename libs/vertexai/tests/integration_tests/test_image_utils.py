@@ -6,7 +6,7 @@ from langchain_google_vertexai._image_utils import ImageBytesLoader
 
 
 @pytest.mark.skip("CI testing not set up")
-def test_image_utils():
+def test_image_utils() -> None:
     base64_image = (
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAA"
         "BHNCSVQICAgIfAhkiAAAAAlwSFlzAAAApgAAAKYB3X3/OAAAABl0RVh0U29mdHdhcmUAd3"

@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator, Iterator, Sequence
 from operator import itemgetter
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterator,
     List,
     Literal,
     Optional,
-    Sequence,
     Type,
     Union,
 )
@@ -33,7 +31,6 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
 )
-from langchain_core.messages.ai import UsageMetadata
 from langchain_core.outputs import (
     ChatGeneration,
     ChatGenerationChunk,
@@ -47,6 +44,8 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.tools import BaseTool
+from langchain_core.utils import get_pydantic_field_names
+from langchain_core.utils.utils import _build_model_kwargs
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
@@ -55,6 +54,7 @@ from langchain_google_vertexai._anthropic_parsers import (
     _extract_tool_calls,
 )
 from langchain_google_vertexai._anthropic_utils import (
+    _create_usage_metadata,
     _documents_in_params,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
@@ -64,13 +64,6 @@ from langchain_google_vertexai._anthropic_utils import (
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
 from langchain_google_vertexai._retry import create_base_retry_decorator
-
-
-class CacheUsageMetadata(UsageMetadata):
-    cache_creation_input_tokens: Optional[int]
-    """The number of input tokens used to create the cache entry."""
-    cache_read_input_tokens: Optional[int]
-    """The number of input tokens read from the cache."""
 
 
 def _create_retry_decorator(
@@ -191,6 +184,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         default=None,
         description="Timeout for API requests.",
     )
+    http_client: Any = Field(default=None, exclude=True)
+    async_http_client: Any = Field(default=None, exclude=True)
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -201,6 +196,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
+    @model_validator(mode="before")
+    @classmethod
+    def build_extra(cls, values: dict[str, Any]) -> Any:
+        """Build extra kwargs from additional params that were passed in."""
+        all_required_field_names = get_pydantic_field_names(cls)
+        return _build_model_kwargs(values, all_required_field_names)
+
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         from anthropic import (  # type: ignore[unused-ignore, import-not-found]
@@ -209,7 +211,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         )
 
         if self.project is None:
-            raise ValueError("project is required for ChatAnthropicVertex")
+            msg = "project is required for ChatAnthropicVertex"
+            raise ValueError(msg)
 
         project_id: str = self.project
 
@@ -217,18 +220,22 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         self.client = AnthropicVertex(
             project_id=project_id,
             region=self.location,
+            base_url=self.api_endpoint,
             max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
             timeout=self.timeout,
+            http_client=self.http_client,
         )
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
             region=self.location,
+            base_url=self.api_endpoint,
             max_retries=0,
             access_token=self.access_token,
             credentials=self.credentials,
             timeout=self.timeout,
+            http_client=self.async_http_client,
         )
         return self
 
@@ -285,14 +292,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             )
         else:
             msg = AIMessage(content=content)
-        # Collect token usage
-        msg.usage_metadata = CacheUsageMetadata(
-            input_tokens=data.usage.input_tokens,
-            output_tokens=data.usage.output_tokens,
-            total_tokens=data.usage.input_tokens + data.usage.output_tokens,
-            cache_creation_input_tokens=data.usage.cache_creation_input_tokens,
-            cache_read_input_tokens=data.usage.cache_read_input_tokens,
-        )
+        # Collect token usage using the reusable function (matches langchain_anthropic)
+        msg.usage_metadata = _create_usage_metadata(data.usage)
         return ChatResult(
             generations=[ChatGeneration(message=msg)],
             llm_output=llm_output,
@@ -448,8 +449,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         ] = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
-        """Bind tool-like objects to this chat model"""
-
+        """Bind tool-like objects to this chat model."""
         formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
         if not tool_choice:
             pass
@@ -460,10 +460,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         elif isinstance(tool_choice, str):
             kwargs["tool_choice"] = {"type": "tool", "name": tool_choice}
         else:
-            raise ValueError(
+            msg = (  # type: ignore[unreachable, unused-ignore]
                 f"Unrecognized 'tool_choice' type {tool_choice=}. Expected dict, "
                 f"str, or None."
             )
+            raise ValueError(msg)
         return self.bind(tools=formatted_tools, **kwargs)
 
     def with_structured_output(
@@ -474,7 +475,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         """Model wrapper that returns outputs formatted to match the given schema."""
-
         tool_name = convert_to_anthropic_tool(schema)["name"]
         llm = self.bind_tools([schema], tool_choice=tool_name)
         if isinstance(schema, type) and issubclass(schema, BaseModel):
@@ -493,5 +493,4 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 [parser_none], exception_key="parsing_error"
             )
             return RunnableMap(raw=llm) | parser_with_fallback
-        else:
-            return llm | output_parser
+        return llm | output_parser

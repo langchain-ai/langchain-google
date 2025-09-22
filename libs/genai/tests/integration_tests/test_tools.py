@@ -25,13 +25,13 @@ def test_multiple_tools() -> None:
     tools = [check_weather, check_live_traffic, check_tennis_score]
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash-001",
+        model="gemini-2.5-flash",
     )
 
     model_with_tools = model.bind_tools(tools)
 
-    input = "What is the latest tennis score for Leonid?"
+    input_ = "What is the latest tennis score for Leonid?"
 
-    result = model_with_tools.invoke(input)
+    result = model_with_tools.invoke(input_)
     assert len(result.tool_calls) == 1  # type: ignore
     assert result.tool_calls[0]["name"] == "check_tennis_score"  # type: ignore

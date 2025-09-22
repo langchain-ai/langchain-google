@@ -72,7 +72,6 @@ def test_gemma_kaggle() -> None:
     llm = GemmaLocalKaggle(model_name="gemma_2b_en")
     output = llm.invoke("What is the meaning of life?")
     assert isinstance(output, str)
-    print(output)
     assert len(output) > 2
 
 

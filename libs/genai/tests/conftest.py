@@ -1,8 +1,4 @@
-"""
-Tests configuration to be executed before tests execution.
-"""
-
-from typing import List
+"""Tests configuration to be executed before tests execution."""
 
 import pytest
 
@@ -15,14 +11,10 @@ _PYTEST_FLAGS = [_RELEASE_FLAG, _GPU_FLAG, _LONG_FLAG, _EXTENDED_FLAG]
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """
-    Add flags accepted by pytest CLI.
+    """Add flags accepted by pytest CLI.
 
     Args:
         parser: The pytest parser object.
-
-    Returns:
-
     """
     for flag in _PYTEST_FLAGS:
         parser.addoption(
@@ -31,13 +23,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """
-    Add pytest custom configuration.
+    """Add pytest custom configuration.
 
     Args:
         config: The pytest config object.
-
-    Returns:
     """
     for flag in _PYTEST_FLAGS:
         config.addinivalue_line(
@@ -46,19 +35,16 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(
-    config: pytest.Config, items: List[pytest.Item]
+    config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """
-    Skip tests with a marker from our list that were not explicitly invoked.
+    """Skip tests with a marker from our list that were not explicitly invoked.
 
     Args:
         config: The pytest config object.
         items: The list of tests to be executed.
-
-    Returns:
     """
     for item in items:
         keywords = list(set(item.keywords).intersection(_PYTEST_FLAGS))
-        if keywords and not any((config.getoption(f"--{kw}") for kw in keywords)):
+        if keywords and not any(config.getoption(f"--{kw}") for kw in keywords):
             skip = pytest.mark.skip(reason=f"need --{keywords[0]} option to run")
             item.add_marker(skip)

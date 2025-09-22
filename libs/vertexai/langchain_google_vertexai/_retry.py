@@ -74,7 +74,7 @@ def create_base_retry_decorator(
                     else:
                         asyncio.run(coro)
                 except Exception as e:
-                    logger.error(f"Error in on_retry: {e}")
+                    logger.exception(f"Error in on_retry: {e}")
             else:
                 run_manager.metadata.update({"retry_state": retry_d})
                 run_manager.on_retry(retry_state)
@@ -106,17 +106,19 @@ def create_base_retry_decorator(
                 retry_instance = get_google_api_call_error_retry_instance()
             else:
                 retry_instance = retry_if_exception_type(error)
+        elif error is GoogleAPICallError:
+            retry_instance = (retry_instance) | (
+                get_google_api_call_error_retry_instance()
+            )
         else:
-            if error is GoogleAPICallError:
-                retry_instance = (retry_instance) | (
-                    get_google_api_call_error_retry_instance()
-                )
-            else:
-                retry_instance = (retry_instance) | (retry_if_exception_type(error))
+            retry_instance = (retry_instance) | (retry_if_exception_type(error))
+
+    # Interpret max_retries=0 as "no retries" which still allows 1 attempt.
+    attempts = 1 if max_retries is None or max_retries <= 0 else max_retries
 
     return retry(
         reraise=True,
-        stop=stop_after_attempt(max_retries),
+        stop=stop_after_attempt(attempts),
         wait=wait_exponential(**wait_params),
         retry=retry_instance,
         before_sleep=_before_sleep,

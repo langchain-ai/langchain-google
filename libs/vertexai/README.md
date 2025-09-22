@@ -4,15 +4,18 @@ This package contains the LangChain integrations for Google Cloud generative mod
 
 ## Contents
 
-1. [Installation](#installation)
-2. [Chat Models](#chat-models)
-   * [Multimodal inputs](#multimodal-inputs)
-3. [Embeddings](#embeddings)
-4. [LLMs](#llms)
-5. [Code Generation](#code-generation)
-   * [Example: Generate a Python function](#example-generate-a-python-function)
-   * [Example: Generate JavaScript code](#example-generate-javascript-code)
-   * [Notes](#notes)
+- [langchain-google-vertexai](#langchain-google-vertexai)
+  - [Contents](#contents)
+  - [Installation](#installation)
+  - [Chat Models](#chat-models)
+    - [Multimodal inputs](#multimodal-inputs)
+    - [Multimodal Outputs](#multimodal-outputs)
+  - [Embeddings](#embeddings)
+  - [LLMs](#llms)
+  - [Code Generation](#code-generation)
+    - [Example: Generate a Python function](#example-generate-a-python-function)
+    - [Example: Generate JavaScript code](#example-generate-javascript-code)
+    - [Notes](#notes)
 
 ## Installation
 
@@ -29,7 +32,7 @@ To use, you should have a Google Cloud project with APIs enabled, and configured
 ```python
 from langchain_google_vertexai import ChatVertexAI
 
-llm = ChatVertexAI(model_name="gemini-pro")
+llm = ChatVertexAI(model_name="gemini-2.5-flash")
 llm.invoke("Sing a ballad of LangChain.")
 ```
 
@@ -48,17 +51,41 @@ message = HumanMessage(
             "type": "text",
             "text": "What's in this image?",
         },
-        {"type": "image_url", "image_url": {"url": "https://picsum.photos/seed/picsum/200/300"}},
+        {
+            "type": "image_url",
+            "image_url": {"url": "https://picsum.photos/seed/picsum/200/300"}
+        },
     ]
 )
-llm.invoke([message])
+response = llm.invoke([message])
 ```
 
 The value of `image_url` can be:
 
-* A public image URL
-* An accessible Google Cloud Storage (GCS) file (e.g., `"gcs://path/to/file.png"`)
-* A base64 encoded image (e.g., `"data:image/png;base64,abcd124"`)
+- A public image URL
+- An accessible Google Cloud Storage (GCS) file (e.g., `"gcs://path/to/file.png"`)
+- A base64 encoded image (e.g., `"data:image/png;base64,abcd124"`)
+
+### Multimodal Outputs
+
+Gemini supports image output. Example:
+
+```python
+from langchain_core.messages import HumanMessage
+from langchain_google_vertexai import ChatVertexAI, Modality
+
+llm = ChatVertexAI(model_name="imagen-3.0-generate-002",
+                   response_modalities = [Modality.TEXT, Modality.IMAGE])
+message = HumanMessage(
+    content=[
+        {
+            "type": "text",
+            "text": "Generate an image of a cat.",
+        },
+    ]
+)
+response = llm.invoke([message])
+```
 
 ## Embeddings
 
@@ -73,7 +100,7 @@ embeddings.embed_query("hello, world!")
 
 ## LLMs
 
-Use Google Cloud's generative AI models as LangChain LLMs:
+Use Google Cloud's generative AI models as old-style LangChain LLMs:
 
 ```python
 from langchain_core.prompts import PromptTemplate
@@ -84,7 +111,7 @@ template = """Question: {question}
 Answer: Let's think step by step."""
 prompt = PromptTemplate.from_template(template)
 
-llm = ChatVertexAI(model_name="gemini-pro")
+llm = ChatVertexAI(model_name="gemini-2.5-flash")
 chain = prompt | llm
 
 question = "Who was the president of the USA in 1994?"
@@ -100,7 +127,7 @@ You can use Gemini models for code generation tasks to generate code snippets, f
 ```python
 from langchain_google_vertexai import ChatVertexAI
 
-llm = ChatVertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
+llm = ChatVertexAI(model_name="gemini-2.5-flash", temperature=0.3, max_output_tokens=1000)
 
 prompt = "Write a Python function that checks if a string is a valid email address."
 
@@ -113,7 +140,7 @@ print(generated_code)
 ```python
 from langchain_google_vertexai import ChatVertexAI
 
-llm = ChatVertexAI(model_name="gemini-pro", temperature=0.3, max_output_tokens=1000)
+llm = ChatVertexAI(model_name="gemini-2.5-flash", temperature=0.3, max_output_tokens=1000)
 prompt_js = "Write a JavaScript function that returns the factorial of a number."
 
 print(llm.invoke(prompt_js))
@@ -121,6 +148,6 @@ print(llm.invoke(prompt_js))
 
 ### Notes
 
-* Adjust `temperature` to control creativity (higher values increase randomness).
-* Use `max_output_tokens` to limit the length of the generated code.
-* Gemini models are well-suited for code generation tasks with advanced understanding of programming concepts.
+- Adjust `temperature` to control creativity (higher values increase randomness).
+- Use `max_output_tokens` to limit the length of the generated code.
+- Gemini models are well-suited for code generation tasks with advanced understanding of programming concepts.

@@ -1,3 +1,5 @@
+"""Script to check imports of given Python files."""
+
 import sys
 import traceback
 from importlib.machinery import SourceFileLoader
@@ -10,8 +12,6 @@ if __name__ == "__main__":
             SourceFileLoader("x", file).load_module()
         except Exception:
             has_faillure = True
-            print(file)
             traceback.print_exc()
-            print()
 
     sys.exit(1 if has_failure else 0)

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from langchain_core.messages import BaseMessage
-from vertexai.preview import caching  # type: ignore
+from vertexai.preview import caching
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
@@ -28,7 +28,7 @@ def create_context_cache(
     """Creates a cache for content in some model.
 
     Args:
-        model: ChatVertexAI model. Must be at least gemini-1.5 pro or flash.
+        model: ChatVertexAI model. Must be at least gemini-2.5-pro or gemini-2.0-flash.
         messages: List of messages to cache.
         expire_time:  Timestamp of when this resource is considered expired.
         At most one of expire_time and ttl can be set. If neither is set, default TTL
@@ -50,11 +50,6 @@ def create_context_cache(
     Returns:
         String with the identificator of the created cache.
     """
-
-    if not model._is_gemini_advanced:
-        error_msg = f"Model {model.full_model_name} doesn't support context catching"
-        raise ValueError(error_msg)
-
     system_instruction, contents = _parse_chat_history_gemini(
         messages, ImageBytesLoader(project=model.project)
     )

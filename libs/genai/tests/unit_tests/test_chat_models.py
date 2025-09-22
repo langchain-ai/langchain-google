@@ -3,8 +3,10 @@
 import asyncio
 import base64
 import json
+import warnings
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -15,9 +17,11 @@ from google.ai.generativelanguage_v1beta.types import (
     GenerateContentResponse,
     Part,
 )
+from google.api_core.exceptions import ResourceExhausted
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -26,21 +30,22 @@ from langchain_core.messages import (
 from langchain_core.messages.tool import tool_call as create_tool_call
 from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
-from pytest import CaptureFixture
 
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
+    _chat_with_retry,
     _convert_tool_message_to_parts,
     _parse_chat_history,
     _parse_response_candidate,
+    _response_to_result,
 )
 
 
 def test_integration_initialization() -> None:
     """Test chat model initialization."""
     llm = ChatGoogleGenerativeAI(
-        model="gemini-nano",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
         temperature=0.7,
@@ -49,27 +54,27 @@ def test_integration_initialization() -> None:
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-nano",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-nano",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("..."),
         max_output_tokens=10,
     )
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-nano",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
         "ls_max_tokens": 10,
     }
 
     ChatGoogleGenerativeAI(
-        model="gemini-nano",
+        model="gemini-2.5-flash",
         api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
@@ -78,14 +83,16 @@ def test_integration_initialization() -> None:
 
     # test initialization with an invalid argument to check warning
     with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-nano",
-            google_api_key=SecretStr("..."),  # type: ignore[call-arg]
-            safety_setting={
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
-            },  # Invalid arg
-        )
-        assert llm.model == "models/gemini-nano"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash",
+                google_api_key=SecretStr("..."),
+                safety_setting={
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+                },  # Invalid arg
+            )
+        assert llm.model == "models/gemini-2.5-flash"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
@@ -98,15 +105,15 @@ def test_initialization_inside_threadpool() -> None:
     with ThreadPoolExecutor() as executor:
         executor.submit(
             ChatGoogleGenerativeAI,
-            model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+            model="gemini-2.5-flash",
+            google_api_key=SecretStr("secret-api-key"),
         ).result()
 
 
 def test_initalization_without_async() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("secret-api-key"),
     )
     assert chat.async_client is None
 
@@ -114,29 +121,30 @@ def test_initalization_without_async() -> None:
 def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         model = ChatGoogleGenerativeAI(
-            model="gemini-nano",
-            google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+            model="gemini-2.5-flash",
+            google_api_key=SecretStr("secret-api-key"),
         )
         _ = model.async_client
         return model
 
-    loop = asyncio.get_event_loop()
-    chat = loop.run_until_complete(initialize_chat_with_async_client())
+    chat = asyncio.run(initialize_chat_with_async_client())
     assert chat.async_client is not None
 
 
 def test_api_key_is_string() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(chat.google_api_key, SecretStr)
 
 
-def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> None:
+def test_api_key_masked_when_passed_via_constructor(
+    capsys: pytest.CaptureFixture,
+) -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-nano",
-        google_api_key=SecretStr("secret-api-key"),  # type: ignore[call-arg]
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("secret-api-key"),
     )
     print(chat.google_api_key, end="")  # noqa: T201
     captured = capsys.readouterr()
@@ -144,8 +152,8 @@ def test_api_key_masked_when_passed_via_constructor(capsys: CaptureFixture) -> N
     assert captured.out == "**********"
 
 
-@pytest.mark.parametrize("convert_system_message_to_human", [False, True])
-def test_parse_history(convert_system_message_to_human: bool) -> None:
+def test_parse_history() -> None:
+    convert_system_message_to_human = False
     system_input = "You're supposed to answer math questions."
     text_question1, text_answer1 = "How much is 2+2?", "4"
     function_name = "calculator"
@@ -210,19 +218,9 @@ def test_parse_history(convert_system_message_to_human: bool) -> None:
         message8,
         message9,
     ]
-    system_instruction, history = _parse_chat_history(
-        messages, convert_system_message_to_human=convert_system_message_to_human
-    )
+    system_instruction, history = _parse_chat_history(messages)
     assert len(history) == 8
-    if convert_system_message_to_human:
-        assert history[0] == glm.Content(
-            role="user",
-            parts=[glm.Part(text=system_input), glm.Part(text=text_question1)],
-        )
-    else:
-        assert history[0] == glm.Content(
-            role="user", parts=[glm.Part(text=text_question1)]
-        )
+    assert history[0] == glm.Content(role="user", parts=[glm.Part(text=text_question1)])
     assert history[1] == glm.Content(
         role="model",
         parts=[
@@ -325,15 +323,15 @@ def test_parse_history(convert_system_message_to_human: bool) -> None:
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
-def test_parse_function_history(content: Union[str, List[Union[str, Dict]]]) -> None:
+def test_parse_function_history(content: Union[str, list[Union[str, dict]]]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
-    _parse_chat_history([function_message], convert_system_message_to_human=True)
+    _parse_chat_history([function_message])
 
 
 @pytest.mark.parametrize(
-    "headers", (None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"})
+    "headers", [None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"}]
 )
-def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
+def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -351,8 +349,8 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         mock_client,
     ):
         chat = ChatGoogleGenerativeAI(
-            model="gemini-pro",
-            google_api_key=param_secret_api_key,  # type: ignore[call-arg]
+            model="gemini-2.5-flash",
+            google_api_key=param_secret_api_key,
             client_options=param_client_options,
             transport=param_transport,
             additional_headers=headers,
@@ -363,7 +361,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         assert chat.additional_headers == headers
     else:
         assert chat.additional_headers
-        assert all(header in chat.additional_headers for header in headers.keys())
+        assert all(header in chat.additional_headers for header in headers)
         expected_default_metadata = tuple(headers.items())
         assert chat.default_metadata == expected_default_metadata
 
@@ -383,8 +381,42 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
     assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
 
 
+def test_default_metadata_field_alias() -> None:
+    """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
+    # Test with default_metadata_input field name (alias) - should accept None without
+    # error
+    # This is the main issue: LangSmith Playground passes None to default_metadata_input
+    chat1 = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("test-key"),
+        default_metadata_input=None,
+    )
+    # When None is passed to alias, it should use the default factory and be overridden
+    # by validator
+    assert chat1.default_metadata == ()
+
+    # Test with empty list for default_metadata_input (should not cause validation
+    # error)
+    chat2 = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("test-key"),
+        default_metadata_input=[],
+    )
+    # Empty list should be accepted and overridden by validator
+    assert chat2.default_metadata == ()
+
+    # Test with tuple for default_metadata_input (should not cause validation error)
+    chat3 = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("test-key"),
+        default_metadata_input=[("X-Test", "test")],
+    )
+    # The validator will override this with additional_headers, so it should be empty
+    assert chat3.default_metadata == ()
+
+
 @pytest.mark.parametrize(
-    "raw_candidate, expected",
+    ("raw_candidate", "expected"),
     [
         (
             {"content": {"parts": [{"text": "Mike age is 30"}]}},
@@ -428,7 +460,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                         "type": "image_url",
                         "image_url": {
                             "url": "data:image/bmp;base64,"
-                            + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                            "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     }
                 ]
@@ -457,7 +489,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
                         "type": "image_url",
                         "image_url": {
                             "url": "data:image/bmp;base64,"
-                            + "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
+                            "Qk0eAAAAAAAAABoAAAAMAAAAAQABAAEAGAAAAP8A"
                         },
                     },
                 ]
@@ -661,7 +693,7 @@ def test_additional_headers_support(headers: Optional[Dict[str, str]]) -> None:
         ),
     ],
 )
-def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> None:
+def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> None:
     with patch("langchain_google_genai.chat_models.uuid.uuid4") as uuid4:
         uuid4.return_value = "00000000-0000-0000-0000-00000000000"
         response_candidate = glm.Candidate(raw_candidate)
@@ -684,7 +716,7 @@ def test_parse_response_candidate(raw_candidate: Dict, expected: AIMessage) -> N
 
 
 def test_serialize() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-pro-1.5", google_api_key="test-key")  # type: ignore[call-arg]
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="test-key")
     serialized = dumps(llm)
     llm_loaded = loads(
         serialized,
@@ -721,36 +753,34 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 
 
 def test_temperature_range_pydantic_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]"""
+    """Test that temperature is in the range [0.0, 2.0]."""
+    with pytest.raises(ValidationError):
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=2.1)
 
     with pytest.raises(ValidationError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.1)
-
-    with pytest.raises(ValidationError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.1)
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=-0.1)
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        google_api_key=SecretStr("..."),  # type: ignore[call-arg]
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr("..."),
         temperature=1.5,
     )
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-2.0-flash",
+        "ls_model_name": "gemini-2.5-flash",
         "ls_model_type": "chat",
         "ls_temperature": 1.5,
     }
 
 
 def test_temperature_range_model_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]"""
+    """Test that temperature is in the range [0.0, 2.0]."""
+    with pytest.raises(ValueError):
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=2.5)
 
     with pytest.raises(ValueError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=2.5)
-
-    with pytest.raises(ValueError):
-        ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=-0.5)
+        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=-0.5)
 
 
 def test_model_kwargs() -> None:
@@ -773,3 +803,332 @@ def test_model_kwargs() -> None:
     assert llm.model == "models/my-model"
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
+
+
+def test_retry_decorator_with_custom_parameters() -> None:
+    # Mock the generation method
+    mock_generation_method = Mock()
+    # TODO: remove ignore once google-auth has types.
+    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")  # type: ignore[no-untyped-call]
+
+    # Call the function with custom retry parameters
+    with pytest.raises(ResourceExhausted):
+        _chat_with_retry(
+            generation_method=mock_generation_method,
+            max_retries=3,
+            wait_exponential_multiplier=1.5,
+            wait_exponential_min=2.0,
+            wait_exponential_max=30.0,
+        )
+
+    # Verify that the retry mechanism used the custom parameters
+    assert mock_generation_method.call_count == 3
+
+
+@pytest.mark.parametrize(
+    ("raw_response", "expected_grounding_metadata"),
+    [
+        (
+            # Case 1: Response with grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "grounding_metadata": {
+                            "grounding_chunks": [
+                                {
+                                    "web": {
+                                        "uri": "https://example.com",
+                                        "title": "Example Site",
+                                    }
+                                }
+                            ],
+                            "grounding_supports": [
+                                {
+                                    "segment": {
+                                        "start_index": 0,
+                                        "end_index": 13,
+                                        "text": "Test response",
+                                    },
+                                    "grounding_chunk_indices": [0],
+                                    "confidence_scores": [0.95],
+                                }
+                            ],
+                            "web_search_queries": ["test query"],
+                        },
+                    }
+                ],
+                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {
+                "grounding_chunks": [
+                    {"web": {"uri": "https://example.com", "title": "Example Site"}}
+                ],
+                "grounding_supports": [
+                    {
+                        "segment": {
+                            "start_index": 0,
+                            "end_index": 13,
+                            "text": "Test response",
+                            "part_index": 0,
+                        },
+                        "grounding_chunk_indices": [0],
+                        "confidence_scores": [0.95],
+                    }
+                ],
+                "web_search_queries": ["test query"],
+            },
+        ),
+        (
+            # Case 2: Response without grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                    }
+                ],
+                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {},
+        ),
+    ],
+)
+def test_response_to_result_grounding_metadata(
+    raw_response: dict, expected_grounding_metadata: dict
+) -> None:
+    """Test that _response_to_result includes grounding_metadata in the response."""
+    response = GenerateContentResponse(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    assert len(result.generations) == len(raw_response["candidates"])
+    for generation in result.generations:
+        assert generation.message.content == "Test response"
+        grounding_metadata = (
+            generation.generation_info.get("grounding_metadata", {})
+            if generation.generation_info is not None
+            else {}
+        )
+        assert grounding_metadata == expected_grounding_metadata
+
+
+@pytest.mark.parametrize(
+    "is_async,mock_target,method_name",
+    [
+        (False, "_chat_with_retry", "_generate"),  # Sync
+        (True, "_achat_with_retry", "_agenerate"),  # Async
+    ],
+)
+@pytest.mark.parametrize(
+    "instance_timeout,call_timeout,expected_timeout,should_have_timeout",
+    [
+        (5.0, None, 5.0, True),  # Instance-level timeout
+        (5.0, 10.0, 10.0, True),  # Call-level overrides instance
+        (None, None, None, False),  # No timeout anywhere
+    ],
+)
+async def test_timeout_parameter_handling(
+    is_async: bool,
+    mock_target: str,
+    method_name: str,
+    instance_timeout: Optional[float],
+    call_timeout: Optional[float],
+    expected_timeout: Optional[float],
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for sync and async methods."""
+    with patch(f"langchain_google_genai.chat_models.{mock_target}") as mock_retry:
+        mock_retry.return_value = GenerateContentResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "finish_reason": "STOP",
+                    }
+                ]
+            }
+        )
+
+        # Create LLM with optional instance-level timeout
+        llm_kwargs = {
+            "model": "gemini-2.5-flash",
+            "google_api_key": SecretStr("test-key"),
+        }
+        if instance_timeout is not None:
+            llm_kwargs["timeout"] = instance_timeout
+
+        llm = ChatGoogleGenerativeAI(**llm_kwargs)
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+        # Call the appropriate method with optional call-level timeout
+        method = getattr(llm, method_name)
+        call_kwargs = {}
+        if call_timeout is not None:
+            call_kwargs["timeout"] = call_timeout
+
+        if is_async:
+            await method(messages, **call_kwargs)
+        else:
+            method(messages, **call_kwargs)
+
+        # Verify timeout was passed correctly
+        mock_retry.assert_called_once()
+        call_kwargs_actual = mock_retry.call_args[1]
+
+        if should_have_timeout:
+            assert "timeout" in call_kwargs_actual
+            assert call_kwargs_actual["timeout"] == expected_timeout
+        else:
+            assert "timeout" not in call_kwargs_actual
+
+
+@pytest.mark.parametrize(
+    "instance_timeout,expected_timeout,should_have_timeout",
+    [
+        (5.0, 5.0, True),  # Instance-level timeout
+        (None, None, False),  # No timeout
+    ],
+)
+@patch("langchain_google_genai.chat_models._chat_with_retry")
+def test_timeout_streaming_parameter_handling(
+    mock_retry: Mock,
+    instance_timeout: Optional[float],
+    expected_timeout: Optional[float],
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for streaming methods."""
+
+    # Mock the return value for _chat_with_retry to return an iterator
+    def mock_stream() -> Iterator[GenerateContentResponse]:
+        yield GenerateContentResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "chunk1"}]},
+                        "finish_reason": "STOP",
+                    }
+                ]
+            }
+        )
+
+    mock_retry.return_value = mock_stream()
+
+    # Create LLM with optional instance-level timeout
+    llm_kwargs = {
+        "model": "gemini-2.5-flash",
+        "google_api_key": SecretStr("test-key"),
+    }
+    if instance_timeout is not None:
+        llm_kwargs["timeout"] = instance_timeout
+
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+
+    # Call _stream (which should pass timeout to _chat_with_retry)
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    list(llm._stream(messages))  # Convert generator to list to trigger execution
+
+    # Verify timeout was passed correctly
+    mock_retry.assert_called_once()
+    call_kwargs = mock_retry.call_args[1]
+
+    if should_have_timeout:
+        assert "timeout" in call_kwargs
+        assert call_kwargs["timeout"] == expected_timeout
+    else:
+        assert "timeout" not in call_kwargs
+
+
+@pytest.mark.parametrize(
+    "is_async,mock_target,method_name",
+    [
+        (False, "_chat_with_retry", "_generate"),  # Sync
+        (True, "_achat_with_retry", "_agenerate"),  # Async
+    ],
+)
+@pytest.mark.parametrize(
+    "instance_max_retries,call_max_retries,expected_max_retries,should_have_max_retries",
+    [
+        (1, None, 1, True),  # Instance-level max_retries
+        (3, 5, 5, True),  # Call-level overrides instance
+        (6, None, 6, True),  # Default instance value
+    ],
+)
+async def test_max_retries_parameter_handling(
+    is_async: bool,
+    mock_target: str,
+    method_name: str,
+    instance_max_retries: int,
+    call_max_retries: Optional[int],
+    expected_max_retries: int,
+    should_have_max_retries: bool,
+) -> None:
+    """Test max_retries parameter handling for sync and async methods."""
+    with patch(f"langchain_google_genai.chat_models.{mock_target}") as mock_retry:
+        mock_retry.return_value = GenerateContentResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "finish_reason": "STOP",
+                    }
+                ]
+            }
+        )
+
+        # Instance-level max_retries
+        llm_kwargs = {
+            "model": "gemini-2.5-flash",
+            "google_api_key": SecretStr("test-key"),
+            "max_retries": instance_max_retries,
+        }
+
+        llm = ChatGoogleGenerativeAI(**llm_kwargs)
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+        # Call the appropriate method with optional call-level max_retries
+        method = getattr(llm, method_name)
+        call_kwargs = {}
+        if call_max_retries is not None:
+            call_kwargs["max_retries"] = call_max_retries
+
+        if is_async:
+            await method(messages, **call_kwargs)
+        else:
+            method(messages, **call_kwargs)
+
+        # Verify max_retries was passed correctly
+        mock_retry.assert_called_once()
+        call_kwargs_actual = mock_retry.call_args[1]
+
+        if should_have_max_retries:
+            assert "max_retries" in call_kwargs_actual
+            assert call_kwargs_actual["max_retries"] == expected_max_retries
+        else:
+            assert "max_retries" not in call_kwargs_actual
+
+
+def test_with_structured_output_json_schema_alias() -> None:
+    """Test that json_schema method works as alias for json_mode."""
+    from pydantic import BaseModel
+
+    class TestModel(BaseModel):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key="fake-key")
+
+    structured_llm = llm.with_structured_output(TestModel, method="json_schema")
+    assert structured_llm is not None
+
+    schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
+    structured_llm_dict = llm.with_structured_output(schema_dict, method="json_schema")
+    assert structured_llm_dict is not None

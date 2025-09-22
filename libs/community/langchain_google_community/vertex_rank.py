@@ -52,6 +52,7 @@ class VertexAIRank(BaseDocumentCompressor):
         credentials (Optional[Credentials]): Google Cloud credentials object.
         credentials_path (Optional[str]): Path to the Google Cloud service
         account credentials file.
+        timeout (Optional[int]): Timeout for API calls in seconds.
     """
 
     project_id: str = Field(default=None)  # type: ignore
@@ -64,6 +65,7 @@ class VertexAIRank(BaseDocumentCompressor):
     title_field: Optional[str] = Field(default=None)
     credentials: Optional[Credentials] = Field(default=None)
     credentials_path: Optional[str] = Field(default=None)
+    timeout: Optional[int] = Field(default=None)
     client: Any = None
 
     def __init__(self, **kwargs: Any):
@@ -95,9 +97,9 @@ class VertexAIRank(BaseDocumentCompressor):
                 "`pip install langchain-google-community[vertexaisearch]`"
             ) from exc
         return discoveryengine_v1alpha.RankServiceClient(
-            credentials=(
-                self.credentials
-                or Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
+            credentials=self.credentials
+            or (
+                Credentials.from_service_account_file(self.credentials_path)  # type: ignore[attr-defined]
                 if self.credentials_path
                 else None
             ),
@@ -152,7 +154,7 @@ class VertexAIRank(BaseDocumentCompressor):
         )
 
         try:
-            response = self.client.rank(request=request)
+            response = self.client.rank(request=request, timeout=self.timeout)
         except core_exceptions.GoogleAPICallError as e:
             print(f"Error in Vertex AI Ranking API call: {str(e)}")
             raise RuntimeError(f"Error in Vertex AI Ranking API call: {str(e)}") from e
