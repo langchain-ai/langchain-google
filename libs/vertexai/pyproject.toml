@@ -8,21 +8,21 @@ version = "2.1.2"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.10.0,<4.0.0"
 readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=1.0.0a3",
-    "google-cloud-aiplatform>=1.97.0",
-    "google-cloud-storage>=2.18,<3",
-    "httpx>=0.28,<1",
-    "httpx-sse>=0.4,<1",
-    "pydantic>=2.9,<3",
-    "validators>=0.22,<1",
-    "bottleneck>=1.4,<2",
-    "numexpr>=2.8.6,<3",
-    "pyarrow>=19.0.1,<22",
+    "langchain-core>=1.0.0a3,<2.0.0",
+    "google-cloud-aiplatform>=1.97.0,<2.0.0",
+    "google-cloud-storage>=2.18.0,<3.0.0",
+    "httpx>=0.28.0,<1.0.0",
+    "httpx-sse>=0.4.0,<1.0.0",
+    "pydantic>=2.9.0,<3.0.0",
+    "validators>=0.22.0,<1.0.0",
+    "bottleneck>=1.4.0,<2.0.0",
+    "numexpr>=2.8.6,<3.0.0",
+    "pyarrow>=19.0.1,<22.0.0",
 ]
 
 [project.urls]
@@ -31,17 +31,17 @@ dependencies = [
 repository = "https://github.com/langchain-ai/langchain-google"
 
 [project.optional-dependencies]
-anthropic = ["anthropic>=0.35,<1"]
-mistral = ["langchain-mistralai>=0.2.0,<1"]
+anthropic = ["anthropic>=0.35.0,<1.0.0"]
+mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
 
 [dependency-groups]
-lint = ["ruff<0.13,>=0.12.2"]
+lint = ["ruff<0.13.0,>=0.12.2"]
 typing = [
-    "mypy<1.19,>=1.18.1",
-    "types-requests>=2.31,<3",
-    "types-google-cloud-ndb>=2.2.0.20240106,<3",
-    "types-protobuf>=4.24.0.4,<5",
-    "anthropic>=0.64,<1",
+    "mypy>=1.18.1,<1.19.0",
+    "types-requests>=2.31.0,<3.0.0",
+    "types-google-cloud-ndb>=2.2.0.20240106,<3.0.0.0",
+    "types-protobuf>=4.24.0.4,<5.0.0.0",
+    "anthropic>=0.64.0,<1.0.0",
 ]
 test = [
     "pytest>=8.4,<9",

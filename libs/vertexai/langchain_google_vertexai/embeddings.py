@@ -6,7 +6,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, wait
 from enum import Enum, auto
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 from google.api_core.exceptions import (
     Aborted,
@@ -133,6 +133,10 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates that the python package exists in environment."""
+        if self.model_name is None:
+            msg = "model_name must be provided for VertexAI embeddings"
+            raise ValueError(msg)
+
         values = {
             "project": self.project,
             "location": self.location,
@@ -310,11 +314,12 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
     ) -> List[List[float]]:
         """Makes a Vertex AI model request with retry logic."""
         if embeddings_type and self.model_version.task_type_supported:
-            requests: Union[List[str], List[TextEmbeddingInput]] = [
+            requests: List[TextEmbeddingInput] = [
                 TextEmbeddingInput(text=t, task_type=embeddings_type) for t in texts
             ]
         else:
-            requests = texts
+            # Fallback to raw text strings for models that don't support task_type
+            requests = texts  # type: ignore
 
         kwargs = {}
         if output_dimensionality and self.model_version.output_dimensionality_supported:
@@ -531,7 +536,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             "get_embeddings_with_retry"
         ](image=image, contextual_text=contextual_text, dimension=dimensions)
         if result.image_embedding is None:
-            raise ValueError("Failed to generate image embedding")
+            msg = "Failed to generate image embedding"
+            raise ValueError(msg)
         return result.image_embedding
 
     def embed_images(
@@ -564,9 +570,8 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
                 "get_embeddings_with_retry"
             ](image=image, contextual_text=contextual_text, dimension=dimensions)
             if result.image_embedding is None:
-                raise ValueError(
-                    f"Failed to generate embedding for image: {image_path}"
-                )
+                msg = f"Failed to generate embedding for image: {image_path}"
+                raise ValueError(msg)
             embeddings.append(result.image_embedding)
         return embeddings
 

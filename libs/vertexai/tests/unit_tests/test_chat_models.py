@@ -1130,13 +1130,16 @@ def test_safety_settings_gemini() -> None:
     assert safety_settings == [expected_safety_setting]
     # Ignores for tests that intentionally use invalid dict types
     safety_settings = model._safety_settings_gemini(
+        # Ignore since testing string conversion
         {"HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"}  # type: ignore[dict-item]
     )
     assert safety_settings == [expected_safety_setting]
+    # Ignore since testing int conversion
     safety_settings = model._safety_settings_gemini({2: 1})  # type: ignore[dict-item]
     assert safety_settings == [expected_safety_setting]
     threshold = SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
     safety_settings = model._safety_settings_gemini(
+        # Ignore since testing enum conversion
         {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}  # type: ignore[dict-item]
     )
     assert safety_settings == [expected_safety_setting]
