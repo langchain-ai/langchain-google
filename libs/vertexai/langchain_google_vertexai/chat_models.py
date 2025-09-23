@@ -2049,8 +2049,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        # Type conversion handled internally
-        safety_settings = self._safety_settings_gemini(safety_settings)  # type: ignore[assignment]
+        formatted_safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -2121,12 +2120,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             if formatted_safety_settings:
                 v1_safety_settings = [
                     v1SafetySetting(
-                        # Ignores needed due to complex union type where mypy cannot
-                        # infer which variant of SafetySetting is being used
-                        # (Different SDK e.g. vertexai vs gapic has same name)
-                        category=s.category,  # type: ignore[union-attr]
-                        method=s.method,  # type: ignore[union-attr]
-                        threshold=s.threshold,  # type: ignore[union-attr]
+                        category=s.category,
+                        method=s.method,
+                        threshold=s.threshold,
                     )
                     for s in formatted_safety_settings
                 ]
@@ -2153,7 +2149,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return GenerateContentRequest(
                 contents=contents,
                 model=self.full_model_name,
-                safety_settings=safety_settings,
+                safety_settings=formatted_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
             )
@@ -2175,7 +2171,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=safety_settings,
+            safety_settings=formatted_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
             labels=self.labels,
@@ -2671,8 +2667,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            # Using default streaming=False, but mypy can't verify due to type mismatch
-            message = _parse_response_candidate(candidate)  # type: ignore[call-overload]
+            message = _parse_response_candidate(candidate)
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
@@ -2720,8 +2715,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            # Type ignore since mypy infers literal as bool
-            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
+            message = _parse_response_candidate(top_candidate, streaming=True)
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(
