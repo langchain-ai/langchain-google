@@ -18,25 +18,25 @@ BLOCKED_PROMPT = """
 You are agent designed to answer questions.
 You are given context in triple backticks.
 ```
-The religion\'s failure to report abuse allegations to authorities has also been 
+The religion\'s failure to report abuse allegations to authorities has also been
 criticized. The Watch Tower Society\'s policy is that elders inform authorities when
- required by law to do so, but otherwise leave that action up to the victim and his 
- or her family. The Australian Royal Commission into Institutional Responses to Child 
-Sexual Abuse found that of 1006 alleged perpetrators of child sexual abuse 
-identified by the Jehovah\'s Witnesses within their organization since 1950, 
-"not one was reported by the church to secular authorities." William Bowen, a former 
-Jehovah\'s Witness elder who established the Silentlambs organization to assist sex 
-abuse victims within the religion, has claimed Witness leaders discourage followers 
-from reporting incidents of sexual misconduct to authorities, and other critics claim 
+ required by law to do so, but otherwise leave that action up to the victim and his
+ or her family. The Australian Royal Commission into Institutional Responses to Child
+Sexual Abuse found that of 1006 alleged perpetrators of child sexual abuse
+identified by the Jehovah\'s Witnesses within their organization since 1950,
+"not one was reported by the church to secular authorities." William Bowen, a former
+Jehovah\'s Witness elder who established the Silentlambs organization to assist sex
+abuse victims within the religion, has claimed Witness leaders discourage followers
+from reporting incidents of sexual misconduct to authorities, and other critics claim
 the organization is reluctant to alert authorities in order to protect its "crime-free"
  reputation. In court cases in the United Kingdom and the United States the Watch Tower
- Society has been found to have been negligent in its failure to protect children from 
- known sex offenders within the congregation and the Society has settled other child 
-abuse lawsuits out of court, reportedly paying as much as $780,000 to one plaintiff 
+ Society has been found to have been negligent in its failure to protect children from
+ known sex offenders within the congregation and the Society has settled other child
+abuse lawsuits out of court, reportedly paying as much as $780,000 to one plaintiff
 without admitting wrongdoing.
 ```
 Question: What have courts in both the UK and the US found the Watch Tower Society to
-          have been for failing to protect children from sexual predators within the 
+          have been for failing to protect children from sexual predators within the
           congregation ?
 Answer:
 """

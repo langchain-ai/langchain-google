@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from langchain_core.messages import BaseMessage
-from vertexai.preview import caching  # type: ignore
+from vertexai.preview import caching
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
@@ -50,7 +50,6 @@ def create_context_cache(
     Returns:
         String with the identificator of the created cache.
     """
-
     system_instruction, contents = _parse_chat_history_gemini(
         messages, ImageBytesLoader(project=model.project)
     )

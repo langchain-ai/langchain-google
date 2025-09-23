@@ -9,9 +9,9 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 )
 
 __all__ = [
+    "DataStoreDocumentStorage",
+    "GCSDocumentStorage",
     "VectorSearchVectorStore",
     "VectorSearchVectorStoreDatastore",
     "VectorSearchVectorStoreGCS",
-    "DataStoreDocumentStorage",
-    "GCSDocumentStorage",
 ]

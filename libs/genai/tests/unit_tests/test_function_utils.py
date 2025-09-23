@@ -1,18 +1,24 @@
-from typing import Any, Dict, Generator, List, Optional, Tuple, Union
+import datetime
+from collections.abc import Generator
+from typing import Annotated, Any, Optional, Union
 from unittest.mock import MagicMock, patch
 
 import google.ai.generativelanguage as glm
 import pytest
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, InjectedToolArg, tool
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import (
+    convert_to_openai_function,
+    convert_to_openai_tool,
+)
 from pydantic import BaseModel, Field
-from typing_extensions import Annotated
+from typing_extensions import Literal
 
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
     _format_base_tool_to_function_declaration,
     _format_dict_to_function_declaration,
+    _format_to_gapic_function_declaration,
     _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
     _ToolConfigDict,
@@ -23,20 +29,20 @@ from langchain_google_genai._function_utils import (
 
 
 def test_tool_with_anyof_nullable_param() -> None:
-    """
-    Example test that checks a string parameter marked as Optional,
-    verifying it's recognized as a 'string' & 'nullable'.
+    """Example test.
+
+    Checks a string parameter marked as Optional, verifying it's recognized as a
+    'string' & 'nullable'.
     """
 
     @tool(parse_docstring=True)
     def possibly_none(
         a: Optional[str] = None,
     ) -> str:
-        """
-        A test function whose argument can be a string or None.
+        """A test function whose argument can be a string or None.
 
         Args:
-          a: Possibly none.
+            a: Possibly none.
         """
         return "value"
 
@@ -69,20 +75,20 @@ def test_tool_with_anyof_nullable_param() -> None:
 
 
 def test_tool_with_array_anyof_nullable_param() -> None:
-    """
-    Checks an array parameter marked as Optional, verifying it's recognized
-    as an 'array' & 'nullable', and that the items are correctly typed.
+    """Checks an array parameter marked as Optional.
+
+    Verifying it's recognized As an 'array' & 'nullable', and that the items are
+    correctly typed.
     """
 
     @tool(parse_docstring=True)
     def possibly_none_list(
-        items: Optional[List[str]] = None,
+        items: Optional[list[str]] = None,
     ) -> str:
-        """
-        A test function whose argument can be a list of strings or None.
+        """A test function whose argument can be a list of strings or None.
 
         Args:
-          items: Possibly a list of strings or None.
+            items: Possibly a list of strings or None.
         """
         return "value"
 
@@ -123,21 +129,20 @@ def test_tool_with_array_anyof_nullable_param() -> None:
 
 
 def test_tool_with_nested_object_anyof_nullable_param() -> None:
-    """
-    Checks an object parameter (dict) marked as Optional, verifying it's recognized
-    as an 'object' but defaults to string if there are no real properties,
-    and that it is 'nullable'.
+    """Checks an object parameter (dict) marked as Optional.
+
+    Verifying it's recognized as an 'object' but defaults to string if there are no real
+    properties, and that it is 'nullable'.
     """
 
     @tool(parse_docstring=True)
     def possibly_none_dict(
         data: Optional[dict] = None,
     ) -> str:
-        """
-        A test function whose argument can be an object (dict) or None.
+        """A test function whose argument can be an object (dict) or None.
 
         Args:
-          data: Possibly a dict or None.
+            data: Possibly a dict or None.
         """
         return "value"
 
@@ -172,20 +177,20 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
-    """
-    Checks a parameter with an enum, marked as Optional, verifying it's recognized
-    as 'string' & 'nullable', and that the 'enum' field is captured.
+    """Checks a parameter with an enum, marked as Optional.
+
+    Verifying it's recognized as 'string' & 'nullable', and that the 'enum' field is
+    captured.
     """
 
     @tool(parse_docstring=True)
     def possibly_none_enum(
         status: Optional[str] = None,
     ) -> str:
-        """
-        A test function whose argument can be an enum string or None.
+        """A test function whose argument can be an enum string or None.
 
         Args:
-          status: Possibly one of ("active", "inactive", "pending") or None.
+            status: Possibly one of ("active", "inactive", "pending") or None.
         """
         return "value"
 
@@ -235,17 +240,17 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
 
 # reusable test inputs
 def search(question: str) -> str:
-    """Search tool"""
+    """Search tool."""
     return question
 
 
 search_tool = tool(search)
 search_exp = glm.FunctionDeclaration(
     name="search",
-    description="Search tool",
+    description="Search tool.",
     parameters=glm.Schema(
         type=glm.Type.OBJECT,
-        description="Search tool",
+        description="Search tool.",
         properties={"question": glm.Schema(type=glm.Type.STRING)},
         required=["question"],
         title="search",
@@ -273,7 +278,7 @@ search_base_tool_exp = glm.FunctionDeclaration(
 
 
 class SearchModel(BaseModel):
-    """Search model"""
+    """Search model."""
 
     question: str
 
@@ -286,10 +291,10 @@ search_model_dict = {
 }
 search_model_exp = glm.FunctionDeclaration(
     name="SearchModel",
-    description="Search model",
+    description="Search model.",
     parameters=glm.Schema(
         type=glm.Type.OBJECT,
-        description="Search model",
+        description="Search model.",
         properties={
             "question": glm.Schema(type=glm.Type.STRING),
         },
@@ -300,7 +305,7 @@ search_model_exp = glm.FunctionDeclaration(
 
 search_model_exp_pyd = glm.FunctionDeclaration(
     name="SearchModel",
-    description="Search model",
+    description="Search model.",
     parameters=glm.Schema(
         type=glm.Type.OBJECT,
         properties={
@@ -318,8 +323,8 @@ mock_pydantic = MagicMock(
     name="mock_pydantic", wraps=_convert_pydantic_to_genai_function
 )
 
-SRC_EXP_MOCKS_DESC: List[
-    Tuple[_FunctionDeclarationLike, glm.FunctionDeclaration, List[MagicMock], str]
+SRC_EXP_MOCKS_DESC: list[
+    tuple[_FunctionDeclarationLike, glm.FunctionDeclaration, list[MagicMock], str]
 ] = [
     (search, search_exp, [mock_base_tool], "plain function"),
     (search_tool, search_exp, [mock_base_tool], "LC tool"),
@@ -332,15 +337,13 @@ SRC_EXP_MOCKS_DESC: List[
 def test_format_tool_to_genai_function() -> None:
     @tool
     def get_datetime() -> str:
-        """Gets the current datetime"""
-        import datetime
-
-        return datetime.datetime.now().strftime("%Y-%m-%d")
+        """Gets the current datetime."""
+        return datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d")
 
     schema = convert_to_genai_function_declarations([get_datetime])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "get_datetime"
-    assert function_declaration.description == "Gets the current datetime"
+    assert function_declaration.description == "Gets the current datetime."
     assert function_declaration.parameters
     assert function_declaration.parameters.required == []
 
@@ -349,11 +352,11 @@ def test_format_tool_to_genai_function() -> None:
         """Sum two numbers 'a' and 'b'.
 
         Returns:
-           a + b in string format
+            a + b in string format
         """
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([sum_two_numbers])  # type: ignore
+    schema = convert_to_genai_function_declarations([sum_two_numbers])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "sum_two_numbers"
     assert function_declaration.parameters
@@ -361,10 +364,10 @@ def test_format_tool_to_genai_function() -> None:
 
     @tool
     def do_something_optional(a: float, b: float = 0) -> str:
-        """Some description"""
+        """Some description."""
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([do_something_optional])  # type: ignore
+    schema = convert_to_genai_function_declarations([do_something_optional])
     function_declaration = schema.function_declarations[0]
     assert function_declaration.name == "do_something_optional"
     assert function_declaration.parameters
@@ -380,7 +383,7 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations([src_2])
     assert result == src_2
 
-    src_3: Dict[str, Any] = {"google_search_retrieval": {}}
+    src_3: dict[str, Any] = {"google_search_retrieval": {}}
     result = convert_to_genai_function_declarations([src_3])
     assert result == src_2
 
@@ -410,14 +413,13 @@ def test_tool_with_annotated_optional_args() -> None:
         chunk_overlap: Optional[int] = None,
         tokenizer_name: Annotated[Optional[str], InjectedToolArg] = "model",
     ) -> list[Document]:
-        """
-        Tool.
+        """Tool.
 
         Args:
-          chunk_size: chunk size.
-          knowledge_base: knowledge base.
-          chunk_overlap: chunk overlap.
-          tokenizer_name: tokenizer name.
+            chunk_size: chunk size.
+            knowledge_base: knowledge base.
+            chunk_overlap: chunk overlap.
+            tokenizer_name: tokenizer name.
         """
         return []
 
@@ -428,14 +430,13 @@ def test_tool_with_annotated_optional_args() -> None:
         num_results: int = 5,
         truncate_threshold: Optional[int] = None,
     ) -> list[Document]:
-        """
-        Tool.
+        """Tool.
 
         Args:
-          query: query.
-          engine: engine.
-          num_results: number of results.
-          truncate_threshold: truncate threshold.
+            query: query.
+            engine: engine.
+            num_results: number of results.
+            truncate_threshold: truncate threshold.
         """
         return []
 
@@ -447,123 +448,165 @@ def test_tool_with_annotated_optional_args() -> None:
             "name": "split_documents",
             "description": "Tool.",
             "parameters": {
-                "any_of": [],
                 "type_": 6,
                 "properties": {
-                    "chunk_overlap": {
-                        "any_of": [],
-                        "type_": 3,
-                        "description": "chunk overlap.",
-                        "format_": "",
-                        "nullable": True,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "properties": {},
-                        "property_ordering": [],
-                        "required": [],
-                        "title": "",
-                    },
                     "chunk_size": {
-                        "any_of": [],
                         "type_": 3,
                         "description": "chunk size.",
                         "format_": "",
+                        "title": "",
                         "nullable": False,
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
                         "properties": {},
-                        "property_ordering": [],
                         "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
+                    },
+                    "chunk_overlap": {
+                        "type_": 3,
+                        "description": "chunk overlap.",
+                        "nullable": True,
+                        "format_": "",
                         "title": "",
+                        "enum": [],
+                        "max_items": "0",
+                        "min_items": "0",
+                        "properties": {},
+                        "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                 },
-                "property_ordering": [],
                 "required": ["chunk_size"],
-                "title": "",
                 "format_": "",
+                "title": "",
                 "description": "",
                 "nullable": False,
                 "enum": [],
                 "max_items": "0",
                 "min_items": "0",
+                "min_properties": "0",
+                "max_properties": "0",
+                "min_length": "0",
+                "max_length": "0",
+                "pattern": "",
+                "any_of": [],
+                "property_ordering": [],
             },
+            "behavior": 0,
         },
         {
             "name": "search_web",
             "description": "Tool.",
             "parameters": {
-                "any_of": [],
                 "type_": 6,
                 "properties": {
                     "truncate_threshold": {
-                        "any_of": [],
                         "type_": 3,
                         "description": "truncate threshold.",
-                        "format_": "",
                         "nullable": True,
-                        "enum": [],
-                        "max_items": "0",
-                        "min_items": "0",
-                        "property_ordering": [],
-                        "properties": {},
-                        "required": [],
-                        "title": "",
-                    },
-                    "query": {
-                        "any_of": [],
-                        "type_": 1,
-                        "description": "query.",
                         "format_": "",
-                        "nullable": False,
+                        "title": "",
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
                         "properties": {},
-                        "property_ordering": [],
                         "required": [],
-                        "title": "",
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                     "engine": {
-                        "any_of": [],
                         "type_": 1,
                         "description": "engine.",
                         "format_": "",
+                        "title": "",
                         "nullable": False,
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
-                        "property_ordering": [],
                         "properties": {},
                         "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
+                    },
+                    "query": {
+                        "type_": 1,
+                        "description": "query.",
+                        "format_": "",
                         "title": "",
+                        "nullable": False,
+                        "enum": [],
+                        "max_items": "0",
+                        "min_items": "0",
+                        "properties": {},
+                        "required": [],
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                     "num_results": {
-                        "any_of": [],
                         "type_": 3,
                         "description": "number of results.",
                         "format_": "",
+                        "title": "",
                         "nullable": False,
                         "enum": [],
                         "max_items": "0",
                         "min_items": "0",
                         "properties": {},
-                        "property_ordering": [],
                         "required": [],
-                        "title": "",
+                        "min_properties": "0",
+                        "max_properties": "0",
+                        "min_length": "0",
+                        "max_length": "0",
+                        "pattern": "",
+                        "any_of": [],
+                        "property_ordering": [],
                     },
                 },
-                "property_ordering": [],
                 "required": ["query"],
-                "title": "",
                 "format_": "",
+                "title": "",
                 "description": "",
                 "nullable": False,
                 "enum": [],
                 "max_items": "0",
                 "min_items": "0",
+                "min_properties": "0",
+                "max_properties": "0",
+                "min_length": "0",
+                "max_length": "0",
+                "pattern": "",
+                "any_of": [],
+                "property_ordering": [],
             },
+            "behavior": 0,
         },
     ]
     actual = tool_to_dict(convert_to_genai_function_declarations(oai_tools))[
@@ -616,7 +659,7 @@ def test_format_dict_to_genai_function() -> None:
     assert function_declaration.parameters.required == []
 
 
-@pytest.mark.parametrize("choice", (True, "foo", ["foo"], "any"))
+@pytest.mark.parametrize("choice", [True, "foo", ["foo"], "any"])
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = _ToolConfigDict(
         function_calling_config={
@@ -679,80 +722,106 @@ def test_tool_to_dict_pydantic_nested() -> None:
     assert tool_dict == {
         "function_declarations": [
             {
-                "description": "",
                 "name": "Models",
                 "parameters": {
-                    "any_of": [],
-                    "description": "",
-                    "enum": [],
-                    "format_": "",
-                    "max_items": "0",
-                    "min_items": "0",
-                    "nullable": False,
+                    "type_": 6,
                     "properties": {
                         "models": {
-                            "any_of": [],
-                            "description": "",
-                            "enum": [],
-                            "format_": "",
+                            "type_": 5,
                             "items": {
-                                "any_of": [],
+                                "type_": 6,
                                 "description": "MyModel",
-                                "enum": [],
-                                "format_": "",
-                                "max_items": "0",
-                                "min_items": "0",
-                                "nullable": False,
                                 "properties": {
                                     "age": {
-                                        "any_of": [],
-                                        "description": "",
-                                        "enum": [],
+                                        "type_": 3,
                                         "format_": "",
+                                        "title": "",
+                                        "description": "",
+                                        "nullable": False,
+                                        "enum": [],
                                         "max_items": "0",
                                         "min_items": "0",
-                                        "nullable": False,
                                         "properties": {},
-                                        "property_ordering": [],
                                         "required": [],
-                                        "title": "",
-                                        "type_": 3,
+                                        "min_properties": "0",
+                                        "max_properties": "0",
+                                        "min_length": "0",
+                                        "max_length": "0",
+                                        "pattern": "",
+                                        "any_of": [],
+                                        "property_ordering": [],
                                     },
                                     "name": {
-                                        "any_of": [],
-                                        "description": "",
-                                        "enum": [],
+                                        "type_": 1,
                                         "format_": "",
+                                        "title": "",
+                                        "description": "",
+                                        "nullable": False,
+                                        "enum": [],
                                         "max_items": "0",
                                         "min_items": "0",
-                                        "nullable": False,
                                         "properties": {},
-                                        "property_ordering": [],
                                         "required": [],
-                                        "title": "",
-                                        "type_": 1,
+                                        "min_properties": "0",
+                                        "max_properties": "0",
+                                        "min_length": "0",
+                                        "max_length": "0",
+                                        "pattern": "",
+                                        "any_of": [],
+                                        "property_ordering": [],
                                     },
                                 },
-                                "property_ordering": [],
                                 "required": ["name", "age"],
+                                "format_": "",
                                 "title": "",
-                                "type_": 6,
+                                "nullable": False,
+                                "enum": [],
+                                "max_items": "0",
+                                "min_items": "0",
+                                "min_properties": "0",
+                                "max_properties": "0",
+                                "min_length": "0",
+                                "max_length": "0",
+                                "pattern": "",
+                                "any_of": [],
+                                "property_ordering": [],
                             },
+                            "format_": "",
+                            "title": "",
+                            "description": "",
+                            "nullable": False,
+                            "enum": [],
                             "max_items": "0",
                             "min_items": "0",
-                            "nullable": False,
                             "properties": {},
-                            "property_ordering": [],
                             "required": [],
-                            "title": "",
-                            "type_": 5,
+                            "min_properties": "0",
+                            "max_properties": "0",
+                            "min_length": "0",
+                            "max_length": "0",
+                            "pattern": "",
+                            "any_of": [],
+                            "property_ordering": [],
                         }
                     },
-                    "property_ordering": [],
                     "required": ["models"],
+                    "format_": "",
                     "title": "",
-                    "type_": 6,
+                    "description": "",
+                    "nullable": False,
+                    "enum": [],
+                    "max_items": "0",
+                    "min_items": "0",
+                    "min_properties": "0",
+                    "max_properties": "0",
+                    "min_length": "0",
+                    "max_length": "0",
+                    "pattern": "",
+                    "any_of": [],
+                    "property_ordering": [],
                 },
+                "description": "",
+                "behavior": 0,
             }
         ]
     }
@@ -771,20 +840,19 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
 
 
 def test_tool_with_doubly_nested_list_param() -> None:
-    """
-    Tests a tool parameter with a doubly nested list (List[List[str]]),
-    verifying that the GAPIC schema correctly represents the nested items.
+    """Tests a tool parameter with a doubly nested list (list[list[str]]).
+
+    Verifying that the GAPIC schema correctly represents the nested items.
     """
 
     @tool(parse_docstring=True)
     def process_nested_data(
-        matrix: List[List[str]],
+        matrix: list[list[str]],
     ) -> str:
-        """
-        Processes a matrix (list of lists of strings).
+        """Processes a matrix (list of lists of strings).
 
         Args:
-          matrix: The nested list data.
+            matrix: The nested list data.
         """
         return f"Processed {len(matrix)} rows."
 
@@ -796,7 +864,8 @@ def test_tool_with_doubly_nested_list_param() -> None:
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
     function_declarations = genai_tool_dict.get("function_declarations")
-    assert isinstance(function_declarations, list) and len(function_declarations) == 1
+    assert isinstance(function_declarations, list)
+    assert len(function_declarations) == 1
     fn_decl = function_declarations[0]
     assert isinstance(fn_decl, dict)
 
@@ -886,9 +955,10 @@ def test_schema_recursive_error_self_reference() -> None:
 
 
 def test_tool_with_union_types() -> None:
-    """
-    Test that validates tools with Union types in function declarations
-    are correctly converted to 'anyOf' in the schema.
+    """Test union types with tools.
+
+    Tests that validates tools with Union types in function declarations are correctly
+    converted to 'anyOf' in the schema.
     """
 
     class Helper1(BaseModel):
@@ -956,9 +1026,10 @@ def test_tool_with_union_types() -> None:
 
 
 def test_tool_with_union_primitive_types() -> None:
-    """
-    Test that validates tools with Union types that include primitive types
-    are correctly converted to 'anyOf' in the schema.
+    """Test union primitive types for tools.
+
+    Tests that validates tools with Union types that include primitive types are
+    correctly converted to 'anyOf' in the schema.
     """
 
     class Helper(BaseModel):
@@ -1022,9 +1093,10 @@ def test_tool_with_union_primitive_types() -> None:
 
 
 def test_tool_with_nested_union_types() -> None:
-    """
-    Test that validates tools with nested Union types are correctly converted
-    to nested 'anyOf' structures in the schema.
+    """Test nested union types.
+
+    Tests that validates tools with nested Union types are correctly converted to nested
+    'anyOf' structures in the schema.
     """
 
     class Address(BaseModel):
@@ -1044,7 +1116,7 @@ def test_tool_with_nested_union_types() -> None:
 
         name: str
         location: Union[str, Address] = "Unknown"
-        contacts: List[Union[str, Contact]] = []
+        contacts: list[Union[str, Contact]] = []
 
     # Convert to OpenAI, then to GenAI, then to dict
     oai_tool = convert_to_openai_tool(Person)
@@ -1087,20 +1159,20 @@ def test_tool_with_nested_union_types() -> None:
 
 
 def test_tool_invocation_with_union_types() -> None:
-    """
-    Test that validates tools with Union types can be correctly invoked
-    with either type from the union.
+    """Test invocation with union types.
+
+    Tests that validates tools with Union types can be correctly invoked with either
+    type from the union.
     """
 
     class Configuration(BaseModel):
         """Configuration model."""
 
-        settings: Dict[str, str] = {}
+        settings: dict[str, str] = {}
 
     @tool
     def configure_service(service_name: str, config: Union[str, Configuration]) -> str:
-        """
-        Configure a service with either a configuration string or object.
+        """Configure a service with either a configuration string or object.
 
         Args:
             service_name: The name of the service to configure
@@ -1159,9 +1231,10 @@ def test_tool_invocation_with_union_types() -> None:
 
 
 def test_tool_field_union_types() -> None:
-    """
-    Test that validates Field with Union types in Pydantic models
-    are correctly converted to 'anyOf' in the schema.
+    """Test field union types.
+
+    Test that validates Field with Union types in Pydantic models are correctly
+    converted to 'anyOf' in the schema.
     """
 
     class Helper1(BaseModel):
@@ -1175,9 +1248,7 @@ def test_tool_field_union_types() -> None:
         y: str = "1"
 
     class GetWeather(BaseModel):
-        """
-        Get weather information for a location.
-        """
+        """Get weather information for a location."""
 
         location: str = Field(
             ..., description="The city and country, e.g. New York, USA"
@@ -1241,3 +1312,94 @@ def test_tool_field_union_types() -> None:
     required_fields = parameters.get("required", [])
     assert "location" in required_fields, "Expected 'location' to be required"
     assert "date" in required_fields, "Expected 'date' to be required"
+
+
+def test_union_type_schema_validation() -> None:
+    """Test that Union types get proper type_ assignment for Gemini compatibility."""
+
+    class Response(BaseModel):
+        """Response to user."""
+
+        response: str
+
+    class Plan(BaseModel):
+        """Plan to perform."""
+
+        plan: str
+
+    class Act(BaseModel):
+        """Action to perform."""
+
+        action: Union[Response, Plan] = Field(description="Action to perform.")
+
+    # Convert to GenAI function declaration
+    openai_func = convert_to_openai_function(Act)
+    genai_func = _format_to_gapic_function_declaration(openai_func)
+
+    # The action property should have a valid type (not 0) for Gemini compatibility
+    action_prop = genai_func.parameters.properties["action"]
+    assert action_prop.type_ == glm.Type.OBJECT, (
+        f"Union type should have OBJECT type, got {action_prop.type_}"
+    )
+    assert action_prop.type_ != 0, "Union type should not have type_ = 0"
+
+
+def test_optional_dict_schema_validation() -> None:
+    """Test that Optional types get proper OBJECT type for Gemini compatibility."""
+
+    class RequestsGetToolInput(BaseModel):
+        url: str = Field(description="The URL to send the GET request to")
+        params: Optional[dict[str, str]] = Field(
+            default={}, description="Query parameters for the GET request"
+        )
+        output_instructions: str = Field(
+            description="Instructions on what information to extract from the response"
+        )
+
+    # Convert to GenAI function declaration
+    openai_func = convert_to_openai_function(RequestsGetToolInput)
+    genai_func = _format_to_gapic_function_declaration(openai_func)
+
+    # The params property should have OBJECT type, not STRING
+    params_prop = genai_func.parameters.properties["params"]
+    assert params_prop.type_ == glm.Type.OBJECT, (
+        f"Optional[dict] should have OBJECT type, got {params_prop.type_}"
+    )
+    assert params_prop.type_ != glm.Type.STRING, (
+        "Optional[dict] should not be converted to STRING type"
+    )
+    assert params_prop.nullable is True, "Optional[dict] should be nullable"
+    assert params_prop.description == "Query parameters for the GET request", (
+        "Description should be preserved"
+    )
+
+
+def test_tool_field_enum_array() -> None:
+    class ToolInfo(BaseModel):
+        kind: list[Literal["foo", "bar"]]
+
+    # Convert to OpenAI tool
+    oai_tool = convert_to_openai_tool(ToolInfo)
+
+    # Convert to GenAI
+    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tool)
+
+    # Get function declaration
+    function_declarations = genai_tool_dict.get("function_declarations", [])
+    assert len(function_declarations) > 0, "Expected at least one function declaration"
+    fn_decl = function_declarations[0]
+
+    # Check parameters
+    parameters = fn_decl.get("parameters", {})  # type: ignore
+    properties = parameters.get("properties", {})
+
+    # Check location property
+    assert "kind" in properties
+    kind_property = properties["kind"]
+    assert kind_property["type_"] == glm.Type.ARRAY
+
+    assert "items" in kind_property
+    items_property = kind_property["items"]
+    assert items_property["type_"] == glm.Type.STRING
+    assert items_property["enum"] == ["foo", "bar"]

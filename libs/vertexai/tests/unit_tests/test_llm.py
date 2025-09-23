@@ -1,3 +1,4 @@
+import warnings
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
@@ -36,13 +37,17 @@ def test_model_name() -> None:
 
     # Test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.llms.logger.warning") as mock_warning:
-        llm = VertexAI(
-            model_name="gemini-pro",
-            project="test-project",
-            safety_setting={
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
-            },  # Invalid arg
-        )
+        # Suppress UserWarning during test execution - we're testing the warning
+        # mechanism via logger mock assertions, not via pytest's warning system
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            llm = VertexAI(
+                model_name="gemini-pro",
+                project="test-project",
+                safety_setting={
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
+                },  # Invalid arg
+            )
         assert llm.model_name == "gemini-pro"
         assert llm.project == "test-project"
         mock_warning.assert_called_once()
@@ -147,7 +152,7 @@ def test_extract_response() -> None:
     model = FakeModelGarden(endpoint_id="123", result_arg=None, project="test-proj")
 
     class MyResult:
-        def __init__(self, result):
+        def __init__(self, result) -> None:
             self.result = result
 
     for original_result, result in prompts_results:

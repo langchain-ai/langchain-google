@@ -1,7 +1,7 @@
-"""Standard LangChain interface tests"""
+"""Standard LangChain interface tests."""
 
 import base64
-from typing import Dict, List, Literal, Type
+from typing import Literal
 
 import httpx
 import pytest
@@ -18,13 +18,13 @@ rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
 class TestGeminiFlashStandard(ChatModelIntegrationTests):
     @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
+    def chat_model_class(self) -> type[BaseChatModel]:
         return ChatGoogleGenerativeAI
 
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-2.5-flash",
+            "model": "gemini-2.5-flash",
             "rate_limiter": rate_limiter,
         }
 
@@ -55,7 +55,7 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
             pytest.skip("Model does not support image message.")
 
         # Use a reliable image URL that works with requests
-        image_url = "https://httpbin.org/image/jpeg"
+        image_url = "https://picsum.photos/seed/picsum/200/300"
         image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
 
         # OpenAI format, base64 data
@@ -101,13 +101,13 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
 
 class TestGeminiProStandard(ChatModelIntegrationTests):
     @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
+    def chat_model_class(self) -> type[BaseChatModel]:
         return ChatGoogleGenerativeAI
 
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "models/gemini-2.5-pro",
+            "model": "gemini-2.5-pro",
             "rate_limiter": rate_limiter,
         }
 
@@ -126,9 +126,9 @@ class TestGeminiProStandard(ChatModelIntegrationTests):
     @property
     def supported_usage_metadata_details(
         self,
-    ) -> Dict[
+    ) -> dict[
         Literal["invoke", "stream"],
-        List[
+        list[
             Literal[
                 "audio_input",
                 "audio_output",

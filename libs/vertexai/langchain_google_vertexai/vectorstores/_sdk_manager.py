@@ -32,6 +32,7 @@ class VectorSearchSDKManager:
         If `credentials` is provided, those credentials are used. If not provided
         `credentials_path` is used to retrieve credentials from a file. If also not
         provided, falls back to default credentials.
+
         Args:
             project_id: Id of the project.
             region: Region of the project. E.j. 'us-central1'
@@ -60,6 +61,7 @@ class VectorSearchSDKManager:
 
     def get_gcs_client(self) -> storage.Client:
         """Retrieves a Google Cloud Storage client.
+
         Returns:
             Google Cloud Storage Agent.
         """
@@ -71,8 +73,10 @@ class VectorSearchSDKManager:
 
     def get_gcs_bucket(self, bucket_name: str) -> storage.Bucket:
         """Retrieves a Google Cloud Bucket by bucket name.
+
         Args:
             bucket_name: Name of the bucket to be retrieved.
+
         Returns:
             Google Cloud Bucket.
         """
@@ -81,8 +85,10 @@ class VectorSearchSDKManager:
 
     def get_index(self, index_id: str) -> MatchingEngineIndex:
         """Retrieves a MatchingEngineIndex (VectorSearchIndex) by id.
+
         Args:
             index_id: Id of the index to be retrieved.
+
         Returns:
             MatchingEngineIndex instance.
         """
@@ -97,8 +103,10 @@ class VectorSearchSDKManager:
 
     def get_endpoint(self, endpoint_id: str) -> MatchingEngineIndexEndpoint:
         """Retrieves a MatchingEngineIndexEndpoint (VectorSearchIndexEndpoint) by id.
+
         Args:
             endpoint_id: Id of the endpoint to be retrieved.
+
         Returns:
             MatchingEngineIndexEndpoint instance.
         """
@@ -113,18 +121,18 @@ class VectorSearchSDKManager:
 
     def get_datastore_client(self, **kwargs: Any) -> "datastore.Client":
         """Gets a datastore Client.
+
         Args:
             **kwargs: Keyword arguments to pass to datastore.Client constructor.
+
         Returns:
             datastore Client.
         """
         from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
 
-        ds_client = datastore.Client(
+        return datastore.Client(
             project=self._project_id,
             credentials=self._credentials,
             client_info=get_client_info(module="vertex-ai-matching-engine"),
             **kwargs,
         )
-
-        return ds_client

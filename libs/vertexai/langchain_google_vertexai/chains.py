@@ -1,7 +1,7 @@
+from collections.abc import Sequence
 from typing import (
     Dict,
     Optional,
-    Sequence,
     Type,
     Union,
 )
@@ -34,14 +34,14 @@ def get_output_parser(
     """
     function_names = [f.__name__ for f in functions]
     if len(functions) > 1:
-        pydantic_schema: Union[Dict, Type[BaseModel]] = {
-            name: fn for name, fn in zip(function_names, functions)
-        }
+        pydantic_schema: Union[Dict, Type[BaseModel]] = dict(
+            zip(function_names, functions)
+        )
     else:
         pydantic_schema = functions[0]
-    output_parser: Union[
-        BaseOutputParser, BaseGenerationOutputParser
-    ] = PydanticFunctionsOutputParser(pydantic_schema=pydantic_schema)
+    output_parser: Union[BaseOutputParser, BaseGenerationOutputParser] = (
+        PydanticFunctionsOutputParser(pydantic_schema=pydantic_schema)
+    )
     return output_parser
 
 
@@ -145,7 +145,8 @@ def create_structured_runnable(
                 # -> RecordDog(name="Harry", color="brown", fav_food="chicken")
     """  # noqa: E501
     if not function:
-        raise ValueError("Need to pass in at least one function. Received zero.")
+        msg = "Need to pass in at least one function. Received zero."
+        raise ValueError(msg)
     functions = function if isinstance(function, Sequence) else [function]
     if use_extra_step:
         return _create_structured_runnable_extra_step(
