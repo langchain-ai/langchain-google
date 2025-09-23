@@ -330,7 +330,7 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
             continue
         properties_item: Dict[str, Union[str, int, Dict, List]] = {}
 
-        # Preserve description before and other schema properties before manipulation
+        # Preserve description and other schema properties before manipulation
         original_description = v.get("description")
         original_enum = v.get("enum")
         original_items = v.get("items")
