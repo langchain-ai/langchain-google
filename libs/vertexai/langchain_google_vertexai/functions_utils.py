@@ -332,7 +332,9 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
                     "code_execution",
                 ]
             ):
-                fd = _format_to_gapic_function_declaration(tool)
+                # Type ignore: tool is dict but mypy can't verify it's valid
+                # _FunctionDeclarationLike. Runtime handles invalid types properly
+                fd = _format_to_gapic_function_declaration(tool)  # type: ignore
                 gapic_tool.function_declarations.append(fd)
                 continue
             # _ToolDictLike

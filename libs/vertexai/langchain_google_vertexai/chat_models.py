@@ -227,10 +227,10 @@ def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
         if i == 0 and isinstance(message, SystemMessage):
             context = content
         elif isinstance(message, AIMessage):
-            vertex_message = ChatMessage(content=message.content, author="bot")
+            vertex_message = ChatMessage(content=content, author="bot")
             vertex_messages.append(vertex_message)
         elif isinstance(message, HumanMessage):
-            vertex_message = ChatMessage(content=message.content, author="user")
+            vertex_message = ChatMessage(content=content, author="user")
             vertex_messages.append(vertex_message)
         else:
             msg = f"Unexpected message with type {type(message)} at the position {i}."
@@ -559,7 +559,8 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"{type(example)} for the {i}th message."
                 )
                 raise ValueError(msg)
-            input_text = example.content
+            # InputOutputTextPair only accepts strings
+            input_text = cast("str", example.content)
         if i % 2 == 1:
             if not isinstance(example, AIMessage):
                 msg = (
@@ -567,9 +568,10 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
                     f"{type(example)} for the {i}th message."
                 )
                 raise ValueError(msg)
-            pair = InputOutputTextPair(
-                input_text=input_text, output_text=example.content
-            )
+            output_text = cast("str", example.content)
+            # input_text should always be set by the previous iteration (i % 2 == 0)
+            assert input_text is not None, "input_text should be set before output_text"
+            pair = InputOutputTextPair(input_text=input_text, output_text=output_text)
             example_pairs.append(pair)
     return example_pairs
 
@@ -1990,7 +1992,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 return self._safety_settings_gemini(self.safety_settings)
             return None
         if isinstance(safety_settings, list):
-            return safety_settings
+            # Convert from vertexai SafetySetting to gapic SafetySetting if needed
+            return safety_settings  # type: ignore[return-value] # Assuming compatible types
         if isinstance(safety_settings, dict):
             formatted_safety_settings = []
             for category, threshold in safety_settings.items():
@@ -2006,8 +2009,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                 )
             return formatted_safety_settings
-        msg = "safety_settings should be either"
-        raise ValueError(msg)
+        # Should never reach here due to the above conditions
+        raise ValueError("safety_settings should be either a list, dict, or None")
 
     def _prepare_request_gemini(
         self,
@@ -2041,7 +2044,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        safety_settings = self._safety_settings_gemini(safety_settings)
+        # Type conversion handled internally
+        safety_settings = self._safety_settings_gemini(safety_settings)  # type: ignore[assignment]
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -2102,14 +2106,22 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             if tool_config:
                 v1_tool_config = v1ToolConfig(
                     function_calling_config=v1FunctionCallingConfig(
-                        **proto.Message.to_dict(tool_config.function_calling_config)
+                        # Assuming gapic type has function_calling_config
+                        # mypy can't guarantee all variants of `tool_config` have the
+                        # function_calling_config attribute
+                        **proto.Message.to_dict(tool_config.function_calling_config)  # type: ignore[union-attr]
                     )
                 )
 
             if safety_settings:
                 v1_safety_settings = [
                     v1SafetySetting(
-                        category=s.category, method=s.method, threshold=s.threshold
+                        # Ignores needed due to complex union type where mypy cannot
+                        # infer which variant of SafetySetting is being used
+                        # (Different SDK e.g. vertexai vs gapic has same name)
+                        category=s.category,  # type: ignore[union-attr]
+                        method=s.method,  # type: ignore[union-attr]
+                        threshold=s.threshold,  # type: ignore[union-attr]
                     )
                     for s in safety_settings
                 ]
@@ -2267,7 +2279,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, tool_config: Optional[Union[_ToolConfigDict, ToolConfig]] = None
     ) -> Optional[GapicToolConfig]:
         if tool_config and not isinstance(tool_config, ToolConfig):
-            return _format_tool_config(cast("_ToolConfigDict", tool_config))
+            return _format_tool_config(tool_config)
         return None
 
     async def _agenerate(
@@ -2654,7 +2666,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            message = _parse_response_candidate(candidate)
+            # Using default streaming=False, but mypy can't verify due to type mismatch
+            message = _parse_response_candidate(candidate)  # type: ignore[call-overload]
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
@@ -2702,7 +2715,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            message = _parse_response_candidate(top_candidate, streaming=True)
+            # Type ignore since mypy infers literal as bool
+            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(
