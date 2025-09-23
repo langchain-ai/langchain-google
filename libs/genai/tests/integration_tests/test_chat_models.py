@@ -261,8 +261,8 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     content = result.content
 
     assert isinstance(content[0], dict)
-    assert content[0].get("type") == "thinking"
-    assert isinstance(content[0].get("thinking"), str)
+    assert content[0].get("type") == "reasoning"
+    assert isinstance(content[0].get("reasoning"), str)
 
     assert isinstance(content[1], str)
 

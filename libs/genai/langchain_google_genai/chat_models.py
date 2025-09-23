@@ -1,3 +1,9 @@
+"""
+TODO:
+- [ ] Using .content_blocks on audio output doesn't extract from additional_kwargs
+
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -78,7 +84,9 @@ from langchain_core.messages import (
     ToolMessage,
     is_data_content_block,
 )
+from langchain_core.messages import content as types
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
+from langchain_core.messages.content import create_reasoning_block
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
@@ -113,6 +121,9 @@ from langchain_google_genai._common import (
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
     get_client_info,
+)
+from langchain_google_genai._compat import (
+    _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai._function_utils import (
     _dict_to_gapic_schema,
@@ -294,7 +305,10 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts a list of LangChain messages into Google parts."""
+    """Converts LangChain message content into generativelanguage_v1beta parts.
+
+    Handles both legacy (pre-v1) dict-based content blocks and v1 ContentBlock objects.
+    """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
 
@@ -423,7 +437,19 @@ def _convert_to_parts(
                     )
                     parts.append(code_execution_result_part)
                 elif part["type"] == "thinking":
+                    # Deprecated thinking type (v0 LangChain)
                     parts.append(Part(text=part["thinking"], thought=True))
+                elif part["type"] == "reasoning":
+                    extras = part.get("extras", {}) or {}
+                    sig = extras.get("signature")
+                    thought_sig = sig.encode("utf-8") if isinstance(sig, str) else sig
+                    parts.append(
+                        Part(
+                            text=part["reasoning"],
+                            thought=True,
+                            thought_signature=thought_sig,  # API requires bytes
+                        )
+                    )
                 else:
                     msg = (
                         f"Unrecognized message part type: {part['type']}. Only text, "
@@ -437,8 +463,7 @@ def _convert_to_parts(
                 )
                 parts.append(Part(text=str(part)))
         else:
-            # TODO: Maybe some of Google's native stuff
-            # would hit this branch.
+            # TODO: Maybe some of Google's native stuff would hit this branch?
             msg = "Gemini only supports text and inline_data parts."
             raise ChatGoogleGenerativeAIError(msg)
     return parts
@@ -512,7 +537,7 @@ def _get_ai_message_tool_messages_parts(
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
-    messages: List[Content] = []
+    """Converts sequence of LangChain messages to generativelanguage_v1beta content."""
 
     if convert_system_message_to_human:
         warnings.warn(
@@ -521,6 +546,23 @@ def _parse_chat_history(
             DeprecationWarning,
             stacklevel=2,
         )
+    input_messages = list(input_messages)  # Make a mutable copy
+    for idx, message in enumerate(input_messages):
+        # Translate v1 content
+        if (
+            isinstance(message, AIMessage)
+            and message.response_metadata.get("output_version") == "v1"
+        ):
+            input_messages[idx] = message.model_copy(
+                update={
+                    "content": _convert_from_v1_to_generativelanguage_v1beta(
+                        cast(list[types.ContentBlock], message.content),
+                        message.response_metadata.get("model_provider"),
+                    )
+                }
+            )
+
+    formatted_messages: List[Content] = []
 
     system_instruction: Optional[Content] = None
     messages_without_tool_messages = [
@@ -554,8 +596,10 @@ def _parse_chat_history(
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
                     tool_messages=tool_messages, ai_message=message
                 )
-                messages.append(Content(role=role, parts=ai_message_parts))
-                messages.append(Content(role="user", parts=tool_messages_parts))
+                formatted_messages.append(Content(role=role, parts=ai_message_parts))
+                formatted_messages.append(
+                    Content(role="user", parts=tool_messages_parts)
+                )
                 continue
             if raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
@@ -580,8 +624,8 @@ def _parse_chat_history(
             msg = f"Unexpected message with type {type(message)} at the position {i}."
             raise ValueError(msg)
 
-        messages.append(Content(role=role, parts=parts))
-    return system_instruction, messages
+        formatted_messages.append(Content(role=role, parts=parts))
+    return system_instruction, formatted_messages
 
 
 # Helper function to append content consistently
@@ -630,11 +674,15 @@ def _parse_response_candidate(
             pass
 
         if hasattr(part, "thought") and part.thought:
-            thinking_message = {
-                "type": "thinking",
-                "thinking": part.text,
-            }
-            content = _append_to_content(content, thinking_message)
+            reasoning_block = create_reasoning_block(
+                reasoning=part.text,
+                thought_signature=(
+                    part.thought_signature.decode("utf-8")
+                    if part.thought_signature
+                    else None
+                ),
+            )
+            content = _append_to_content(content, reasoning_block)
         elif text is not None and text:
             content = _append_to_content(content, text)
 
@@ -743,7 +791,6 @@ def _parse_response_candidate(
         Validate before using in production.
 """
         )
-
     if streaming:
         return AIMessageChunk(
             content=content,
@@ -886,6 +933,16 @@ def _response_to_result(
         grounding_metadata = _extract_grounding_metadata(candidate)
         generation_info["grounding_metadata"] = grounding_metadata
         message = _parse_response_candidate(candidate, streaming=stream)
+
+        # Transfer grounding metadata to message for block translator access needed for
+        # citations
+        if generation_info.get("grounding_metadata"):
+            # Store grounding metadata on message for block translator
+            setattr(
+                message,
+                "generation_info",
+                {"grounding_metadata": generation_info["grounding_metadata"]},
+            )
         message.usage_metadata = lc_usage
 
         if not hasattr(message, "response_metadata"):
@@ -2169,7 +2226,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return request
 
     def get_num_tokens(self, text: str) -> int:
-        """Get the number of tokens present in the text.
+        """Get the number of tokens present in the text. Uses the model's tokenizer.
 
         Useful for checking if an input will fit in a model's context window.
 
@@ -2201,7 +2258,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        if method in ("json_mode", "json_schema"):  # `json_schema` preferred
+        # `json_schema` preferred, but `json_mode` kept for backwards compatibility
+        if method in ("json_mode", "json_schema"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
