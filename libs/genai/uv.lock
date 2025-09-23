@@ -447,7 +447,7 @@ wheels = [
 [[package]]
 name = "langchain-core"
 version = "1.0.0a4"
-source = { git = "https://github.com/langchain-ai/langchain.git?subdirectory=libs%2Fcore&branch=mdrxy%2Fgenai#dd5efdb1f9112159427ee5dcb15a5653e176a7f6" }
+source = { git = "https://github.com/langchain-ai/langchain.git?subdirectory=libs%2Fcore&branch=mdrxy%2Fgenai#494aacb47877b99dbab42f5e7c451081c79cca5f" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
@@ -535,7 +535,7 @@ typing = [
 [[package]]
 name = "langchain-tests"
 version = "1.0.0a1"
-source = { git = "https://github.com/langchain-ai/langchain.git?subdirectory=libs%2Fstandard-tests&branch=mdrxy%2Fgenai#dd5efdb1f9112159427ee5dcb15a5653e176a7f6" }
+source = { git = "https://github.com/langchain-ai/langchain.git?subdirectory=libs%2Fstandard-tests&branch=mdrxy%2Fgenai#494aacb47877b99dbab42f5e7c451081c79cca5f" }
 dependencies = [
     { name = "httpx" },
     { name = "langchain-core" },
