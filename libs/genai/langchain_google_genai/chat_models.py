@@ -1,9 +1,3 @@
-"""
-TODO:
-- [ ] Using .content_blocks on audio output doesn't extract from additional_kwargs
-
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -463,7 +457,7 @@ def _convert_to_parts(
                 )
                 parts.append(Part(text=str(part)))
         else:
-            # TODO: Maybe some of Google's native stuff would hit this branch?
+            # Maybe some of Google's native stuff would hit this branch?
             msg = "Gemini only supports text and inline_data parts."
             raise ChatGoogleGenerativeAIError(msg)
     return parts
@@ -676,7 +670,7 @@ def _parse_response_candidate(
         if hasattr(part, "thought") and part.thought:
             reasoning_block = create_reasoning_block(
                 reasoning=part.text,
-                thought_signature=(
+                signature=(
                     part.thought_signature.decode("utf-8")
                     if part.thought_signature
                     else None
@@ -706,7 +700,11 @@ def _parse_response_candidate(
             }
             content = _append_to_content(content, execution_result)
 
-        if part.inline_data.mime_type.startswith("audio/"):
+        if (
+            hasattr(part, "inline_data")
+            and part.inline_data
+            and part.inline_data.mime_type.startswith("audio/")
+        ):
             buffer = io.BytesIO()
 
             with wave.open(buffer, "wb") as wf:
@@ -716,9 +714,22 @@ def _parse_response_candidate(
                 wf.setframerate(24000)
                 wf.writeframes(part.inline_data.data)
 
-            additional_kwargs["audio"] = buffer.getvalue()
+            audio_data = buffer.getvalue()
+            additional_kwargs["audio"] = audio_data
 
-        if part.inline_data.mime_type.startswith("image/"):
+            # Create audio content block for content_blocks property
+            audio_message = {
+                "type": "audio",
+                "audio": base64.b64encode(audio_data).decode("utf-8"),
+                "mime_type": part.inline_data.mime_type,
+            }
+            content = _append_to_content(content, audio_message)
+
+        if (
+            hasattr(part, "inline_data")
+            and part.inline_data
+            and part.inline_data.mime_type.startswith("image/")
+        ):
             image_format = part.inline_data.mime_type[6:]
             image_message = {
                 "type": "image_url",
