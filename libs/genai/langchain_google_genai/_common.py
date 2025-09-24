@@ -52,7 +52,8 @@ Examples:
 
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     """Maximum number of tokens to include in a candidate. Must be greater than zero.
-    If unset, will default to ``64``."""
+    If unset, will use the model's default value, which varies by model.
+    See https://ai.google.dev/gemini-api/docs/models for model-specific limits."""
 
     n: int = 1
     """Number of chat completions to generate for each prompt. Note that the API may
