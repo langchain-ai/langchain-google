@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from langchain_core.tools import BaseTool
 from langchain_core.tools.base import BaseToolkit
@@ -35,11 +33,10 @@ class SheetsToolkit(BaseToolkit):
         For example, this toolkit can be used to read spreadsheet data,
         get spreadsheet metadata, and perform filtered data queries.
 
-        See https://python.langchain.com/docs/security for more information.
     """
 
     api_resource: Resource = Field(default=None)
-    api_key: str | None = Field(default=None)
+    api_key: Optional[str] = Field(default=None)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
