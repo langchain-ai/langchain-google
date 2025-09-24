@@ -89,6 +89,9 @@ dev = [
 [tool.ruff]
 fix = true
 
+[tool.ruff.format]
+docstring-code-format = true
+
 [tool.ruff.lint]
 select = [
     "E", # pycodestyle

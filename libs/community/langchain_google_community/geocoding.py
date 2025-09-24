@@ -496,22 +496,18 @@ class GoogleGeocodingTool(BaseTool):
                 include_bounds=True,
                 include_navigation=True,
                 include_metadata=True,
-                language="en"
+                language="en",
             )
 
     Invoke directly:
         .. code-block:: python
 
-            result = tool.invoke({
-                "query": "Eiffel Tower, Empire State Building"
-            })
+            result = tool.invoke({"query": "Eiffel Tower, Empire State Building"})
 
     Invoke with agent:
         .. code-block:: python
 
-            agent.invoke({
-                "input": "Find coordinates of Times Square and Central Park"
-            })
+            agent.invoke({"input": "Find coordinates of Times Square and Central Park"})
 
     Returns:
         Tuple containing:
