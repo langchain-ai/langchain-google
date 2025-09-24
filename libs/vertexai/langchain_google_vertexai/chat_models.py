@@ -51,7 +51,9 @@ from langchain_core.messages import (
     convert_to_openai_image_block,
     is_data_content_block,
 )
-from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.ai import (
+    UsageMetadata,
+)
 from langchain_core.messages.tool import (
     tool_call_chunk,
     tool_call as create_tool_call,
@@ -74,6 +76,10 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
+from langchain_google_vertexai._usage import (
+    coerce_usage_metadata,
+    diff_usage_metadata,
+)
 from vertexai.generative_models import (
     Tool as VertexTool,  # TODO: migrate to google-genai since this is deprecated
 )
@@ -2697,17 +2703,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         # Note: some models (e.g., gemini-1.5-pro with image inputs) return
         # cumulative sums of token counts.
         total_lc_usage = _get_usage_metadata_gemini(usage_metadata)
-        if total_lc_usage and prev_total_usage:
-            lc_usage: Optional[UsageMetadata] = UsageMetadata(
-                input_tokens=total_lc_usage["input_tokens"]
-                - prev_total_usage["input_tokens"],
-                output_tokens=total_lc_usage["output_tokens"]
-                - prev_total_usage["output_tokens"],
-                total_tokens=total_lc_usage["total_tokens"]
-                - prev_total_usage["total_tokens"],
-            )
-        else:
-            lc_usage = total_lc_usage
+        lc_usage = diff_usage_metadata(total_lc_usage, prev_total_usage)
         if not response_chunk.candidates:
             message = AIMessageChunk(content="")
             if lc_usage:
@@ -2738,30 +2734,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
     """Get UsageMetadata from raw response metadata."""
-    input_tokens = raw_metadata.get("prompt_token_count", 0)
-    output_tokens = raw_metadata.get("candidates_token_count", 0)
-    total_tokens = raw_metadata.get("total_token_count", 0)
-    thought_tokens = raw_metadata.get("thoughts_token_count", 0)
-    cache_read_tokens = raw_metadata.get("cached_content_token_count", 0)
-    if all(
-        count == 0
-        for count in [input_tokens, output_tokens, total_tokens, cache_read_tokens]
-    ):
-        return None
-    if thought_tokens > 0:
-        return UsageMetadata(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            input_token_details={"cache_read": cache_read_tokens},
-            output_token_details={"reasoning": thought_tokens},
-        )
-    return UsageMetadata(
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        total_tokens=total_tokens,
-        input_token_details={"cache_read": cache_read_tokens},
-    )
+    return coerce_usage_metadata(raw_metadata)
 
 
 def _get_tool_name(tool: _ToolType) -> str:

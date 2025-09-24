@@ -896,7 +896,7 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     assert response.usage_metadata["output_token_details"]["reasoning"] > 0
     assert (
         response.usage_metadata["total_tokens"]
-        > response.usage_metadata["input_tokens"]
+        == response.usage_metadata["input_tokens"]
         + response.usage_metadata["output_tokens"]
     )
 
@@ -912,7 +912,7 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     assert response.usage_metadata["output_token_details"]["reasoning"] <= 100
     assert (
         response.usage_metadata["total_tokens"]
-        > response.usage_metadata["input_tokens"]
+        == response.usage_metadata["input_tokens"]
         + response.usage_metadata["output_tokens"]
     )
 
@@ -943,7 +943,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
     assert response.usage_metadata["output_token_details"]["reasoning"] > 0
     assert (
         response.usage_metadata["total_tokens"]
-        > response.usage_metadata["input_tokens"]
+        == response.usage_metadata["input_tokens"]
         + response.usage_metadata["output_tokens"]
     )
 

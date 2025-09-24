@@ -6,7 +6,8 @@ import json
 import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Union
+from types import SimpleNamespace
+from typing import Optional, Union, cast
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -966,6 +967,194 @@ def test_response_to_result_grounding_metadata(
             else {}
         )
         assert grounding_metadata == expected_grounding_metadata
+
+
+def test_response_to_result_usage_details() -> None:
+    """Ensure usage metadata includes tool and modality details."""
+    base_response = GenerateContentResponse()
+    response = cast(
+        GenerateContentResponse,
+        SimpleNamespace(
+            prompt_feedback=base_response.prompt_feedback,
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part(text="Hello")]),
+                    finish_reason=Candidate.FinishReason.STOP,
+                )
+            ],
+            model_version="models/gemini-2.5-pro",
+            usage_metadata={
+                "prompt_token_count": 12,
+                "tool_use_prompt_token_count": 8,
+                "candidates_token_count": 20,
+                "thoughts_token_count": 5,
+                "cached_content_token_count": 3,
+                "total_token_count": 45,
+                "prompt_tokens_details": [
+                    {"modality": "TEXT", "token_count": 12},
+                    {"modality": "AUDIO", "token_count": 2},
+                ],
+                "tool_use_prompt_tokens_details": [
+                    {
+                        "modality": "TEXT",
+                        "token_count": 8,
+                    }
+                ],
+                "candidates_tokens_details": [
+                    {
+                        "modality": "TEXT",
+                        "token_count": 20,
+                    }
+                ],
+            },
+        ),
+    )
+
+    result = _response_to_result(response, stream=False)
+    message = cast(AIMessage, result.generations[0].message)
+
+    assert message.usage_metadata is not None
+    usage_metadata = message.usage_metadata
+    assert usage_metadata["input_tokens"] == 20
+    assert usage_metadata["output_tokens"] == 25
+    assert usage_metadata["total_tokens"] == 45
+
+    input_details = cast(
+        dict[str, int], usage_metadata.get("input_token_details", {}) or {}
+    )
+    assert input_details["tool_use_prompt"] == 8
+    assert input_details["cache_read"] == 3
+    assert input_details["text"] == 12
+    assert input_details["audio"] == 2
+    assert input_details["tool_use_prompt_text"] == 8
+
+    output_details = cast(
+        dict[str, int], usage_metadata.get("output_token_details", {}) or {}
+    )
+    assert output_details["reasoning"] == 5
+    assert output_details["text"] == 20
+
+    llm_output = result.llm_output or {}
+    assert llm_output.get("usage_metadata") == usage_metadata
+
+
+def test_response_to_result_streaming_delta_details() -> None:
+    """Streaming responses should expose per-chunk usage deltas."""
+    base_response = GenerateContentResponse()
+    chunk_one = cast(
+        GenerateContentResponse,
+        SimpleNamespace(
+            prompt_feedback=base_response.prompt_feedback,
+            model_version="models/gemini-stream",
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part(text="First")]),
+                    finish_reason=Candidate.FinishReason.STOP,
+                )
+            ],
+            usage_metadata={
+                "prompt_token_count": 10,
+                "tool_use_prompt_token_count": 2,
+                "candidates_token_count": 6,
+                "thoughts_token_count": 4,
+                "cached_content_token_count": 3,
+                "total_token_count": 22,
+                "prompt_tokens_details": [
+                    {
+                        "modality": "TEXT",
+                        "token_count": 10,
+                    }
+                ],
+                "candidates_tokens_details": [
+                    {
+                        "modality": "TEXT",
+                        "token_count": 6,
+                    }
+                ],
+            },
+        ),
+    )
+
+    first_result = _response_to_result(chunk_one, stream=True)
+    first_message = cast(AIMessage, first_result.generations[0].message)
+    first_usage = first_message.usage_metadata
+    assert first_usage is not None
+    assert first_usage["input_tokens"] == 12
+    assert first_usage["output_tokens"] == 10
+    assert first_usage["total_tokens"] == 22
+    first_input_details = cast(
+        dict[str, int], first_usage.get("input_token_details", {}) or {}
+    )
+    first_output_details = cast(
+        dict[str, int], first_usage.get("output_token_details", {}) or {}
+    )
+    assert first_input_details["tool_use_prompt"] == 2
+    assert first_output_details["reasoning"] == 4
+    llm_output_first = first_result.llm_output or {}
+    prev_cumulative_usage = llm_output_first.get("usage_metadata")
+    assert prev_cumulative_usage is not None
+
+    chunk_two = cast(
+        GenerateContentResponse,
+        SimpleNamespace(
+            prompt_feedback=base_response.prompt_feedback,
+            model_version="models/gemini-stream",
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part(text="Second")]),
+                    finish_reason=Candidate.FinishReason.STOP,
+                )
+            ],
+            usage_metadata={
+                "prompt_token_count": 16,
+                "tool_use_prompt_token_count": 4,
+                "candidates_token_count": 12,
+                "thoughts_token_count": 8,
+                "cached_content_token_count": 5,
+                "total_token_count": 40,
+                "prompt_tokens_details": [
+                    {
+                        "modality": "TEXT",
+                        "token_count": 14,
+                    }
+                ],
+                "candidates_tokens_details": [
+                    {
+                        "modality": "TEXT",
+                        "token_count": 12,
+                    }
+                ],
+            },
+        ),
+    )
+
+    second_result = _response_to_result(
+        chunk_two,
+        stream=True,
+        prev_usage=prev_cumulative_usage,
+    )
+    second_message = cast(AIMessage, second_result.generations[0].message)
+    second_usage = second_message.usage_metadata
+    assert second_usage is not None
+    assert second_usage["input_tokens"] == 8
+    assert second_usage["output_tokens"] == 10
+    assert second_usage["total_tokens"] == 18
+
+    input_details_delta = cast(
+        dict[str, int], second_usage.get("input_token_details", {}) or {}
+    )
+    assert input_details_delta["tool_use_prompt"] == 2
+    assert input_details_delta["cache_read"] == 2
+    assert input_details_delta["text"] == 4
+
+    output_details_delta = cast(
+        dict[str, int], second_usage.get("output_token_details", {}) or {}
+    )
+    assert output_details_delta["reasoning"] == 4
+    assert output_details_delta["text"] == 6
+
+    llm_output = second_result.llm_output or {}
+    assert llm_output.get("usage_metadata") is not None
 
 
 @pytest.mark.parametrize(
