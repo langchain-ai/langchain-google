@@ -32,14 +32,16 @@ def test_spreadsheet_id() -> str:
 def test_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) -> None:
     """Test reading data from a Google Sheet."""
     tool = SheetsReadDataTool.from_api_key(sheets_api_key)
-    
+
     try:
-        result = tool.run({
-            "spreadsheet_id": test_spreadsheet_id,
-            "range_name": "A1:C3",
-            "convert_to_records": True,
-        })
-        
+        result = tool.run(
+            {
+                "spreadsheet_id": test_spreadsheet_id,
+                "range_name": "A1:C3",
+                "convert_to_records": True,
+            }
+        )
+
         # Parse and verify JSON response
         data = json.loads(result)
         assert "range" in data
@@ -56,14 +58,16 @@ def test_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) -> None:
 def test_batch_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) -> None:
     """Test batch reading data from multiple ranges."""
     tool = SheetsBatchReadDataTool.from_api_key(sheets_api_key)
-    
+
     try:
-        result = tool.run({
-            "spreadsheet_id": test_spreadsheet_id,
-            "ranges": ["A1:C3", "D1:F3"],
-            "convert_to_records": True,
-        })
-        
+        result = tool.run(
+            {
+                "spreadsheet_id": test_spreadsheet_id,
+                "ranges": ["A1:C3", "D1:F3"],
+                "convert_to_records": True,
+            }
+        )
+
         # Parse and verify JSON response
         data = json.loads(result)
         assert "spreadsheet_id" in data
@@ -79,13 +83,15 @@ def test_batch_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) ->
 def test_get_spreadsheet_info(sheets_api_key: str, test_spreadsheet_id: str) -> None:
     """Test getting spreadsheet metadata."""
     tool = SheetsGetSpreadsheetInfoTool.from_api_key(sheets_api_key)
-    
+
     try:
-        result = tool.run({
-            "spreadsheet_id": test_spreadsheet_id,
-            "fields": "properties,sheets",
-        })
-        
+        result = tool.run(
+            {
+                "spreadsheet_id": test_spreadsheet_id,
+                "fields": "properties,sheets",
+            }
+        )
+
         # Parse and verify JSON response
         data = json.loads(result)
         assert "spreadsheet_id" in data
@@ -101,20 +107,22 @@ def test_get_spreadsheet_info(sheets_api_key: str, test_spreadsheet_id: str) -> 
 @pytest.mark.extended
 def test_toolkit_functionality(sheets_api_key: str, test_spreadsheet_id: str) -> None:
     """Test SheetsToolkit functionality."""
-    toolkit = SheetsToolkit.from_api_key(sheets_api_key)
+    toolkit = SheetsToolkit(api_key=sheets_api_key)
     tools = toolkit.get_tools()
-    
+
     # Should have 3 tools (excludes filtered read which requires OAuth2)
     assert len(tools) == 3
-    
+
     try:
         # Test using a tool from the toolkit
         read_tool = next(tool for tool in tools if tool.name == "sheets_read_data")
-        result = read_tool.run({
-            "spreadsheet_id": test_spreadsheet_id,
-            "range_name": "A1:B2",
-        })
-        
+        result = read_tool.run(
+            {
+                "spreadsheet_id": test_spreadsheet_id,
+                "range_name": "A1:B2",
+            }
+        )
+
         # Verify the result
         data = json.loads(result)
         assert "range" in data
@@ -127,16 +135,20 @@ def test_toolkit_functionality(sheets_api_key: str, test_spreadsheet_id: str) ->
 
 
 @pytest.mark.extended
-def test_error_handling_invalid_range(sheets_api_key: str, test_spreadsheet_id: str) -> None:
+def test_error_handling_invalid_range(
+    sheets_api_key: str, test_spreadsheet_id: str
+) -> None:
     """Test error handling with invalid range."""
     tool = SheetsReadDataTool.from_api_key(sheets_api_key)
-    
+
     try:
         with pytest.raises(Exception, match="Error reading sheet data"):
-            tool.run({
-                "spreadsheet_id": test_spreadsheet_id,
-                "range_name": "InvalidRange!A1:Z999",
-            })
+            tool.run(
+                {
+                    "spreadsheet_id": test_spreadsheet_id,
+                    "range_name": "InvalidRange!A1:Z999",
+                }
+            )
     except Exception as e:
         if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
