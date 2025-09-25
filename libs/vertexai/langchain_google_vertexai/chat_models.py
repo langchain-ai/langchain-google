@@ -28,8 +28,8 @@ from typing import (
 from collections.abc import AsyncIterator, Iterator, Sequence, Mapping
 
 import proto  # type: ignore[import-untyped]
-from google.protobuf.json_format import SerializeToJsonError  # type: ignore[import-untyped]
-from google.protobuf.struct_pb2 import (  # type: ignore[import-untyped]
+from google.protobuf.json_format import SerializeToJsonError
+from google.protobuf.struct_pb2 import (
     ListValue,
     Struct,
     Value,
