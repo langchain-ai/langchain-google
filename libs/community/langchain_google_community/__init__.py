@@ -41,6 +41,13 @@ from langchain_google_community.search import (
     GoogleSearchResults,
     GoogleSearchRun,
 )
+from langchain_google_community.sheets import (
+    SheetsBatchReadDataTool,
+    SheetsFilteredReadDataTool,
+    SheetsGetSpreadsheetInfoTool,
+    SheetsReadDataTool,
+    SheetsToolkit,
+)
 from langchain_google_community.texttospeech import TextToSpeechTool
 from langchain_google_community.translate import GoogleTranslateTransformer
 from langchain_google_community.vertex_ai_search import (
@@ -76,6 +83,11 @@ __all__ = [
     "GMailLoader",
     "GmailToolkit",
     "GoogleDriveLoader",
+    "SheetsReadDataTool",
+    "SheetsBatchReadDataTool",
+    "SheetsFilteredReadDataTool",
+    "SheetsGetSpreadsheetInfoTool",
+    "SheetsToolkit",
     "GoogleGeocodingAPIWrapper",
     "GoogleGeocodingTool",
     "GooglePlacesAPIWrapper",
