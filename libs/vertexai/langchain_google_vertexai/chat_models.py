@@ -3,6 +3,7 @@
 from __future__ import annotations  # noqa
 import ast
 import base64
+import math
 from functools import cached_property
 import json
 import logging
@@ -24,9 +25,15 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence, Mapping
 
 import proto  # type: ignore[import-untyped]
+from google.protobuf.json_format import SerializeToJsonError  # type: ignore[import-untyped]
+from google.protobuf.struct_pb2 import (  # type: ignore[import-untyped]
+    ListValue,
+    Struct,
+    Value,
+)
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
@@ -614,6 +621,80 @@ def _append_to_content(
     raise TypeError(msg)
 
 
+def _json_safe_number(value: float) -> Union[str, float]:
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return value
+
+
+def _struct_value_to_jsonable(value: Value) -> Any:
+    kind = value.WhichOneof("kind")
+    if kind == "number_value":
+        return _json_safe_number(value.number_value)
+    if kind == "string_value":
+        return value.string_value
+    if kind == "bool_value":
+        return bool(value.bool_value)
+    if kind == "null_value":
+        return None
+    if kind == "struct_value":
+        return _struct_to_jsonable(value.struct_value)
+    if kind == "list_value":
+        return [_struct_value_to_jsonable(item) for item in value.list_value.values]
+    return None
+
+
+def _struct_to_jsonable(struct: Struct) -> dict[str, Any]:
+    return {key: _struct_value_to_jsonable(val) for key, val in struct.fields.items()}
+
+
+def _make_jsonable(value: Any) -> Any:
+    if isinstance(value, Value):
+        return _struct_value_to_jsonable(value)
+    if isinstance(value, Struct):
+        return _struct_to_jsonable(value)
+    if isinstance(value, ListValue):
+        return [_struct_value_to_jsonable(item) for item in value.values]
+    if isinstance(value, Mapping):
+        return {str(key): _make_jsonable(val) for key, val in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_make_jsonable(item) for item in value]
+    if isinstance(value, float):
+        return _json_safe_number(value)
+    return value
+
+
+def _coerce_function_call_args(function_call: FunctionCall) -> dict[str, Any]:
+    try:
+        fc_dict = proto.Message.to_dict(function_call)
+    except SerializeToJsonError:
+        fc_dict = {}
+    except TypeError:
+        fc_dict = {}
+
+    args_dict: Any = fc_dict.get("args") if isinstance(fc_dict, dict) else None
+    if isinstance(args_dict, dict):
+        return dict(args_dict)
+
+    struct_args = getattr(function_call, "args", None)
+    if isinstance(struct_args, Struct):
+        return _struct_to_jsonable(struct_args)
+    if isinstance(struct_args, Mapping):
+        return {str(key): _make_jsonable(val) for key, val in struct_args.items()}
+
+    if struct_args is not None:
+        try:
+            fallback_dict = proto.Message.to_dict(struct_args)
+        except Exception:
+            fallback_dict = {}
+        if isinstance(fallback_dict, dict):
+            return fallback_dict
+
+    return {}
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: Literal[False] = False
@@ -657,9 +738,10 @@ def _parse_response_candidate(
             # but in general the full set of function calls is stored in tool_calls.
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
-            function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            function_call_args_dict = _coerce_function_call_args(part.function_call)
             function_call["arguments"] = json.dumps(
-                {k: function_call_args_dict[k] for k in function_call_args_dict}
+                function_call_args_dict,
+                allow_nan=False,
             )
             additional_kwargs["function_call"] = function_call
 

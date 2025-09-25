@@ -1016,6 +1016,51 @@ def test_default_params_gemini() -> None:
                 },
             ),
         ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="handle_numbers",
+                                args={
+                                    "positive": float("inf"),
+                                    "negative": float("-inf"),
+                                    "not_a_number": float("nan"),
+                                },
+                            ),
+                        ),
+                    ],
+                )
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    create_tool_call(
+                        name="handle_numbers",
+                        args={
+                            "positive": "Infinity",
+                            "negative": "-Infinity",
+                            "not_a_number": "NaN",
+                        },
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+                additional_kwargs={
+                    "function_call": {
+                        "name": "handle_numbers",
+                        "arguments": json.dumps(
+                            {
+                                "positive": "Infinity",
+                                "negative": "-Infinity",
+                                "not_a_number": "NaN",
+                            }
+                        ),
+                    }
+                },
+            ),
+        ),
     ],
 )
 def test_parse_response_candidate(raw_candidate, expected) -> None:
