@@ -31,6 +31,7 @@ class GooglePlacesAPIWrapper(BaseModel):
 
 
             from langchain_community.utilities import GooglePlacesAPIWrapper
+
             gplaceapi = GooglePlacesAPIWrapper()
     """
 
