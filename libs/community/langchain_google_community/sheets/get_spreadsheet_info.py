@@ -50,40 +50,31 @@ class GetSpreadsheetInfoSchema(BaseModel):
 
 class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
     """Tool that retrieves comprehensive metadata information from Google Sheets.
-
     This tool provides detailed metadata extraction capabilities from Google Sheets,
     allowing you to understand spreadsheet structure, sheet properties, named ranges,
     and other organizational information. It's essential for exploring spreadsheet
     contents before reading data and understanding the overall structure.
-
     Instantiate:
         .. code-block:: python
-
             from langchain_google_community.sheets import SheetsGetSpreadsheetInfoTool
-
             tool = SheetsGetSpreadsheetInfoTool(
                 api_key="your_api_key",
                 include_grid_data=False,
                 include_formatting=False,
-                include_validation=False
+                include_validation=False,
             )
-
     Invoke directly:
         .. code-block:: python
-
-            result = tool.run({
-                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                "include_grid_data": False,
-                "fields": "properties,sheets.properties"
-            })
-
+            result = tool.run(
+                {
+                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "include_grid_data": False,
+                    "fields": "properties,sheets.properties",
+                }
+            )
     Invoke with agent:
         .. code-block:: python
-
-            agent.invoke({
-                "input": "Get information about the spreadsheet structure"
-            })
-
+            agent.invoke({"input": "Get information about the spreadsheet structure"})
     Returns:
         JSON string containing:
             - Spreadsheet properties: Title, locale, timezone, etc.
@@ -91,14 +82,12 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
             - Named ranges: Defined ranges and their locations
             - Grid data: Detailed cell information (optional)
             - Metadata: Processing information and data structure
-
     Information Types Available:
         - Basic info: Title, locale, timezone, creation date
         - Sheet details: Names, IDs, row/column counts, properties
         - Named ranges: Defined ranges and their sheet references
         - Grid data: Cell properties, formatting, validation rules
         - Developer metadata: Custom properties and annotations
-
     Example Response:
         {
             "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
@@ -134,7 +123,6 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
                 "processing_time": "0.2s"
             }
         }
-
     Raises:
         ValueError: If spreadsheet_id is invalid
         Exception: For API errors or connection issues
@@ -263,21 +251,6 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
             spreadsheet_info["developer_metadata"].append(metadata_info)
 
         return spreadsheet_info
-
-    def _safe_get_cell_value(self, cell_data: dict) -> str:
-        """Safely extract cell value with proper fallback hierarchy."""
-        if cell_data.get("formattedValue"):
-            return cell_data["formattedValue"]
-        elif cell_data.get("effectiveValue", {}).get("stringValue"):
-            return str(cell_data["effectiveValue"]["stringValue"])
-        elif cell_data.get("effectiveValue", {}).get("numberValue") is not None:
-            return str(cell_data["effectiveValue"]["numberValue"])
-        elif cell_data.get("userEnteredValue", {}).get("stringValue"):
-            return str(cell_data["userEnteredValue"]["stringValue"])
-        elif cell_data.get("userEnteredValue", {}).get("numberValue") is not None:
-            return str(cell_data["userEnteredValue"]["numberValue"])
-        else:
-            return ""
 
     def _process_grid_data(self, grid_data: List[dict]) -> List[List[str]]:
         """Process grid data using simplified patterns from the guide."""

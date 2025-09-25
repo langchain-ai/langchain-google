@@ -97,3 +97,25 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             A tool with API key for read-only access.
         """
         return cls(api_key=api_key)  # type: ignore[call-arg]
+
+    def _safe_get_cell_value(self, cell_data: dict) -> str:
+        """Safely extract cell value with proper fallback hierarchy.
+
+        Args:
+            cell_data: Cell data dictionary from Google Sheets API
+
+        Returns:
+            str: The cell value as a string
+        """
+        if cell_data.get("formattedValue"):
+            return cell_data["formattedValue"]
+        elif cell_data.get("effectiveValue", {}).get("stringValue"):
+            return str(cell_data["effectiveValue"]["stringValue"])
+        elif cell_data.get("effectiveValue", {}).get("numberValue") is not None:
+            return str(cell_data["effectiveValue"]["numberValue"])
+        elif cell_data.get("userEnteredValue", {}).get("stringValue"):
+            return str(cell_data["userEnteredValue"]["stringValue"])
+        elif cell_data.get("userEnteredValue", {}).get("numberValue") is not None:
+            return str(cell_data["userEnteredValue"]["numberValue"])
+        else:
+            return ""

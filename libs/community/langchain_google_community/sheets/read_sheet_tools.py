@@ -67,28 +67,6 @@ class BaseReadTool(SheetsBaseTool):
     and record conversion that is common across all read tools.
     """
 
-    def _safe_get_cell_value(self, cell_data: dict) -> str:
-        """Safely extract cell value with proper fallback hierarchy.
-
-        Args:
-            cell_data: Cell data dictionary from Google Sheets API
-
-        Returns:
-            str: The cell value as a string
-        """
-        if cell_data.get("formattedValue"):
-            return cell_data["formattedValue"]
-        elif cell_data.get("effectiveValue", {}).get("stringValue"):
-            return str(cell_data["effectiveValue"]["stringValue"])
-        elif cell_data.get("effectiveValue", {}).get("numberValue") is not None:
-            return str(cell_data["effectiveValue"]["numberValue"])
-        elif cell_data.get("userEnteredValue", {}).get("stringValue"):
-            return str(cell_data["userEnteredValue"]["stringValue"])
-        elif cell_data.get("userEnteredValue", {}).get("numberValue") is not None:
-            return str(cell_data["userEnteredValue"]["numberValue"])
-        else:
-            return ""
-
     def _numericise(self, value: str) -> Union[str, int, float]:
         """Convert string values to numbers when possible.
 
@@ -227,24 +205,26 @@ class SheetsReadDataTool(BaseReadTool):
                 api_key="your_api_key",
                 value_render_option=ValueRenderOption.FORMATTED_VALUE,
                 convert_to_records=True,
-                numericise_values=True
+                numericise_values=True,
             )
 
     Invoke directly:
         .. code-block:: python
 
-            result = tool.run({
-                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                "range_name": "A1:E10",
-                "convert_to_records": True
-            })
+            result = tool.run(
+                {
+                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "range_name": "A1:E10",
+                    "convert_to_records": True,
+                }
+            )
 
     Invoke with agent:
         .. code-block:: python
 
-            agent.invoke({
-                "input": "Read the first 10 rows from the student data spreadsheet"
-            })
+            agent.invoke(
+                {"input": "Read the first 10 rows from the student data spreadsheet"}
+            )
 
     Returns:
         JSON string containing:
@@ -401,24 +381,24 @@ class SheetsBatchReadDataTool(BaseReadTool):
                 api_key="your_api_key",
                 value_render_option=ValueRenderOption.FORMATTED_VALUE,
                 convert_to_records=True,
-                numericise_values=True
+                numericise_values=True,
             )
 
     Invoke directly:
         .. code-block:: python
 
-            result = tool.run({
-                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
-                "convert_to_records": True
-            })
+            result = tool.run(
+                {
+                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
+                    "convert_to_records": True,
+                }
+            )
 
     Invoke with agent:
         .. code-block:: python
 
-            agent.invoke({
-                "input": "Read data from multiple ranges in the spreadsheet"
-            })
+            agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
 
     Returns:
         JSON string containing:
@@ -524,20 +504,50 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
             response = request.execute()
 
-            # Process the response
-            result = {}
-            for i, value_range in enumerate(response.get("valueRanges", [])):
+            # Process the response with enhanced metadata
+            results = []
+            successful_ranges = 0
+            failed_ranges = 0
+            value_ranges = response.get("valueRanges", [])
+
+            for i, value_range in enumerate(value_ranges):
                 range_name = value_range.get("range", f"range_{i}")
                 values = value_range.get("values", [])
+                error = None
 
-                # Process the data
-                processed_data = self._process_data(
-                    values, convert_to_records, numericise_values
+                try:
+                    processed_data = self._process_data(
+                        values, convert_to_records, numericise_values
+                    )
+                    successful_ranges += 1
+                except Exception as e:
+                    processed_data = None
+                    error = str(e)
+                    failed_ranges += 1
+
+                results.append(
+                    {
+                        "range": range_name,
+                        "data": processed_data,
+                        "error": error,
+                    }
                 )
 
-                result[range_name] = processed_data
+            batch_metadata = {
+                "spreadsheet_id": spreadsheet_id,
+                "requested_ranges": ranges,
+                "value_render_option": value_render_option.value,
+                "date_time_render_option": date_time_render_option.value,
+                "major_dimension": major_dimension.value,
+                "convert_to_records": convert_to_records,
+                "numericise_values": numericise_values,
+                "total_ranges": len(ranges),
+                "successful_ranges": successful_ranges,
+                "failed_ranges": failed_ranges,
+                "results": results,
+            }
 
-            return json.dumps(result, indent=2, default=str)
+            return json.dumps(batch_metadata, indent=2, default=str)
 
         except Exception as error:
             raise Exception(f"Error batch reading sheet data: {error}") from error
@@ -598,30 +608,30 @@ class SheetsFilteredReadDataTool(BaseReadTool):
                 credentials_path="path/to/credentials.json",
                 include_grid_data=True,
                 convert_to_records=True,
-                numericise_values=True
+                numericise_values=True,
             )
 
     Invoke directly:
         .. code-block:: python
 
-            result = tool.run({
-                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                "data_filters": [
-                    {
-                        "column_index": 1,
-                        "condition": "NUMBER_GREATER",
-                        "value": "50"
-                    }
-                ],
-                "include_grid_data": True
-            })
+            result = tool.run(
+                {
+                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "data_filters": [
+                        {
+                            "column_index": 1,
+                            "condition": "NUMBER_GREATER",
+                            "value": "50",
+                        }
+                    ],
+                    "include_grid_data": True,
+                }
+            )
 
     Invoke with agent:
         .. code-block:: python
 
-            agent.invoke({
-                "input": "Find all students with scores above 80"
-            })
+            agent.invoke({"input": "Find all students with scores above 80"})
 
     Returns:
         JSON string containing:
@@ -681,6 +691,27 @@ class SheetsFilteredReadDataTool(BaseReadTool):
     )
     args_schema: Type[BaseModel] = FilteredReadSheetDataSchema
 
+    def _convert_to_dict_list(self, items: list) -> list:
+        """Convert a list of items to dictionaries.
+
+        Handles both Pydantic models and dicts.
+
+        Args:
+            items: List of items that may be Pydantic models or dictionaries
+
+        Returns:
+            list: List of dictionaries
+        """
+        result = []
+        for item in items:
+            if hasattr(item, "model_dump"):
+                # It's a Pydantic model, convert to dict
+                result.append(item.model_dump())
+            else:
+                # It's already a dict
+                result.append(item)
+        return result
+
     def _run(
         self,
         spreadsheet_id: str,
@@ -705,14 +736,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
             service = self._get_service()
 
             # Convert DataFilterSchema objects to dictionaries
-            data_filters_dict = []
-            for filter_item in data_filters:
-                if hasattr(filter_item, "model_dump"):
-                    # It's a Pydantic model, convert to dict
-                    data_filters_dict.append(filter_item.model_dump())
-                else:
-                    # It's already a dict
-                    data_filters_dict.append(filter_item)
+            data_filters_dict = self._convert_to_dict_list(data_filters)
 
             # Prepare the request body
             request_body = {

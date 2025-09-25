@@ -46,7 +46,7 @@ def build_sheets_service(
     ]
 
     if use_domain_wide:
-        # Read-only scopes for service accounts
+        # Scopes for domain-wide delegation (can be read-only or read-write)
         default_scopes = [
             "https://www.googleapis.com/auth/spreadsheets.readonly",
             "https://www.googleapis.com/auth/drive.readonly",
