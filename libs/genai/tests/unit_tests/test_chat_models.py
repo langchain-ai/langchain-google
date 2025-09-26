@@ -1261,9 +1261,9 @@ def test_thinking_config_merging_with_generation_config() -> None:
 
         # Should have thinking content first
         assert isinstance(content[0], dict)
-        assert content[0].get("type") == "thinking"
-        assert isinstance(content[0].get("thinking"), str)
-        assert content[0]["thinking"] == "Let me think about this..."
+        assert content[0].get("type") == "reasoning"
+        assert isinstance(content[0].get("reasoning"), str)
+        assert content[0]["reasoning"] == "Let me think about this..."
 
         # Should have regular text content second
         assert isinstance(content[1], str)
