@@ -1,5 +1,4 @@
 from langchain_google_community.bigquery import BigQueryLoader
-from langchain_google_community.bigquery_vector_search import BigQueryVectorSearch
 from langchain_google_community.bq_storage_vectorstores.bigquery import (
     BigQueryVectorStore,
 )
@@ -64,7 +63,6 @@ from langchain_google_community.vision import CloudVisionLoader, CloudVisionPars
 __all__ = [
     "BigQueryLoader",
     "BigQueryVectorStore",
-    "BigQueryVectorSearch",
     "CalendarCreateEvent",
     "CalendarDeleteEvent",
     "CalendarMoveEvent",
