@@ -1128,6 +1128,7 @@ def test_safety_settings_gemini() -> None:
     )
     safety_settings = model._safety_settings_gemini([expected_safety_setting])
     assert safety_settings == [expected_safety_setting]
+    # Ignores for tests that intentionally use invalid dict types
     safety_settings = model._safety_settings_gemini(
         # Ignore since testing string conversion
         {"HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"}  # type: ignore[dict-item]

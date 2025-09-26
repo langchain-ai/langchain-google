@@ -8,12 +8,12 @@ version = "2.1.2"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 license = {text = "MIT"}
-requires-python = ">=3.9.0,<4.0.0"
+requires-python = ">=3.10.0,<4.0.0"
 readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=0.3.76,<2.0.0",
+    "langchain-core>=1.0.0a3,<2.0.0",
     "google-cloud-aiplatform>=1.97.0,<2.0.0",
     "google-cloud-storage>=2.18.0,<3.0.0",
     "httpx>=0.28.0,<1.0.0",
@@ -57,10 +57,10 @@ test = [
     "types-requests>=2.31.0,<3.0.0",
     "types-protobuf>=4.24.0.4,<7.0.0.0",
     "google-api-python-client>=2.117.0,<3.0.0",
-    "langchain>=0.3.27,<2.0.0",
+    "langchain>=1.0.0a5,<2.0.0",
     "anthropic>=0.64.0,<1.0.0",
     "validators>=0.35.0,<1.0.0",
-    "langchain-tests>=0.2.0,<2.0.0",
+    "langchain-tests>=1.0.0a1,<2.0.0",
 ]
 
 test_integration = [
@@ -69,13 +69,14 @@ test_integration = [
     "numpy>=2.1.0; python_version>='3.13'",
     "google-api-python-client>=2.114.0,<3.0.0",
     "google-cloud-datastore>=2.19.0,<3.0.0",
-    "langchain-mistralai>=0.2,<2.0.0",
-    "langchain-tests>=0.2.0,<2.0.0",
+    "langchain-mistralai>=0.2.12,<2.0.0",
+    "langchain-tests>=1.0.0a1,<2.0.0",
 ]
 
 dev = []
 
 [tool.ruff]
+target-version = "py39"
 fix = true
 
 [tool.ruff.format]
