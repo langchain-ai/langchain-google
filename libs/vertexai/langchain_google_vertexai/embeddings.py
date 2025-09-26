@@ -2,7 +2,6 @@ import logging
 import re
 import string
 import threading
-import warnings
 from concurrent.futures import ThreadPoolExecutor, wait
 from enum import Enum, auto
 from functools import cached_property
@@ -17,7 +16,6 @@ from google.api_core.exceptions import (
     ServiceUnavailable,
 )
 from google.cloud.aiplatform import telemetry
-from langchain_core._api.deprecation import deprecated
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
@@ -499,46 +497,6 @@ class VertexAIEmbeddings(_VertexAICommon, Embeddings):
             Embedding for the text.
         """
         return self.embed([text], 1, embeddings_task_type)[0]
-
-    @deprecated(
-        since="2.0.1", removal="3.0.0", alternative="VertexAIEmbeddings.embed_images()"
-    )
-    def embed_image(
-        self,
-        image_path: str,
-        contextual_text: Optional[str] = None,
-        dimensions: Optional[int] = None,
-    ) -> List[float]:
-        """Embed an image.
-
-        Args:
-            image_path: Path to image (Google Cloud Storage or web) to generate
-            embeddings for.
-            contextual_text: Text to generate embeddings for.
-
-        Returns:
-            Embedding for the image.
-        """
-        warnings.warn(
-            "The `embed_image()` API will be deprecated and replaced by \
-            `embed_images()`. Change your usage to \
-            `embed_images([image_path1, image_path2])` and note\
-            that the result returned will be a list of image embeddings."
-        )
-        if self.model_type != GoogleEmbeddingModelType.MULTIMODAL:
-            msg = "Only supported for multimodal models"
-            raise NotImplementedError(msg)
-
-        image_loader = self._image_bytes_loader_client
-        bytes_image = image_loader.load_bytes(image_path)
-        image = Image(bytes_image)
-        result: MultiModalEmbeddingResponse = self.instance[
-            "get_embeddings_with_retry"
-        ](image=image, contextual_text=contextual_text, dimension=dimensions)
-        if result.image_embedding is None:
-            msg = "Failed to generate image embedding"
-            raise ValueError(msg)
-        return result.image_embedding
 
     def embed_images(
         self,
