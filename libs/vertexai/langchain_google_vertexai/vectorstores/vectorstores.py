@@ -8,7 +8,6 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
     NumericNamespace,
 )
 from google.oauth2.service_account import Credentials
-from langchain_core._api.deprecation import deprecated
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
@@ -59,12 +58,6 @@ class _BaseVertexAIVectorStore(VectorStore):
                 category=DeprecationWarning,
             )
         self._embeddings = embeddings or embbedings or self._get_default_embeddings()
-
-    @property
-    @deprecated(since="0.1.0", removal="3.0.0", alternative="embeddings")
-    def embbedings(self) -> Embeddings:
-        """Returns the embeddings object."""
-        return self._embeddings
 
     @property
     def embeddings(self) -> Embeddings:
