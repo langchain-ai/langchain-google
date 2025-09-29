@@ -602,8 +602,6 @@ def _parse_chat_history(
                 }
             )
 
-            # TODO: ensure subsequent processing doesn't mutate/double-process
-
     formatted_messages: List[Content] = []
 
     system_instruction: Optional[Content] = None
@@ -694,6 +692,8 @@ def _parse_chat_history(
             raise ValueError(msg)
 
         # Final step; assemble the Content object to pass to the API
+        # If version = "v1", the parts are already in v1beta format and will be
+        # automatically converted using protobuf's auto-conversion
         formatted_messages.append(Content(role=role, parts=parts))
     return system_instruction, formatted_messages
 
