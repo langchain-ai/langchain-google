@@ -762,6 +762,53 @@ def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> N
                 assert res_kw == exp_kw
 
 
+def test_parse_response_candidate_includes_model_provider() -> None:
+    """Test `_parse_response_candidate` has `model_provider` in `response_metadata`."""
+    raw_candidate = {
+        "content": {"parts": [{"text": "Hello, world!"}]},
+        "finish_reason": 1,
+        "safety_ratings": [],
+    }
+
+    response_candidate = glm.Candidate(raw_candidate)
+    result = _parse_response_candidate(response_candidate)
+
+    assert hasattr(result, "response_metadata")
+    assert result.response_metadata["model_provider"] == "google_genai"
+
+    # Streaming
+    result = _parse_response_candidate(response_candidate, streaming=True)
+
+    assert hasattr(result, "response_metadata")
+    assert result.response_metadata["model_provider"] == "google_genai"
+
+
+def test_parse_response_candidate_includes_model_name() -> None:
+    """Test that _parse_response_candidate includes model_name in response_metadata."""
+    raw_candidate = {
+        "content": {"parts": [{"text": "Hello, world!"}]},
+        "finish_reason": 1,
+        "safety_ratings": [],
+    }
+
+    response_candidate = glm.Candidate(raw_candidate)
+    result = _parse_response_candidate(
+        response_candidate, model_name="gemini-2.5-flash"
+    )
+
+    assert hasattr(result, "response_metadata")
+    assert result.response_metadata["model_provider"] == "google_genai"
+    assert result.response_metadata["model_name"] == "gemini-2.5-flash"
+
+    # No name
+
+    result = _parse_response_candidate(response_candidate)
+
+    assert hasattr(result, "response_metadata")
+    assert result.response_metadata["model_provider"] == "google_genai"
+    assert "model_name" not in result.response_metadata
+
+
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="test-key")
     serialized = dumps(llm)

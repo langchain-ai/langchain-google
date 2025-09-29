@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Type,
     Union,
     cast,
@@ -24,7 +25,7 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
 
@@ -75,6 +76,7 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from vertexai.generative_models import (
+    Candidate as VertexCandidate,
     Tool as VertexTool,  # TODO: migrate to google-genai since this is deprecated
 )
 from vertexai.generative_models._generative_models import (
@@ -610,18 +612,19 @@ def _append_to_content(
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[False] = False
+    response_candidate: Union[Candidate, VertexCandidate],
+    streaming: Literal[False] = False,
 ) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[True]
+    response_candidate: Union[Candidate, VertexCandidate], streaming: Literal[True]
 ) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Union[Candidate, VertexCandidate], streaming: bool = False
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict[str, Any]]]] = None
     additional_kwargs = {}
@@ -637,7 +640,7 @@ def _parse_response_candidate(
         except AttributeError:
             pass
 
-        if part.thought:
+        if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
@@ -696,7 +699,9 @@ def _parse_response_candidate(
 
             if getattr(part, "thought_signature", None):
                 # store dict of {tool_call_id: thought_signature}
-                if isinstance(part.thought_signature, bytes):
+                if hasattr(part, "thought_signature") and isinstance(
+                    part.thought_signature, bytes
+                ):
                     thought_signature = _bytes_to_base64(part.thought_signature)
                     if (
                         _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
@@ -2044,8 +2049,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        # Type conversion handled internally
-        safety_settings = self._safety_settings_gemini(safety_settings)  # type: ignore[assignment]
+        formatted_safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -2113,17 +2117,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                 )
 
-            if safety_settings:
+            if formatted_safety_settings:
                 v1_safety_settings = [
                     v1SafetySetting(
-                        # Ignores needed due to complex union type where mypy cannot
-                        # infer which variant of SafetySetting is being used
-                        # (Different SDK e.g. vertexai vs gapic has same name)
-                        category=s.category,  # type: ignore[union-attr]
-                        method=s.method,  # type: ignore[union-attr]
-                        threshold=s.threshold,  # type: ignore[union-attr]
+                        category=s.category,
+                        method=s.method,
+                        threshold=s.threshold,
                     )
-                    for s in safety_settings
+                    for s in formatted_safety_settings
                 ]
 
         if (self.cached_content is not None) or (cached_content is not None):
@@ -2148,7 +2149,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return GenerateContentRequest(
                 contents=contents,
                 model=self.full_model_name,
-                safety_settings=safety_settings,
+                safety_settings=formatted_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
             )
@@ -2170,7 +2171,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=safety_settings,
+            safety_settings=formatted_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
             labels=self.labels,
@@ -2623,7 +2624,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
 
         Assumes model is compatible with Vertex tool-calling API.
@@ -2666,8 +2667,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            # Using default streaming=False, but mypy can't verify due to type mismatch
-            message = _parse_response_candidate(candidate)  # type: ignore[call-overload]
+            message = _parse_response_candidate(candidate)
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
@@ -2715,8 +2715,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            # Type ignore since mypy infers literal as bool
-            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
+            message = _parse_response_candidate(top_candidate, streaming=True)
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(

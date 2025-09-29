@@ -62,7 +62,11 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LangSmithParams, LanguageModelInput
+from langchain_core.language_models import (
+    LangSmithParams,
+    LanguageModelInput,
+    is_openai_data_block,
+)
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -287,56 +291,61 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     return await _achat_with_retry(**params)
 
 
-def _is_lc_content_block(part: dict) -> bool:
-    return "type" in part
-
-
-def _is_openai_image_block(block: dict) -> bool:
-    """Check if the block contains image data in OpenAI Chat Completions format."""
-    if block.get("type") == "image_url":
-        if (
-            (set(block.keys()) <= {"type", "image_url", "detail"})
-            and (image_url := block.get("image_url"))
-            and isinstance(image_url, dict)
-        ):
-            url = image_url.get("url")
-            if isinstance(url, str):
-                return True
-    else:
-        return False
-
-    return False
-
-
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts a list of LangChain messages into a Google parts."""
-    parts = []
+    """Converts a list of LangChain messages into Google parts."""
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
+
+    parts = []
+    # Iterate over each item in the content list, constructing a list of Parts
     for part in content:
         if isinstance(part, str):
             parts.append(Part(text=part))
-        elif isinstance(part, Mapping):
-            if _is_lc_content_block(part):
+        elif isinstance(part, Mapping):  # e.g. a dict
+            if "type" in part:  # e.g. a LangChain content block
                 if part["type"] == "text":
+                    # Either old dict-style CC text block or new TextContentBlock
                     parts.append(Part(text=part["text"]))
                 elif is_data_content_block(part):
-                    if part["source_type"] == "url":
+                    # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
+
+                    if "source_type" in part:
+                        # Catch legacy v0 formats
+                        # Safe since v1 content blocks don't have `source_type` key
+                        if part["source_type"] == "url":
+                            bytes_ = image_loader._bytes_from_url(part["url"])
+                        elif part["source_type"] == "base64":
+                            bytes_ = base64.b64decode(part["data"])
+                        else:
+                            # Unable to support IDContentBlock
+                            msg = "source_type must be url or base64."
+                            raise ValueError(msg)
+                    elif "url" in part:
+                        # v1 multimodal block w/ URL
                         bytes_ = image_loader._bytes_from_url(part["url"])
-                    elif part["source_type"] == "base64":
-                        bytes_ = base64.b64decode(part["data"])
+                    elif "base64" in part:
+                        # v1 multimodal block w/ base64
+                        bytes_ = base64.b64decode(part["base64"])
                     else:
-                        msg = "source_type must be url or base64."
+                        msg = (
+                            "Data content block must contain 'url', 'base64', or "
+                            "'data' field."
+                        )
                         raise ValueError(msg)
                     inline_data: dict = {"data": bytes_}
                     if "mime_type" in part:
                         inline_data["mime_type"] = part["mime_type"]
                     else:
-                        source = cast("str", part.get("url") or part.get("data"))
+                        # Guess mime type based on data field if not provided
+                        source = cast(
+                            "str",
+                            part.get("url") or part.get("base64") or part.get("data"),
+                        )
                         mime_type, _ = mimetypes.guess_type(source)
                         if not mime_type:
+                            # Last resort - try to guess based on file bytes
                             kind = filetype.guess(bytes_)
                             if kind:
                                 mime_type = kind.mime
@@ -344,6 +353,7 @@ def _convert_to_parts(
                             inline_data["mime_type"] = mime_type
                     parts.append(Part(inline_data=inline_data))
                 elif part["type"] == "image_url":
+                    # Chat Completions image format
                     img_url = part["image_url"]
                     if isinstance(img_url, dict):
                         if "url" not in img_url:
@@ -375,7 +385,28 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
+                elif part["type"] == "thinking":
+                    # Pre-existing thinking block format
+                    parts.append(Part(text=part["thinking"], thought=True))
+                elif part["type"] == "reasoning":
+                    # New ReasoningContentBlock
+
+                    extras = part.get("extras", {}) or {}
+                    sig = extras.get("signature")
+                    # Thought signature isn't stored in a standard key in RCB
+
+                    thought_sig = (
+                        sig.encode("utf-8") if isinstance(sig, str) else sig
+                    )  # API requires bytes
+                    parts.append(
+                        Part(
+                            text=part["reasoning"],
+                            thought=True,
+                            thought_signature=thought_sig,
+                        )
+                    )
                 elif part["type"] == "executable_code":
+                    # TODO: LangChain's native server execution tool block not handled
                     if "executable_code" not in part or "language" not in part:
                         msg = (
                             "Executable code part must have 'code' and 'language' "
@@ -389,6 +420,7 @@ def _convert_to_parts(
                     )
                     parts.append(executable_code_part)
                 elif part["type"] == "code_execution_result":
+                    # TODO: LangChain's native server execution result block not handled
                     if "code_execution_result" not in part:
                         msg = (
                             "Code execution result part must have "
@@ -406,24 +438,17 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(code_execution_result_part)
-                elif part["type"] == "thinking":
-                    parts.append(Part(text=part["thinking"], thought=True))
                 else:
-                    msg = (
-                        f"Unrecognized message part type: {part['type']}. Only text, "
-                        f"image_url, and media types are supported."
-                    )
+                    msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
             else:
-                # Yolo
+                # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
                     "Unrecognized message part format. Assuming it's a text part."
                 )
                 parts.append(Part(text=str(part)))
         else:
-            # TODO: Maybe some of Google's native stuff
-            # would hit this branch.
-            msg = "Gemini only supports text and inline_data parts."
+            msg = "Unknown error occurred while converting LC message content to parts."
             raise ChatGoogleGenerativeAIError(msg)
     return parts
 
@@ -441,7 +466,7 @@ def _convert_tool_message_to_parts(
         other_blocks = []
         for block in message.content:
             if isinstance(block, dict) and (
-                is_data_content_block(block) or _is_openai_image_block(block)
+                is_data_content_block(block) or is_openai_data_block(block)
             ):
                 media_blocks.append(block)
             else:
@@ -589,10 +614,15 @@ def _append_to_content(
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Candidate,
+    streaming: bool = False,
+    model_name: Optional[str] = None,
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict]]] = None
     additional_kwargs: Dict[str, Any] = {}
+    response_metadata: Dict[str, Any] = {"model_provider": "google_genai"}
+    if model_name:
+        response_metadata["model_name"] = model_name
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
@@ -727,12 +757,14 @@ def _parse_response_candidate(
         return AIMessageChunk(
             content=content,
             additional_kwargs=additional_kwargs,
+            response_metadata=response_metadata,
             tool_call_chunks=tool_call_chunks,
         )
 
     return AIMessage(
         content=content,
         additional_kwargs=additional_kwargs,
+        response_metadata=response_metadata,
         tool_calls=tool_calls,
         invalid_tool_calls=invalid_tool_calls,
     )
@@ -1725,7 +1757,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         code_execution: Optional[bool] = None,
         stop: Optional[list[str]] = None,
         **kwargs: Any,
-    ) -> BaseMessage:
+    ) -> AIMessage:
         """Enable code execution. Supported on: gemini-1.5-pro, gemini-1.5-flash,
         gemini-2.0-flash, and gemini-2.0-pro. When enabled, the model can execute
         code to solve problems.
@@ -2246,7 +2278,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
 
         Assumes model is compatible with google-generativeAI tool-calling API.
