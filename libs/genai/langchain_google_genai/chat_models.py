@@ -1168,7 +1168,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 file = client.files.get(name=file.name)
 
             # Create cache
-            model = "models/gemini-1.5-flash-latest"
+            model = "models/gemini-2.5-flash-latest"
             cache = client.caches.create(
                 model=model,
                 config=types.CreateCachedContentConfig(
@@ -1224,7 +1224,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     ],
                 )
             ]
-            model = "gemini-1.5-flash-latest"
+            model = "gemini-2.5-flash-latest"
             cache = client.caches.create(
                 model=model,
                 config=CreateCachedContentConfig(
