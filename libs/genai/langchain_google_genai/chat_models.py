@@ -80,7 +80,6 @@ from langchain_core.messages import (
 )
 from langchain_core.messages import content as types
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
-from langchain_core.messages.content import create_reasoning_block
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
@@ -317,7 +316,19 @@ def _convert_to_parts(
             if "type" in part:
                 if part["type"] == "text":
                     # Either old dict-style CC text block or new TextContentBlock
-                    parts.append(Part(text=part["text"]))
+                    # Check if there's a signature attached to this text block
+                    thought_sig = None
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            # Decode base64-encoded signature back to bytes
+                            thought_sig = base64.b64decode(sig)
+                    if thought_sig:
+                        parts.append(
+                            Part(text=part["text"], thought_signature=thought_sig)
+                        )
+                    else:
+                        parts.append(Part(text=part["text"]))
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
@@ -399,17 +410,32 @@ def _convert_to_parts(
                     parts.append(media_part)
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format
-                    parts.append(Part(text=part["thinking"], thought=True))
+                    thought_sig = None
+                    if "signature" in part:
+                        sig = part["signature"]
+                        if sig and isinstance(sig, str):
+                            # Decode base64-encoded signature back to bytes
+                            thought_sig = base64.b64decode(sig)
+                    parts.append(
+                        Part(
+                            text=part["thinking"],
+                            thought=True,
+                            thought_signature=thought_sig,
+                        )
+                    )
+                elif part["type"] == "function_call_signature":
+                    # Signature for function_call Part - skip it here as it should be
+                    # attached to the actual function_call Part
+                    # This is handled separately in the history parsing logic
+                    pass
                 elif part["type"] == "reasoning":
                     # New ReasoningContentBlock
-
                     extras = part.get("extras", {}) or {}
                     sig = extras.get("signature")
-                    # Thought signature isn't stored in a standard key in RCB
-
-                    thought_sig = (
-                        sig.encode("utf-8") if isinstance(sig, str) else sig
-                    )  # API requires bytes
+                    thought_sig = None
+                    if sig and isinstance(sig, str):
+                        # Decode base64-encoded signature back to bytes
+                        thought_sig = base64.b64decode(sig)
                     parts.append(
                         Part(
                             text=part["reasoning"],
@@ -576,7 +602,7 @@ def _parse_chat_history(
                 }
             )
 
-            # TODO: need to ensure subsequent processing doesn't mutate/double-process
+            # TODO: ensure subsequent processing doesn't mutate/double-process
 
     formatted_messages: List[Content] = []
 
@@ -601,14 +627,36 @@ def _parse_chat_history(
             role = "model"
             if message.tool_calls:
                 ai_message_parts = []
-                for tool_call in message.tool_calls:
+                # Extract any function_call_signature blocks from content
+                function_call_sigs: dict[int, bytes] = {}
+                if isinstance(message.content, list):
+                    for idx, item in enumerate(message.content):
+                        if (
+                            isinstance(item, dict)
+                            and item.get("type") == "function_call_signature"
+                        ):
+                            sig_str = item.get("signature", "")
+                            if sig_str and isinstance(sig_str, str):
+                                # Decode base64-encoded signature back to bytes
+                                sig_bytes = base64.b64decode(sig_str)
+                                function_call_sigs[idx] = sig_bytes
+
+                for tool_call_idx, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         {
                             "name": tool_call["name"],
                             "args": tool_call["args"],
                         }
                     )
-                    ai_message_parts.append(Part(function_call=function_call))
+                    # Check if there's a signature for this function call
+                    # (We use the index to match signature to function call)
+                    sig = function_call_sigs.get(tool_call_idx)
+                    if sig:
+                        ai_message_parts.append(
+                            Part(function_call=function_call, thought_signature=sig)
+                        )
+                    else:
+                        ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
                     tool_messages=tool_messages, ai_message=message
                 )
@@ -695,18 +743,40 @@ def _parse_response_candidate(
         except AttributeError:
             pass
 
+        # Extract thought signature if present (can be on any Part type)
+        # Signatures are binary data, encode to base64 string for JSON serialization
+        thought_sig: Optional[str] = None
+        if hasattr(part, "thought_signature") and part.thought_signature:
+            try:
+                # Encode binary signature to base64 string
+                thought_sig = base64.b64encode(part.thought_signature).decode("ascii")
+                if not thought_sig:  # Empty string
+                    thought_sig = None
+            except (AttributeError, TypeError):
+                thought_sig = None
+
         if hasattr(part, "thought") and part.thought:
-            reasoning_block = create_reasoning_block(
-                reasoning=part.text,
-                signature=(
-                    part.thought_signature.decode("utf-8")
-                    if hasattr(part, "thought_signature")
-                    else ""
-                ),
-            )
-            content = _append_to_content(content, reasoning_block)
+            thinking_message = {
+                "type": "thinking",
+                "thinking": part.text,
+            }
+            # Include signature if present
+            if thought_sig:
+                thinking_message["signature"] = thought_sig
+            content = _append_to_content(content, thinking_message)
         elif text is not None and text:
-            content = _append_to_content(content, text)
+            # Check if this text Part has a signature attached
+            if thought_sig:
+                # Text with signature needs structured block to preserve signature
+                # We use a v1 TextContentBlock
+                text_with_sig = {
+                    "type": "text",
+                    "text": text,
+                    "extras": {"signature": thought_sig},
+                }
+                content = _append_to_content(content, text_with_sig)
+            else:
+                content = _append_to_content(content, text)
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
@@ -811,6 +881,15 @@ def _parse_response_candidate(
                             id=tool_call_dict.get("id", str(uuid.uuid4())),
                         )
                     )
+
+            # If this function_call Part has a signature, add it as a content block
+            # This preserves the signature with the Part for round-tripping
+            if thought_sig:
+                sig_block = {
+                    "type": "function_call_signature",
+                    "signature": thought_sig,
+                }
+                content = _append_to_content(content, sig_block)
     if content is None:
         content = ""
     if isinstance(content, list) and any(

@@ -291,8 +291,8 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
 
     if output_version == "v0":
         assert isinstance(content[0], dict)
-        assert content[0].get("type") == "reasoning"
-        assert isinstance(content[0].get("reasoning"), str)
+        assert content[0].get("type") == "thinking"
+        assert isinstance(content[0].get("thinking"), str)
 
         assert isinstance(content[1], str)
 
@@ -305,9 +305,8 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
         ):
             assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
-        # Test we can pass back in
-        next_message = {"role": "user", "content": "Thanks!"}
-        _ = llm.invoke([input_message, result, next_message])
+        # We don't test passing back in here as it's covered in the next test
+        # (Google requires function declaration)
     else:
         # v1
         assert isinstance(content, list)
@@ -322,9 +321,127 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
 
         _check_usage_metadata(result)
 
-        # Test we can pass back in
+        # We don't test passing back in here as it's covered in the next test
+        # (Google requires function declaration)
+
+
+@pytest.mark.flaky(retries=5, delay=1)
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_chat_google_genai_invoke_thinking_with_tools(
+    output_version: str,
+) -> None:
+    """Test thinking with function calling to get thought signatures.
+
+    Ensure we can pass the response back in.
+    """
+
+    @tool
+    def analyze_weather(location: str, date: str) -> dict:
+        """Analyze weather patterns for a location on a specific date.
+
+        Args:
+            location: The city or region to analyze.
+            date: The date in YYYY-MM-DD format.
+
+        Returns:
+            A dictionary with weather analysis.
+        """
+        return {
+            "location": location,
+            "date": date,
+            "temperature": "72F",
+            "conditions": "sunny",
+            "analysis": "Pleasant weather expected",
+        }
+
+    llm = ChatGoogleGenerativeAI(
+        model=_THINKING_MODEL, include_thoughts=True, output_version=output_version
+    )
+    llm_with_tools = llm.bind_tools([analyze_weather])
+
+    input_message = {
+        "role": "user",
+        "content": (
+            "I'm planning a trip to Paris. Should I check the weather for "
+            "tomorrow (2025-01-22) before deciding what to pack? "
+            "Please think through whether you need to use the weather tool, "
+            "and if so, use it to help me decide."
+        ),
+    }
+
+    result = llm_with_tools.invoke([input_message])
+
+    assert isinstance(result, AIMessage)
+    content = result.content
+
+    response_metadata = result.response_metadata
+    model_provider = response_metadata.get("model_provider", "google_genai")
+    assert model_provider == "google_genai"
+
+    if output_version == "v0":
+        # v0 format:
+        # Signatures are attached to function_call Parts, not thinking Parts.
+        # They appear as separate function_call_signature blocks in content.
+        # [{"type": "thinking", "thinking": "..."},
+        #  {"type": "function_call_signature", "signature": "..."}]
+
+        # Check for thinking blocks (should exist)
+        thinking_blocks = [
+            item
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "thinking"
+        ]
+        assert thinking_blocks, "Should have thinking blocks when include_thoughts=True"
+
+        # Check for function_call_signature blocks (not in thinking blocks)
+        signature_blocks = [
+            item
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "function_call_signature"
+        ]
+        if signature_blocks:
+            # Signature should be present when using function calling
+            assert "signature" in signature_blocks[0]
+            assert isinstance(signature_blocks[0]["signature"], str)
+            assert len(signature_blocks[0]["signature"]) > 0
+
+        # Test we can pass the result back in (with signature)
         next_message = {"role": "user", "content": "Thanks!"}
-        _ = llm.invoke([input_message, result, next_message])
+        _ = llm_with_tools.invoke([input_message, result, next_message])
+    else:
+        # v1 format:
+        # Signatures are attached to function_call Parts, not reasoning Parts.
+        # They appear as separate function_call_signature blocks in content.
+        # [{"type": "reasoning", "reasoning": "..."},
+        #  {"type": "function_call_signature", "signature": "..."}]
+        assert isinstance(content, list)
+
+        # Check for reasoning blocks (should exist)
+        reasoning_blocks = [
+            block
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "reasoning"
+        ]
+        assert reasoning_blocks, (
+            "Should have reasoning blocks when include_thoughts=True"
+        )
+
+        # Check for function_call_signature blocks (not in reasoning blocks)
+        signature_blocks = [
+            block
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "function_call_signature"
+        ]
+        if signature_blocks:
+            # Signature should be present when using function calling
+            assert "signature" in signature_blocks[0]
+            assert isinstance(signature_blocks[0]["signature"], str)
+            assert len(signature_blocks[0]["signature"]) > 0
+
+        # Test we can pass the result back in (with signature)
+        next_message = {"role": "user", "content": "Thanks!"}
+        _ = llm_with_tools.invoke([input_message, result, next_message])
 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:

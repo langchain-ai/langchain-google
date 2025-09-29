@@ -148,29 +148,23 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
         # ReasoningContentBlock -> thinking
         elif block_dict["type"] == "reasoning" and model_provider == "google_genai":
-            # Google requires passing back the thought_signature. Thus, we don't attempt
-            # to convert non-Google reasoning blocks
+            # Google requires passing back the thought_signature when available.
+            # Signatures are only provided when function calling is enabled.
+            # If no signature is available, we skip the reasoning block as it cannot
+            # be properly serialized back to the API.
             if "extras" in block_dict and isinstance(block_dict["extras"], dict):
                 extras = block_dict["extras"]
-                new_block = {
-                    "thought": True,
-                    "text": block_dict.get("reasoning", ""),
-                }
                 if "signature" in extras:
-                    new_block["thought_signature"] = extras["signature"]
-                else:
-                    # Shouldn't hit this case
-                    msg = "Signature required to pass though back into Google GenAI."
-                    raise ValueError(msg)
-
-                new_content.append(new_block)
-            else:
-                # TODO: may consider making this a warning instead of raising an error
-                msg = (
-                    "ReasoningContentBlock to thinking conversion requires "
-                    "`extras.signature` field for Google GenAI."
-                )
-                raise ValueError(msg)
+                    new_block = {
+                        "thought": True,
+                        "text": block_dict.get("reasoning", ""),
+                        "thought_signature": extras["signature"],
+                    }
+                    new_content.append(new_block)
+                # else: skip reasoning blocks without signatures
+                # TODO: log a warning?
+            # else: skip reasoning blocks without extras
+            # TODO: log a warning?
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
