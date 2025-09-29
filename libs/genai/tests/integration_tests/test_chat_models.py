@@ -26,7 +26,7 @@ from langchain_google_genai import (
     Modality,
 )
 
-_MODEL = "models/gemini-1.5-flash-latest"
+_MODEL = "models/gemini-2.5-flash"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
 _AUDIO_OUTPUT_MODEL = "models/gemini-2.5-flash-preview-tts"
@@ -402,7 +402,7 @@ def test_chat_google_genai_single_call_with_history() -> None:
 
 @pytest.mark.parametrize(
     ("model_name", "convert_system_message_to_human"),
-    [(_MODEL, True), ("models/gemini-1.5-pro-latest", False)],
+    [(_MODEL, True), ("models/gemini-2.5-pro", False)],
 )
 def test_chat_google_genai_system_message(
     model_name: str, convert_system_message_to_human: bool
@@ -477,9 +477,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
-    llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-pro-latest", safety_settings=safety
-    )
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-pro", safety_settings=safety)
     llm_with_search = llm.bind(
         functions=tools,
     )
@@ -518,7 +516,10 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     result = llm_with_search.invoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
-    assert "brown" in result.content
+    content_str = (
+        result.content if isinstance(result.content, str) else str(result.content)
+    )
+    assert "brown" in content_str.lower()
 
 
 # TODO: check .content_blocks result
@@ -698,7 +699,7 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) -> None:
     """Test invoke/ainvoke and stream/astream without event loop."""
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
     if use_streaming:
         if is_async:
