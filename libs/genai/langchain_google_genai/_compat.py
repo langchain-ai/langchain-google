@@ -217,7 +217,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                         "mime_type": block_dict.get(
                             "mime_type", "application/octet-stream"
                         ),
-                        "file_uri": block_dict[url],
+                        "file_uri": block_dict[str(url)],
                     }
                 }
                 new_content.append(new_block)

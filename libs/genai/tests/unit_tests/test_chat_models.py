@@ -1510,7 +1510,7 @@ def test_content_blocks_translation_with_mixed_image_content() -> None:
             },
         },
     ]
-    msg = AIMessage(content=mixed_content)
+    msg = AIMessage(content=mixed_content)  # type: ignore[arg-type]
     msg.response_metadata = {"model_provider": "google_genai"}
 
     content_blocks = msg.content_blocks
