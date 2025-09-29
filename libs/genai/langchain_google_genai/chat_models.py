@@ -717,13 +717,8 @@ def _parse_response_candidate(
             audio_data = buffer.getvalue()
             additional_kwargs["audio"] = audio_data
 
-            # Create audio content block for content_blocks property
-            audio_message = {
-                "type": "audio",
-                "audio": base64.b64encode(audio_data).decode("utf-8"),
-                "mime_type": part.inline_data.mime_type,
-            }
-            content = _append_to_content(content, audio_message)
+            # For backwards compatibility, audio stays in additional_kwargs by default
+            # and is accessible via .content_blocks property
 
         if (
             hasattr(part, "inline_data")
