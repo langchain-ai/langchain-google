@@ -318,6 +318,7 @@ def _convert_to_parts(
                     parts.append(Part(text=part["text"]))
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and standard v1
+
                     if "source_type" in part:
                         # Catch legacy v0 formats (Base64CB, URLCB, IDCB)
                         # v1 content blocks won't have top-level a `source_type` key
@@ -375,9 +376,9 @@ def _convert_to_parts(
                         # Currently Google doesn't have a equivalent of OpenAI's
                         # `detail` field for images, so we ignore it if present.
                     parts.append(image_loader.load_part(img_url))
-                # Handle media type like LangChain.js
-                # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                 elif part["type"] == "media":
+                    # Handle `media` following pattern established in LangChain.js
+                    # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                     if "mime_type" not in part:
                         msg = f"Missing mime_type in media part: {part}"
                         raise ValueError(msg)
@@ -385,10 +386,12 @@ def _convert_to_parts(
                     media_part = Part()
 
                     if "data" in part:
+                        # Embedded media
                         media_part.inline_data = Blob(
                             data=part["data"], mime_type=mime_type
                         )
                     elif "file_uri" in part:
+                        # Referenced files (e.g. stored in GCS)
                         media_part.file_data = FileData(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
