@@ -696,7 +696,7 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) -> None:
     """Test invoke/ainvoke and stream/astream without event loop."""
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-latest")
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
     if use_streaming:
         if is_async:
