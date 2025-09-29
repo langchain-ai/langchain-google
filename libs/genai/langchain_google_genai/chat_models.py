@@ -301,6 +301,8 @@ def _convert_to_parts(
 ) -> List[Part]:
     """Converts LangChain message content into generativelanguage_v1beta parts.
 
+    Used when preparing Human, System and AI messages for sending to the API.
+
     Handles both legacy (pre-v1) dict-based content blocks and v1 ContentBlock objects.
     """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
@@ -531,7 +533,20 @@ def _get_ai_message_tool_messages_parts(
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
-    """Converts sequence of LangChain messages to generativelanguage_v1beta content."""
+    """Parses sequence of `BaseMessage` into system instruction and formatted messages.
+
+    Args:
+        input_messages: Sequence of `BaseMessage` objects representing the chat history.
+        convert_system_message_to_human: Whether to convert the first system message
+            into a human message. Deprecated, use system instructions instead.
+
+    Returns:
+        A tuple containing:
+        - An optional `google.ai.generativelanguage_v1beta.types.Content` representing
+            the system instruction (if any).
+        - A list of `google.ai.generativelanguage_v1beta.types.Content` representing the
+            formatted messages.
+    """
 
     if convert_system_message_to_human:
         warnings.warn(
@@ -542,11 +557,13 @@ def _parse_chat_history(
         )
     input_messages = list(input_messages)  # Make a mutable copy
     for idx, message in enumerate(input_messages):
-        # Translate v1 content
         if (
             isinstance(message, AIMessage)
             and message.response_metadata.get("output_version") == "v1"
         ):
+            # Unpack known v1 content to v1beta format for the request
+            # Old content types and any previously serialized messages passed back in to
+            # history will skip this, but hit and processed in `_convert_to_parts`
             input_messages[idx] = message.model_copy(
                 update={
                     "content": _convert_from_v1_to_generativelanguage_v1beta(
@@ -2215,7 +2232,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ]
         request = GenerateContentRequest(
             model=self.model,
-            contents=history,
+            contents=history,  # google.ai.generativelanguage_v1beta.types.Content
             tools=formatted_tools,
             tool_config=formatted_tool_config,
             safety_settings=formatted_safety_settings,

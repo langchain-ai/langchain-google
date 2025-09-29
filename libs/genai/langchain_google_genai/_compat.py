@@ -123,78 +123,76 @@ def translate_citations_to_grounding_metadata(
 def _convert_from_v1_to_generativelanguage_v1beta(
     content: list[types.ContentBlock], model_provider: str | None
 ) -> list[dict[str, Any]]:
-    """Convert from v1 content blocks to generativelanguage_v1beta format.
+    """Convert v1 content blocks to `google.ai.generativelanguage_v1beta.types.Content`.
 
     Args:
         content: List of v1 `ContentBlock` objects.
         model_provider: The model provider name that generated the v1 content.
+
+    Returns:
+        List of dictionaries in `google.ai.generativelanguage_v1beta.types.Content`
+        format, ready to be sent to the API.
     """
     new_content: list = []
     for block in content:
         if not isinstance(block, dict) or "type" not in block:
-            # Invalid block, skip or handle as needed
             continue
 
-        block_dict = dict(block)  # For typing
+        block_dict = dict(block)  # (For typing)
 
         # TextContentBlock
         if block_dict["type"] == "text":
-            new_block = {"type": "text", "text": block_dict.get("text", "")}
-
-            # Handle annotations (citations) -> grounding metadata
-            if "annotations" in block_dict:
-                if model_provider != "google_genai":
-                    msg = (
-                        "Annotations to grounding metadata conversion is only "
-                        "supported for Google GenAI."
-                    )
-                    raise ValueError(msg)
-                    # TODO: at some point, support other providers if possible
-
-                # TODO: complete this, use `translate_citations_to_grounding_metadata`
-
-                # Note: Google AI doesn't support per-block grounding metadata in input
-                # This is typically handled at the message/request level
-                pass
-
+            new_block = {"text": block_dict.get("text", "")}
             new_content.append(new_block)
+            # Citations are only handled on output. We can't pass them back as of now...
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
             if base64 := block_dict.get("base64"):
-                mime_type = block_dict.get("mime_type", "image/jpeg")  # Default to jpeg
-
                 new_block = {
                     "inline_data": {
-                        "mime_type": mime_type,
+                        "mime_type": block_dict.get("mime_type", "image/jpeg"),
                         "data": base64.encode("utf-8")
                         if isinstance(base64, str)
                         else base64,
                     }
                 }
                 new_content.append(new_block)
-            # URL and file-ID based images are not directly supported in Google GenAI
-            # They must be made into a Part with inline_data
-            else:
-                new_content.append({"type": "non_standard", "value": block_dict})
+            elif url := block_dict.get("url") and model_provider == "google_genai":
+                # Google file service
+                new_block = {
+                    "file_data": {
+                        "mime_type": block_dict.get("mime_type", "image/jpeg"),
+                        "file_uri": block_dict[url],
+                    }
+                }
+                new_content.append(new_block)
 
         # FileContentBlock (documents)
         elif block_dict["type"] == "file":
-            # Google GenAI typically uses inline_data for file content
             if base64 := block_dict.get("base64"):
-                mime_type = block_dict.get("mime_type", "application/octet-stream")
-
                 new_block = {
                     "inline_data": {
-                        "mime_type": mime_type,
+                        "mime_type": block_dict.get(
+                            "mime_type", "application/octet-stream"
+                        ),
                         "data": base64.encode("utf-8")
                         if isinstance(base64, str)
                         else base64,
                     }
                 }
                 new_content.append(new_block)
-            else:
-                new_content.append({"type": "non_standard", "value": block_dict})
+            elif url := block_dict.get("url") and model_provider == "google_genai":
+                # Google file service
+                new_block = {
+                    "file_data": {
+                        "mime_type": block_dict.get(
+                            "mime_type", "application/octet-stream"
+                        ),
+                        "file_uri": block_dict[url],
+                    }
+                }
+                new_content.append(new_block)
 
         # ToolCall -> FunctionCall
         elif block_dict["type"] == "tool_call":
@@ -222,23 +220,24 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             }
             new_content.append(function_call)
 
-        # ReasoningContentBlock -> thinking (if Google GenAI)
+        # ReasoningContentBlock -> thinking
         elif block_dict["type"] == "reasoning" and model_provider == "google_genai":
             # If you want to continue a conversation and preserve thought context, you
-            # must pass back the thought_signature, not just the text. Thus, we can't
-            # just pass the reasoning text as-is.
-
-            # TODO: consider a mode where we interpret ReasoningContentBlock as a
-            # TextContentBlock instead (prefixed with "Thought: " or similar?)
-            new_block = {
-                "type": "thinking",
-                "thinking": block_dict.get("reasoning", ""),
-            }
+            # must pass back the thought_signature
             # Signature is required to pass back to Google GenAI
             if "extras" in block_dict and isinstance(block_dict["extras"], dict):
                 extras = block_dict["extras"]
+                new_block = {
+                    "thought": True,
+                    "text": block_dict.get("text", ""),
+                }
                 if "signature" in extras:
-                    new_block["signature"] = extras["signature"]
+                    new_block["thought_signature"] = extras["signature"]
+                else:
+                    msg = "Signature required to pass though back into Google GenAI."
+                    raise ValueError(msg)
+
+                new_content.append(new_block)
             else:
                 msg = (
                     "ReasoningContentBlock to thinking conversion requires "
@@ -246,42 +245,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 )
                 raise ValueError(msg)
 
-            new_content.append(new_block)
-
         # NonStandardContentBlock
-        # TODO: Handle known non-standard types
-        elif block_dict["type"] == "non_standard" and "value" in block_dict:
-            value = block_dict["value"]
-            if isinstance(value, dict):
-                value_type = value.get("type")
-
-                if value_type == "executable_code":
-                    new_content.append(
-                        {
-                            "type": "executable_code",
-                            "executable_code": value.get("executable_code", ""),
-                            "language": value.get("language", ""),
-                        }
-                    )
-                elif value_type == "code_execution_result":
-                    new_content.append(
-                        {
-                            "type": "code_execution_result",
-                            "code_execution_result": value.get(
-                                "code_execution_result", ""
-                            ),
-                            "outcome": value.get("outcome", ""),
-                        }
-                    )
-                else:
-                    # Unknown non-standard, keep as is
-                    new_content.append(value)
-            else:
-                # Non-dict value, keep as is
-                new_content.append(value)
-
-        else:
-            # For any other block types, preserve as non-standard wrapper
-            new_content.append({"type": "non_standard", "value": block_dict})
+        # TODO: Handle new server tools
 
     return new_content
