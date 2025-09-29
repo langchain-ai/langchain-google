@@ -314,14 +314,14 @@ def _convert_to_parts(
         elif isinstance(part, Mapping):  # e.g. a dict
             if "type" in part:  # e.g. a LangChain content block
                 if part["type"] == "text":
-                    # Either old text block or TextContentBlock
+                    # Either old dict-style CC text block or new TextContentBlock
                     parts.append(Part(text=part["text"]))
                 elif is_data_content_block(part):
-                    # Handle both legacy LC blocks (with `source_type`) and standard v1
+                    # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
                     if "source_type" in part:
-                        # Catch legacy v0 formats (Base64CB, URLCB, IDCB)
-                        # v1 content blocks won't have top-level a `source_type` key
+                        # Catch legacy v0 formats
+                        # Safe since v1 content blocks don't have `source_type` key
                         if part["source_type"] == "url":
                             bytes_ = image_loader._bytes_from_url(part["url"])
                         elif part["source_type"] == "base64":
@@ -331,17 +331,12 @@ def _convert_to_parts(
                             msg = "source_type must be url or base64."
                             raise ValueError(msg)
                     elif "url" in part:
-                        # Standard Data block format using URL
+                        # v1 multimodal block w/ URL
                         bytes_ = image_loader._bytes_from_url(part["url"])
                     elif "base64" in part:
-                        # Standard Data block format using base64
+                        # v1 multimodal block w/ base64
                         bytes_ = base64.b64decode(part["base64"])
-                    elif "data" in part:
-                        # Alternative base64 format unknown to us
-                        # (This branch likely will never be hit)
-                        bytes_ = base64.b64decode(part["data"])
                     else:
-                        # `is_data_content_block` validates this, but just in case
                         msg = (
                             "Data content block must contain 'url', 'base64', or "
                             "'data' field."
@@ -373,8 +368,6 @@ def _convert_to_parts(
                             msg = f"Unrecognized message image format: {img_url}"
                             raise ValueError(msg)
                         img_url = img_url["url"]
-                        # Currently Google doesn't have a equivalent of OpenAI's
-                        # `detail` field for images, so we ignore it if present.
                     parts.append(image_loader.load_part(img_url))
                 elif part["type"] == "media":
                     # Handle `media` following pattern established in LangChain.js
@@ -402,7 +395,28 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
+                elif part["type"] == "thinking":
+                    # Pre-existing thinking block format
+                    parts.append(Part(text=part["thinking"], thought=True))
+                elif part["type"] == "reasoning":
+                    # New ReasoningContentBlock
+
+                    extras = part.get("extras", {}) or {}
+                    sig = extras.get("signature")
+                    # Thought signature isn't stored in a standard key in RCB
+
+                    thought_sig = (
+                        sig.encode("utf-8") if isinstance(sig, str) else sig
+                    )  # API requires bytes
+                    parts.append(
+                        Part(
+                            text=part["reasoning"],
+                            thought=True,
+                            thought_signature=thought_sig,
+                        )
+                    )
                 elif part["type"] == "executable_code":
+                    # TODO: LangChain's native server execution tool block not handled
                     if "executable_code" not in part or "language" not in part:
                         msg = (
                             "Executable code part must have 'code' and 'language' "
@@ -416,6 +430,7 @@ def _convert_to_parts(
                     )
                     parts.append(executable_code_part)
                 elif part["type"] == "code_execution_result":
+                    # TODO: LangChain's native server execution result block not handled
                     if "code_execution_result" not in part:
                         msg = (
                             "Code execution result part must have "
@@ -433,35 +448,17 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(code_execution_result_part)
-                elif part["type"] == "thinking":
-                    # Deprecated thinking type (v0 LangChain)
-                    parts.append(Part(text=part["thinking"], thought=True))
-                elif part["type"] == "reasoning":
-                    extras = part.get("extras", {}) or {}
-                    sig = extras.get("signature")
-                    thought_sig = sig.encode("utf-8") if isinstance(sig, str) else sig
-                    parts.append(
-                        Part(
-                            text=part["reasoning"],
-                            thought=True,
-                            thought_signature=thought_sig,  # API requires bytes
-                        )
-                    )
                 else:
-                    msg = (
-                        f"Unrecognized message part type: {part['type']}. Only text, "
-                        f"image_url, and media types are supported."
-                    )
+                    msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
             else:
-                # Yolo. This doesn't have `type` and is thus likely not a content block
+                # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
                     "Unrecognized message part format. Assuming it's a text part."
                 )
                 parts.append(Part(text=str(part)))
         else:
-            # Maybe some of Google's native stuff would hit this branch?
-            msg = "Gemini only supports text and inline_data parts."
+            msg = "Unknown error occurred while converting LC message content to parts."
             raise ChatGoogleGenerativeAIError(msg)
     return parts
 
