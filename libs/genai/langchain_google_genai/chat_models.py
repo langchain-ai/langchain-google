@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import base64 as _b64
 import io
 import json
 import logging
@@ -407,7 +408,18 @@ def _convert_to_parts(
                     )
                     parts.append(code_execution_result_part)
                 elif part["type"] == "thinking":
-                    parts.append(Part(text=part["thinking"], thought=True))
+                    sig = part.get("signature")
+                    if isinstance(sig, (bytes, bytearray)):
+                        sig = bytes(sig)
+                    elif isinstance(sig, str):
+                        try:
+                            sig = _b64.b64decode(sig, validate=False)
+                        except Exception:
+                            # Fallback: utf-8 encode
+                            sig = sig.encode("utf-8")  # type: ignore[union-attr]
+                    parts.append(
+                        Part(text=part["thinking"], thought=True, thought_signature=sig)
+                    )
                 else:
                     msg = (
                         f"Unrecognized message part type: {part['type']}. Only text, "
@@ -613,7 +625,49 @@ def _parse_response_candidate(
                 "type": "thinking",
                 "thinking": part.text,
             }
+            sig_bytes = getattr(part, "thought_signature", None)
+            # Only returned when both thinking and function calling are enabled
+            if sig_bytes is not None:
+                # If this happens to have a signature, even if empty, capture
+                # Typically in practice it comes in a second block (next conditional)
+                try:
+                    sig_b64 = _b64.b64encode(sig_bytes).decode("ascii")
+                except Exception:
+                    # As a fallback, stringify bytes; base64 is preferred for stability.
+                    sig_b64 = str(sig_bytes)
+                thinking_message["signature"] = sig_b64
+                if isinstance(additional_kwargs, dict):
+                    # Keep the latest thought signature for fast access
+                    additional_kwargs.setdefault("reasoning", {})
+                    additional_kwargs["reasoning"]["thought_signature_b64"] = sig_b64
             content = _append_to_content(content, thinking_message)
+        elif (
+            hasattr(part, "thought_signature")
+            and getattr(part, "thought_signature", None) is not None
+            and len(getattr(part, "thought_signature", b"")) > 0
+        ):
+            sig_bytes = getattr(part, "thought_signature", None)
+            if sig_bytes is not None:
+                try:
+                    sig_b64 = _b64.b64encode(sig_bytes).decode("ascii")
+                except Exception:
+                    sig_b64 = str(sig_bytes)
+
+                # Update the most recent thinking message if one exists
+                if isinstance(content, list) and len(content) > 0:
+                    for i in range(len(content) - 1, -1, -1):
+                        content_item = content[i]
+                        if (
+                            isinstance(content_item, dict)
+                            and content_item.get("type") == "thinking"
+                        ):
+                            content_item["signature"] = sig_b64
+                            if isinstance(additional_kwargs, dict):
+                                additional_kwargs.setdefault("reasoning", {})
+                                additional_kwargs["reasoning"][
+                                    "thought_signature_b64"
+                                ] = sig_b64
+                            break
         elif text is not None and text:
             content = _append_to_content(content, text)
 
