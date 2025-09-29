@@ -516,7 +516,10 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     result = llm_with_search.invoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
-    assert "brown" in result.content
+    content_str = (
+        result.content if isinstance(result.content, str) else str(result.content)
+    )
+    assert "brown" in content_str.lower()
 
 
 # TODO: check .content_blocks result
