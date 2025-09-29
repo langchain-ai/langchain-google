@@ -263,8 +263,6 @@ def test_chat_google_genai_invoke_thinking() -> None:
         assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
-# TODO: parametrize this test to use output_version=v1 and then assert `content` is
-# proper ReasoningContentBlock with google-specific thinking fields in `extras`
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts(
     output_version: str,
@@ -570,7 +568,6 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     assert "brown" in result.content
 
 
-# TODO: check .content_blocks result
 def test_chat_vertexai_gemini_function_calling() -> None:
     """Test function calling with Gemini models.
 
@@ -632,6 +629,13 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     arguments_str = tool_call_chunk["args"]
     arguments = json.loads(str(arguments_str))
     _check_tool_call_args(arguments)
+
+    # Test .content_blocks property
+    content_blocks = response.content_blocks
+    assert isinstance(content_blocks, list)
+    assert len(content_blocks) == 1
+    assert isinstance(content_blocks[0], dict)
+    assert content_blocks[0].get("type") == "tool_call"
 
 
 @pytest.mark.parametrize(
