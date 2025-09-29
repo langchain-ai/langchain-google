@@ -26,7 +26,7 @@ from langchain_google_genai import (
     Modality,
 )
 
-_MODEL = "models/gemini-1.5-flash-latest"
+_MODEL = "models/gemini-2.5-flash-latest"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
 _AUDIO_OUTPUT_MODEL = "models/gemini-2.5-flash-preview-tts"
@@ -690,7 +690,7 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) -> None:
     """Test invoke/ainvoke and stream/astream without event loop."""
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-latest")
 
     if use_streaming:
         if is_async:
