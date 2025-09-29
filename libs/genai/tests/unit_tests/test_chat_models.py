@@ -1495,7 +1495,7 @@ def test_chat_google_genai_image_content_blocks() -> None:
 
 
 def test_content_blocks_translation_with_mixed_image_content() -> None:
-    """Test _convert_to_v1_from_genai_input with mixed image and text content."""
+    """Test converting with mixed image and text content."""
     mixed_content = [
         "Here is the image you requested:",
         {
