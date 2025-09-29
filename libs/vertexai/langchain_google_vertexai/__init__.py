@@ -56,14 +56,6 @@ from langchain_google_vertexai.evaluators.evaluation import (
 from langchain_google_vertexai.functions_utils import (
     PydanticFunctionsOutputParser,
 )
-from langchain_google_vertexai.gemma import (
-    GemmaChatLocalHF,
-    GemmaChatLocalKaggle,
-    GemmaChatVertexAIModelGarden,
-    GemmaLocalHF,
-    GemmaLocalKaggle,
-    GemmaVertexAIModelGarden,
-)
 from langchain_google_vertexai.llms import VertexAI
 from langchain_google_vertexai.model_garden import VertexAIModelGarden
 from langchain_google_vertexai.model_garden_maas import get_vertex_maas_model
@@ -89,12 +81,6 @@ __all__ = [
     "FunctionCallingConfig",
     "FunctionDeclaration",
     "GCSDocumentStorage",
-    "GemmaChatLocalHF",
-    "GemmaChatLocalKaggle",
-    "GemmaChatVertexAIModelGarden",
-    "GemmaLocalHF",
-    "GemmaLocalKaggle",
-    "GemmaVertexAIModelGarden",
     "HarmBlockThreshold",
     "HarmCategory",
     "Modality",
