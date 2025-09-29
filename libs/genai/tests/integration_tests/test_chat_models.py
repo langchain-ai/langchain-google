@@ -199,30 +199,22 @@ def test_chat_google_genai_invoke_with_audio() -> None:
     _check_usage_metadata(result)
 
 
-def test_chat_google_genai_invoke_thinking_default() -> None:
-    """Test invoke thinking model with default thinking config."""
-    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
+@pytest.mark.parametrize(
+    ("thinking_budget", "test_description"),
+    [
+        (None, "default thinking config"),
+        (100, "explicit thinking budget"),
+    ],
+)
+def test_chat_google_genai_invoke_thinking(
+    thinking_budget: Optional[int], test_description: str
+) -> None:
+    """Test invoke thinking model with different thinking budget configurations."""
+    llm_kwargs: dict[str, Union[str, int]] = {"model": _THINKING_MODEL}
+    if thinking_budget is not None:
+        llm_kwargs["thinking_budget"] = thinking_budget
 
-    result = llm.invoke(
-        "How many O's are in Google? Please tell me how you double checked the result",
-    )
-
-    assert isinstance(result, AIMessage)
-    assert isinstance(result.content, str)
-
-    _check_usage_metadata(result)
-
-    assert result.usage_metadata is not None
-    if (
-        "output_token_details" in result.usage_metadata
-        and "reasoning" in result.usage_metadata["output_token_details"]
-    ):
-        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
-
-
-def test_chat_google_genai_invoke_thinking() -> None:
-    """Test invoke thinking model with `thinking_budget`."""
-    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=100)
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
 
     result = llm.invoke(
         "How many O's are in Google? Please tell me how you double checked the result",
