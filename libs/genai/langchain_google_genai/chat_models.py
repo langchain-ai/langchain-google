@@ -731,6 +731,8 @@ def _parse_response_candidate(
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
+    # Track function call signatures separately to handle them conditionally
+    function_call_signatures: List[dict] = []
 
     for part in response_candidate.content.parts:
         text: Optional[str] = None
@@ -882,14 +884,22 @@ def _parse_response_candidate(
                         )
                     )
 
-            # If this function_call Part has a signature, add it as a content block
-            # This preserves the signature with the Part for round-tripping
+            # If this function_call Part has a signature, track it separately
+            # We'll add it to content only if there's other content present
             if thought_sig:
                 sig_block = {
                     "type": "function_call_signature",
                     "signature": thought_sig,
                 }
-                content = _append_to_content(content, sig_block)
+                function_call_signatures.append(sig_block)
+
+    # Add function call signatures to content only if there's already other content
+    # This preserves backward compatibility where content is "" for
+    # function-only responses
+    if function_call_signatures and content is not None:
+        for sig_block in function_call_signatures:
+            content = _append_to_content(content, sig_block)
+
     if content is None:
         content = ""
     if isinstance(content, list) and any(
