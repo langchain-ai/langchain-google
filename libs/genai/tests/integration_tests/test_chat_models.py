@@ -26,7 +26,7 @@ from langchain_google_genai import (
     Modality,
 )
 
-_MODEL = "models/gemini-2.5-flash-latest"
+_MODEL = "models/gemini-2.5-flash"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
 _AUDIO_OUTPUT_MODEL = "models/gemini-2.5-flash-preview-tts"
@@ -394,7 +394,7 @@ def test_chat_google_genai_single_call_with_history() -> None:
 
 @pytest.mark.parametrize(
     ("model_name", "convert_system_message_to_human"),
-    [(_MODEL, True), ("models/gemini-1.5-pro-latest", False)],
+    [(_MODEL, True), ("models/gemini-2.5-pro", False)],
 )
 def test_chat_google_genai_system_message(
     model_name: str, convert_system_message_to_human: bool
@@ -469,9 +469,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
-    llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-pro-latest", safety_settings=safety
-    )
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-pro", safety_settings=safety)
     llm_with_search = llm.bind(
         functions=tools,
     )

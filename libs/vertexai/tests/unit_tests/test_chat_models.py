@@ -1078,7 +1078,7 @@ def test_parser_multiple_tools() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-1.5-pro", project="test-project")
+        model = ChatVertexAI(model_name="gemini-2.5-pro", project="test-project")
         message = HumanMessage(content="Hello")
         parser = PydanticToolsParser(tools=[Add, Multiply])
         llm = model | parser
@@ -1287,7 +1287,7 @@ def test_parse_chat_history_gemini_without_literal_eval() -> None:
 
 def test_init_client_with_custom_api_endpoint() -> None:
     config = {
-        "model": "gemini-1.5-pro",
+        "model": "gemini-2.5-pro",
         "api_endpoint": "https://example.com",
         "api_transport": "rest",
     }
@@ -1310,7 +1310,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
 
 def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
     config = {
-        "model": "gemini-1.5-pro",
+        "model": "gemini-2.5-pro",
         "base_url": "https://example.com",
         "api_transport": "rest",
     }
