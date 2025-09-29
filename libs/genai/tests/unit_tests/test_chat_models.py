@@ -27,12 +27,15 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.messages.block_translators.google_genai import (
+    _convert_to_v1_from_genai,
+)
 from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
-from langchain_google_genai import HarmBlockThreshold, HarmCategory
+from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     _chat_with_retry,
@@ -1408,3 +1411,185 @@ def test_modalities_override_in_generation_config() -> None:
 
         # Verify that the _generate method was called
         mock_generate.assert_called_once()
+
+
+def test_chat_google_genai_image_content_blocks() -> None:
+    """Test generating an image with mocked response and content_blocks translation."""
+    mock_response = GenerateContentResponse(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Meow!"},
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/png",
+                                    "data": base64.b64decode(
+                                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf"
+                                        "FcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+                                    ),
+                                }
+                            },
+                        ]
+                    },
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 10,
+                "candidates_token_count": 5,
+                "total_token_count": 15,
+            },
+        }
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-2.5-flash",
+        google_api_key=SecretStr("test-key"),
+    )
+
+    with patch.object(llm.client, "generate_content", return_value=mock_response):
+        result = llm.invoke(
+            "Say 'meow!' and then Generate an image of a cat.",
+            generation_config={
+                "top_k": 2,
+                "top_p": 1,
+                "temperature": 0.7,
+                "response_modalities": ["TEXT", "IMAGE"],
+            },
+        )
+
+    assert isinstance(result, AIMessage)
+    assert isinstance(result.content, list)
+    assert isinstance(result.content[0], str)
+    assert isinstance(result.content[1], dict)
+    assert result.content[1].get("type") == "image_url"
+    assert not result.content[0].startswith(" ")
+
+    content_blocks = result.content_blocks
+    assert len(content_blocks) == 2
+
+    text_block = content_blocks[0]
+    assert text_block["type"] == "text"
+    assert isinstance(text_block["text"], str)
+
+    image_block = content_blocks[1]
+    assert isinstance(image_block, dict)
+    assert image_block["type"] == "image"
+    assert "base64" in image_block
+    assert "mime_type" in image_block
+    assert image_block["mime_type"] == "image/png"
+    assert image_block["base64"] == (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDw"
+        "AChwGA60e6kgAAAABJRU5ErkJggg=="
+    )
+
+    # Pre-v1 we returned images using chat completions format. This translation logic
+    # is already covered by unit tests in langchain core, but we add a simple test here
+    # to ensure our translator function is wired up correctly
+    image_blocks_v1 = _convert_to_v1_from_genai(result)
+    assert len(image_blocks_v1) == 2
+    assert image_blocks_v1[0] == text_block
+    assert image_blocks_v1[1] == image_block
+
+
+def test_content_blocks_translation_with_mixed_image_content() -> None:
+    """Test _convert_to_v1_from_genai_input with mixed image and text content."""
+    mixed_content = [
+        "Here is the image you requested:",
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": base64.b64encode(
+                    base64.b64decode(
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+                        "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+                    )
+                ).decode(),
+            },
+        },
+    ]
+    msg = AIMessage(content=mixed_content)
+    msg.response_metadata = {"model_provider": "google_genai"}
+
+    content_blocks = msg.content_blocks
+
+    assert len(content_blocks) == 2
+
+    # First block should be text
+    text_block = content_blocks[0]
+    assert text_block["type"] == "text"
+    assert text_block["text"] == "Here is the image you requested:"
+
+    # Second block should be ImageContentBlock
+    image_block = content_blocks[1]
+    assert image_block["type"] == "image"
+    assert "base64" in image_block
+
+
+def test_chat_google_genai_invoke_with_audio_mocked() -> None:
+    """Test generating audio with mocked response and content_blocks translation."""
+    mock_response = GenerateContentResponse(
+        {
+            "candidates": [
+                {
+                    # Empty content when audio is in additional_kwargs
+                    "content": {"parts": []},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 10,
+                "candidates_token_count": 5,
+                "total_token_count": 15,
+            },
+        }
+    )
+
+    wav_bytes = (  # (minimal WAV header)
+        b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
+        b"\x44\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-2.5-flash-preview-tts",
+        google_api_key=SecretStr("test-key"),
+        response_modalities=[Modality.AUDIO],
+    )
+
+    with patch.object(llm.client, "generate_content", return_value=mock_response):
+        with patch(
+            "langchain_google_genai.chat_models._parse_response_candidate"
+        ) as mock_parse:
+            mock_parse.return_value = AIMessage(
+                content="",
+                additional_kwargs={"audio": wav_bytes},
+                usage_metadata={
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15,
+                },
+                response_metadata={"model_provider": "google_genai"},
+            )
+
+            result = llm.invoke(
+                "Please say The quick brown fox jumps over the lazy dog",
+            )
+
+    assert isinstance(result, AIMessage)
+    assert result.content == ""
+    audio_data = result.additional_kwargs.get("audio")
+    assert isinstance(audio_data, bytes)
+    assert len(audio_data) >= 12
+    assert audio_data[0:4] == b"RIFF"
+    assert audio_data[8:12] == b"WAVE"
+
+    # Test content_blocks translation to AudioContentBlock
+    blocks = result.content_blocks
+    audio_blocks = [block for block in blocks if block["type"] == "audio"]
+    assert len(audio_blocks) >= 1
+    audio_block = audio_blocks[0]
+    assert audio_block["type"] == "audio"
+    assert "base64" in audio_block
+    assert audio_block["base64"] == base64.b64encode(wav_bytes).decode()

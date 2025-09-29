@@ -144,7 +144,33 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         if block_dict["type"] == "text":
             new_block = {"text": block_dict.get("text", "")}
             new_content.append(new_block)
-            # Citations are only handled on output. We can't pass them back as of now...
+            # Citations are only handled on output. Can't pass them back :/
+
+        # ReasoningContentBlock -> thinking
+        elif block_dict["type"] == "reasoning" and model_provider == "google_genai":
+            # Google requires passing back the thought_signature. Thus, we don't attempt
+            # to convert non-Google reasoning blocks
+            if "extras" in block_dict and isinstance(block_dict["extras"], dict):
+                extras = block_dict["extras"]
+                new_block = {
+                    "thought": True,
+                    "text": block_dict.get("reasoning", ""),
+                }
+                if "signature" in extras:
+                    new_block["thought_signature"] = extras["signature"]
+                else:
+                    # Shouldn't hit this case
+                    msg = "Signature required to pass though back into Google GenAI."
+                    raise ValueError(msg)
+
+                new_content.append(new_block)
+            else:
+                # TODO: may consider making this a warning instead of raising an error
+                msg = (
+                    "ReasoningContentBlock to thinking conversion requires "
+                    "`extras.signature` field for Google GenAI."
+                )
+                raise ValueError(msg)
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
@@ -163,10 +189,12 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 new_block = {
                     "file_data": {
                         "mime_type": block_dict.get("mime_type", "image/jpeg"),
-                        "file_uri": block_dict[url],
+                        "file_uri": block_dict[str(url)],
                     }
                 }
                 new_content.append(new_block)
+
+        # TODO: AudioContentBlock -> audio once models support passing back in
 
         # FileContentBlock (documents)
         elif block_dict["type"] == "file":
@@ -219,31 +247,6 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 }
             }
             new_content.append(function_call)
-
-        # ReasoningContentBlock -> thinking
-        elif block_dict["type"] == "reasoning" and model_provider == "google_genai":
-            # If you want to continue a conversation and preserve thought context, you
-            # must pass back the thought_signature
-            # Signature is required to pass back to Google GenAI
-            if "extras" in block_dict and isinstance(block_dict["extras"], dict):
-                extras = block_dict["extras"]
-                new_block = {
-                    "thought": True,
-                    "text": block_dict.get("text", ""),
-                }
-                if "signature" in extras:
-                    new_block["thought_signature"] = extras["signature"]
-                else:
-                    msg = "Signature required to pass though back into Google GenAI."
-                    raise ValueError(msg)
-
-                new_content.append(new_block)
-            else:
-                msg = (
-                    "ReasoningContentBlock to thinking conversion requires "
-                    "`extras.signature` field for Google GenAI."
-                )
-                raise ValueError(msg)
 
         # NonStandardContentBlock
         # TODO: Handle new server tools

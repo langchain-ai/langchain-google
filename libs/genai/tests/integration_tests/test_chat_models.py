@@ -26,7 +26,7 @@ from langchain_google_genai import (
     Modality,
 )
 
-_MODEL = "models/gemini-1.5-flash-latest"
+_MODEL = "models/gemini-2.5-flash"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
 _AUDIO_OUTPUT_MODEL = "models/gemini-2.5-flash-preview-tts"
@@ -141,8 +141,6 @@ async def test_chat_google_genai_invoke(is_async: bool) -> None:
     _check_usage_metadata(result)
 
 
-# TODO: assert calling .content_blocks translates outcome to ImageContentBlock
-# but do this in unit tests in langchain-core
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_image() -> None:
     """Test generating an image and then text from ChatGoogleGenerativeAI.
@@ -179,9 +177,23 @@ def test_chat_google_genai_invoke_with_image() -> None:
     assert not result.content[0].startswith(" ")
     _check_usage_metadata(result)
 
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm.invoke([result, next_message])
 
-# TODO: assert calling .content_blocks translates outcome to AudioContentBlock
-# but do this in unit tests in langchain-core
+    # Test content_blocks property
+    content_blocks = result.content_blocks
+    assert isinstance(content_blocks, list)
+    assert len(content_blocks) == 2
+    assert isinstance(content_blocks[0], dict)
+    assert content_blocks[0].get("type") == "text"
+    assert isinstance(content_blocks[1], dict)
+    assert content_blocks[1].get("type") == "image"
+
+    # Test we can pass back in content_blocks
+    _ = llm.invoke(["What's this?", {"role": "assistant", "content": content_blocks}])
+
+
 def test_chat_google_genai_invoke_with_audio() -> None:
     """Test generating audio from ChatGoogleGenerativeAI."""
     llm = ChatGoogleGenerativeAI(
@@ -197,6 +209,16 @@ def test_chat_google_genai_invoke_with_audio() -> None:
     assert isinstance(audio_data, bytes)
     assert get_wav_type_from_bytes(audio_data)
     _check_usage_metadata(result)
+
+    # Test content_blocks property
+    content_blocks = result.content_blocks
+    assert isinstance(content_blocks, list)
+    assert len(content_blocks) == 1
+    assert isinstance(content_blocks[0], dict)
+    assert content_blocks[0].get("type") == "audio"
+
+    # Test we can pass back in
+    # TODO: no model currently supports audio input
 
 
 def test_chat_google_genai_invoke_thinking_default() -> None:
@@ -243,9 +265,14 @@ def test_chat_google_genai_invoke_thinking() -> None:
 
 # TODO: parametrize this test to use output_version=v1 and then assert `content` is
 # proper ReasoningContentBlock with google-specific thinking fields in `extras`
-def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_chat_google_genai_invoke_thinking_include_thoughts(
+    output_version: str,
+) -> None:
     """Test invoke thinking model with `include_thoughts` on the chat model."""
-    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
+    llm = ChatGoogleGenerativeAI(
+        model=_THINKING_MODEL, include_thoughts=True, output_version=output_version
+    )
 
     input_message = {
         "role": "user",
@@ -260,24 +287,46 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
     assert isinstance(result, AIMessage)
     content = result.content
 
-    assert isinstance(content[0], dict)
-    assert content[0].get("type") == "reasoning"
-    assert isinstance(content[0].get("reasoning"), str)
+    response_metadata = result.response_metadata
+    model_provider = response_metadata.get("model_provider", "google_genai")
+    assert model_provider == "google_genai"
 
-    assert isinstance(content[1], str)
+    if output_version == "v0":
+        assert isinstance(content[0], dict)
+        assert content[0].get("type") == "reasoning"
+        assert isinstance(content[0].get("reasoning"), str)
 
-    _check_usage_metadata(result)
+        assert isinstance(content[1], str)
 
-    assert result.usage_metadata is not None
-    if (
-        "output_token_details" in result.usage_metadata
-        and "reasoning" in result.usage_metadata["output_token_details"]
-    ):
-        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+        _check_usage_metadata(result)
 
-    # Test we can pass back in
-    next_message = {"role": "user", "content": "Thanks!"}
-    _ = llm.invoke([input_message, result, next_message])
+        assert result.usage_metadata is not None
+        if (
+            "output_token_details" in result.usage_metadata
+            and "reasoning" in result.usage_metadata["output_token_details"]
+        ):
+            assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+
+        # Test we can pass back in
+        next_message = {"role": "user", "content": "Thanks!"}
+        _ = llm.invoke([input_message, result, next_message])
+    else:
+        # v1
+        assert isinstance(content, list)
+        assert len(content) == 2
+        assert isinstance(content[0], dict)
+        assert content[0].get("type") == "reasoning"
+        assert isinstance(content[0].get("reasoning"), str)
+
+        assert isinstance(content[1], dict)
+        assert content[1].get("type") == "text"
+        assert isinstance(content[1].get("text"), str)
+
+        _check_usage_metadata(result)
+
+        # Test we can pass back in
+        next_message = {"role": "user", "content": "Thanks!"}
+        _ = llm.invoke([input_message, result, next_message])
 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
@@ -723,9 +772,6 @@ def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) ->
             invoke_result = model.invoke("How can you help me?")
 
         assert isinstance(invoke_result, AIMessage)
-
-
-# TODO: in unit tests, translate to new content blocks in langchain-core
 
 
 @pytest.mark.parametrize("use_streaming", [False, True])

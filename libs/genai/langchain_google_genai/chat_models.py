@@ -313,8 +313,8 @@ def _convert_to_parts(
     for part in content:
         if isinstance(part, str):
             parts.append(Part(text=part))
-        elif isinstance(part, Mapping):  # e.g. a dict
-            if "type" in part:  # e.g. a LangChain content block
+        elif isinstance(part, Mapping):
+            if "type" in part:
                 if part["type"] == "text":
                     # Either old dict-style CC text block or new TextContentBlock
                     parts.append(Part(text=part["text"]))
@@ -556,12 +556,15 @@ def _parse_chat_history(
             stacklevel=2,
         )
     input_messages = list(input_messages)  # Make a mutable copy
+
+    # Case where content was serialized to v1 format
     for idx, message in enumerate(input_messages):
         if (
             isinstance(message, AIMessage)
             and message.response_metadata.get("output_version") == "v1"
         ):
             # Unpack known v1 content to v1beta format for the request
+            #
             # Old content types and any previously serialized messages passed back in to
             # history will skip this, but hit and processed in `_convert_to_parts`
             input_messages[idx] = message.model_copy(
@@ -572,6 +575,8 @@ def _parse_chat_history(
                     )
                 }
             )
+
+            # TODO: need to ensure subsequent processing doesn't mutate/double-process
 
     formatted_messages: List[Content] = []
 
@@ -621,7 +626,12 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             else:
-                parts = _convert_to_parts(message.content)
+                if message.response_metadata.get("output_version") == "v1":
+                    # Already converted to v1beta format above
+                    parts = message.content  # type: ignore[assignment]
+                else:
+                    # Prepare request content parts from message.content field
+                    parts = _convert_to_parts(message.content)
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content)
@@ -635,6 +645,7 @@ def _parse_chat_history(
             msg = f"Unexpected message with type {type(message)} at the position {i}."
             raise ValueError(msg)
 
+        # Final step; assemble the Content object to pass to the API
         formatted_messages.append(Content(role=role, parts=parts))
     return system_instruction, formatted_messages
 
@@ -689,8 +700,8 @@ def _parse_response_candidate(
                 reasoning=part.text,
                 signature=(
                     part.thought_signature.decode("utf-8")
-                    if part.thought_signature
-                    else None
+                    if hasattr(part, "thought_signature")
+                    else ""
                 ),
             )
             content = _append_to_content(content, reasoning_block)
@@ -1829,11 +1840,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> AIMessage:
-        """Enable code execution. Supported on: gemini-1.5-pro, gemini-1.5-flash,
-        gemini-2.0-flash, and gemini-2.0-pro. When enabled, the model can execute
-        code to solve problems.
+        """Override invoke to add code_execution parameter.
+
+        Supported on: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, and
+        gemini-2.0-pro. When enabled, the model can execute code to solve problems.
         """
-        """Override invoke to add code_execution parameter."""
 
         if code_execution is not None:
             if not self._supports_code_execution:
