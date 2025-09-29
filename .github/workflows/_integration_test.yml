@@ -7,8 +7,9 @@ on:
         required: true
         type: string
       python-version:
-        required: true
+        required: false
         type: string
+        default: "3.13"
         description: "Python version to use"
 
 permissions:
