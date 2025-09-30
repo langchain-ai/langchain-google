@@ -316,15 +316,15 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
 
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     endpoint_id: str
-    "A name of an endpoint where the model has been deployed."
+    """A name of an endpoint where the model has been deployed."""
     allowed_model_args: Optional[List[str]] = None
-    "Allowed optional args to be passed to the model."
+    """Allowed optional args to be passed to the model."""
     prompt_arg: str = "prompt"
     result_arg: Optional[str] = "generated_text"
-    "Set result_arg to None if output of the model is expected to be a string."
-    "Otherwise, if it's a dict, provided an argument that contains the result."
+    """Set result_arg to None if output of the model is expected to be a string.
+    Otherwise, if it's a dict, provided an argument that contains the result."""
     single_example_per_request: bool = True
-    "LLM endpoint currently serves only the first example in the request"
+    """LLM endpoint currently serves only the first example in the request"""
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
