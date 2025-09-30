@@ -58,6 +58,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -934,8 +935,11 @@ def _parse_response_candidate(
 def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
     """Extract grounding metadata from candidate.
 
-    Uses `proto.Message.to_dict()` for complete unfiltered extraction first,
-    falls back to custom field extraction in cases of failure for robustness.
+    core's block translator converts this metadata into citation annotations.
+
+    Uses `MessageToDict` for complete unfiltered extraction.
+
+    Falls back to custom field extraction in cases of failure for robustness.
     """
     if not hasattr(candidate, "grounding_metadata") or not candidate.grounding_metadata:
         return {}
@@ -943,12 +947,26 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
     grounding_metadata = candidate.grounding_metadata
 
     try:
-        return proto.Message.to_dict(grounding_metadata)
-    except (AttributeError, TypeError):
-        # Fallback: field extraction
+        # proto-plus wraps protobuf messages - access ._pb to get the raw protobuf
+        # message that MessageToDict expects
+        pb_message = (
+            grounding_metadata._pb
+            if hasattr(grounding_metadata, "_pb")
+            else grounding_metadata
+        )
+
+        return MessageToDict(  # type: ignore[call-arg]
+            pb_message,
+            preserving_proto_field_name=True,
+            always_print_fields_with_no_presence=True,
+            # type stub issue - ensures that protobuf fields with default values
+            # (like start_index=0) are included in the output
+        )
+    except (AttributeError, TypeError, ImportError):
+        # Attempt manual extraction of known fields
         result: Dict[str, Any] = {}
 
-        # Extract grounding chunks
+        # Grounding chunks
         if hasattr(grounding_metadata, "grounding_chunks"):
             grounding_chunks = []
             for chunk in grounding_metadata.grounding_chunks:
@@ -961,7 +979,7 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
                 grounding_chunks.append(chunk_data)
             result["grounding_chunks"] = grounding_chunks
 
-        # Extract grounding supports
+        # Grounding supports
         if hasattr(grounding_metadata, "grounding_supports"):
             grounding_supports = []
             for support in grounding_metadata.grounding_supports:
@@ -984,7 +1002,7 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
                 grounding_supports.append(support_data)
             result["grounding_supports"] = grounding_supports
 
-        # Extract web search queries
+        # Web search queries
         if hasattr(grounding_metadata, "web_search_queries"):
             result["web_search_queries"] = list(grounding_metadata.web_search_queries)
 
@@ -1057,15 +1075,6 @@ def _response_to_result(
         generation_info["grounding_metadata"] = grounding_metadata
         message = _parse_response_candidate(candidate, streaming=stream)
 
-        # Transfer grounding metadata to message for block translator access needed for
-        # citations
-        if generation_info.get("grounding_metadata"):
-            # Store grounding metadata on message for block translator
-            setattr(
-                message,
-                "generation_info",
-                {"grounding_metadata": generation_info["grounding_metadata"]},
-            )
         message.usage_metadata = lc_usage
 
         if not hasattr(message, "response_metadata"):

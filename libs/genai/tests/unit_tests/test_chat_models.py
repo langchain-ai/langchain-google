@@ -946,6 +946,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
                                         "start_index": 0,
                                         "end_index": 13,
                                         "text": "Test response",
+                                        "part_index": 0,
                                     },
                                     "grounding_chunk_indices": [0],
                                     "confidence_scores": [0.95],
@@ -1016,6 +1017,271 @@ def test_response_to_result_grounding_metadata(
             else {}
         )
         assert grounding_metadata == expected_grounding_metadata
+
+
+def test_grounding_metadata_to_citations_conversion() -> None:
+    """Test grounding metadata is properly converted to citations in content blocks."""
+
+    raw_response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": (
+                                "Spain won the UEFA Euro 2024 championship by "
+                                "defeating England 2-1 in the final."
+                            )
+                        }
+                    ]
+                },
+                "grounding_metadata": {
+                    "grounding_chunks": [
+                        {
+                            "web": {
+                                "uri": "https://uefa.com/euro2024",
+                                "title": "UEFA Euro 2024 Results",
+                            }
+                        },
+                        {
+                            "web": {
+                                "uri": "https://bbc.com/sport/football",
+                                "title": "BBC Sport Football",
+                            }
+                        },
+                    ],
+                    "grounding_supports": [
+                        {
+                            "segment": {
+                                "start_index": 0,
+                                "end_index": 40,
+                                "text": "Spain won the UEFA Euro 2024 championship",
+                                "part_index": 0,
+                            },
+                            "grounding_chunk_indices": [0],
+                            "confidence_scores": [0.95],
+                        },
+                        {
+                            "segment": {
+                                "start_index": 41,
+                                "end_index": 78,
+                                "text": "by defeating England 2-1 in the final",
+                                "part_index": 0,
+                            },
+                            "grounding_chunk_indices": [0, 1],
+                            "confidence_scores": [0.92, 0.88],
+                        },
+                    ],
+                    "web_search_queries": [
+                        "UEFA Euro 2024 winner",
+                        "Euro 2024 final score",
+                    ],
+                },
+            }
+        ],
+        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "usage_metadata": {
+            "prompt_token_count": 10,
+            "candidates_token_count": 20,
+            "total_token_count": 30,
+        },
+    }
+
+    response = GenerateContentResponse(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    assert len(result.generations) == 1
+    message = result.generations[0].message
+
+    assert "grounding_metadata" in message.response_metadata
+
+    # Verify grounding metadata structure uses snake_case
+    gm = message.response_metadata["grounding_metadata"]
+    assert "grounding_chunks" in gm
+    assert "grounding_supports" in gm
+    assert "web_search_queries" in gm
+
+    # Verify all required fields are present with correct casing
+    assert len(gm["grounding_chunks"]) == 2
+    assert len(gm["grounding_supports"]) == 2
+
+    # Verify first support has all fields including start_index
+    first_support = gm["grounding_supports"][0]
+    assert "segment" in first_support
+    assert "start_index" in first_support["segment"]
+    assert first_support["segment"]["start_index"] == 0
+    assert "end_index" in first_support["segment"]
+    assert "grounding_chunk_indices" in first_support
+    assert "confidence_scores" in first_support
+
+    content_blocks = message.content_blocks
+    text_blocks_with_citations = [
+        block
+        for block in content_blocks
+        if block.get("type") == "text" and block.get("annotations")
+    ]
+    assert len(text_blocks_with_citations) > 0, "Expected citations in text blocks"
+
+    for block in text_blocks_with_citations:
+        annotations = block.get("annotations", [])
+        citations = [ann for ann in annotations if ann.get("type") == "citation"]  # type: ignore[attr-defined]
+        assert len(citations) > 0, "Expected at least one citation"
+
+        for citation in citations:
+            assert citation.get("type") == "citation"
+            assert "id" in citation
+            if "url" in citation:
+                assert isinstance(citation["url"], str)
+
+
+def test_empty_grounding_metadata_no_citations() -> None:
+    """Test that empty grounding metadata doesn't create citations."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [{"text": "This is a response without grounding."}]
+                },
+                "grounding_metadata": {},
+            }
+        ],
+        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 8,
+            "total_token_count": 13,
+        },
+    }
+
+    response = GenerateContentResponse(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    message = result.generations[0].message
+    content_blocks = message.content_blocks
+
+    text_blocks_with_citations = [
+        block
+        for block in content_blocks
+        if block.get("type") == "text" and block.get("annotations")
+    ]
+
+    assert len(text_blocks_with_citations) == 0
+
+
+def test_grounding_metadata_missing_optional_fields() -> None:
+    """Test handling of grounding metadata with missing optional fields."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Sample text"}]},
+                "grounding_metadata": {
+                    "grounding_chunks": [
+                        {
+                            "web": {
+                                "uri": "https://example.com",
+                                # Missing 'title'
+                            }
+                        }
+                    ],
+                    "grounding_supports": [
+                        {
+                            "segment": {
+                                # Missing 'text'
+                                "start_index": 0,
+                                "end_index": 11,
+                                "part_index": 0,
+                            },
+                            "grounding_chunk_indices": [0],
+                        }
+                    ],
+                    # Missing 'web_search_queries' (optional field)
+                },
+            }
+        ],
+        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 3,
+            "total_token_count": 8,
+        },
+    }
+
+    response = GenerateContentResponse(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    message = result.generations[0].message
+
+    # Verify grounding metadata is present even with missing optional fields
+    assert "grounding_metadata" in message.response_metadata
+    gm = message.response_metadata["grounding_metadata"]
+
+    # Verify structure is correct (snake_case from MessageToDict)
+    assert "grounding_chunks" in gm
+    assert "grounding_supports" in gm
+
+    # Verify optional fields can be missing
+    chunk = gm["grounding_chunks"][0]
+    assert "web" in chunk
+    assert "uri" in chunk["web"]
+    # Title is missing, which is OK
+
+    support = gm["grounding_supports"][0]
+    assert "segment" in support
+    # Text is missing from segment, which is OK
+    assert "start_index" in support["segment"]
+    assert "end_index" in support["segment"]
+
+    # web_search_queries is optional and missing in this test
+
+
+def test_grounding_metadata_multiple_parts() -> None:
+    """Test grounding metadata with multiple content parts."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {"text": "First part. "},
+                        {"text": "Second part with citation."},
+                    ]
+                },
+                "grounding_metadata": {
+                    "grounding_chunks": [
+                        {"web": {"uri": "https://example.com", "title": "Example"}}
+                    ],
+                    "grounding_supports": [
+                        {
+                            "segment": {
+                                "start_index": 12,  # Points to second part
+                                "end_index": 38,
+                                "text": "Second part with citation",
+                                "part_index": 1,  # Indicates which part
+                            },
+                            "grounding_chunk_indices": [0],
+                        }
+                    ],
+                },
+            }
+        ],
+        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "usage_metadata": {
+            "prompt_token_count": 10,
+            "candidates_token_count": 10,
+            "total_token_count": 20,
+        },
+    }
+
+    response = GenerateContentResponse(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    message = result.generations[0].message
+
+    # Verify grounding metadata is present
+    assert "grounding_metadata" in message.response_metadata
+    grounding = message.response_metadata["grounding_metadata"]
+    # grounding metadata from proto.Message.to_dict() uses snake_case
+    assert len(grounding["grounding_supports"]) == 1
+    assert grounding["grounding_supports"][0]["segment"]["part_index"] == 1
 
 
 @pytest.mark.parametrize(

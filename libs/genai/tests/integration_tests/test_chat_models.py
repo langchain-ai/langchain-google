@@ -935,6 +935,127 @@ def test_search_builtin(use_streaming: bool) -> None:
 
 
 @pytest.mark.parametrize("use_streaming", [False, True])
+def test_search_builtin_with_citations(use_streaming: bool) -> None:
+    """Test that citations are properly extracted from grounding metadata."""
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").bind_tools(
+        [{"google_search": {}}]
+    )
+    input_message = {
+        "role": "user",
+        "content": "Who won the 2024 UEFA Euro championship? Use search/citations.",
+    }
+
+    if use_streaming:
+        full: Optional[BaseMessageChunk] = None
+        for chunk in llm.stream([input_message]):
+            assert isinstance(chunk, AIMessageChunk)
+            full = chunk if full is None else full + chunk
+        assert isinstance(full, AIMessageChunk)
+
+        assert "grounding_metadata" in full.response_metadata
+        grounding = full.response_metadata["grounding_metadata"]
+
+        assert "grounding_chunks" in grounding or "grounding_chunks" in grounding
+        assert "grounding_supports" in grounding or "grounding_supports" in grounding
+
+        content_blocks = full.content_blocks
+        text_blocks_with_citations = [
+            block
+            for block in content_blocks
+            if block.get("type") == "text" and block.get("annotations")
+        ]
+
+        assert len(text_blocks_with_citations) > 0, (
+            "Expected citations in text block if grounding metadata present"
+        )
+
+        for block in text_blocks_with_citations:
+            annotations = block.get("annotations", [])
+            citations = [
+                ann
+                for ann in annotations  # type: ignore[attr-defined]
+                if annotations and ann.get("type") == "citation"
+            ]
+
+            for citation in citations:
+                # Required fields
+                assert citation.get("type") == "citation"
+                assert "id" in citation
+
+                # Optional but expected fields from Google AI
+                if "url" in citation:
+                    assert isinstance(citation["url"], str)
+                    assert citation["url"].startswith("http")
+                if "title" in citation:
+                    assert isinstance(citation["title"], str)
+                if "start_index" in citation:
+                    assert isinstance(citation["start_index"], int)
+                    assert citation["start_index"] >= 0
+                if "end_index" in citation:
+                    assert isinstance(citation["end_index"], int)
+                    assert citation["end_index"] > citation.get("start_index", 0)
+                if "cited_text" in citation:
+                    assert isinstance(citation["cited_text"], str)
+                if "extras" in citation:
+                    google_metadata = citation["extras"].get("google_ai_metadata", {})
+                    if google_metadata:
+                        assert isinstance(google_metadata, dict)
+    else:
+        # Test invoke
+        response = llm.invoke([input_message])
+        assert isinstance(response, AIMessage)
+
+        assert "grounding_metadata" in response.response_metadata
+        grounding = response.response_metadata["grounding_metadata"]
+
+        assert "grounding_chunks" in grounding or "grounding_chunks" in grounding
+        assert "grounding_supports" in grounding or "grounding_supports" in grounding
+
+        content_blocks = response.content_blocks
+        text_blocks_with_citations = [
+            block
+            for block in content_blocks
+            if block.get("type") == "text" and block.get("annotations")
+        ]
+
+        assert len(text_blocks_with_citations) > 0, (
+            "Expected citations in text blocks if grounding metadata present"
+        )
+
+        for block in text_blocks_with_citations:
+            block_annotations = block.get("annotations", [])
+            citations = [
+                ann
+                for ann in block_annotations  # type: ignore[attr-defined]
+                if ann.get("type") == "citation"
+            ]
+
+            for citation in citations:
+                # Required fields
+                assert citation.get("type") == "citation"
+                assert "id" in citation
+
+                # Optional but expected fields from Google AI
+                if "url" in citation:
+                    assert isinstance(citation["url"], str)
+                    assert citation["url"].startswith("http")
+                if "title" in citation:
+                    assert isinstance(citation["title"], str)
+                if "start_index" in citation:
+                    assert isinstance(citation["start_index"], int)
+                    assert citation["start_index"] >= 0
+                if "end_index" in citation:
+                    assert isinstance(citation["end_index"], int)
+                    assert citation["end_index"] > citation.get("start_index", 0)
+                if "cited_text" in citation:
+                    assert isinstance(citation["cited_text"], str)
+                if "extras" in citation:
+                    google_metadata = citation["extras"].get("google_ai_metadata", {})
+                    if google_metadata:
+                        assert isinstance(google_metadata, dict)
+
+
+@pytest.mark.parametrize("use_streaming", [False, True])
 def test_code_execution_builtin(use_streaming: bool) -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
         [{"code_execution": {}}]
