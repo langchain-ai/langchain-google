@@ -409,8 +409,13 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
+                elif part["type"] == "function_call_signature":
+                    # Signature for function_call Part - skip it here as it should be
+                    # attached to the actual function_call Part
+                    # This is handled separately in the history parsing logic
+                    pass
                 elif part["type"] == "thinking":
-                    # Pre-existing thinking block format
+                    # Pre-existing thinking block format that we continue to store as
                     thought_sig = None
                     if "signature" in part:
                         sig = part["signature"]
@@ -424,13 +429,8 @@ def _convert_to_parts(
                             thought_signature=thought_sig,
                         )
                     )
-                elif part["type"] == "function_call_signature":
-                    # Signature for function_call Part - skip it here as it should be
-                    # attached to the actual function_call Part
-                    # This is handled separately in the history parsing logic
-                    pass
                 elif part["type"] == "reasoning":
-                    # New ReasoningContentBlock
+                    # ReasoningContentBlock (when output_version = "v1")
                     extras = part.get("extras", {}) or {}
                     sig = extras.get("signature")
                     thought_sig = None
@@ -444,8 +444,24 @@ def _convert_to_parts(
                             thought_signature=thought_sig,
                         )
                     )
+                elif part["type"] == "server_tool_call":
+                    if part.get("name") == "code_interpreter":
+                        args = part.get("args", {})
+                        code = args.get("code", "")
+                        language = args.get("language", "python")
+                        executable_code_part = Part(
+                            executable_code=ExecutableCode(language=language, code=code)
+                        )
+                        parts.append(executable_code_part)
+                    else:
+                        warnings.warn(
+                            f"Server tool call with name '{part.get('name')}' is not "
+                            "currently supported by Google GenAI. Only "
+                            "'code_interpreter' is supported.",
+                            stacklevel=2,
+                        )
                 elif part["type"] == "executable_code":
-                    # TODO: LangChain's native server execution tool block not handled
+                    # Legacy executable_code format (backward compat)
                     if "executable_code" not in part or "language" not in part:
                         msg = (
                             "Executable code part must have 'code' and 'language' "
@@ -458,8 +474,22 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(executable_code_part)
+                elif part["type"] == "server_tool_result":
+                    output = part.get("output", "")
+                    status = part.get("status", "success")
+                    # Map status to outcome: success → 1 (OUTCOME_OK), error → 2
+                    outcome = 1 if status == "success" else 2
+                    # Check extras for original outcome if available
+                    if "extras" in part and "outcome" in part["extras"]:
+                        outcome = part["extras"]["outcome"]
+                    code_execution_result_part = Part(
+                        code_execution_result=CodeExecutionResult(
+                            output=str(output), outcome=outcome
+                        )
+                    )
+                    parts.append(code_execution_result_part)
                 elif part["type"] == "code_execution_result":
-                    # TODO: LangChain's native server execution result block not handled
+                    # Legacy code_execution_result format (backward compat)
                     if "code_execution_result" not in part:
                         msg = (
                             "Code execution result part must have "
@@ -783,10 +813,12 @@ def _parse_response_candidate(
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
+                code_id = str(uuid.uuid4())  # Generate ID if not present, needed later
                 code_message = {
                     "type": "executable_code",
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
+                    "id": code_id,
                 }
                 content = _append_to_content(content, code_message)
 
@@ -794,10 +826,13 @@ def _parse_response_candidate(
             hasattr(part, "code_execution_result")
             and part.code_execution_result is not None
         ) and part.code_execution_result.output:
+            # outcome: 1 = OUTCOME_OK (success), else = error
+            outcome = part.code_execution_result.outcome
             execution_result = {
                 "type": "code_execution_result",
                 "code_execution_result": part.code_execution_result.output,
-                "outcome": part.code_execution_result.outcome,
+                "outcome": outcome,
+                "tool_call_id": "",  # Linked via block translator
             }
             content = _append_to_content(content, execution_result)
 
