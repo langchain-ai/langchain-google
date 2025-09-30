@@ -1055,6 +1055,7 @@ def test_search_builtin_with_citations(use_streaming: bool) -> None:
                         assert isinstance(google_metadata, dict)
 
 
+@pytest.mark.filterwarnings("ignore::UserWarning")
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_code_execution_builtin(use_streaming: bool) -> None:
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
@@ -1068,38 +1069,56 @@ def test_code_execution_builtin(use_streaming: bool) -> None:
     if use_streaming:
         # Test streaming mode
         full: Optional[BaseMessageChunk] = None
-        with pytest.warns(match="executable_code"):
-            for chunk in llm.stream([input_message]):
-                assert isinstance(chunk, AIMessageChunk)
-                full = chunk if full is None else full + chunk
+        for chunk in llm.stream([input_message]):
+            assert isinstance(chunk, AIMessageChunk)
+            full = chunk if full is None else full + chunk
         assert isinstance(full, AIMessageChunk)
 
-        # Should get both code and result blocks
+        # Check raw content still has legacy format (backward compatibility)
         blocks = [block for block in full.content if isinstance(block, dict)]
         expected_block_types = {"executable_code", "code_execution_result"}
         assert {block.get("type") for block in blocks} == expected_block_types
 
-        # Test we can process chat history without raising errors
+        content_blocks = full.content_blocks
+        standard_blocks = [block for block in content_blocks if isinstance(block, dict)]
+        standard_types = {block.get("type") for block in standard_blocks}
+        assert (
+            "server_tool_call" in standard_types or "executable_code" in standard_types
+        )
+        assert (
+            "server_tool_result" in standard_types
+            or "code_execution_result" in standard_types
+        )
+
+        # Test passing back in chat history without raising errors
         next_message = {
             "role": "user",
             "content": "Can you show me the calculation again with comments?",
         }
-        with pytest.warns(match="executable_code"):
-            _ = llm.invoke([input_message, full, next_message])
+        _ = llm.invoke([input_message, full, next_message])
     else:
-        # Test invoke mode
-        with pytest.warns(match="executable_code"):
-            response = llm.invoke([input_message])
+        # Invoke
+        response = llm.invoke([input_message])
         blocks = [block for block in response.content if isinstance(block, dict)]
 
-        # Should get both code and result blocks
+        # Check raw content still has legacy format (backward compatibility)
         expected_block_types = {"executable_code", "code_execution_result"}
         assert {block.get("type") for block in blocks} == expected_block_types
 
-        # Test we can process chat history without raising errors
+        content_blocks = response.content_blocks
+        standard_blocks = [block for block in content_blocks if isinstance(block, dict)]
+        standard_types = {block.get("type") for block in standard_blocks}
+        assert (
+            "server_tool_call" in standard_types or "executable_code" in standard_types
+        )
+        assert (
+            "server_tool_result" in standard_types
+            or "code_execution_result" in standard_types
+        )
+
+        # Test passing back in chat history without raising errors
         next_message = {
             "role": "user",
             "content": "Can you show me the calculation again with comments?",
         }
-        with pytest.warns(match="executable_code"):
-            _ = llm.invoke([input_message, response, next_message])
+        _ = llm.invoke([input_message, response, next_message])
