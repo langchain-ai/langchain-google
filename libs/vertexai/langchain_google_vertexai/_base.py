@@ -229,7 +229,7 @@ class _VertexAICommon(_VertexAIBase):
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             }
-            """  # noqa: E501
+    """  # noqa: E501
 
     tuned_model_name: Optional[str] = None
     """The name of a tuned model."""
