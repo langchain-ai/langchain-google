@@ -58,6 +58,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -78,6 +79,7 @@ from langchain_core.messages import (
     ToolMessage,
     is_data_content_block,
 )
+from langchain_core.messages import content as types
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
@@ -113,6 +115,9 @@ from langchain_google_genai._common import (
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
     get_client_info,
+)
+from langchain_google_genai._compat import (
+    _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai._function_utils import (
     _dict_to_gapic_schema,
@@ -294,7 +299,12 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts a list of LangChain messages into Google parts."""
+    """Converts LangChain message content into generativelanguage_v1beta parts.
+
+    Used when preparing Human, System and AI messages for sending to the API.
+
+    Handles both legacy (pre-v1) dict-based content blocks and v1 ContentBlock objects.
+    """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
 
@@ -303,11 +313,23 @@ def _convert_to_parts(
     for part in content:
         if isinstance(part, str):
             parts.append(Part(text=part))
-        elif isinstance(part, Mapping):  # e.g. a dict
-            if "type" in part:  # e.g. a LangChain content block
+        elif isinstance(part, Mapping):
+            if "type" in part:
                 if part["type"] == "text":
                     # Either old dict-style CC text block or new TextContentBlock
-                    parts.append(Part(text=part["text"]))
+                    # Check if there's a signature attached to this text block
+                    thought_sig = None
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            # Decode base64-encoded signature back to bytes
+                            thought_sig = base64.b64decode(sig)
+                    if thought_sig:
+                        parts.append(
+                            Part(text=part["text"], thought_signature=thought_sig)
+                        )
+                    else:
+                        parts.append(Part(text=part["text"]))
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
@@ -361,9 +383,9 @@ def _convert_to_parts(
                             raise ValueError(msg)
                         img_url = img_url["url"]
                     parts.append(image_loader.load_part(img_url))
-                # Handle media type like LangChain.js
-                # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                 elif part["type"] == "media":
+                    # Handle `media` following pattern established in LangChain.js
+                    # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                     if "mime_type" not in part:
                         msg = f"Missing mime_type in media part: {part}"
                         raise ValueError(msg)
@@ -371,10 +393,12 @@ def _convert_to_parts(
                     media_part = Part()
 
                     if "data" in part:
+                        # Embedded media
                         media_part.inline_data = Blob(
                             data=part["data"], mime_type=mime_type
                         )
                     elif "file_uri" in part:
+                        # Referenced files (e.g. stored in GCS)
                         media_part.file_data = FileData(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
@@ -387,17 +411,32 @@ def _convert_to_parts(
                     parts.append(media_part)
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format
-                    parts.append(Part(text=part["thinking"], thought=True))
+                    thought_sig = None
+                    if "signature" in part:
+                        sig = part["signature"]
+                        if sig and isinstance(sig, str):
+                            # Decode base64-encoded signature back to bytes
+                            thought_sig = base64.b64decode(sig)
+                    parts.append(
+                        Part(
+                            text=part["thinking"],
+                            thought=True,
+                            thought_signature=thought_sig,
+                        )
+                    )
+                elif part["type"] == "function_call_signature":
+                    # Signature for function_call Part - skip it here as it should be
+                    # attached to the actual function_call Part
+                    # This is handled separately in the history parsing logic
+                    pass
                 elif part["type"] == "reasoning":
                     # New ReasoningContentBlock
-
                     extras = part.get("extras", {}) or {}
                     sig = extras.get("signature")
-                    # Thought signature isn't stored in a standard key in RCB
-
-                    thought_sig = (
-                        sig.encode("utf-8") if isinstance(sig, str) else sig
-                    )  # API requires bytes
+                    thought_sig = None
+                    if sig and isinstance(sig, str):
+                        # Decode base64-encoded signature back to bytes
+                        thought_sig = base64.b64decode(sig)
                     parts.append(
                         Part(
                             text=part["reasoning"],
@@ -521,7 +560,20 @@ def _get_ai_message_tool_messages_parts(
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
 ) -> Tuple[Optional[Content], List[Content]]:
-    messages: List[Content] = []
+    """Parses sequence of `BaseMessage` into system instruction and formatted messages.
+
+    Args:
+        input_messages: Sequence of `BaseMessage` objects representing the chat history.
+        convert_system_message_to_human: Whether to convert the first system message
+            into a human message. Deprecated, use system instructions instead.
+
+    Returns:
+        A tuple containing:
+        - An optional `google.ai.generativelanguage_v1beta.types.Content` representing
+            the system instruction (if any).
+        - A list of `google.ai.generativelanguage_v1beta.types.Content` representing the
+            formatted messages.
+    """
 
     if convert_system_message_to_human:
         warnings.warn(
@@ -530,6 +582,28 @@ def _parse_chat_history(
             DeprecationWarning,
             stacklevel=2,
         )
+    input_messages = list(input_messages)  # Make a mutable copy
+
+    # Case where content was serialized to v1 format
+    for idx, message in enumerate(input_messages):
+        if (
+            isinstance(message, AIMessage)
+            and message.response_metadata.get("output_version") == "v1"
+        ):
+            # Unpack known v1 content to v1beta format for the request
+            #
+            # Old content types and any previously serialized messages passed back in to
+            # history will skip this, but hit and processed in `_convert_to_parts`
+            input_messages[idx] = message.model_copy(
+                update={
+                    "content": _convert_from_v1_to_generativelanguage_v1beta(
+                        cast(list[types.ContentBlock], message.content),
+                        message.response_metadata.get("model_provider"),
+                    )
+                }
+            )
+
+    formatted_messages: List[Content] = []
 
     system_instruction: Optional[Content] = None
     messages_without_tool_messages = [
@@ -552,19 +626,43 @@ def _parse_chat_history(
             role = "model"
             if message.tool_calls:
                 ai_message_parts = []
-                for tool_call in message.tool_calls:
+                # Extract any function_call_signature blocks from content
+                function_call_sigs: dict[int, bytes] = {}
+                if isinstance(message.content, list):
+                    for idx, item in enumerate(message.content):
+                        if (
+                            isinstance(item, dict)
+                            and item.get("type") == "function_call_signature"
+                        ):
+                            sig_str = item.get("signature", "")
+                            if sig_str and isinstance(sig_str, str):
+                                # Decode base64-encoded signature back to bytes
+                                sig_bytes = base64.b64decode(sig_str)
+                                function_call_sigs[idx] = sig_bytes
+
+                for tool_call_idx, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         {
                             "name": tool_call["name"],
                             "args": tool_call["args"],
                         }
                     )
-                    ai_message_parts.append(Part(function_call=function_call))
+                    # Check if there's a signature for this function call
+                    # (We use the index to match signature to function call)
+                    sig = function_call_sigs.get(tool_call_idx)
+                    if sig:
+                        ai_message_parts.append(
+                            Part(function_call=function_call, thought_signature=sig)
+                        )
+                    else:
+                        ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
                     tool_messages=tool_messages, ai_message=message
                 )
-                messages.append(Content(role=role, parts=ai_message_parts))
-                messages.append(Content(role="user", parts=tool_messages_parts))
+                formatted_messages.append(Content(role=role, parts=ai_message_parts))
+                formatted_messages.append(
+                    Content(role="user", parts=tool_messages_parts)
+                )
                 continue
             if raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
@@ -575,7 +673,12 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             else:
-                parts = _convert_to_parts(message.content)
+                if message.response_metadata.get("output_version") == "v1":
+                    # Already converted to v1beta format above
+                    parts = message.content  # type: ignore[assignment]
+                else:
+                    # Prepare request content parts from message.content field
+                    parts = _convert_to_parts(message.content)
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content)
@@ -589,8 +692,11 @@ def _parse_chat_history(
             msg = f"Unexpected message with type {type(message)} at the position {i}."
             raise ValueError(msg)
 
-        messages.append(Content(role=role, parts=parts))
-    return system_instruction, messages
+        # Final step; assemble the Content object to pass to the API
+        # If version = "v1", the parts are already in v1beta format and will be
+        # automatically converted using protobuf's auto-conversion
+        formatted_messages.append(Content(role=role, parts=parts))
+    return system_instruction, formatted_messages
 
 
 # Helper function to append content consistently
@@ -626,6 +732,8 @@ def _parse_response_candidate(
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
+    # Track function call signatures separately to handle them conditionally
+    function_call_signatures: List[dict] = []
 
     for part in response_candidate.content.parts:
         text: Optional[str] = None
@@ -638,14 +746,40 @@ def _parse_response_candidate(
         except AttributeError:
             pass
 
+        # Extract thought signature if present (can be on any Part type)
+        # Signatures are binary data, encode to base64 string for JSON serialization
+        thought_sig: Optional[str] = None
+        if hasattr(part, "thought_signature") and part.thought_signature:
+            try:
+                # Encode binary signature to base64 string
+                thought_sig = base64.b64encode(part.thought_signature).decode("ascii")
+                if not thought_sig:  # Empty string
+                    thought_sig = None
+            except (AttributeError, TypeError):
+                thought_sig = None
+
         if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
             }
+            # Include signature if present
+            if thought_sig:
+                thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
         elif text is not None and text:
-            content = _append_to_content(content, text)
+            # Check if this text Part has a signature attached
+            if thought_sig:
+                # Text with signature needs structured block to preserve signature
+                # We use a v1 TextContentBlock
+                text_with_sig = {
+                    "type": "text",
+                    "text": text,
+                    "extras": {"signature": thought_sig},
+                }
+                content = _append_to_content(content, text_with_sig)
+            else:
+                content = _append_to_content(content, text)
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
@@ -667,7 +801,11 @@ def _parse_response_candidate(
             }
             content = _append_to_content(content, execution_result)
 
-        if part.inline_data.mime_type.startswith("audio/"):
+        if (
+            hasattr(part, "inline_data")
+            and part.inline_data
+            and part.inline_data.mime_type.startswith("audio/")
+        ):
             buffer = io.BytesIO()
 
             with wave.open(buffer, "wb") as wf:
@@ -677,9 +815,17 @@ def _parse_response_candidate(
                 wf.setframerate(24000)
                 wf.writeframes(part.inline_data.data)
 
-            additional_kwargs["audio"] = buffer.getvalue()
+            audio_data = buffer.getvalue()
+            additional_kwargs["audio"] = audio_data
 
-        if part.inline_data.mime_type.startswith("image/"):
+            # For backwards compatibility, audio stays in additional_kwargs by default
+            # and is accessible via .content_blocks property
+
+        if (
+            hasattr(part, "inline_data")
+            and part.inline_data
+            and part.inline_data.mime_type.startswith("image/")
+        ):
             image_format = part.inline_data.mime_type[6:]
             image_message = {
                 "type": "image_url",
@@ -738,6 +884,23 @@ def _parse_response_candidate(
                             id=tool_call_dict.get("id", str(uuid.uuid4())),
                         )
                     )
+
+            # If this function_call Part has a signature, track it separately
+            # We'll add it to content only if there's other content present
+            if thought_sig:
+                sig_block = {
+                    "type": "function_call_signature",
+                    "signature": thought_sig,
+                }
+                function_call_signatures.append(sig_block)
+
+    # Add function call signatures to content only if there's already other content
+    # This preserves backward compatibility where content is "" for
+    # function-only responses
+    if function_call_signatures and content is not None:
+        for sig_block in function_call_signatures:
+            content = _append_to_content(content, sig_block)
+
     if content is None:
         content = ""
     if isinstance(content, list) and any(
@@ -752,7 +915,6 @@ def _parse_response_candidate(
         Validate before using in production.
 """
         )
-
     if streaming:
         return AIMessageChunk(
             content=content,
@@ -773,8 +935,11 @@ def _parse_response_candidate(
 def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
     """Extract grounding metadata from candidate.
 
-    Uses `proto.Message.to_dict()` for complete unfiltered extraction first,
-    falls back to custom field extraction in cases of failure for robustness.
+    core's block translator converts this metadata into citation annotations.
+
+    Uses `MessageToDict` for complete unfiltered extraction.
+
+    Falls back to custom field extraction in cases of failure for robustness.
     """
     if not hasattr(candidate, "grounding_metadata") or not candidate.grounding_metadata:
         return {}
@@ -782,12 +947,26 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
     grounding_metadata = candidate.grounding_metadata
 
     try:
-        return proto.Message.to_dict(grounding_metadata)
-    except (AttributeError, TypeError):
-        # Fallback: field extraction
+        # proto-plus wraps protobuf messages - access ._pb to get the raw protobuf
+        # message that MessageToDict expects
+        pb_message = (
+            grounding_metadata._pb
+            if hasattr(grounding_metadata, "_pb")
+            else grounding_metadata
+        )
+
+        return MessageToDict(  # type: ignore[call-arg]
+            pb_message,
+            preserving_proto_field_name=True,
+            always_print_fields_with_no_presence=True,
+            # type stub issue - ensures that protobuf fields with default values
+            # (like start_index=0) are included in the output
+        )
+    except (AttributeError, TypeError, ImportError):
+        # Attempt manual extraction of known fields
         result: Dict[str, Any] = {}
 
-        # Extract grounding chunks
+        # Grounding chunks
         if hasattr(grounding_metadata, "grounding_chunks"):
             grounding_chunks = []
             for chunk in grounding_metadata.grounding_chunks:
@@ -800,7 +979,7 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
                 grounding_chunks.append(chunk_data)
             result["grounding_chunks"] = grounding_chunks
 
-        # Extract grounding supports
+        # Grounding supports
         if hasattr(grounding_metadata, "grounding_supports"):
             grounding_supports = []
             for support in grounding_metadata.grounding_supports:
@@ -823,7 +1002,7 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
                 grounding_supports.append(support_data)
             result["grounding_supports"] = grounding_supports
 
-        # Extract web search queries
+        # Web search queries
         if hasattr(grounding_metadata, "web_search_queries"):
             result["web_search_queries"] = list(grounding_metadata.web_search_queries)
 
@@ -895,6 +1074,7 @@ def _response_to_result(
         grounding_metadata = _extract_grounding_metadata(candidate)
         generation_info["grounding_metadata"] = grounding_metadata
         message = _parse_response_candidate(candidate, streaming=stream)
+
         message.usage_metadata = lc_usage
 
         if not hasattr(message, "response_metadata"):
@@ -1758,11 +1938,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> AIMessage:
-        """Enable code execution. Supported on: gemini-1.5-pro, gemini-1.5-flash,
-        gemini-2.0-flash, and gemini-2.0-pro. When enabled, the model can execute
-        code to solve problems.
+        """Override invoke to add code_execution parameter.
+
+        Supported on: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, and
+        gemini-2.0-pro. When enabled, the model can execute code to solve problems.
         """
-        """Override invoke to add code_execution parameter."""
 
         if code_execution is not None:
             if not self._supports_code_execution:
@@ -2161,7 +2341,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ]
         request = GenerateContentRequest(
             model=self.model,
-            contents=history,
+            contents=history,  # google.ai.generativelanguage_v1beta.types.Content
             tools=formatted_tools,
             tool_config=formatted_tool_config,
             safety_settings=formatted_safety_settings,
@@ -2178,7 +2358,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return request
 
     def get_num_tokens(self, text: str) -> int:
-        """Get the number of tokens present in the text.
+        """Get the number of tokens present in the text. Uses the model's tokenizer.
 
         Useful for checking if an input will fit in a model's context window.
 
@@ -2210,7 +2390,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        if method in ("json_mode", "json_schema"):  # `json_schema` preferred
+        # `json_schema` preferred, but `json_mode` kept for backwards compatibility
+        if method in ("json_mode", "json_schema"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
