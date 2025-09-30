@@ -13,7 +13,7 @@ readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=1.0.0a3,<2.0.0",
+    "langchain-core>=1.0.0a4,<2.0.0",
     "google-ai-generativelanguage>=0.7.0,<1.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "filetype>=1.2.0,<2.0.0",
@@ -25,7 +25,7 @@ dependencies = [
 repository = "https://github.com/langchain-ai/langchain-google"
 
 [dependency-groups]
-lint = ["ruff>=0.12.2,<0.13.0"]
+lint = ["ruff>=0.13.1,<0.14.0"]
 typing = [
     "mypy>=1.18.1,<1.19.0",
     "types-requests>=2.31.0,<3.0.0",
@@ -62,7 +62,6 @@ langchain-tests = { git = "https://github.com/langchain-ai/langchain.git", subdi
 #langchain-tests = { path = "../../../langchain/libs/standard-tests", editable = true }
 
 [tool.ruff]
-target-version = "py39"
 fix = true
 
 [tool.ruff.format]
@@ -93,7 +92,6 @@ ignore = [
     # 3.9 needs
     "UP007",
     "UP006",
-    "UP038",
     "UP045",
     "FA100",
 
