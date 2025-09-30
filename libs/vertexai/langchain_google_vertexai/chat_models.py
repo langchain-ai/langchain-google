@@ -1,4 +1,7 @@
-"""Wrapper around Google VertexAI chat-based models."""
+"""Wrapper around Google VertexAI chat-based models.
+
+Vertex supports both v1 and v1beta1 endpoints (`endpoint_version` parameter).
+"""
 
 from __future__ import annotations  # noqa
 import ast
@@ -335,6 +338,12 @@ def _parse_chat_history_gemini(
         raise ValueError(msg)
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
+        """Parse LangChain message content into Google parts.
+
+        Used when preparing Human, System and AI messages for sending to the API.
+        Handles both legacy (pre-v1) dict-based content blocks and v1 ContentBlock
+        objects.
+        """
         raw_content = message.content
 
         # If a user sends a multimodal request with agents, then the full input
