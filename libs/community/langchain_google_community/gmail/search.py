@@ -101,7 +101,7 @@ class GmailSearch(GmailBaseTool):
                         try:
                             message_body = part.get_payload(decode=True).decode(  # type: ignore[union-attr]
                                 "utf-8", errors="replace"
-                            ) 
+                            )
                         except UnicodeDecodeError:
                             message_body = part.get_payload(decode=True).decode(  # type: ignore[union-attr]
                                 "latin-1", errors="replace"
@@ -111,11 +111,11 @@ class GmailSearch(GmailBaseTool):
                 try:
                     message_body = email_msg.get_payload(decode=True).decode(  # type: ignore[union-attr]
                         "utf-8", errors="replace"
-                    )  
+                    )
                 except UnicodeDecodeError:
                     message_body = email_msg.get_payload(decode=True).decode(  # type: ignore[union-attr]
                         "latin-1", errors="replace"
-                    )  
+                    )
 
             body = clean_email_body(message_body)
 
