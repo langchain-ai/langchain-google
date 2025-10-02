@@ -518,7 +518,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         self,
         tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model."""
         formatted_tools = [convert_to_openai_function(tool) for tool in tools]
         return super().bind(tools=formatted_tools, **kwargs)

@@ -448,7 +448,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             Union[Dict[str, str], Literal["any", "auto"], str]
         ] = None,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model."""
         formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
         if not tool_choice:
