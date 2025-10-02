@@ -89,8 +89,8 @@ class GmailSearch(GmailBaseTool):
 
             email_msg = email.message_from_bytes(raw_message)
 
-            subject = email_msg["Subject"]
-            sender = email_msg["From"]
+            subject = email_msg["Subject"] or ""
+            sender = email_msg["From"] or ""
 
             message_body = ""
             if email_msg.is_multipart():
@@ -99,18 +99,22 @@ class GmailSearch(GmailBaseTool):
                     cdispo = str(part.get("Content-Disposition"))
                     if ctype == "text/plain" and "attachment" not in cdispo:
                         try:
-                            message_body = part.get_payload(decode=True).decode("utf-8")  # type: ignore[union-attr]
+                            message_body = part.get_payload(decode=True).decode(
+                                "utf-8", errors="replace"
+                            )  # type: ignore[union-attr]
                         except UnicodeDecodeError:
                             message_body = part.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                                "latin-1"
+                                "latin-1", errors="replace"
                             )
                         break
             else:
                 try:
-                    message_body = email_msg.get_payload(decode=True).decode("utf-8")  # type: ignore[union-attr]
+                    message_body = email_msg.get_payload(decode=True).decode(
+                        "utf-8", errors="replace"
+                    )  # type: ignore[union-attr]
                 except UnicodeDecodeError:
                     message_body = email_msg.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                        "latin-1"
+                        "latin-1", errors="replace"
                     )
 
             body = clean_email_body(message_body)
