@@ -541,7 +541,7 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
             from langchain_google_community.sheets import SheetsBatchUpdateValuesTool
 
             tool = SheetsBatchUpdateValuesTool(
-                api_resource=service, 
+                api_resource=service,
                 value_input_option="USER_ENTERED",
             )
 

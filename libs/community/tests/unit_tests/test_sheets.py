@@ -159,12 +159,12 @@ def test_sheets_toolkit_with_api_key() -> None:
     # Should return 3 read-only tools (no write tools with API key)
     assert len(tools) == 3
     tool_names = [tool.name for tool in tools]
-    
+
     # Read-only tools should be present
     assert "sheets_read_data" in tool_names
     assert "sheets_batch_read_data" in tool_names
     assert "sheets_get_spreadsheet_info" in tool_names
-    
+
     # OAuth2-only tools should NOT be present
     assert "sheets_get_by_data_filter" not in tool_names
     assert "sheets_create_spreadsheet" not in tool_names

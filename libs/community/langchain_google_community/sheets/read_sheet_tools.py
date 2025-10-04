@@ -605,13 +605,13 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
 class DataFilterSchema(BaseModel):
     """Schema for DataFilter used with getByDataFilter API.
-    
+
     DataFilters specify which ranges or metadata to read from a spreadsheet.
     Must specify exactly ONE of: a1Range, gridRange, or developerMetadataLookup.
-    
+
     Note: This is for range selection, NOT conditional filtering (like "score > 50").
     For conditional filtering, use Filter Views via the batchUpdate API.
-    
+
     See: https://developers.google.com/sheets/api/reference/rest/v4/DataFilter
     """
 
@@ -682,17 +682,17 @@ class SheetsFilteredReadDataTool(BaseReadTool):
     allows you to specify ranges using A1 notation, grid coordinates, or developer
     metadata. It also provides detailed cell formatting and properties when
     include_grid_data=True.
-    
+
     Note: This tool is for RANGE SELECTION, not conditional filtering like
     "score > 50". For conditional filtering, create a Filter View using the
     Sheets UI or batchUpdate API.
-    
+
     Use cases:
     - Read multiple ranges in a single API call
     - Get detailed cell formatting and properties (gridData)
     - Select ranges by developer metadata tags
     - Use grid coordinates instead of A1 notation
-    
+
     Requires OAuth2 authentication for full functionality.
 
     Instantiate:
@@ -714,13 +714,11 @@ class SheetsFilteredReadDataTool(BaseReadTool):
             result = tool.run(
                 {
                     "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                    "data_filters": [
-                        {"a1Range": "Class Data!A1:E10"}
-                    ],
+                    "data_filters": [{"a1Range": "Class Data!A1:E10"}],
                     "include_grid_data": True,
                 }
             )
-            
+
             # Example 2: Read using grid coordinates
             result = tool.run(
                 {
@@ -732,7 +730,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
                                 "startRowIndex": 0,
                                 "endRowIndex": 10,
                                 "startColumnIndex": 0,
-                                "endColumnIndex": 5
+                                "endColumnIndex": 5,
                             }
                         }
                     ],
@@ -743,9 +741,9 @@ class SheetsFilteredReadDataTool(BaseReadTool):
     Invoke with agent:
         .. code-block:: python
 
-            agent.invoke({
-                "input": "Read the range Class Data!A1:E10 with formatting details"
-            })
+            agent.invoke(
+                {"input": "Read the range Class Data!A1:E10 with formatting details"}
+            )
 
 <<<<<<< HEAD
     Tool Output:
