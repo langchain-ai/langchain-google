@@ -4,6 +4,9 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools.base import BaseToolkit
 from pydantic import ConfigDict, Field
 
+from langchain_google_community.sheets.create_spreadsheet_tool import (
+    SheetsCreateSpreadsheetTool,
+)
 from langchain_google_community.sheets.get_spreadsheet_info import (
     SheetsGetSpreadsheetInfoTool,
 )
@@ -11,6 +14,12 @@ from langchain_google_community.sheets.read_sheet_tools import (
     SheetsBatchReadDataTool,
     SheetsFilteredReadDataTool,
     SheetsReadDataTool,
+)
+from langchain_google_community.sheets.write_sheet_tools import (
+    SheetsAppendValuesTool,
+    SheetsBatchUpdateValuesTool,
+    SheetsClearValuesTool,
+    SheetsUpdateValuesTool,
 )
 
 if TYPE_CHECKING:
@@ -27,15 +36,28 @@ else:
 class SheetsToolkit(BaseToolkit):
     """Toolkit for interacting with Google Sheets.
 
-    *Security Note*: This toolkit contains tools that can read data from
-        Google Sheets. Currently, only read operations are supported.
+    This toolkit provides comprehensive Google Sheets integration with both
+    read and write capabilities.
 
-        For example, this toolkit can be used to read spreadsheet data,
-        get spreadsheet metadata, and perform filtered data queries.
+    *Security Note*: This toolkit contains tools that can read and write data
+        to Google Sheets.
+
+        Read operations: Can use either API key (public sheets) or OAuth2
+        Write operations: Require OAuth2 credentials (api_resource)
+
+        For example, this toolkit can be used to:
+        - Read spreadsheet data and metadata
+        - Create new spreadsheets
+        - Update, append, and clear cell values
+        - Perform batch operations for efficiency
+
+    Authentication:
+        - api_resource: OAuth2 credentials for full read/write access
+        - api_key: API key for read-only access to public spreadsheets
 
     """
 
-    api_resource: Resource = Field(default=None)
+    api_resource: Resource = Field(default=None)  # type: ignore[assignment]
     api_key: Optional[str] = Field(default=None)
 
     model_config = ConfigDict(
@@ -43,20 +65,33 @@ class SheetsToolkit(BaseToolkit):
     )
 
     def get_tools(self) -> List[BaseTool]:
-        """Get the tools in the toolkit."""
-        # If api_key is provided, use it for all tools
+        """Get the tools in the toolkit.
+
+        Returns:
+            List[BaseTool]: List of tools available based on authentication method.
+                - API key: Read-only tools (public spreadsheets)
+                - OAuth2: Full read/write tools (private spreadsheets)
+        """
+        # If api_key is provided, return read-only tools
         if self.api_key:
             return [
                 SheetsReadDataTool(api_key=self.api_key),
                 SheetsBatchReadDataTool(api_key=self.api_key),
                 SheetsGetSpreadsheetInfoTool(api_key=self.api_key),
-                # Note: FilteredReadDataTool requires OAuth2, not API key
+                # Note: Write operations and FilteredReadDataTool require OAuth2
             ]
 
-        # Otherwise, use the api_resource (OAuth2)
+        # Otherwise, use the api_resource (OAuth2) for full read/write access
         return [
+            # Read operations
             SheetsReadDataTool(api_resource=self.api_resource),
             SheetsBatchReadDataTool(api_resource=self.api_resource),
             SheetsFilteredReadDataTool(api_resource=self.api_resource),
             SheetsGetSpreadsheetInfoTool(api_resource=self.api_resource),
+            # Write operations (OAuth2 only)
+            SheetsCreateSpreadsheetTool(api_resource=self.api_resource),
+            SheetsUpdateValuesTool(api_resource=self.api_resource),
+            SheetsAppendValuesTool(api_resource=self.api_resource),
+            SheetsClearValuesTool(api_resource=self.api_resource),
+            SheetsBatchUpdateValuesTool(api_resource=self.api_resource),
         ]

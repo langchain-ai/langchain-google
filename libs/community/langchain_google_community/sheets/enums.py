@@ -165,3 +165,41 @@ BOOLEAN_CONDITIONS = [
     FilterConditionType.BOOLEAN_IS_TRUE.value,
     FilterConditionType.BOOLEAN_IS_FALSE.value,
 ]
+
+
+class ValueInputOption(str, Enum):
+    """Google Sheets value input options for write operations.
+
+    Determines how input values should be interpreted when writing to cells.
+    """
+
+    RAW = "RAW"
+    """Values are stored exactly as provided without any parsing.
+    For example, "=1+2" will be stored as the literal string "=1+2"."""
+
+    USER_ENTERED = "USER_ENTERED"
+    """Values are parsed as if the user typed them into the UI.
+    For example, "=1+2" will be parsed as a formula and display "3".
+    Numbers, dates, and formulas are automatically detected and parsed."""
+
+
+class InsertDataOption(str, Enum):
+    """Google Sheets insert data options for append operations.
+
+    Determines how data should be inserted when appending to a table.
+    """
+
+    OVERWRITE = "OVERWRITE"
+    """Data overwrites existing data after the table. This is the default."""
+
+    INSERT_ROWS = "INSERT_ROWS"
+    """Rows are inserted for the new data. Existing data is shifted down."""
+
+
+# Default values for write operations
+DEFAULT_VALUE_INPUT_OPTION = ValueInputOption.USER_ENTERED
+DEFAULT_INSERT_DATA_OPTION = InsertDataOption.OVERWRITE
+
+# Valid options for validation
+VALID_VALUE_INPUT_OPTIONS = [option.value for option in ValueInputOption]
+VALID_INSERT_DATA_OPTIONS = [option.value for option in InsertDataOption]

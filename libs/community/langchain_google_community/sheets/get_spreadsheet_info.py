@@ -1,7 +1,6 @@
 """Get metadata information from Google Sheets."""
 
-import json
-from typing import List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
@@ -76,12 +75,18 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         .. code-block:: python
             agent.invoke({"input": "Get information about the spreadsheet structure"})
     Returns:
-        JSON string containing:
-            - Spreadsheet properties: Title, locale, timezone, etc.
-            - Sheet information: Names, IDs, dimensions, properties
-            - Named ranges: Defined ranges and their locations
-            - Grid data: Detailed cell information (optional)
-            - Metadata: Processing information and data structure
+        Dictionary containing:
+            - success (bool): Always True for successful operations
+            - spreadsheet_id (str): The spreadsheet ID
+            - title (str): Spreadsheet title
+            - locale (str): Spreadsheet locale (e.g., "en_US")
+            - time_zone (str): Spreadsheet timezone (e.g., "America/New_York")
+            - auto_recalc (str): Auto-recalculation setting
+            - default_format (Dict): Default cell format
+            - sheets (List[Dict]): List of sheet information with properties
+            - named_ranges (List[Dict]): List of named ranges with locations
+            - developer_metadata (List[Dict]): Developer metadata entries
+            - grid_data (optional): Detailed cell data when include_grid_data=True
     Information Types Available:
         - Basic info: Title, locale, timezone, creation date
         - Sheet details: Names, IDs, row/column counts, properties
@@ -90,38 +95,41 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         - Developer metadata: Custom properties and annotations
     Example Response:
         {
+            "success": True,
             "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "properties": {
-                "title": "Student Data",
-                "locale": "en_US",
-                "timeZone": "America/New_York",
-                "createdTime": "2024-01-15T10:30:00Z"
-            },
+            "title": "Student Data",
+            "locale": "en_US",
+            "time_zone": "America/New_York",
+            "auto_recalc": "ON_CHANGE",
+            "default_format": {},
             "sheets": [
                 {
-                    "properties": {
-                        "sheetId": 0,
-                        "title": "Students",
+                    "sheet_id": 0,
+                    "title": "Students",
+                    "sheet_type": "GRID",
+                    "grid_properties": {
                         "rowCount": 100,
-                        "columnCount": 10,
-                        "gridProperties": {
-                            "rowCount": 100,
-                            "columnCount": 10
-                        }
-                    }
+                        "columnCount": 10
+                    },
+                    "tab_color": {},
+                    "hidden": False,
+                    "right_to_left": False
                 }
             ],
             "named_ranges": [
                 {
                     "name": "StudentList",
-                    "range": "Students!A1:E100"
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": 100,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": 5
+                    },
+                    "named_range_id": "123456"
                 }
             ],
-            "metadata": {
-                "total_sheets": 1,
-                "total_named_ranges": 1,
-                "processing_time": "0.2s"
-            }
+            "developer_metadata": []
         }
     Raises:
         ValueError: If spreadsheet_id is invalid
@@ -146,7 +154,7 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         ranges: Optional[List[str]] = None,
         fields: Optional[str] = None,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Run the tool to get spreadsheet information."""
         try:
             # Validate spreadsheet ID
@@ -174,7 +182,10 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
                 response, include_formatting, include_validation
             )
 
-            return json.dumps(processed_info, indent=2, default=str)
+            # Add success field
+            processed_info["success"] = True
+
+            return processed_info
 
         except Exception as error:
             raise Exception(f"Error getting spreadsheet info: {error}") from error
@@ -253,61 +264,63 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         return spreadsheet_info
 
     def _process_grid_data(self, grid_data: List[dict]) -> List[List[str]]:
-        """Process grid data using simplified patterns from the guide."""
+        """Process ALL grid data segments using simplified patterns.
+
+        Now processes all GridData segments to prevent data loss when the API
+        returns multiple segments.
+        """
         if not grid_data:
             return []
 
-        # Get the first GridData (usually contains all data)
-        grid = grid_data[0]
-
-        # Extract simple data using the safe extraction pattern
-        result = []
-        for row_data in grid.get("rowData", []):
-            row_values = []
-            for cell_data in row_data.get("values", []):
-                # Use the safe extraction pattern
-                value = self._safe_get_cell_value(cell_data)
-                row_values.append(value)
-            result.append(row_values)
+        # Process ALL grids, not just the first
+        result: List[List[str]] = []
+        for grid in grid_data:
+            for row_data in grid.get("rowData", []) or []:
+                row_values: List[str] = []
+                for cell_data in row_data.get("values", []) or []:
+                    # Use the safe extraction pattern
+                    value = self._safe_get_cell_value(cell_data)
+                    row_values.append(value)
+                result.append(row_values)
 
         return result
 
     def _extract_formatting(self, grid_data: List[dict]) -> List[List[dict]]:
-        """Extract cell formatting information."""
+        """Extract cell formatting information from ALL grid segments."""
         if not grid_data:
             return []
 
-        grid = grid_data[0]
-        formatting_info = []
-
-        for row_data in grid.get("rowData", []):
-            row_formatting = []
-            for cell_data in row_data.get("values", []):
-                cell_formatting = {
-                    "user_entered_format": cell_data.get("userEnteredFormat", {}),
-                    "effective_format": cell_data.get("effectiveFormat", {}),
-                }
-                row_formatting.append(cell_formatting)
-            formatting_info.append(row_formatting)
+        # Process ALL grids, not just the first
+        formatting_info: List[List[dict]] = []
+        for grid in grid_data:
+            for row_data in grid.get("rowData", []) or []:
+                row_formatting: List[dict] = []
+                for cell_data in row_data.get("values", []) or []:
+                    cell_formatting = {
+                        "user_entered_format": cell_data.get("userEnteredFormat", {}),
+                        "effective_format": cell_data.get("effectiveFormat", {}),
+                    }
+                    row_formatting.append(cell_formatting)
+                formatting_info.append(row_formatting)
 
         return formatting_info
 
     def _extract_validation(self, grid_data: List[dict]) -> List[List[dict]]:
-        """Extract data validation rules."""
+        """Extract data validation rules from ALL grid segments."""
         if not grid_data:
             return []
 
-        grid = grid_data[0]
-        validation_info = []
-
-        for row_data in grid.get("rowData", []):
-            row_validation = []
-            for cell_data in row_data.get("values", []):
-                validation_rule = cell_data.get("dataValidation", {})
-                if validation_rule:
-                    row_validation.append(validation_rule)
-                else:
-                    row_validation.append({})
-            validation_info.append(row_validation)
+        # Process ALL grids, not just the first
+        validation_info: List[List[dict]] = []
+        for grid in grid_data:
+            for row_data in grid.get("rowData", []) or []:
+                row_validation: List[dict] = []
+                for cell_data in row_data.get("values", []) or []:
+                    validation_rule = cell_data.get("dataValidation", {})
+                    if validation_rule:
+                        row_validation.append(validation_rule)
+                    else:
+                        row_validation.append({})
+                validation_info.append(row_validation)
 
         return validation_info

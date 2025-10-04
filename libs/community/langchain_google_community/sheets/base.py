@@ -113,9 +113,41 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             return str(cell_data["effectiveValue"]["stringValue"])
         elif cell_data.get("effectiveValue", {}).get("numberValue") is not None:
             return str(cell_data["effectiveValue"]["numberValue"])
+        elif cell_data.get("effectiveValue", {}).get("boolValue") is not None:
+            return str(cell_data["effectiveValue"]["boolValue"])
         elif cell_data.get("userEnteredValue", {}).get("stringValue"):
             return str(cell_data["userEnteredValue"]["stringValue"])
         elif cell_data.get("userEnteredValue", {}).get("numberValue") is not None:
             return str(cell_data["userEnteredValue"]["numberValue"])
+        elif cell_data.get("userEnteredValue", {}).get("boolValue") is not None:
+            return str(cell_data["userEnteredValue"]["boolValue"])
         else:
             return ""
+
+    def _convert_to_dict_list(self, items: list) -> list:
+        """Convert a list of items to dictionaries.
+
+        Handles both Pydantic models and dicts. Useful for converting
+        user-provided schemas (which may be Pydantic models or plain dicts)
+        into the dict format required by Google Sheets API.
+
+        Args:
+            items: List of items that may be Pydantic models or dictionaries
+
+        Returns:
+            list: List of dictionaries with all Pydantic models converted
+
+        Example:
+            >>> items = [SomeSchema(field="value"), {"field": "value"}]
+            >>> self._convert_to_dict_list(items)
+            [{"field": "value"}, {"field": "value"}]
+        """
+        result = []
+        for item in items:
+            if hasattr(item, "model_dump"):
+                # It's a Pydantic model, convert to dict
+                result.append(item.model_dump())
+            else:
+                # It's already a dict
+                result.append(item)
+        return result

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+import re
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from langchain_google_community._utils import (
     get_google_credentials,
@@ -39,18 +40,12 @@ def build_sheets_service(
     Returns:
         Resource: Google Sheets API service with full access capabilities.
     """
-    # Default scopes for full access
+    # Default scopes for full access (read/write)
+    # Note: Use scopes parameter to override if read-only access is desired
     default_scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive.readonly",
     ]
-
-    if use_domain_wide:
-        # Scopes for domain-wide delegation (can be read-only or read-write)
-        default_scopes = [
-            "https://www.googleapis.com/auth/spreadsheets.readonly",
-            "https://www.googleapis.com/auth/drive.readonly",
-        ]
 
     scopes = scopes or default_scopes
 
@@ -113,8 +108,105 @@ def validate_spreadsheet_id(spreadsheet_id: str) -> str:
     return spreadsheet_id
 
 
+# These patterns and validators are actively used by all read/write tools
+# to ensure proper A1 notation format before making API calls.
+
+# A1 notation regex patterns
+# Single cell: A1, Z99 (column letters + row starting with 1-9)
+_CELL = re.compile(r"^[A-Za-z]+[1-9]\d*$")
+# Area: A1:B2 (two cells separated by colon)
+_AREA = re.compile(r"^[A-Za-z]+[1-9]\d*:[A-Za-z]+[1-9]\d*$")
+# Whole columns: A:A, B:D (column letters on both sides)
+_COLS = re.compile(r"^[A-Za-z]+:[A-Za-z]+$")
+# Whole rows: 1:1, 5:10 (row numbers starting with 1-9 on both sides)
+_ROWS = re.compile(r"^[1-9]\d*:[1-9]\d*$")
+# Named range: MyData, Sales_2024 (alphanumeric + underscore, letter/underscore start)
+_NAMED = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_target(target: str) -> bool:
+    """Validate a range target (after sheet qualifier removed).
+
+    Args:
+        target: Range string without sheet qualifier.
+
+    Returns:
+        True if valid, False otherwise.
+    """
+    # Check specific patterns first (more restrictive)
+    if _AREA.fullmatch(target):
+        return True
+    if _CELL.fullmatch(target):
+        return True
+    if _COLS.fullmatch(target):
+        return True
+    if _ROWS.fullmatch(target):
+        return True
+    # Check named range last (least restrictive)
+    # Only allow if it looks like a name, not like a malformed cell reference
+    if _NAMED.fullmatch(target):
+        # Reject simple cell-ish names that end with 0 (e.g., "A0")
+        if target[-1] == "0" and any(c.isalpha() for c in target):
+            return False
+        return True
+    return False
+
+
+def validate_a1_range(range_name: str) -> bool:
+    """Validate A1 notation range format.
+
+    Supports:
+    - Single cells: "A1", "Z99"
+    - Areas: "A1:B2"
+    - Whole columns: "A:A", "B:D"
+    - Whole rows: "1:1", "5:10"
+    - Sheet-qualified: "Sheet1!A1", "'My Sheet'!A1:B2"
+    - Named ranges: "MyData", "Sales_2024"
+
+    Args:
+        range_name: Range string to validate.
+
+    Returns:
+        True if valid format, False otherwise.
+
+    Examples:
+        >>> validate_a1_range("A1")
+        True
+        >>> validate_a1_range("A1:B2")
+        True
+        >>> validate_a1_range("Sheet1!A1")
+        True
+        >>> validate_a1_range("A:A")
+        True
+        >>> validate_a1_range("")
+        False
+    """
+    if not range_name or not range_name.strip():
+        return False
+    if range_name.startswith("!"):
+        return False
+
+    sheet, had_bang, after = range_name.partition("!")
+    if had_bang:
+        if not after:  # "Sheet1!" -> invalid
+            return False
+        target = after
+    else:
+        target = range_name
+
+    return _validate_target(target)
+
+
 def validate_range_name(range_name: str) -> str:
     """Validate and normalize a range name.
+
+    Permissive A1 validator. Supports:
+    - Single cells: "A1", "Z99"
+    - Areas: "A1:B2", "AA1:BB10"
+    - Whole columns: "A:A", "B:D"
+    - Whole rows: "1:1", "5:10"
+    - Sheet-qualified: "Sheet1!A1", "'My Sheet'!A1:B2"
+    - Named ranges: "MyData", "Sales_2024" (let API validate)
 
     Args:
         range_name: The range name to validate (e.g., "A1:Z100", "Sheet1!A1:B2").
@@ -124,12 +216,24 @@ def validate_range_name(range_name: str) -> str:
 
     Raises:
         ValueError: If the range name is invalid.
-    """
-    if not range_name:
-        raise ValueError("Range name cannot be empty")
 
-    # Basic validation - should contain at least one colon for range
-    if ":" not in range_name and not range_name.isalpha():
-        raise ValueError(f"Invalid range format: {range_name}")
+    Examples:
+        >>> validate_range_name("A1")
+        'A1'
+        >>> validate_range_name("Sheet1!A1:B2")
+        'Sheet1!A1:B2'
+        >>> validate_range_name("A:A")
+        'A:A'
+        >>> validate_range_name("")
+        Traceback (most recent call last):
+        ...
+        ValueError: Invalid range format: ...
+    """
+    if not validate_a1_range(range_name):
+        raise ValueError(
+            f"Invalid range format: {range_name}. "
+            "Expected A1 notation like 'A1', 'A1:B2', 'Sheet1!A1', 'A:A', or '1:1'. "
+            "Named ranges are allowed."
+        )
 
     return range_name
