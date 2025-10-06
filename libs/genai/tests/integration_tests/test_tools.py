@@ -35,5 +35,5 @@ def test_multiple_tools() -> None:
     input_ = "What is the latest tennis score for Leonid?"
 
     result = model_with_tools.invoke(input_)
-    assert len(result.tool_calls) == 1  # type: ignore
-    assert result.tool_calls[0]["name"] == "check_tennis_score"  # type: ignore
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0]["name"] == "check_tennis_score"
