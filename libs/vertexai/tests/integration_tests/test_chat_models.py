@@ -1467,7 +1467,7 @@ def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) ->
 
 @pytest.mark.release
 def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) -> None:
-    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
+    url = "https://s206.q4cdn.com/479360582/files/doc_financials/2025/q1/2025q1-alphabet-earnings-release.pdf"
     # URL
     response = multimodal_pdf_chain.invoke({"image": url})
     assert isinstance(response, AIMessage)
@@ -1475,7 +1475,7 @@ def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) ->
 
 @pytest.mark.release
 def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) -> None:
-    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
+    url = "https://s206.q4cdn.com/479360582/files/doc_financials/2025/q1/2025q1-alphabet-earnings-release.pdf"
     request_response = requests.get(url, allow_redirects=True)
     # B64
     with io.BytesIO() as stream:
