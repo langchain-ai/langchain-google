@@ -1264,7 +1264,7 @@ def test_context_catching_tools() -> None:
 @pytest.mark.release
 def test_json_serializable() -> None:
     llm = ChatVertexAI(
-        model_name="gemini-2.0-flash-001",
+        model_name=_DEFAULT_MODEL_NAME,
     )
     # Needed to init self.client and self.async_client
     llm.prediction_client
@@ -1395,7 +1395,7 @@ def test_init_from_credentials_obj() -> None:
     credentials = service_account.Credentials.from_service_account_info(
         credentials_dict
     )
-    llm = ChatVertexAI(model="gemini-2.0-flash-001", credentials=credentials)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, credentials=credentials)
     llm.invoke("how are you")
 
 
@@ -1403,7 +1403,7 @@ def test_init_from_credentials_obj() -> None:
 @pytest.mark.release
 def test_label_metadata() -> None:
     llm = ChatVertexAI(
-        model="gemini-2.0-flash-001",
+        model=_DEFAULT_MODEL_NAME,
         labels={
             "task": "labels_using_declaration",
             "environment": "testing",
@@ -1415,7 +1415,7 @@ def test_label_metadata() -> None:
 @pytest.mark.xfail(reason="can't add labels to the gemini content using invoke method")
 @pytest.mark.release
 def test_label_metadata_invoke_method() -> None:
-    llm = ChatVertexAI(model="gemini-2.0-flash-001")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
     llm.invoke(
         "hello! invoke method",
         labels={
@@ -1427,7 +1427,7 @@ def test_label_metadata_invoke_method() -> None:
 
 @pytest.mark.release
 def test_response_metadata_avg_logprobs() -> None:
-    llm = ChatVertexAI(model="gemini-2.0-flash-001")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
     response = llm.invoke("Hello!")
     probs = response.response_metadata.get("avg_logprobs")
     if probs is not None:
@@ -1489,7 +1489,7 @@ def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) ->
 @pytest.mark.xfail(reason="logprobs are subject to daily quotas")
 @pytest.mark.release
 def test_logprobs() -> None:
-    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=2)
     msg = llm.invoke("hey")
     tokenprobs = msg.response_metadata.get("logprobs_result")
     assert tokenprobs is None or isinstance(tokenprobs, list)
@@ -1506,34 +1506,32 @@ def test_logprobs() -> None:
                 assert isinstance(token.get("top_logprobs"), list)
                 stack.extend(token.get("top_logprobs", []))
 
-    llm2 = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=True)
+    llm2 = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=True)
     msg2 = llm2.invoke("how are you")
     assert msg2.response_metadata["logprobs_result"]
 
-    llm3 = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=False)
+    llm3 = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=False)
     msg3 = llm3.invoke("howdy")
     assert msg3.response_metadata.get("logprobs_result") is None
 
 
 def test_location_init() -> None:
     # If I don't initialize vertexai before, defaults to us-central-1
-    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=2)
     assert llm.location == "us-central1"
 
     # If I init vertexai with other region the model is in that particular region
     vertexai.init(location="europe-west1")
-    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=2)
     assert llm.location == "europe-west1"
 
     # If I specify the location, it follows that location
-    llm = ChatVertexAI(
-        model="gemini-2.0-flash-001", logprobs=2, location="europe-west2"
-    )
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=2, location="europe-west2")
     assert llm.location == "europe-west2"
 
     # It reverts to the default
     vertexai.init(location="us-central1")
-    llm = ChatVertexAI(model="gemini-2.0-flash-001", logprobs=2)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=2)
     assert llm.location == "us-central1"
 
 
@@ -1568,7 +1566,7 @@ def test_nested_bind_tools() -> None:
     class People(BaseModel):
         data: list[Person] = Field(description="The people.")
 
-    llm = ChatVertexAI(model="gemini-2.0-flash-001")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
     llm_with_tools = llm.bind_tools([People], tool_choice="People")
 
     response = llm_with_tools.invoke("Chester, no hair color provided.")
