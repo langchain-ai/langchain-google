@@ -26,7 +26,7 @@ from langchain_google_genai import (
     Modality,
 )
 
-_MODEL = "models/gemini-2.5-flash"
+_MODEL = "gemini-flash-lite-latest"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
 _AUDIO_OUTPUT_MODEL = "models/gemini-2.5-flash-preview-tts"
