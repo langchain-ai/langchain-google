@@ -61,7 +61,7 @@ Then use the `ChatGoogleGenerativeAI` interface:
 ```python
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+llm = ChatGoogleGenerativeAI(model="gemini-flash-latest")
 response = llm.invoke("Sing a ballad of LangChain.")
 print(response.content)
 ```
@@ -82,7 +82,7 @@ Most Gemini models support image inputs.
 from langchain_core.messages import HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+llm = ChatGoogleGenerativeAI(model="gemini-flash-latest")
 
 message = HumanMessage(
     content=[
