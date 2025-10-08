@@ -14,6 +14,8 @@ from pydantic import SecretStr
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
+MODEL_NAME = "gemini-embedding-001"
+
 
 def test_integration_initialization() -> None:
     """Test chat model initialization."""
@@ -21,7 +23,7 @@ def test_integration_initialization() -> None:
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         _ = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-001",
+            model=f"models/{MODEL_NAME}",
             google_api_key=SecretStr("..."),
         )
         mock_prediction_service.assert_called_once()
@@ -34,7 +36,7 @@ def test_integration_initialization() -> None:
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
         _ = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-001",
+            model=f"models/{MODEL_NAME}",
             google_api_key=SecretStr("..."),
             task_type="retrieval_document",
         )
@@ -43,7 +45,7 @@ def test_integration_initialization() -> None:
 
 def test_api_key_is_string() -> None:
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
+        model=f"models/{MODEL_NAME}",
         google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(embeddings.google_api_key, SecretStr)
@@ -53,7 +55,7 @@ def test_api_key_masked_when_passed_via_constructor(
     capsys: pytest.CaptureFixture,
 ) -> None:
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
+        model=f"models/{MODEL_NAME}",
         google_api_key=SecretStr("secret-api-key"),
     )
     print(embeddings.google_api_key, end="")  # noqa: T201
@@ -72,13 +74,13 @@ def test_embed_query() -> None:
         )
         mock_prediction_service.return_value.embed_content = mock_embed
         llm = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-test",
+            model=f"models/{MODEL_NAME}",
             google_api_key=SecretStr("test-key"),
             task_type="classification",
         )
         llm.embed_query("test text", output_dimensionality=524)
         request = EmbedContentRequest(
-            model="models/embedding-test",
+            model=f"models/{MODEL_NAME}",
             content={"parts": [{"text": "test text"}]},
             task_type="CLASSIFICATION",
             output_dimensionality=524,
@@ -97,22 +99,22 @@ def test_embed_documents() -> None:
         mock_prediction_service.return_value.batch_embed_contents = mock_embed
 
         llm = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-test",
+            model=f"models/{MODEL_NAME}",
             google_api_key=SecretStr("test-key"),
         )
 
         llm.embed_documents(["test text", "test text2"], titles=["title1", "title2"])
         request = BatchEmbedContentsRequest(
-            model="models/embedding-test",
+            model=f"models/{MODEL_NAME}",
             requests=[
                 EmbedContentRequest(
-                    model="models/embedding-test",
+                    model=f"models/{MODEL_NAME}",
                     content={"parts": [{"text": "test text"}]},
                     task_type="RETRIEVAL_DOCUMENT",
                     title="title1",
                 ),
                 EmbedContentRequest(
-                    model="models/embedding-test",
+                    model=f"models/{MODEL_NAME}",
                     content={"parts": [{"text": "test text2"}]},
                     task_type="RETRIEVAL_DOCUMENT",
                     title="title2",
@@ -135,7 +137,7 @@ def test_embed_documents_with_numerous_texts() -> None:
         mock_prediction_service.return_value.batch_embed_contents = mock_embed
 
         llm = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-test",
+            model=f"models/{MODEL_NAME}",
             google_api_key=SecretStr("test-key"),
         )
 
@@ -145,10 +147,10 @@ def test_embed_documents_with_numerous_texts() -> None:
             titles=["title1" for _ in range(test_corpus_size)],
         )
         request = BatchEmbedContentsRequest(
-            model="models/embedding-test",
+            model=f"models/{MODEL_NAME}",
             requests=[
                 EmbedContentRequest(
-                    model="models/embedding-test",
+                    model=f"models/{MODEL_NAME}",
                     content={"parts": [{"text": "test text"}]},
                     task_type="RETRIEVAL_DOCUMENT",
                     title="title1",

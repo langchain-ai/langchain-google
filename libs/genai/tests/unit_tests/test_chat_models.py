@@ -42,11 +42,13 @@ from langchain_google_genai.chat_models import (
     _response_to_result,
 )
 
+MODEL_NAME = "gemini-flash-lite-latest"
+
 
 def test_integration_initialization() -> None:
     """Test chat model initialization."""
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
@@ -56,27 +58,27 @@ def test_integration_initialization() -> None:
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-2.5-flash",
+        "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("..."),
         max_output_tokens=10,
     )
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-2.5-flash",
+        "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
         "ls_max_tokens": 10,
     }
 
     ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         api_key=SecretStr("..."),
         top_k=2,
         top_p=1,
@@ -88,13 +90,13 @@ def test_integration_initialization() -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash",
+                model=MODEL_NAME,
                 google_api_key=SecretStr("..."),
                 safety_setting={
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
             )
-        assert llm.model == "models/gemini-2.5-flash"
+        assert llm.model == f"models/{MODEL_NAME}"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
@@ -109,7 +111,7 @@ def test_safety_settings_initialization() -> None:
 
     # Test initialization with safety_settings
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
         temperature=0.7,
         safety_settings=safety_settings,
@@ -118,7 +120,7 @@ def test_safety_settings_initialization() -> None:
     # Verify the safety_settings are stored correctly
     assert llm.safety_settings == safety_settings
     assert llm.temperature == 0.7
-    assert llm.model == "models/gemini-2.5-flash"
+    assert llm.model == f"models/{MODEL_NAME}"
 
 
 def test_initialization_inside_threadpool() -> None:
@@ -127,30 +129,28 @@ def test_initialization_inside_threadpool() -> None:
     with ThreadPoolExecutor() as executor:
         executor.submit(
             ChatGoogleGenerativeAI,
-            model="gemini-2.5-flash",
+            model=MODEL_NAME,
             google_api_key=SecretStr("secret-api-key"),
         ).result()
 
 
 def test_client_transport() -> None:
     """Test client transport configuration."""
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="fake-key")
+    model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
     assert model.client.transport.kind == "grpc"
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", google_api_key="fake-key", transport="rest"
+        model=MODEL_NAME, google_api_key="fake-key", transport="rest"
     )
     assert model.client.transport.kind == "rest"
 
     async def check_async_client() -> None:
-        model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash", google_api_key="fake-key"
-        )
+        model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
         assert model.async_client.transport.kind == "grpc_asyncio"
 
         # Test auto conversion of transport to "grpc_asyncio" from "rest"
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash", google_api_key="fake-key", transport="rest"
+            model=MODEL_NAME, google_api_key="fake-key", transport="rest"
         )
         assert model.async_client.transport.kind == "grpc_asyncio"
 
@@ -159,7 +159,7 @@ def test_client_transport() -> None:
 
 def test_initalization_without_async() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("secret-api-key"),
     )
     assert chat.async_client is None
@@ -168,7 +168,7 @@ def test_initalization_without_async() -> None:
 def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=MODEL_NAME,
             google_api_key=SecretStr("secret-api-key"),
         )
         _ = model.async_client
@@ -180,7 +180,7 @@ def test_initialization_with_async() -> None:
 
 def test_api_key_is_string() -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("secret-api-key"),
     )
     assert isinstance(chat.google_api_key, SecretStr)
@@ -190,7 +190,7 @@ def test_api_key_masked_when_passed_via_constructor(
     capsys: pytest.CaptureFixture,
 ) -> None:
     chat = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("secret-api-key"),
     )
     print(chat.google_api_key, end="")  # noqa: T201
@@ -396,7 +396,7 @@ def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
         mock_client,
     ):
         chat = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=MODEL_NAME,
             google_api_key=param_secret_api_key,
             client_options=param_client_options,
             transport=param_transport,
@@ -434,7 +434,7 @@ def test_default_metadata_field_alias() -> None:
     # error
     # This is the main issue: LangSmith Playground passes None to default_metadata_input
     chat1 = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
         default_metadata_input=None,
     )
@@ -445,7 +445,7 @@ def test_default_metadata_field_alias() -> None:
     # Test with empty list for default_metadata_input (should not cause validation
     # error)
     chat2 = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
         default_metadata_input=[],
     )
@@ -454,7 +454,7 @@ def test_default_metadata_field_alias() -> None:
 
     # Test with tuple for default_metadata_input (should not cause validation error)
     chat3 = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
         default_metadata_input=[("X-Test", "test")],
     )
@@ -763,7 +763,7 @@ def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> N
 
 
 def test_serialize() -> None:
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="test-key")
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)
     llm_loaded = loads(
         serialized,
@@ -802,20 +802,20 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 def test_temperature_range_pydantic_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValidationError):
-        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=2.1)
+        ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=2.1)
 
     with pytest.raises(ValidationError):
-        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=-0.1)
+        ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.1)
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("..."),
         temperature=1.5,
     )
     ls_params = llm._get_ls_params()
     assert ls_params == {
         "ls_provider": "google_genai",
-        "ls_model_name": "gemini-2.5-flash",
+        "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
         "ls_temperature": 1.5,
     }
@@ -824,30 +824,30 @@ def test_temperature_range_pydantic_validation() -> None:
 def test_temperature_range_model_validation() -> None:
     """Test that temperature is in the range [0.0, 2.0]."""
     with pytest.raises(ValueError):
-        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=2.5)
+        ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=2.5)
 
     with pytest.raises(ValueError):
-        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=-0.5)
+        ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.5)
 
 
 def test_model_kwargs() -> None:
     """Test we can transfer unknown params to model_kwargs."""
     llm = ChatGoogleGenerativeAI(
-        model="my-model",
+        model=MODEL_NAME,
         convert_system_message_to_human=True,
         model_kwargs={"foo": "bar"},
     )
-    assert llm.model == "models/my-model"
+    assert llm.model == f"models/{MODEL_NAME}"
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
 
     with pytest.warns(match="transferred to model_kwargs"):
         llm = ChatGoogleGenerativeAI(
-            model="my-model",
+            model=MODEL_NAME,
             convert_system_message_to_human=True,
             foo="bar",
         )
-    assert llm.model == "models/my-model"
+    assert llm.model == f"models/{MODEL_NAME}"
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
 
@@ -1191,7 +1191,7 @@ def test_thinking_config_merging_with_generation_config() -> None:
         mock_retry.return_value = mock_response
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=MODEL_NAME,
             google_api_key=SecretStr("test-key"),
         )
 

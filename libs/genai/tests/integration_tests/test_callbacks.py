@@ -7,7 +7,7 @@ from langchain_core.prompts import PromptTemplate
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-model_names = ["gemini-2.5-flash"]
+MODEL_NAMES = ["gemini-flash-lite-latest"]
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
@@ -25,7 +25,7 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_streaming_callback(model_name: str) -> None:
     prompt_template = "Tell me details about the Company {name} with 2 bullet point?"

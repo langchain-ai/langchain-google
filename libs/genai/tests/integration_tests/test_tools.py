@@ -2,6 +2,8 @@ from langchain_core.tools import tool
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+MODEL = "gemini-flash-lite-latest"
+
 
 @tool
 def check_weather(location: str) -> str:
@@ -25,7 +27,7 @@ def test_multiple_tools() -> None:
     tools = [check_weather, check_live_traffic, check_tennis_score]
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL,
     )
 
     model_with_tools = model.bind_tools(tools)

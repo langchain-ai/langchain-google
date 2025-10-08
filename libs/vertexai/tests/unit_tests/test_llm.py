@@ -18,6 +18,9 @@ from langchain_google_vertexai._base import (
     _get_prediction_client,
 )
 from langchain_google_vertexai.llms import VertexAI
+from tests.integration_tests.conftest import (
+    _DEFAULT_MODEL_NAME,
+)
 
 
 @pytest.fixture
@@ -29,10 +32,12 @@ def clear_prediction_client_cache() -> None:
 
 def test_model_name() -> None:
     for llm in [
-        VertexAI(model_name="gemini-pro", project="test-project", max_output_tokens=10),
-        VertexAI(model="gemini-pro", project="test-project", max_tokens=10),
+        VertexAI(
+            model_name=_DEFAULT_MODEL_NAME, project="test-project", max_output_tokens=10
+        ),
+        VertexAI(model=_DEFAULT_MODEL_NAME, project="test-project", max_tokens=10),
     ]:
-        assert llm.model_name == "gemini-pro"
+        assert llm.model_name == _DEFAULT_MODEL_NAME
         assert llm.max_output_tokens == 10
 
     # Test initialization with an invalid argument to check warning
@@ -42,13 +47,13 @@ def test_model_name() -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             llm = VertexAI(
-                model_name="gemini-pro",
+                model_name=_DEFAULT_MODEL_NAME,
                 project="test-project",
                 safety_setting={
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
             )
-        assert llm.model_name == "gemini-pro"
+        assert llm.model_name == _DEFAULT_MODEL_NAME
         assert llm.project == "test-project"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
@@ -58,11 +63,11 @@ def test_model_name() -> None:
 
 def test_tuned_model_name() -> None:
     llm = VertexAI(
-        model_name="gemini-pro",
+        model_name=_DEFAULT_MODEL_NAME,
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
     )
-    assert llm.model_name == "gemini-pro"
+    assert llm.model_name == _DEFAULT_MODEL_NAME
     assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
     assert (
         llm.client.full_model_name
@@ -95,7 +100,9 @@ def test_vertexai_args_passed(clear_prediction_client_cache: Any) -> None:
         )
         mock_prediction_service.return_value.generate_content = mock_generate_content
 
-        llm = VertexAI(model_name="gemini-pro", project="test-proj", **prompt_params)
+        llm = VertexAI(
+            model_name=_DEFAULT_MODEL_NAME, project="test-proj", **prompt_params
+        )
         response = llm.invoke(
             user_prompt, temperature=0.5, frequency_penalty=0.5, presence_penalty=0.5
         )
@@ -176,7 +183,7 @@ def test_tracing_params() -> None:
         }
 
         llm = VertexAI(
-            model_name="gemini-pro",
+            model_name=_DEFAULT_MODEL_NAME,
             temperature=0.1,
             max_output_tokens=10,
             project="test-proj",
@@ -185,7 +192,7 @@ def test_tracing_params() -> None:
         assert ls_params == {
             "ls_provider": "google_vertexai",
             "ls_model_type": "llm",
-            "ls_model_name": "gemini-pro",
+            "ls_model_name": _DEFAULT_MODEL_NAME,
             "ls_temperature": 0.1,
             "ls_max_tokens": 10,
         }
