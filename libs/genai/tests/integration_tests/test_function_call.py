@@ -11,12 +11,12 @@ from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
 )
 
-model_names = ["gemini-2.5-flash"]
+MODEL_NAMES = ["gemini-flash-lite-latest"]
 
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_function_call(model_name: str) -> None:
     functions = [
@@ -50,7 +50,7 @@ def test_function_call(model_name: str) -> None:
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_tool_call(model_name: str) -> None:
     @tool
@@ -79,7 +79,7 @@ class MyModel(BaseModel):
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_pydantic_call(model_name: str) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=[MyModel])

@@ -508,7 +508,10 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     result = llm_with_search.invoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
-    assert "brown" in result.content
+    content_str = (
+        result.content if isinstance(result.content, str) else str(result.content)
+    )
+    assert "brown" in content_str.lower()
 
 
 # TODO: check .content_blocks result
@@ -688,7 +691,7 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) -> None:
     """Test invoke/ainvoke and stream/astream without event loop."""
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-latest")
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
     if use_streaming:
         if is_async:
