@@ -89,8 +89,8 @@ class GmailSearch(GmailBaseTool):
 
             email_msg = email.message_from_bytes(raw_message)
 
-            subject = email_msg["Subject"] or ""
-            sender = email_msg["From"] or ""
+            subject = email_msg.get("Subject", "")
+            sender = email_msg.get("From", "")
 
             message_body = ""
             if email_msg.is_multipart():
