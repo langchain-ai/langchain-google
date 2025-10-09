@@ -79,7 +79,7 @@ def datastore_document_storage(
 
 @pytest.fixture
 def embeddings() -> VertexAIEmbeddings:
-    return VertexAIEmbeddings(model_name="text-embedding-005")
+    return VertexAIEmbeddings(model_name="text-embedding-005")  # type: ignore
 
 
 @pytest.fixture

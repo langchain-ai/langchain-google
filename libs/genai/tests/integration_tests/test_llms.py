@@ -10,12 +10,12 @@ from langchain_core.outputs import LLMResult
 
 from langchain_google_genai import GoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 
-model_names = ["gemini-2.5-flash"]
+MODEL_NAMES = ["gemini-flash-lite-latest"]
 
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_google_generativeai_call(model_name: str) -> None:
     """Test valid call to Google GenerativeAI text API."""
@@ -31,7 +31,7 @@ def test_google_generativeai_call(model_name: str) -> None:
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_google_generativeai_generate(model_name: str) -> None:
     llm = GoogleGenerativeAI(temperature=0.3, model=model_name)
@@ -47,7 +47,7 @@ def test_google_generativeai_generate(model_name: str) -> None:
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 async def test_google_generativeai_agenerate(model_name: str) -> None:
     llm = GoogleGenerativeAI(temperature=0, model=model_name)
@@ -57,7 +57,7 @@ async def test_google_generativeai_agenerate(model_name: str) -> None:
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_generativeai_stream(model_name: str) -> None:
     llm = GoogleGenerativeAI(temperature=0, model=model_name)
@@ -67,7 +67,7 @@ def test_generativeai_stream(model_name: str) -> None:
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_generativeai_get_num_tokens_gemini(model_name: str) -> None:
     llm = GoogleGenerativeAI(temperature=0, model=model_name)
@@ -77,7 +77,7 @@ def test_generativeai_get_num_tokens_gemini(model_name: str) -> None:
 
 @pytest.mark.parametrize(
     "model_name",
-    model_names,
+    MODEL_NAMES,
 )
 def test_safety_settings_gemini(model_name: str) -> None:
     # test with blocked prompt
