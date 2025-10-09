@@ -226,8 +226,8 @@ class SheetsReadDataTool(BaseReadTool):
                 {"input": "Read the first 10 rows from the student data spreadsheet"}
             )
 
-    Returns:
-        JSON string containing:
+    Tool Output:
+        str: JSON string containing:
             - Raw data: 2D array of values as returned by Google Sheets API
             - Records format: List of dictionaries with first row as headers
             - Metadata: Information about the data structure and processing
@@ -400,8 +400,8 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
             agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
 
-    Returns:
-        JSON string containing:
+    Tool Output:
+        str: JSON string containing:
             - Batch results: Dictionary with range names as keys
             - Individual range data: Each range processed according to options
             - Metadata: Information about each range and processing results
@@ -633,8 +633,8 @@ class SheetsFilteredReadDataTool(BaseReadTool):
 
             agent.invoke({"input": "Find all students with scores above 80"})
 
-    Returns:
-        JSON string containing:
+    Tool Output:
+        str: JSON string containing:
             - Filtered data: Only rows matching the filter criteria
             - Grid data: Detailed cell information with formatting (optional)
             - Metadata: Information about filtering results and data structure
