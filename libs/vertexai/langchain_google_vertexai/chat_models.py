@@ -453,9 +453,7 @@ def _parse_chat_history_gemini(
             parts = [part]
             if vertex_messages:
                 prev_content = vertex_messages[-1]
-                prev_content_is_function = (
-                    prev_content and prev_content.role == "model"
-                )
+                prev_content_is_function = prev_content and prev_content.role == "model"
                 if prev_content_is_function:
                     prev_parts = list(prev_content.parts)
                     prev_parts.extend(parts)
