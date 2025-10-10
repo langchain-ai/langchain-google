@@ -453,7 +453,7 @@ def _parse_chat_history_gemini(
             parts = [part]
             if vertex_messages:
                 prev_content = vertex_messages[-1]
-                prev_content_is_function = prev_content and prev_content.role == "model"
+                prev_content_is_function = prev_content and prev_content.role == "user"
                 if prev_content_is_function:
                     prev_parts = list(prev_content.parts)
                     prev_parts.extend(parts)
@@ -525,9 +525,9 @@ def _parse_chat_history_gemini(
             parts = [part]
 
             prev_content = vertex_messages[-1]
-            prev_content_is_function = prev_content and prev_content.role == "user"
+            prev_content_is_tool_response = prev_content and prev_content.role == "user"
 
-            if prev_content_is_function:
+            if prev_content_is_tool_response:
                 prev_parts = list(prev_content.parts)
                 prev_parts.extend(parts)
                 # replacing last message
