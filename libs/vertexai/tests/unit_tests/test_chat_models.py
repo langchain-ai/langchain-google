@@ -414,7 +414,7 @@ def test_parse_history_gemini_function() -> None:
         name=tool_call_2["name"], args=tool_call_2["args"]
     )
 
-    assert history[2].role == "model"
+    assert history[2].role == "user"
     assert history[2].parts[0].function_response == FunctionResponse(
         name=fn_name_1,
         response={"content": message3.content},
