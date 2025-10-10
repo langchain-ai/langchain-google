@@ -75,12 +75,6 @@ test_integration = [
 
 dev = []
 
-[tool.uv.sources]
-langchain-core = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core", branch = "mdrxy/genai" }
-langchain-tests = { git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/standard-tests", branch = "mdrxy/genai" }
-#langchain-core = { path = "../../../langchain/libs/core", editable = true }
-#langchain-tests = { path = "../../../langchain/libs/standard-tests", editable = true }
-
 [tool.ruff]
 fix = true
 

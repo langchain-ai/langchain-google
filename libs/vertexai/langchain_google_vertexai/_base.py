@@ -192,23 +192,23 @@ class _VertexAIBase(BaseModel):
 class _VertexAICommon(_VertexAIBase):
     client_preview: Any = Field(default=None, exclude=True)  #: :meta private:
     model_name: Optional[str] = Field(default=None, alias="model")
-    """Underlying model name."""
+    "Underlying model name."
     temperature: Optional[float] = None
-    """Sampling temperature, it controls the degree of randomness in token selection."""
+    "Sampling temperature, it controls the degree of randomness in token selection."
     frequency_penalty: Optional[float] = None
-    """Positive values penalize tokens that repeatedly appear in the generated text,
-    decreasing the probability of repeating content."""
+    "Positive values penalize tokens that repeatedly appear in the generated text, "
+    "decreasing the probability of repeating content."
     presence_penalty: Optional[float] = None
-    """Positive values penalize tokens that already appear in the generated text,
-    increasing the probability of generating more diverse content."""
+    "Positive values penalize tokens that already appear in the generated text, "
+    "increasing the probability of generating more diverse content."
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
-    """Token limit determines the maximum amount of text output from one prompt."""
+    "Token limit determines the maximum amount of text output from one prompt."
     top_p: Optional[float] = None
-    """Tokens are selected from most probable to least until the sum of their 
-    probabilities equals the top-p value. Top-p is ignored for Codey models."""
+    "Tokens are selected from most probable to least until the sum of their "
+    "probabilities equals the top-p value. Top-p is ignored for Codey models."
     top_k: Optional[int] = None
-    """How the model selects tokens for output, the next token is selected from
-    among the top-k most probable tokens. Top-k is ignored for Codey models."""
+    "How the model selects tokens for output, the next token is selected from "
+    "among the top-k most probable tokens. Top-k is ignored for Codey models."
     n: int = 1
     """How many completions to generate for each prompt."""
     seed: Optional[int] = None
@@ -229,7 +229,7 @@ class _VertexAICommon(_VertexAIBase):
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             }
-    """  # noqa: E501
+            """  # noqa: E501
 
     tuned_model_name: Optional[str] = None
     """The name of a tuned model."""
@@ -316,15 +316,15 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
 
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     endpoint_id: str
-    """A name of an endpoint where the model has been deployed."""
+    "A name of an endpoint where the model has been deployed."
     allowed_model_args: Optional[List[str]] = None
-    """Allowed optional args to be passed to the model."""
+    "Allowed optional args to be passed to the model."
     prompt_arg: str = "prompt"
     result_arg: Optional[str] = "generated_text"
-    """Set result_arg to None if output of the model is expected to be a string.
-    Otherwise, if it's a dict, provided an argument that contains the result."""
+    "Set result_arg to None if output of the model is expected to be a string."
+    "Otherwise, if it's a dict, provided an argument that contains the result."
     single_example_per_request: bool = True
-    """LLM endpoint currently serves only the first example in the request"""
+    "LLM endpoint currently serves only the first example in the request"
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
