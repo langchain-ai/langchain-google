@@ -443,7 +443,7 @@ def _parse_chat_history_gemini(
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
             prev_ai_message = None
-            role = "function"
+            role = "user"
 
             part = Part(
                 function_response=FunctionResponse(
@@ -454,7 +454,7 @@ def _parse_chat_history_gemini(
             if vertex_messages:
                 prev_content = vertex_messages[-1]
                 prev_content_is_function = (
-                    prev_content and prev_content.role == "function"
+                    prev_content and prev_content.role == "model"
                 )
                 if prev_content_is_function:
                     prev_parts = list(prev_content.parts)
@@ -465,7 +465,7 @@ def _parse_chat_history_gemini(
 
             vertex_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, ToolMessage):
-            role = "function"
+            role = "user"
 
             # message.name can be null for ToolMessage
             name = message.name
@@ -527,7 +527,7 @@ def _parse_chat_history_gemini(
             parts = [part]
 
             prev_content = vertex_messages[-1]
-            prev_content_is_function = prev_content and prev_content.role == "function"
+            prev_content_is_function = prev_content and prev_content.role == "user"
 
             if prev_content_is_function:
                 prev_parts = list(prev_content.parts)
