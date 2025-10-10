@@ -1399,7 +1399,7 @@ def test_init_from_credentials_obj() -> None:
     credentials = service_account.Credentials.from_service_account_info(
         credentials_dict
     )
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, credentials=credentials)
+    llm = ChatVertexAI(model="gemini-2.0-flash-001", credentials=credentials)
     llm.invoke("how are you")
 
 
@@ -1431,7 +1431,7 @@ def test_label_metadata_invoke_method() -> None:
 
 @pytest.mark.release
 def test_response_metadata_avg_logprobs() -> None:
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
+    llm = ChatVertexAI(model="gemini-2.0-flash-001")
     response = llm.invoke("Hello!")
     probs = response.response_metadata.get("avg_logprobs")
     if probs is not None:
@@ -1471,7 +1471,7 @@ def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) ->
 
 @pytest.mark.release
 def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) -> None:
-    url = "https://s206.q4cdn.com/479360582/files/doc_financials/2025/q1/2025q1-alphabet-earnings-release.pdf"
+    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
     # URL
     response = multimodal_pdf_chain.invoke({"image": url})
     assert isinstance(response, AIMessage)
@@ -1479,7 +1479,7 @@ def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) ->
 
 @pytest.mark.release
 def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) -> None:
-    url = "https://s206.q4cdn.com/479360582/files/doc_financials/2025/q1/2025q1-alphabet-earnings-release.pdf"
+    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
     request_response = requests.get(url, allow_redirects=True)
     # B64
     with io.BytesIO() as stream:
