@@ -1,7 +1,4 @@
-"""Wrapper around Google VertexAI chat-based models.
-
-Vertex supports both v1 and v1beta1 endpoints (`endpoint_version` parameter).
-"""
+"""Wrapper around Google VertexAI chat-based models."""
 
 from __future__ import annotations  # noqa
 import ast
@@ -10,6 +7,7 @@ from functools import cached_property
 import json
 import logging
 import re
+from dataclasses import dataclass, field
 from operator import itemgetter
 import uuid
 from typing import (
@@ -89,6 +87,7 @@ from vertexai.generative_models._generative_models import (
     _convert_schema_dict_to_gapic,
 )
 from vertexai.language_models import (
+    ChatMessage,  # TODO: migrate to google-genai since this is deprecated
     InputOutputTextPair,
 )
 from google.cloud.aiplatform_v1.types import (
@@ -196,6 +195,14 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
+@dataclass
+class _ChatHistory:
+    """Represents a context and a history of messages."""
+
+    history: List[ChatMessage] = field(default_factory=list)
+    context: Optional[str] = None
+
+
 class _GeminiGenerateContentKwargs(TypedDict):
     generation_config: Optional[GenerationConfigType]
     safety_settings: Optional[SafetySettingsType]
@@ -203,27 +210,41 @@ class _GeminiGenerateContentKwargs(TypedDict):
     tool_config: Optional[ToolConfig]
 
 
+def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
+    """Parse a sequence of messages into history.
+
+    Args:
+        history: The list of messages to re-create the history of the chat.
+
+    Returns:
+        A parsed chat history.
+
+    Raises:
+        ValueError: If a sequence of message has a SystemMessage not at the
+        first place.
+    """
+    vertex_messages, context = [], None
+    for i, message in enumerate(history):
+        content = cast("str", message.content)
+        if i == 0 and isinstance(message, SystemMessage):
+            context = content
+        elif isinstance(message, AIMessage):
+            vertex_message = ChatMessage(content=content, author="bot")
+            vertex_messages.append(vertex_message)
+        elif isinstance(message, HumanMessage):
+            vertex_message = ChatMessage(content=content, author="user")
+            vertex_messages.append(vertex_message)
+        else:
+            msg = f"Unexpected message with type {type(message)} at the position {i}."
+            raise ValueError(msg)
+    return _ChatHistory(context=context, history=vertex_messages)
+
+
 def _parse_chat_history_gemini(
     history: List[BaseMessage],
     imageBytesLoader: ImageBytesLoader,
     perform_literal_eval_on_string_raw_content: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
-    """Parse LangChain message history into Gemini format.
-
-    .. warning::
-        perform_literal_eval_on_string_raw_content should only be set to True if you
-        fully trust the input, as it may execute arbitrary code.
-
-    Args:
-        history: List of LangChain messages.
-        imageBytesLoader: An ImageBytesLoader instance to handle image loading.
-        perform_literal_eval_on_string_raw_content: Whether to attempt to parse string
-            content as Python literals (e.g., lists or dicts). Defaults to False.
-
-    Returns:
-        Tuple of (system_instruction, aiplatform_v1beta1 content).
-    """
-
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
             return Part(text=part)
@@ -314,12 +335,6 @@ def _parse_chat_history_gemini(
         raise ValueError(msg)
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
-        """Parse LangChain message content into Google parts.
-
-        Used when preparing Human, System and AI messages for sending to the API.
-        Handles both legacy (pre-v1) dict-based content blocks and v1 ContentBlock
-        objects.
-        """
         raw_content = message.content
 
         # If a user sends a multimodal request with agents, then the full input
