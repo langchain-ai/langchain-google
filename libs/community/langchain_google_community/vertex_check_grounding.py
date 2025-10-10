@@ -38,7 +38,7 @@ class VertexAICheckGroundingWrapper(
             default to 0.6.
         credentials (Optional[Credentials]): Google Cloud credentials object.
         credentials_path (Optional[str]): Path to the Google Cloud service
-        account credentials file.
+            account credentials file.
     """
 
     project_id: str = Field(default=None)  # type: ignore
@@ -101,17 +101,17 @@ class VertexAICheckGroundingWrapper(
     ) -> CheckGroundingResponse:
         """
         Calls the Vertex Check Grounding API for a given answer candidate and a list
-        of documents (claims) to validate whether the set of claims support the 
+        of documents (claims) to validate whether the set of claims support the
         answer candidate.
 
         Args:
-            answer_candidate (str): The candidate answer to be evaluated for grounding.
-            documents (List[Document]): The documents against which grounding is
-            checked. This will be converted to facts:
-                facts (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
-                    GroundingFact]):
-                List of facts for the grounding check.
-                We support up to 200 facts.
+            input: The candidate answer to be evaluated for grounding.
+            config: Runnable configuration containing documents in
+                ``config["configurable"]["documents"]``. The documents are used as
+                grounding facts and will be converted to
+                ``google.cloud.discoveryengine_v1alpha.types.GroundingFact`` objects.
+                Supports up to 200 facts.
+
         Returns:
             Response of the type CheckGroundingResponse
 

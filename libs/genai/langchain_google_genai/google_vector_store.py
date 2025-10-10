@@ -262,9 +262,9 @@ class GoogleVectorStore(VectorStore):
         document.
 
         Raises:
-            DoesNotExistsException if the IDs do not match to anything on Google
-                server. In this case, consider using `create_corpus` or
-                `create_document` to create one.
+            DoesNotExistsException: If the IDs do not match to anything on Google
+                server. In this case, consider using ``create_corpus`` or
+                ``create_document`` to create one.
         """
         super().__init__(**kwargs)
         self._retriever = _SemanticRetriever.from_ids(corpus_id, document_id)
@@ -352,7 +352,7 @@ class GoogleVectorStore(VectorStore):
             Document.
 
         Raises:
-            DoesNotExistsException if the IDs do not match to anything at
+            DoesNotExistsException: If the IDs do not match to anything at
                 Google server.
         """
         if corpus_id is None or document_id is None:
@@ -463,16 +463,22 @@ class GoogleVectorStore(VectorStore):
         """
         return lambda score: score
 
-    def as_aqa(self, **kwargs: Any) -> Runnable[str, AqaOutput]:
+    def as_aqa(
+        self,
+        *,
+        answer_style: int = 1,
+        safety_settings: Optional[List[Any]] = None,
+        temperature: Optional[float] = None,
+    ) -> Runnable[str, AqaOutput]:
         """Construct a Google Generative AI AQA engine.
 
         All arguments are optional.
 
         Args:
             answer_style: See
-              `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
-            safety_settings: See `google.ai.generativelanguage.SafetySetting`.
-            temperature: 0.0 to 1.0.
+                ``google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle``.
+            safety_settings: See ``google.ai.generativelanguage.SafetySetting``.
+            temperature: Value between 0.0 and 1.0 controlling randomness.
         """
         return (
             RunnablePassthrough[str]()
@@ -481,7 +487,11 @@ class GoogleVectorStore(VectorStore):
                 "passages": self.as_retriever(),
             }
             | RunnableLambda(_toAqaInput)
-            | GenAIAqa(**kwargs)
+            | GenAIAqa(
+                answer_style=answer_style,
+                safety_settings=safety_settings,
+                temperature=temperature,
+            )
         )
 
 

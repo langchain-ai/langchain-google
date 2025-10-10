@@ -105,26 +105,21 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
         """Embed a list of strings.
 
         Args:
-            texts: List[str] The list of strings to embed.
-            embeddings_task_type: [str] optional embeddings task type,
-                one of the following
-                    RETRIEVAL_QUERY	- Text is a query
-                                      in a search/retrieval setting.
-                    RETRIEVAL_DOCUMENT - Text is a document
-                                         in a search/retrieval setting.
-                    SEMANTIC_SIMILARITY - Embeddings will be used
-                                          for Semantic Textual Similarity (STS).
-                    CLASSIFICATION - Embeddings will be used for classification.
-                    CLUSTERING - Embeddings will be used for clustering.
-                    CODE_RETRIEVAL_QUERY - Embeddings will be used for
-                                           code retrieval for Java and Python.
-                    The following are only supported on preview models:
-                    QUESTION_ANSWERING
-                    FACT_VERIFICATION
-            dimensions: [int] optional. Output embeddings dimensions.
-                Only supported on preview models.
-            title: [str] optional. Title for the text. Only applicable when
-                TaskType is RETRIEVAL_DOCUMENT
+            texts: The list of strings to embed.
+            embeddings_task_type: Optional embeddings task type, one of the
+                following: ``RETRIEVAL_QUERY`` - Text is a query in a search/retrieval
+                setting. ``RETRIEVAL_DOCUMENT`` - Text is a document in a
+                search/retrieval setting. ``SEMANTIC_SIMILARITY`` - Embeddings will be
+                used for Semantic Textual Similarity (STS). ``CLASSIFICATION`` -
+                Embeddings will be used for classification. ``CLUSTERING`` - Embeddings
+                will be used for clustering. ``CODE_RETRIEVAL_QUERY`` - Embeddings will
+                be used for code retrieval for Java and Python. The following are only
+                supported on preview models: ``QUESTION_ANSWERING``,
+                ``FACT_VERIFICATION``.
+            dimensions: Optional output embeddings dimensions. Only supported on
+                preview models.
+            title: Optional title for the text. Only applicable when TaskType is
+                ``RETRIEVAL_DOCUMENT``.
 
         Returns:
             List of embeddings, one for each text.
@@ -148,7 +143,8 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
         """Embed a list of documents.
 
         Args:
-            texts: List[str] The list of texts to embed.
+            texts: The list of texts to embed.
+            embeddings_task_type: The task type for embeddings.
 
         Returns:
             List of embeddings, one for each text.
@@ -165,6 +161,7 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
 
         Args:
             text: The text to embed.
+            embeddings_task_type: The task type for embeddings.
 
         Returns:
             Embedding for the text.

@@ -201,12 +201,12 @@ class _BaseVertexAIVectorStore(VectorStore):
         """Delete by vector ID.
 
         Args:
-            ids (Optional[List[str]]): List of ids to delete.
-            **kwargs (Any): If added metadata={}, deletes the documents
-            that match the metadata filter and the parameter ids is not needed.
+            ids: List of ids to delete.
+            **kwargs: If added metadata={}, deletes the documents
+                that match the metadata filter and the parameter ids is not needed.
 
         Returns:
-            Optional[bool]: True if deletion is successful.
+            True if deletion is successful.
 
         Raises:
             ValueError: If ids is None or an empty list.
@@ -445,18 +445,18 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         Args:
             project_id: The GCP project id.
             region: The default location making the API calls. It must have
-            the same location as the GCS bucket and must be regional.
+                the same location as the GCS bucket and must be regional.
             gcs_bucket_name: The location where the vectors will be stored in
-            order for the index to be created.
+                order for the index to be created.
             index_id: The id of the created index.
             endpoint_id: The id of the created endpoint.
             private_service_connect_ip_address: The IP address of the private
-            service connect instance.
+                service connect instance.
             credentials: Google cloud Credentials object.
-            credentials_path: (Optional) The path of the Google credentials on
-            the local file system.
+            credentials_path: The path of the Google credentials on
+                the local file system.
             embedding: The :class:`Embeddings` that will be used for
-            embedding the texts.
+                embedding the texts.
             stream_update: Whether to update with streaming or batching. VectorSearch
                 index must be compatible with stream/batch updates.
             kwargs: Additional keyword arguments to pass to
@@ -528,19 +528,24 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
                 the same location as the GCS bucket and must be regional.
             index_id: The id of the created index.
             endpoint_id: The id of the created endpoint.
-            index_staging_bucket_name: (Optional) If the index is updated by batch,
+            index_staging_bucket_name: If the index is updated by batch,
                 bucket where the data will be staged before updating the index. Only
                 required when updating the index.
             credentials: Google cloud Credentials object.
-            credentials_path: (Optional) The path of the Google credentials on
-            the local file system.
+            credentials_path: The path of the Google credentials on
+                the local file system.
             embedding: The :class:`Embeddings` that will be used for
-            embedding the texts.
+                embedding the texts.
             stream_update: Whether to update with streaming or batching. VectorSearch
                 index must be compatible with stream/batch updates.
+            datastore_client_kwargs: Additional keyword arguments to pass to the
+                datastore client.
+            exclude_from_indexes: Fields to exclude from datastore indexing.
+            datastore_kind: Datastore kind name.
+            datastore_text_property_name: Property name for storing text content.
+            datastore_metadata_property_name: Property name for storing metadata.
             kwargs: Additional keyword arguments to pass to
                 VertexAIVectorSearch.__init__().
-            exclude_from_indexes: Fields to exclude from datastore indexing
 
         Returns:
             A configured VectorSearchVectorStoreDatastore.

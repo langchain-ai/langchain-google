@@ -30,14 +30,14 @@ def create_context_cache(
     Args:
         model: ChatVertexAI model. Must be at least gemini-2.5-pro or gemini-2.0-flash.
         messages: List of messages to cache.
-        expire_time:  Timestamp of when this resource is considered expired.
-        At most one of expire_time and ttl can be set. If neither is set, default TTL
-            on the API side will be used (currently 1 hour).
-        time_to_live:  The TTL for this resource. If provided, the expiration time is
-        computed: created_time + TTL.
-        At most one of expire_time and ttl can be set. If neither is set, default TTL
-            on the API side will be used (currently 1 hour).
-        tools:  A list of tool definitions to bind to this chat model.
+        expire_time: Timestamp of when this resource is considered expired.
+            At most one of expire_time and time_to_live can be set. If neither is set,
+            default TTL on the API side will be used (currently 1 hour).
+        time_to_live: The TTL for this resource. If provided, the expiration time is
+            computed as created_time + TTL. At most one of expire_time and time_to_live
+            can be set. If neither is set, default TTL on the API side will be used
+            (currently 1 hour).
+        tools: A list of tool definitions to bind to this chat model.
             Can be a pydantic model, callable, or BaseTool. Pydantic
             models, callables, and BaseTools will be automatically converted to
             their schema dictionary representation.

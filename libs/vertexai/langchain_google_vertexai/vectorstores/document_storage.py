@@ -123,7 +123,7 @@ class GCSDocumentStorage(DocumentStorage):
         this method.
 
         Args:
-            ids: List of ids for the text.
+            keys: List of ids for the text.
 
         Returns:
             List of documents. If the key id is not found for any id record returns a
@@ -242,8 +242,11 @@ class DataStoreDocumentStorage(DocumentStorage):
         """Constructor.
 
         Args:
-            bucket: Bucket where the documents will be stored.
-            prefix: Prefix that is prepended to all document names.
+            datastore_client: Google Cloud DataStore client.
+            kind: The kind (table name) for storing documents.
+            text_property_name: Property name for storing document text content.
+            metadata_property_name: Property name for storing document metadata.
+            exclude_from_indexes: List of properties to exclude from indexing.
         """
         super().__init__()
         self._client = datastore_client
@@ -256,7 +259,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         """Gets a batch of documents by id.
 
         Args:
-            ids: List of ids for the text.
+            keys: List of ids for the text.
 
         Returns:
             List of texts. If the key id is not found for any id record returns a None

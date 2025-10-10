@@ -58,18 +58,39 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
         )
 
     def transform_documents(
-        self, documents: Sequence[Document], **kwargs: Any
+        self,
+        documents: Sequence[Document],
+        *,
+        source_language_code: Optional[str] = None,
+        target_language_code: Optional[str] = None,
+        mime_type: str = "text/plain",
+        **kwargs: Any,
     ) -> Sequence[Document]:
         """Translate text documents using Google Translate.
 
-        Arguments:
+        Args:
+            documents: Sequence of documents to translate.
             source_language_code: ISO 639 language code of the input document.
+                If not provided, language will be auto-detected.
             target_language_code: ISO 639 language code of the output document.
-                For supported languages, refer to:
+                Required for translation. For supported languages, refer to:
                 https://cloud.google.com/translate/docs/languages
-            mime_type: (Optional) Media Type of input text.
-                Options: `text/plain`, `text/html`
+            mime_type: Media Type of input text.
+                Options: ``'text/plain'``, ``'text/html'``.
+
+        Returns:
+            Sequence of translated documents with updated metadata.
+
+        Raises:
+            ValueError: If ``target_language_code`` is not provided.
         """
+        if target_language_code is None:
+            msg = (
+                "target_language_code is required for translation. "
+                "Please provide an ISO 639 language code."
+            )
+            raise ValueError(msg)
+
         try:
             from google.cloud import translate  # type: ignore[attr-defined]
         except ImportError as exc:
@@ -87,9 +108,9 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
                 glossary_config=translate.TranslateTextGlossaryConfig(
                     glossary=self._glossary_path
                 ),
-                source_language_code=kwargs.get("source_language_code", None),
-                target_language_code=kwargs.get("target_language_code"),
-                mime_type=kwargs.get("mime_type", "text/plain"),
+                source_language_code=source_language_code,
+                target_language_code=target_language_code,
+                mime_type=mime_type,
             )
         )
 

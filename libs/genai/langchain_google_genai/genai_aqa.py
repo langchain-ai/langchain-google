@@ -103,19 +103,30 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
     # google.generativeai installed.
     answer_style: int = 1
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
+        safety_settings: Optional[List[genai.SafetySetting]] = None,
+        temperature: Optional[float] = None,
+        **kwargs: Any,
+    ) -> None:
         """Construct a Google Generative AI AQA model.
 
         All arguments are optional.
 
         Args:
             answer_style: See
-              `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
+                `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
             safety_settings: See `google.ai.generativelanguage.SafetySetting`.
             temperature: 0.0 to 1.0.
         """
         super().__init__(**kwargs)
-        self._client = _AqaModel(**kwargs)
+        self._client = _AqaModel(
+            answer_style=answer_style,
+            safety_settings=safety_settings,
+            temperature=temperature,
+        )
 
     def invoke(
         self, input: AqaInput, config: Optional[RunnableConfig] = None, **kwargs: Any

@@ -46,11 +46,10 @@ class BigQueryLoader(BaseLoader):
                 of the document.
             metadata_columns: Optional. The columns to write into the `metadata` of the
                 document.
-            credentials : google.auth.credentials.Credentials, optional
-              Credentials for accessing Google APIs. Use this parameter to override
-                default credentials, such as to use Compute Engine
-                (`google.auth.compute_engine.Credentials`) or Service Account
-                (`google.oauth2.service_account.Credentials`) credentials directly.
+            credentials: Optional. Credentials for accessing Google APIs. Use this
+                parameter to override default credentials, such as to use Compute Engine
+                (``google.auth.compute_engine.Credentials``) or Service Account
+                (``google.oauth2.service_account.Credentials``) credentials directly.
         """
         import_bigquery()
         self.query = query

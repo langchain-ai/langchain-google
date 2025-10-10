@@ -486,6 +486,9 @@ class GoogleGeocodeInput(BaseModel):
 class GoogleGeocodingTool(BaseTool):
     """Tool that queries the Google Maps Geocoding API for batch location lookups.
 
+    This tool returns a tuple containing location data with coordinates and addresses,
+    along with raw response data including query information.
+
     Instantiate:
         .. code-block:: python
 
@@ -508,11 +511,6 @@ class GoogleGeocodingTool(BaseTool):
         .. code-block:: python
 
             agent.invoke({"input": "Find coordinates of Times Square and Central Park"})
-
-    Returns:
-        Tuple containing:
-            - List of location data with coordinates and addresses
-            - Raw response data with query information
     """
 
     name: str = "google_geocode"
