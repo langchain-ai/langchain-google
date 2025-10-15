@@ -47,6 +47,7 @@ test = [
     "numpy>=1.26.4; python_version<'3.13'",
     "numpy>=2.1.0; python_version>='3.13'",
     "langchain-tests>=1.0.0a1,<2.0.0",
+    "langchain-core",
 ]
 
 test_integration = [
@@ -56,8 +57,7 @@ test_integration = [
 dev = []
 
 [tool.uv.sources]
-#langchain-core = { path = "../../../langchain/libs/core", editable = true }
-#langchain-tests = { path = "../../../langchain/libs/standard-tests", editable = true }
+langchain-core = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/core" }
 
 [tool.ruff]
 fix = true
