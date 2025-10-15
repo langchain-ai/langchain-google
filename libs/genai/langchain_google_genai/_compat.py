@@ -1,7 +1,7 @@
 """Go from v1 content blocks to generativelanguage_v1beta format."""
 
 import json
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from langchain_core.messages import content as types
 
@@ -241,13 +241,13 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             new_content.append(function_call)
 
         elif block_dict["type"] == "server_tool_call":
-
             if block_dict.get("name") == "code_interpreter":
                 # LangChain v0 format
+                args = cast(dict, block_dict.get("args", {}))
                 executable_code = {
                     "type": "executable_code",
-                    "executable_code": block_dict.get("args", {}).get("code", ""),
-                    "language": block_dict.get("args", {}).get("language", ""),
+                    "executable_code": args.get("code", ""),
+                    "language": args.get("language", ""),
                     "id": block_dict.get("id", ""),
                 }
                 # Google generativelanguage format
@@ -255,19 +255,19 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     {
                         "executable_code": {
                             "language": executable_code["language"],
-                            "code": executable_code["executable_code"]
+                            "code": executable_code["executable_code"],
                         }
                     }
                 )
 
         elif block_dict["type"] == "server_tool_result":
-
-            if block_dict.get("extras", {}).get("block_type") == "code_execution_result":
+            extras = cast(dict, block_dict.get("extras", {}))
+            if extras.get("block_type") == "code_execution_result":
                 # LangChain v0 format
                 code_execution_result = {
                     "type": "code_execution_result",
                     "code_execution_result": block_dict.get("output", ""),
-                    "outcome": block_dict.get("extras", {}).get("outcome", ""),
+                    "outcome": extras.get("outcome", ""),
                     "tool_call_id": block_dict.get("tool_call_id", ""),
                 }
                 # Google generativelanguage format
@@ -275,7 +275,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     {
                         "code_execution_result": {
                             "outcome": code_execution_result["outcome"],
-                            "output": code_execution_result["code_execution_result"]
+                            "output": code_execution_result["code_execution_result"],
                         }
                     }
                 )

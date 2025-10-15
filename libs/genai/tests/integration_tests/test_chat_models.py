@@ -263,7 +263,7 @@ def test_chat_google_genai_invoke_thinking() -> None:
         assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
-def _check_thinking_output(content: list, output_version: Literal["v0", "v1"]) -> None:
+def _check_thinking_output(content: list, output_version: str) -> None:
     if output_version == "v0":
         thinking_key = "thinking"
         assert isinstance(content[-1], str)
@@ -314,7 +314,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
     model_provider = response_metadata.get("model_provider", "google_genai")
     assert model_provider == "google_genai"
 
-    _check_thinking_output(full.content, output_version)
+    _check_thinking_output(cast(list, full.content), output_version)
     _check_usage_metadata(full)
     assert full.usage_metadata is not None
     if (
@@ -322,12 +322,12 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
         and "reasoning" in full.usage_metadata["output_token_details"]
     ):
         assert full.usage_metadata["output_token_details"]["reasoning"] > 0
-    
+
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
     result = llm.invoke([input_message, full, next_message])
     assert isinstance(result, AIMessage)
-    _check_thinking_output(result.content, output_version)
+    _check_thinking_output(cast(list, result.content), output_version)
 
 
 @pytest.mark.flaky(retries=5, delay=1)
@@ -901,9 +901,7 @@ def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) ->
         assert isinstance(invoke_result, AIMessage)
 
 
-def _check_web_search_output(
-    message: AIMessage, output_version: Literal["v0", "v1"]
-) -> None:
+def _check_web_search_output(message: AIMessage, output_version: str) -> None:
     assert "grounding_metadata" in message.response_metadata
 
     # Lazy parsing
@@ -914,7 +912,7 @@ def _check_web_search_output(
     assert text_block["annotations"]
 
     if output_version == "v1":
-        text_blocks = [block for block in message.content if block["type"] == "text"]
+        text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[misc,index]
         assert len(text_blocks) == 1
         text_block = text_blocks[0]
         assert text_block["annotations"]
@@ -1067,9 +1065,7 @@ def test_search_builtin_with_citations(use_streaming: bool) -> None:
                         assert isinstance(google_metadata, dict)
 
 
-def _check_code_execution_output(
-    message: AIMessage, output_version: Literal["v0", "v1"]
-) -> None:
+def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
     if output_version == "v0":
         blocks = [block for block in message.content if isinstance(block, dict)]
         expected_block_types = {"executable_code", "code_execution_result"}
@@ -1078,12 +1074,11 @@ def _check_code_execution_output(
     else:
         # v1
         expected_block_types = {"server_tool_call", "server_tool_result", "text"}
-        assert {block["type"] for block in message.content} == expected_block_types
+        assert {block["type"] for block in message.content} == expected_block_types  # type: ignore[index]
 
     # Lazy parsing
     expected_block_types = {"server_tool_call", "server_tool_result", "text"}
     assert {block["type"] for block in message.content_blocks} == expected_block_types
-
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")
