@@ -947,39 +947,65 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     )
 
 
-@pytest.mark.flaky(retries=3)
+def _check_thinking_output(content: list, output_version: Literal["v0", "v1"]) -> None:
+    if output_version == "v0":
+        thinking_key = "thinking"
+        assert isinstance(content[-1], str)
+
+    else:
+        # v1
+        thinking_key = "reasoning"
+        assert isinstance(content[-1], dict)
+        assert content[-1].get("type") == "text"
+        assert isinstance(content[-1].get("text"), str)
+
+    assert isinstance(content, list)
+    thinking_blocks = [
+        item
+        for item in content
+        if isinstance(item, dict) and item.get("type") == thinking_key
+    ]
+    assert thinking_blocks
+    for block in thinking_blocks:
+        assert isinstance(block[thinking_key], str)
+
+
+#@pytest.mark.flaky(retries=3)
 @pytest.mark.release
-def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
-    model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
+    output_version: str
+) -> None:
+    model = ChatVertexAI(
+        model=_DEFAULT_THINKING_MODEL_NAME,
+        include_thoughts=True,
+        output_version=output_version,
+    )
 
     input_message = {
         "role": "user",
         "content": "How many O's are in Google? Think before you answer.",
     }
 
-    response = model.invoke([input_message])
+    full: AIMessageChunk | None = None
+    for chunk in model.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
 
-    assert isinstance(response, AIMessage)
-    content = response.content
+    _check_thinking_output(full.content, output_version)
 
-    assert isinstance(content[0], dict)
-    assert content[0].get("type") == "thinking"
-    assert isinstance(content[0].get("thinking"), str)
-
-    text_response = next(block for block in content if isinstance(block, str))
-    assert text_response
-
-    assert response.usage_metadata is not None
-    assert response.usage_metadata["output_token_details"]["reasoning"] > 0
+    assert full.usage_metadata is not None
+    assert full.usage_metadata["output_token_details"]["reasoning"] > 0
     assert (
-        response.usage_metadata["total_tokens"]
-        > response.usage_metadata["input_tokens"]
-        + response.usage_metadata["output_tokens"]
+        full.usage_metadata["total_tokens"]
+        > full.usage_metadata["input_tokens"]
+        + full.usage_metadata["output_tokens"]
     )
 
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
-    _ = model.invoke([input_message, response, next_message])
+    _ = model.invoke([input_message, full, next_message])
 
 
 @pytest.mark.release
@@ -1629,31 +1655,44 @@ def test_search_builtin() -> None:
     _ = llm.invoke([input_message, full, next_message])
 
 
-def test_code_execution_builtin() -> None:
-    """Test the built-in code execution tool."""
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"code_execution": {}}])
+def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
+    if output_version == "v0":
+        blocks = [block for block in message.content if isinstance(block, dict)]
+        expected_block_types = {"executable_code", "code_execution_result"}
+        assert {block.get("type") for block in blocks} == expected_block_types
+
+    else:
+        # v1
+        expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+        assert {block["type"] for block in message.content} == expected_block_types  # type: ignore[index]
+
+    # Lazy parsing
+    expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+    assert {block["type"] for block in message.content_blocks} == expected_block_types
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_code_execution_builtin(output_version: str) -> None:
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME, output_version=output_version
+    ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",
         "content": "What is 3^3?",
     }
-    response = llm.invoke([input_message])
-    content_blocks = [block for block in response.content if isinstance(block, dict)]
-    expected_block_types = {"executable_code", "code_execution_result"}
-    assert {block.get("type") for block in content_blocks} == expected_block_types
 
-    # Test streaming
-    full: Optional[BaseMessageChunk] = None
+    full: AIMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
-    content_blocks = [block for block in full.content if isinstance(block, dict)]
-    expected_block_types = {"executable_code", "code_execution_result"}
-    assert {block.get("type") for block in content_blocks} == expected_block_types
 
-    # Test we can process chat history
+    _check_code_execution_output(full, output_version)
+
+    # Test passing back in chat history without raising errors
     next_message = {
         "role": "user",
-        "content": "Can you add some comments to the code?",
+        "content": "Can you show me the calculation again with comments?",
     }
-    _ = llm.invoke([input_message, full, next_message])
+    response = llm.invoke([input_message, full, next_message])
+    _check_code_execution_output(response, output_version)
