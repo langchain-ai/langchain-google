@@ -3,6 +3,7 @@
 from __future__ import annotations  # noqa
 import ast
 import base64
+import math
 from functools import cached_property
 import json
 import logging
@@ -24,9 +25,15 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence, Mapping
 
 import proto  # type: ignore[import-untyped]
+from google.protobuf.json_format import SerializeToJsonError
+from google.protobuf.struct_pb2 import (
+    ListValue,
+    Struct,
+    Value,
+)
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
@@ -51,7 +58,9 @@ from langchain_core.messages import (
     convert_to_openai_image_block,
     is_data_content_block,
 )
-from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.ai import (
+    UsageMetadata,
+)
 from langchain_core.messages.tool import (
     tool_call_chunk,
     tool_call as create_tool_call,
@@ -74,6 +83,10 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
+from langchain_google_vertexai._usage import (
+    coerce_usage_metadata,
+    diff_usage_metadata,
+)
 from vertexai.generative_models import (
     Tool as VertexTool,  # TODO: migrate to google-genai since this is deprecated
 )
@@ -606,6 +619,80 @@ def _append_to_content(
     raise TypeError(msg)
 
 
+def _json_safe_number(value: float) -> Union[str, float]:
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return value
+
+
+def _struct_value_to_jsonable(value: Value) -> Any:
+    kind = value.WhichOneof("kind")
+    if kind == "number_value":
+        return _json_safe_number(value.number_value)
+    if kind == "string_value":
+        return value.string_value
+    if kind == "bool_value":
+        return bool(value.bool_value)
+    if kind == "null_value":
+        return None
+    if kind == "struct_value":
+        return _struct_to_jsonable(value.struct_value)
+    if kind == "list_value":
+        return [_struct_value_to_jsonable(item) for item in value.list_value.values]
+    return None
+
+
+def _struct_to_jsonable(struct: Struct) -> dict[str, Any]:
+    return {key: _struct_value_to_jsonable(val) for key, val in struct.fields.items()}
+
+
+def _make_jsonable(value: Any) -> Any:
+    if isinstance(value, Value):
+        return _struct_value_to_jsonable(value)
+    if isinstance(value, Struct):
+        return _struct_to_jsonable(value)
+    if isinstance(value, ListValue):
+        return [_struct_value_to_jsonable(item) for item in value.values]
+    if isinstance(value, Mapping):
+        return {str(key): _make_jsonable(val) for key, val in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_make_jsonable(item) for item in value]
+    if isinstance(value, float):
+        return _json_safe_number(value)
+    return value
+
+
+def _coerce_function_call_args(function_call: FunctionCall) -> dict[str, Any]:
+    try:
+        fc_dict = proto.Message.to_dict(function_call)
+    except SerializeToJsonError:
+        fc_dict = {}
+    except TypeError:
+        fc_dict = {}
+
+    args_dict: Any = fc_dict.get("args") if isinstance(fc_dict, dict) else None
+    if isinstance(args_dict, dict):
+        return dict(args_dict)
+
+    struct_args = getattr(function_call, "args", None)
+    if isinstance(struct_args, Struct):
+        return _struct_to_jsonable(struct_args)
+    if isinstance(struct_args, Mapping):
+        return {str(key): _make_jsonable(val) for key, val in struct_args.items()}
+
+    if struct_args is not None:
+        try:
+            fallback_dict = proto.Message.to_dict(struct_args)
+        except Exception:
+            fallback_dict = {}
+        if isinstance(fallback_dict, dict):
+            return fallback_dict
+
+    return {}
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: Candidate, streaming: Literal[False] = False
@@ -649,9 +736,10 @@ def _parse_response_candidate(
             # but in general the full set of function calls is stored in tool_calls.
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
-            function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            function_call_args_dict = _coerce_function_call_args(part.function_call)
             function_call["arguments"] = json.dumps(
-                {k: function_call_args_dict[k] for k in function_call_args_dict}
+                function_call_args_dict,
+                allow_nan=False,
             )
             additional_kwargs["function_call"] = function_call
 
@@ -2695,17 +2783,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         # Note: some models (e.g., gemini-1.5-pro with image inputs) return
         # cumulative sums of token counts.
         total_lc_usage = _get_usage_metadata_gemini(usage_metadata)
-        if total_lc_usage and prev_total_usage:
-            lc_usage: Optional[UsageMetadata] = UsageMetadata(
-                input_tokens=total_lc_usage["input_tokens"]
-                - prev_total_usage["input_tokens"],
-                output_tokens=total_lc_usage["output_tokens"]
-                - prev_total_usage["output_tokens"],
-                total_tokens=total_lc_usage["total_tokens"]
-                - prev_total_usage["total_tokens"],
-            )
-        else:
-            lc_usage = total_lc_usage
+        lc_usage = diff_usage_metadata(total_lc_usage, prev_total_usage)
         if not response_chunk.candidates:
             message = AIMessageChunk(content="")
             if lc_usage:
@@ -2736,30 +2814,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> Optional[UsageMetadata]:
     """Get UsageMetadata from raw response metadata."""
-    input_tokens = raw_metadata.get("prompt_token_count", 0)
-    output_tokens = raw_metadata.get("candidates_token_count", 0)
-    total_tokens = raw_metadata.get("total_token_count", 0)
-    thought_tokens = raw_metadata.get("thoughts_token_count", 0)
-    cache_read_tokens = raw_metadata.get("cached_content_token_count", 0)
-    if all(
-        count == 0
-        for count in [input_tokens, output_tokens, total_tokens, cache_read_tokens]
-    ):
-        return None
-    if thought_tokens > 0:
-        return UsageMetadata(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            input_token_details={"cache_read": cache_read_tokens},
-            output_token_details={"reasoning": thought_tokens},
-        )
-    return UsageMetadata(
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        total_tokens=total_tokens,
-        input_token_details={"cache_read": cache_read_tokens},
-    )
+    return coerce_usage_metadata(raw_metadata)
 
 
 def _get_tool_name(tool: _ToolType) -> str:
