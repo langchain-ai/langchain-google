@@ -510,7 +510,7 @@ def test_parse_history_gemini_function_empty_list() -> None:
         name=tool_call_1["name"], args=tool_call_1["args"]
     )
 
-    assert history[2].role == "function"
+    assert history[2].role == "user"
     assert history[2].parts[0].function_response == FunctionResponse(
         name=fn_name_1,
         response={"content": ""},
@@ -592,7 +592,7 @@ def test_parse_history_gemini_function() -> None:
         name=tool_call_2["name"], args=tool_call_2["args"]
     )
 
-    assert history[2].role == "function"
+    assert history[2].role == "user"
     assert history[2].parts[0].function_response == FunctionResponse(
         name=fn_name_1,
         response={"content": message3.content},
@@ -607,7 +607,7 @@ def test_parse_history_gemini_function() -> None:
         name=tool_call_3["name"], args=tool_call_3["args"]
     )
 
-    assert history[4].role == "function"
+    assert history[4].role == "user"
     assert history[4].parts[0].function_response == FunctionResponse(
         name=fn_name_3,
         response={"content": message6.content},
@@ -1378,7 +1378,7 @@ def test_multiple_fc() -> None:
                     )
                 ),
             ],
-            role="function",
+            role="user",
         ),
     ]
     assert history == expected
@@ -1589,7 +1589,7 @@ def test_thought_signature() -> None:
             ],
         ),
         Content(
-            role="function",
+            role="user",
             parts=[
                 Part(
                     function_response=FunctionResponse(
