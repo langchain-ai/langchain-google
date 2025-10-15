@@ -54,6 +54,7 @@ from langchain_core.messages import (
     convert_to_openai_image_block,
     is_data_content_block,
 )
+from langchain_core.messages import content as lc_content
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import (
     tool_call_chunk,
@@ -122,6 +123,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     VideoMetadata,
 )
 from langchain_google_vertexai._base import _VertexAICommon
+from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
@@ -224,6 +226,25 @@ def _parse_chat_history_gemini(
         Tuple of (system_instruction, aiplatform_v1beta1 content).
     """
 
+    # Case where content was serialized to v1 format
+    for idx, message in enumerate(history):
+        if (
+            isinstance(message, AIMessage)
+            and message.response_metadata.get("output_version") == "v1"
+        ):
+            # Unpack known v1 content to v1beta format for the request
+            #
+            # Old content types and any previously serialized messages passed back in to
+            # history will skip this, but hit and processed in `_convert_to_parts`
+            history[idx] = message.model_copy(
+                update={
+                    "content": _convert_from_v1_to_vertex(
+                        cast(list[lc_content.ContentBlock], message.content),
+                        message.response_metadata.get("model_provider"),
+                    )
+                }
+            )
+
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
             return Part(text=part)
@@ -264,12 +285,13 @@ def _parse_chat_history_gemini(
 
         if is_data_content_block(part):
             # LangChain standard format
-            if part["type"] == "image" and part["source_type"] == "url":
+            if part["type"] == "image" and "url" in part:
                 oai_content_block = convert_to_openai_image_block(part)
                 url = oai_content_block["image_url"]["url"]
                 return imageBytesLoader.load_gapic_part(url)
-            if part["source_type"] == "base64":
-                bytes_ = base64.b64decode(part["data"])
+            if "base64" in part or part.get("source_type") == "base64":
+                key_name = "base64" if "base64" in part else "data"
+                bytes_ = base64.b64decode(part[key_name])
             else:
                 msg = "source_type must be url or base64."
                 raise ValueError(msg)
@@ -1371,9 +1393,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     {"type": "text", "text": "describe the document in a sentence"},
                     {
                         "type": "file",
-                        "source_type": "base64",
                         "mime_type": "application/pdf",
-                        "data": pdf_base64,
+                        "base64": pdf_base64,
                     },
                 ]
             )
@@ -1424,9 +1445,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     },
                     {
                         "type": "file",
-                        "source_type": "base64",
                         "mime_type": "video/mp4",
-                        "data": video_base64,
+                        "base64": video_base64,
                     },
                 ]
             )
@@ -1499,9 +1519,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     {"type": "text", "text": "summarize this audio in a sentence"},
                     {
                         "type": "file",
-                        "source_type": "base64",
                         "mime_type": "audio/mp3",
-                        "data": audio_base64,
+                        "base64": audio_base64,
                     },
                 ]
             )
@@ -2651,12 +2670,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
             message = _parse_response_candidate(candidate)
+            message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
             generations.append(ChatGeneration(message=message, generation_info=info))
         if not response.candidates:
             message = AIMessage(content="")
+            message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
             if usage:
                 generation_info = {"usage_metadata": usage}
@@ -2712,6 +2733,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
             generation_info.pop("is_blocked", None)
+
+        message.response_metadata["model_provider"] = "google_vertexai"
+
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,
