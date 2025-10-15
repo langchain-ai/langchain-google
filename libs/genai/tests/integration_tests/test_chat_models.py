@@ -263,6 +263,29 @@ def test_chat_google_genai_invoke_thinking() -> None:
         assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
+def _check_thinking_output(content: list, output_version: Literal["v0", "v1"]) -> None:
+    if output_version == "v0":
+        thinking_key = "thinking"
+        assert isinstance(content[-1], str)
+
+    else:
+        # v1
+        thinking_key = "reasoning"
+        assert isinstance(content[-1], dict)
+        assert content[-1].get("type") == "text"
+        assert isinstance(content[-1].get("text"), str)
+
+    assert isinstance(content, list)
+    thinking_blocks = [
+        item
+        for item in content
+        if isinstance(item, dict) and item.get("type") == thinking_key
+    ]
+    assert thinking_blocks
+    for block in thinking_blocks:
+        assert isinstance(block[thinking_key], str)
+
+
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts(
     output_version: str,
@@ -280,49 +303,31 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
         ),
     }
 
-    result = llm.invoke([input_message])
+    full: AIMessageChunk | None = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
 
-    assert isinstance(result, AIMessage)
-    content = result.content
+    assert isinstance(full, AIMessage)
 
-    response_metadata = result.response_metadata
+    response_metadata = full.response_metadata
     model_provider = response_metadata.get("model_provider", "google_genai")
     assert model_provider == "google_genai"
 
-    if output_version == "v0":
-        assert isinstance(content[0], dict)
-        assert content[0].get("type") == "thinking"
-        assert isinstance(content[0].get("thinking"), str)
-
-        assert isinstance(content[1], str)
-
-        _check_usage_metadata(result)
-
-        assert result.usage_metadata is not None
-        if (
-            "output_token_details" in result.usage_metadata
-            and "reasoning" in result.usage_metadata["output_token_details"]
-        ):
-            assert result.usage_metadata["output_token_details"]["reasoning"] > 0
-
-        # We don't test passing back in here as it's covered in the next test
-        # (Google requires function declaration)
-    else:
-        # v1
-        assert isinstance(content, list)
-        assert len(content) == 2
-        assert isinstance(content[0], dict)
-        assert content[0].get("type") == "reasoning"
-        assert isinstance(content[0].get("reasoning"), str)
-
-        assert isinstance(content[1], dict)
-        assert content[1].get("type") == "text"
-        assert isinstance(content[1].get("text"), str)
-
-        _check_usage_metadata(result)
-
-        # We don't test passing back in here as it's covered in the next test
-        # (Google requires function declaration)
+    _check_thinking_output(full.content, output_version)
+    _check_usage_metadata(full)
+    assert full.usage_metadata is not None
+    if (
+        "output_token_details" in full.usage_metadata
+        and "reasoning" in full.usage_metadata["output_token_details"]
+    ):
+        assert full.usage_metadata["output_token_details"]["reasoning"] > 0
+    
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    result = llm.invoke([input_message, full, next_message])
+    assert isinstance(result, AIMessage)
+    _check_thinking_output(result.content, output_version)
 
 
 @pytest.mark.flaky(retries=5, delay=1)
@@ -1055,70 +1060,48 @@ def test_search_builtin_with_citations(use_streaming: bool) -> None:
                         assert isinstance(google_metadata, dict)
 
 
+def _check_code_execution_output(
+    message: AIMessage, output_version: Literal["v0", "v1"]
+) -> None:
+    if output_version == "v0":
+        blocks = [block for block in message.content if isinstance(block, dict)]
+        expected_block_types = {"executable_code", "code_execution_result"}
+        assert {block.get("type") for block in blocks} == expected_block_types
+
+    else:
+        # v1
+        expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+        assert {block["type"] for block in message.content} == expected_block_types
+
+    # Lazy parsing
+    expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+    assert {block["type"] for block in message.content_blocks} == expected_block_types
+
+
+
 @pytest.mark.filterwarnings("ignore::UserWarning")
-@pytest.mark.parametrize("use_streaming", [False, True])
-def test_code_execution_builtin(use_streaming: bool) -> None:
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
-        [{"code_execution": {}}]
-    )
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_code_execution_builtin(output_version: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-2.0-flash-001", output_version=output_version
+    ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",
         "content": "What is 3^3?",
     }
 
-    if use_streaming:
-        # Test streaming mode
-        full: Optional[BaseMessageChunk] = None
-        for chunk in llm.stream([input_message]):
-            assert isinstance(chunk, AIMessageChunk)
-            full = chunk if full is None else full + chunk
-        assert isinstance(full, AIMessageChunk)
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
 
-        # Check raw content still has legacy format (backward compatibility)
-        blocks = [block for block in full.content if isinstance(block, dict)]
-        expected_block_types = {"executable_code", "code_execution_result"}
-        assert {block.get("type") for block in blocks} == expected_block_types
+    _check_code_execution_output(full, output_version)
 
-        content_blocks = full.content_blocks
-        standard_blocks = [block for block in content_blocks if isinstance(block, dict)]
-        standard_types = {block.get("type") for block in standard_blocks}
-        assert (
-            "server_tool_call" in standard_types or "executable_code" in standard_types
-        )
-        assert (
-            "server_tool_result" in standard_types
-            or "code_execution_result" in standard_types
-        )
-
-        # Test passing back in chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Can you show me the calculation again with comments?",
-        }
-        _ = llm.invoke([input_message, full, next_message])
-    else:
-        # Invoke
-        response = llm.invoke([input_message])
-        blocks = [block for block in response.content if isinstance(block, dict)]
-
-        # Check raw content still has legacy format (backward compatibility)
-        expected_block_types = {"executable_code", "code_execution_result"}
-        assert {block.get("type") for block in blocks} == expected_block_types
-
-        content_blocks = response.content_blocks
-        standard_blocks = [block for block in content_blocks if isinstance(block, dict)]
-        standard_types = {block.get("type") for block in standard_blocks}
-        assert (
-            "server_tool_call" in standard_types or "executable_code" in standard_types
-        )
-        assert (
-            "server_tool_result" in standard_types
-            or "code_execution_result" in standard_types
-        )
-
-        # Test passing back in chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Can you show me the calculation again with comments?",
-        }
-        _ = llm.invoke([input_message, response, next_message])
+    # Test passing back in chat history without raising errors
+    next_message = {
+        "role": "user",
+        "content": "Can you show me the calculation again with comments?",
+    }
+    response = llm.invoke([input_message, full, next_message])
+    _check_code_execution_output(response, output_version)
