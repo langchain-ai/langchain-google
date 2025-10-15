@@ -1,7 +1,7 @@
 """Go from v1 content blocks to generativelanguage_v1beta format."""
 
 import json
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from langchain_core.messages import content as types
 
@@ -150,8 +150,6 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         elif block_dict["type"] == "reasoning" and model_provider == "google_genai":
             # Google requires passing back the thought_signature when available.
             # Signatures are only provided when function calling is enabled.
-            # If no signature is available, we skip the reasoning block as it cannot
-            # be properly serialized back to the API.
             if "extras" in block_dict and isinstance(block_dict["extras"], dict):
                 extras = block_dict["extras"]
                 if "signature" in extras:
@@ -242,7 +240,47 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             }
             new_content.append(function_call)
 
-        # NonStandardContentBlock
-        # TODO: Handle new server tools
+        elif block_dict["type"] == "server_tool_call":
+            if block_dict.get("name") == "code_interpreter":
+                # LangChain v0 format
+                args = cast(dict, block_dict.get("args", {}))
+                executable_code = {
+                    "type": "executable_code",
+                    "executable_code": args.get("code", ""),
+                    "language": args.get("language", ""),
+                    "id": block_dict.get("id", ""),
+                }
+                # Google generativelanguage format
+                new_content.append(
+                    {
+                        "executable_code": {
+                            "language": executable_code["language"],
+                            "code": executable_code["executable_code"],
+                        }
+                    }
+                )
+
+        elif block_dict["type"] == "server_tool_result":
+            extras = cast(dict, block_dict.get("extras", {}))
+            if extras.get("block_type") == "code_execution_result":
+                # LangChain v0 format
+                code_execution_result = {
+                    "type": "code_execution_result",
+                    "code_execution_result": block_dict.get("output", ""),
+                    "outcome": extras.get("outcome", ""),
+                    "tool_call_id": block_dict.get("tool_call_id", ""),
+                }
+                # Google generativelanguage format
+                new_content.append(
+                    {
+                        "code_execution_result": {
+                            "outcome": code_execution_result["outcome"],
+                            "output": code_execution_result["code_execution_result"],
+                        }
+                    }
+                )
+
+        elif block_dict["type"] == "non_standard":
+            new_content.append(block_dict["value"])
 
     return new_content

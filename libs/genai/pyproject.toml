@@ -13,7 +13,7 @@ readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=1.0.0a6,<2.0.0",
+    "langchain-core>=1.0.0rc1,<2.0.0",
     "google-ai-generativelanguage>=0.7.0,<1.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "filetype>=1.2.0,<2.0.0",
@@ -47,6 +47,7 @@ test = [
     "numpy>=1.26.4; python_version<'3.13'",
     "numpy>=2.1.0; python_version>='3.13'",
     "langchain-tests>=1.0.0a1,<2.0.0",
+    "langchain-core",
 ]
 
 test_integration = [
@@ -56,8 +57,7 @@ test_integration = [
 dev = []
 
 [tool.uv.sources]
-#langchain-core = { path = "../../../langchain/libs/core", editable = true }
-#langchain-tests = { path = "../../../langchain/libs/standard-tests", editable = true }
+langchain-core = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/core" }
 
 [tool.ruff]
 fix = true

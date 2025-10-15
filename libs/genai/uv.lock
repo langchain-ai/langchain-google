@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10.0, <4.0.0"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
@@ -456,8 +456,8 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.0a6"
-source = { registry = "https://pypi.org/simple" }
+version = "1.0.0rc1"
+source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore#8f6851c349703d6a4d9c3e877ea938cdf24df5f6" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
@@ -466,10 +466,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tenacity" },
     { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/14/8ba54f4d2c40e3528e511a106aa95e6625083fb42607f1dc6797ce32181e/langchain_core-1.0.0a6.tar.gz", hash = "sha256:8c6d60cae6d7e6c3e3555ad05a4e65d0ae8167a7ee7b40233663209b019ffeae", size = 617086, upload-time = "2025-10-02T03:01:27.997Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/83/b53010d854f76c4373f66bc05a3ea2b85644ddf928e5af7e41db5cc2f832/langchain_core-1.0.0a6-py3-none-any.whl", hash = "sha256:46bb8f5dfe3637cf5fa594a8e40ddd2d4fd1cb48559afaeeece0ea83bd715a22", size = 484625, upload-time = "2025-10-02T03:01:26.46Z" },
 ]
 
 [[package]]
@@ -489,6 +485,7 @@ lint = [
 ]
 test = [
     { name = "freezegun" },
+    { name = "langchain-core" },
     { name = "langchain-tests" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -517,7 +514,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-ai-generativelanguage", specifier = ">=0.7.0,<1.0.0" },
-    { name = "langchain-core", specifier = ">=1.0.0a6,<2.0.0" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
 ]
 
@@ -526,6 +523,7 @@ dev = []
 lint = [{ name = "ruff", specifier = ">=0.13.1,<0.14.0" }]
 test = [
     { name = "freezegun", specifier = ">=1.5.0,<2.0.0" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore" },
     { name = "langchain-tests", specifier = ">=1.0.0a1,<2.0.0" },
     { name = "numpy", marker = "python_full_version < '3.13'", specifier = ">=1.26.4" },
     { name = "numpy", marker = "python_full_version >= '3.13'", specifier = ">=2.1.0" },
