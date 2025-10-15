@@ -901,42 +901,49 @@ def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) ->
         assert isinstance(invoke_result, AIMessage)
 
 
-@pytest.mark.parametrize("use_streaming", [False, True])
-def test_search_builtin(use_streaming: bool) -> None:
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
-        [{"google_search": {}}]
-    )
+def _check_web_search_output(
+    message: AIMessage, output_version: Literal["v0", "v1"]
+) -> None:
+    assert "grounding_metadata" in message.response_metadata
+
+    # Lazy parsing
+    content_blocks = message.content_blocks
+    text_blocks = [block for block in content_blocks if block["type"] == "text"]
+    assert len(text_blocks) == 1
+    text_block = text_blocks[0]
+    assert text_block["annotations"]
+
+    if output_version == "v1":
+        text_blocks = [block for block in message.content if block["type"] == "text"]
+        assert len(text_blocks) == 1
+        text_block = text_blocks[0]
+        assert text_block["annotations"]
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_search_builtin(output_version: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-2.0-flash-001", output_version=output_version
+    ).bind_tools([{"google_search": {}}])
     input_message = {
         "role": "user",
         "content": "What is today's news?",
     }
 
-    if use_streaming:
-        # Test streaming
-        full: Optional[BaseMessageChunk] = None
-        for chunk in llm.stream([input_message]):
-            assert isinstance(chunk, AIMessageChunk)
-            full = chunk if full is None else full + chunk
-        assert isinstance(full, AIMessageChunk)
-        assert "grounding_metadata" in full.response_metadata
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    _check_web_search_output(full, output_version)
 
-        # Test we can process chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Tell me more about that last story.",
-        }
-        _ = llm.invoke([input_message, full, next_message])
-    else:
-        # Test invoke
-        response = llm.invoke([input_message])
-        assert "grounding_metadata" in response.response_metadata
-
-        # Test we can process chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Tell me more about that last story.",
-        }
-        _ = llm.invoke([input_message, response, next_message])
+    # Test we can process chat history without raising errors
+    next_message = {
+        "role": "user",
+        "content": "Tell me more about that last story.",
+    }
+    response = llm.invoke([input_message, full, next_message])
+    _check_web_search_output(response, output_version)
 
 
 @pytest.mark.parametrize("use_streaming", [False, True])
