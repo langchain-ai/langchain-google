@@ -13,7 +13,7 @@ readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=1.0.0a6,<2.0.0",
+    "langchain-core>=1.0.0rc1,<2.0.0",
     "google-ai-generativelanguage>=0.7.0,<1.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "filetype>=1.2.0,<2.0.0",

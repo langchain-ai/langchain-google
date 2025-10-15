@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10.0, <4.0.0"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
@@ -456,7 +456,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.0a6"
+version = "1.0.0rc1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -467,9 +467,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/14/8ba54f4d2c40e3528e511a106aa95e6625083fb42607f1dc6797ce32181e/langchain_core-1.0.0a6.tar.gz", hash = "sha256:8c6d60cae6d7e6c3e3555ad05a4e65d0ae8167a7ee7b40233663209b019ffeae", size = 617086, upload-time = "2025-10-02T03:01:27.997Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/cf/e66bebf8de7d130349d86d337c0876eed386b082cb6ce646de85d86fd9f6/langchain_core-1.0.0rc1.tar.gz", hash = "sha256:fb26e250460d198d26cdbc8197bb9b137cf481741c8833fbb58a1d8c1eb8467c", size = 762275, upload-time = "2025-10-15T17:13:01.827Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/83/b53010d854f76c4373f66bc05a3ea2b85644ddf928e5af7e41db5cc2f832/langchain_core-1.0.0a6-py3-none-any.whl", hash = "sha256:46bb8f5dfe3637cf5fa594a8e40ddd2d4fd1cb48559afaeeece0ea83bd715a22", size = 484625, upload-time = "2025-10-02T03:01:26.46Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/ab/92952a6776e907bf978cbb99b637fb39e680c21c9f8fd392e1f1bb2aabe8/langchain_core-1.0.0rc1-py3-none-any.whl", hash = "sha256:aa207864cd4e74a914f67c17dd7ed7cfbc2b1f249446ca681f68d50050c8d37f", size = 467815, upload-time = "2025-10-15T17:13:00.33Z" },
 ]
 
 [[package]]
@@ -517,7 +517,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-ai-generativelanguage", specifier = ">=0.7.0,<1.0.0" },
-    { name = "langchain-core", specifier = ">=1.0.0a6,<2.0.0" },
+    { name = "langchain-core", specifier = ">=1.0.0rc1,<2.0.0" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
 ]
 
