@@ -52,6 +52,9 @@ from langchain_google_vertexai.chat_models import (
     _parse_response_candidate,
 )
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+from tests.integration_tests.conftest import (
+    _DEFAULT_MODEL_NAME,
+)
 
 
 @pytest.fixture
@@ -64,28 +67,28 @@ def clear_prediction_client_cache() -> None:
 def test_init() -> None:
     for llm in [
         ChatVertexAI(
-            model_name="gemini-pro",
+            model_name=_DEFAULT_MODEL_NAME,
             project="test-project",
             max_output_tokens=10,
             stop=["bar"],
             location="moon-dark1",
         ),
         ChatVertexAI(
-            model="gemini-pro",
+            model=_DEFAULT_MODEL_NAME,
             max_tokens=10,
             stop_sequences=["bar"],
             location="moon-dark1",
             project="test-proj",
         ),
     ]:
-        assert llm.model_name == "gemini-pro"
+        assert llm.model_name == _DEFAULT_MODEL_NAME
         assert llm.max_output_tokens == 10
         assert llm.stop == ["bar"]
 
         ls_params = llm._get_ls_params()
         assert ls_params == {
             "ls_provider": "google_vertexai",
-            "ls_model_name": "gemini-pro",
+            "ls_model_name": _DEFAULT_MODEL_NAME,
             "ls_model_type": "chat",
             "ls_temperature": None,
             "ls_max_tokens": 10,
@@ -99,13 +102,13 @@ def test_init() -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             llm = ChatVertexAI(
-                model_name="gemini-pro",
+                model_name=_DEFAULT_MODEL_NAME,
                 project="test-project",
                 safety_setting={
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
             )
-        assert llm.model_name == "gemini-pro"
+        assert llm.model_name == _DEFAULT_MODEL_NAME
         assert llm.project == "test-project"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
@@ -182,12 +185,12 @@ def test_model_name_presence_in_chat_results(
 
 def test_tuned_model_name() -> None:
     llm = ChatVertexAI(
-        model_name="gemini-pro",
+        model_name=_DEFAULT_MODEL_NAME,
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
         max_tokens=500,
     )
-    assert llm.model_name == "gemini-pro"
+    assert llm.model_name == _DEFAULT_MODEL_NAME
     assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
     assert llm.full_model_name == "projects/123/locations/europe-west4/endpoints/456"
     assert llm.max_output_tokens == 500
@@ -625,7 +628,7 @@ def test_default_params_gemini() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-pro", project="test-project")
+        model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, project="test-project")
         message = HumanMessage(content=user_prompt)
         _ = model.invoke([message])
         mock_generate_content.assert_called_once()
@@ -1093,7 +1096,7 @@ def test_parser_multiple_tools() -> None:
 
 def test_generation_config_gemini() -> None:
     model = ChatVertexAI(
-        model_name="gemini-pro",
+        model_name=_DEFAULT_MODEL_NAME,
         project="test-project",
         temperature=0.2,
         top_k=3,
@@ -1120,7 +1123,7 @@ def test_generation_config_gemini() -> None:
 
 def test_safety_settings_gemini() -> None:
     model = ChatVertexAI(
-        model_name="gemini-pro", temperature=0.2, top_k=3, project="test-project"
+        model_name=_DEFAULT_MODEL_NAME, temperature=0.2, top_k=3, project="test-project"
     )
     expected_safety_setting = SafetySetting(
         category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
@@ -1154,7 +1157,7 @@ def test_safety_settings_gemini_init() -> None:
         )
     ]
     model = ChatVertexAI(
-        model_name="gemini-pro",
+        model_name=_DEFAULT_MODEL_NAME,
         temperature=0.2,
         top_k=3,
         project="test-project",
@@ -1482,7 +1485,7 @@ def test_thinking_configuration() -> None:
 
     # Test init params
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
         thinking_budget=100,
         include_thoughts=True,
@@ -1492,7 +1495,7 @@ def test_thinking_configuration() -> None:
     assert request.generation_config.thinking_config.include_thoughts is True
 
     # Test invocation params
-    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
     request = llm._prepare_request_gemini(
         [input_message],
         thinking_budget=100,
@@ -1504,7 +1507,7 @@ def test_thinking_configuration() -> None:
 
 def test_thought_signature() -> None:
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
         include_thoughts=True,
     )
@@ -1561,7 +1564,7 @@ def test_thought_signature() -> None:
 
 
 def test_python_literal_inputs() -> None:
-    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
     for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
         _ = llm._prepare_request_gemini([HumanMessage(input_string)])
@@ -1569,7 +1572,7 @@ def test_python_literal_inputs() -> None:
 
 def test_v1_function_parts() -> None:
     llm = ChatVertexAI(
-        model="gemini-2.5-flash", project="test-project", endpoint_version="v1"
+        model=_DEFAULT_MODEL_NAME, project="test-project", endpoint_version="v1"
     )
 
     messages = [
