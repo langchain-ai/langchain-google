@@ -917,8 +917,8 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.0rc1"
-source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore#c9018f81ec16f481c0b476b17ae26fa88b6c0321" }
+version = "1.0.0rc2"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
@@ -927,6 +927,10 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tenacity" },
     { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/07/2e30517581acdaa5b2e3cf5527182eb26f2d1d99e80b4735209863e4045a/langchain_core-1.0.0rc2.tar.gz", hash = "sha256:dda7a126fd9b51c9bc836fcb7fc9491a1a7be7ee0f281447b3bf1f897098453d", size = 761288, upload-time = "2025-10-16T17:41:31.878Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/bb/231a5c9a151c8bb4d1765a713e6581136f0510c3e09a6bada00290188f86/langchain_core-1.0.0rc2-py3-none-any.whl", hash = "sha256:7056a68895c6025ceab5ef034cae41a4ce3ec633ef3352b33fc558faffaf2f5c", size = 466704, upload-time = "2025-10-16T17:41:30.303Z" },
 ]
 
 [[package]]
@@ -963,7 +967,6 @@ test = [
     { name = "freezegun" },
     { name = "google-api-python-client" },
     { name = "langchain" },
-    { name = "langchain-core" },
     { name = "langchain-tests" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1005,7 +1008,7 @@ requires-dist = [
     { name = "google-cloud-storage", specifier = ">=2.18.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "httpx-sse", specifier = ">=0.4.0,<1.0.0" },
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore" },
+    { name = "langchain-core", specifier = ">=1.0.0rc2,<2.0.0" },
     { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.0,<2.0.0" },
     { name = "numexpr", specifier = ">=2.8.6,<3.0.0" },
     { name = "pyarrow", specifier = ">=19.0.1,<22.0.0" },
@@ -1022,8 +1025,7 @@ test = [
     { name = "freezegun", specifier = ">=1.5.0,<2.0.0" },
     { name = "google-api-python-client", specifier = ">=2.117.0,<3.0.0" },
     { name = "langchain", specifier = ">=1.0.0a10,<2.0.0" },
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore" },
-    { name = "langchain-tests", specifier = ">=1.0.0a1,<2.0.0" },
+    { name = "langchain-tests", specifier = ">=1.0.0rc1,<2.0.0" },
     { name = "pytest", specifier = ">=8.4.0,<9.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.21.0,<2.0.0" },
     { name = "pytest-mock", specifier = ">=3.14.0,<4.0.0" },
@@ -1041,7 +1043,7 @@ test-integration = [
     { name = "google-api-python-client", specifier = ">=2.114.0,<3.0.0" },
     { name = "google-cloud-datastore", specifier = ">=2.19.0,<3.0.0" },
     { name = "langchain-mistralai", specifier = ">=0.2.12,<2.0.0" },
-    { name = "langchain-tests", specifier = ">=1.0.0a1,<2.0.0" },
+    { name = "langchain-tests", specifier = ">=1.0.0rc1,<2.0.0" },
     { name = "numexpr", marker = "python_full_version >= '3.9'", specifier = ">=2.8.8" },
     { name = "numpy", marker = "python_full_version < '3.13'", specifier = ">=1.26.4" },
     { name = "numpy", marker = "python_full_version >= '3.13'", specifier = ">=2.1.0" },
@@ -1072,7 +1074,7 @@ wheels = [
 
 [[package]]
 name = "langchain-tests"
-version = "1.0.0a1"
+version = "1.0.0rc1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -1088,9 +1090,9 @@ dependencies = [
     { name = "syrupy" },
     { name = "vcrpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/57/98a5f4f3a31e917b764eee823408fe346d5aeb2997b93b38ed2739a79da0/langchain_tests-1.0.0a1.tar.gz", hash = "sha256:0f6bff9f9e2d02120b67f8e308726dcd43ae98c2ea7a9594ceada1c769000c04", size = 46485, upload-time = "2025-09-16T17:44:46.208Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5d/b8/130b1083a698a30bff3d967ccbff3aefb5611566b0f903d3309d0c5e03fe/langchain_tests-1.0.0rc1.tar.gz", hash = "sha256:0fb849f919be0f1f664daa4b4cd6b0a9fda2b284a64c754d83bbac4e35f46cfb", size = 155525, upload-time = "2025-10-16T18:11:59.584Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/23/7bfee56f9997a7235e03f739388e682a26381faca7f3fd3ded437a441b35/langchain_tests-1.0.0a1-py3-none-any.whl", hash = "sha256:860270f641ea2a88061963ae4cbb50579d7d5f0cf3c4170faac43ea920d14cd8", size = 49113, upload-time = "2025-09-16T17:44:45.331Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/6d/8a77d7d6982e68a6e4683bc1ca2de5f8aa0a8c03fe2be49634c8619a39ee/langchain_tests-1.0.0rc1-py3-none-any.whl", hash = "sha256:5b42c5b88239d639b64dd7769a525aed188f8f54a826cbf18c0aecccc89866d1", size = 49920, upload-time = "2025-10-16T18:11:58.368Z" },
 ]
 
 [[package]]
