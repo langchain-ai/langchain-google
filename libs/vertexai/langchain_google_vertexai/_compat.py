@@ -19,9 +19,6 @@ def _convert_from_v1_to_vertex(
     """
     new_content: list = []
     for block in content:
-        if not isinstance(block, dict) or "type" not in block:
-            continue
-
         block_dict = dict(block)  # (For typing)
 
         # TextContentBlock

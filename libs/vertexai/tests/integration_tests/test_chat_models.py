@@ -970,11 +970,11 @@ def _check_thinking_output(content: list, output_version: Literal["v0", "v1"]) -
         assert isinstance(block[thinking_key], str)
 
 
-#@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3)
 @pytest.mark.release
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
-    output_version: str
+    output_version: str,
 ) -> None:
     model = ChatVertexAI(
         model=_DEFAULT_THINKING_MODEL_NAME,
@@ -999,8 +999,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
     assert full.usage_metadata["output_token_details"]["reasoning"] > 0
     assert (
         full.usage_metadata["total_tokens"]
-        > full.usage_metadata["input_tokens"]
-        + full.usage_metadata["output_tokens"]
+        > full.usage_metadata["input_tokens"] + full.usage_metadata["output_tokens"]
     )
 
     # Test we can pass back in
@@ -1625,34 +1624,49 @@ def test_nested_bind_tools() -> None:
     assert response.tool_calls[0]["name"] == "People"
 
 
-def test_search_builtin() -> None:
+def _check_web_search_output(message: AIMessage, output_version: str) -> None:
+    assert "grounding_metadata" in message.response_metadata
+
+    # Lazy parsing
+    content_blocks = message.content_blocks
+    text_blocks = [block for block in content_blocks if block["type"] == "text"]
+    assert len(text_blocks) == 1
+    text_block = text_blocks[0]
+    assert text_block["annotations"]
+
+    if output_version == "v1":
+        text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[misc,index]
+        assert len(text_blocks) == 1
+        text_block = text_blocks[0]
+        assert text_block["annotations"]
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_search_builtin(output_version: str) -> None:
     """Test the built-in search tool."""
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"google_search": {}}])
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME, output_version=output_version
+    ).bind_tools([{"google_search": {}}])
     input_message = {
         "role": "user",
         "content": "What is today's news?",
     }
-    response = llm.invoke([input_message])
-
-    if "grounding_metadata" in response.response_metadata:
-        assert response.response_metadata["grounding_metadata"] is not None
 
     # Test streaming
-    full: Optional[BaseMessageChunk] = None
+    full: AIMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
-
-    if "grounding_metadata" in full.response_metadata:
-        assert full.response_metadata["grounding_metadata"] is not None
+    _check_web_search_output(full, output_version)
 
     # Test we can process chat history
     next_message = {
         "role": "user",
         "content": "Tell me more about that last story.",
     }
-    _ = llm.invoke([input_message, full, next_message])
+    response = llm.invoke([input_message, full, next_message])
+    _check_web_search_output(response, output_version)
 
 
 def _check_code_execution_output(message: AIMessage, output_version: str) -> None:

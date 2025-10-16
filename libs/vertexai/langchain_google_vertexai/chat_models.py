@@ -2672,6 +2672,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message = _parse_response_candidate(candidate)
             message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
+            if "grounding_metadata" in info:
+                message.response_metadata["grounding_metadata"] = info.pop(
+                    "grounding_metadata"
+                )
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
             generations.append(ChatGeneration(message=message, generation_info=info))
