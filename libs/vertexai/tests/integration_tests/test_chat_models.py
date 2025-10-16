@@ -1506,7 +1506,7 @@ def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) ->
 @pytest.mark.release
 def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) -> None:
     # TODO: parallelize with gcs and b64 tests
-    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
+    url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     # URL
     response = multimodal_pdf_chain.invoke({"image": url})
     assert isinstance(response, AIMessage)
@@ -1515,7 +1515,7 @@ def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) ->
 @pytest.mark.release
 def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) -> None:
     # TODO: parallelize with gcs and url tests
-    url = "https://abc.xyz/assets/95/eb/9cef90184e09bac553796896c633/2023q4-alphabet-earnings-release.pdf"
+    url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     request_response = requests.get(url, allow_redirects=True)
     # B64
     with io.BytesIO() as stream:
