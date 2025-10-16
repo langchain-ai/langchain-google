@@ -114,7 +114,7 @@ class DocAIParser(BaseBlobParser):
         """Parses a blob lazily.
 
         Args:
-            blobs: a Blob to parse
+            blob: a Blob to parse
 
         This is a long-running operation. A recommended way is to batch
             documents together and use the `batch_parse()` method.

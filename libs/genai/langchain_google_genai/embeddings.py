@@ -242,7 +242,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             batch_size: [int] The batch size of embeddings to send to the model
             task_type: `task_type <https://ai.google.dev/api/embeddings#tasktype>`__
             titles: An optional list of titles for texts provided.
-              Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
+                Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
             output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
 
         Returns:
@@ -293,7 +293,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             text: The text to embed.
             task_type: `task_type <https://ai.google.dev/api/embeddings#tasktype>`__
             title: An optional title for the text.
-              Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
+                Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
             output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
 
         Returns:
