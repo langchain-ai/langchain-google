@@ -11,7 +11,12 @@ from langchain_google_vertexai.vision_models import (
 )
 
 
-@pytest.mark.release
+@pytest.mark.skip(
+    reason=(
+        "Image captioning is deprecated: "
+        "https://cloud.google.com/vertex-ai/generative-ai/docs/image/image-captioning"
+    )
+)
 def test_vertex_ai_image_captioning_chat(base64_image: str) -> None:
     # This should work
     model = VertexAIImageCaptioningChat()
@@ -45,7 +50,12 @@ def test_vertex_ai_image_captioning_chat(base64_image: str) -> None:
         )
 
 
-@pytest.mark.release
+@pytest.mark.skip(
+    reason=(
+        "Image captioning is deprecated: "
+        "https://cloud.google.com/vertex-ai/generative-ai/docs/image/image-captioning"
+    )
+)
 def test_vertex_ai_image_captioning(base64_image: str) -> None:
     model = VertexAIImageCaptioning()
     response = model.invoke(base64_image)
@@ -55,7 +65,12 @@ def test_vertex_ai_image_captioning(base64_image: str) -> None:
     assert isinstance(response, str)
 
 
-@pytest.mark.release
+@pytest.mark.skip(
+    reason=(
+        "Visual question answering is deprecated: "
+        "https://cloud.google.com/vertex-ai/generative-ai/docs/image/image-captioning"
+    )
+)
 def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
     model = VertexAIVisualQnAChat()
 
