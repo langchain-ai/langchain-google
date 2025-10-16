@@ -141,8 +141,6 @@ async def test_chat_google_genai_invoke(is_async: bool) -> None:
     _check_usage_metadata(result)
 
 
-# TODO: assert calling .content_blocks translates outcome to ImageContentBlock
-# but do this in unit tests in langchain-core
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_image() -> None:
     """Test generating an image and then text from ChatGoogleGenerativeAI.
@@ -179,9 +177,23 @@ def test_chat_google_genai_invoke_with_image() -> None:
     assert not result.content[0].startswith(" ")
     _check_usage_metadata(result)
 
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    _ = llm.invoke([result, next_message])
 
-# TODO: assert calling .content_blocks translates outcome to AudioContentBlock
-# but do this in unit tests in langchain-core
+    # Test content_blocks property
+    content_blocks = result.content_blocks
+    assert isinstance(content_blocks, list)
+    assert len(content_blocks) == 2
+    assert isinstance(content_blocks[0], dict)
+    assert content_blocks[0].get("type") == "text"
+    assert isinstance(content_blocks[1], dict)
+    assert content_blocks[1].get("type") == "image"
+
+    # Test we can pass back in content_blocks
+    _ = llm.invoke(["What's this?", {"role": "assistant", "content": content_blocks}])
+
+
 def test_chat_google_genai_invoke_with_audio() -> None:
     """Test generating audio from ChatGoogleGenerativeAI."""
     llm = ChatGoogleGenerativeAI(
@@ -197,6 +209,16 @@ def test_chat_google_genai_invoke_with_audio() -> None:
     assert isinstance(audio_data, bytes)
     assert get_wav_type_from_bytes(audio_data)
     _check_usage_metadata(result)
+
+    # Test content_blocks property
+    content_blocks = result.content_blocks
+    assert isinstance(content_blocks, list)
+    assert len(content_blocks) == 1
+    assert isinstance(content_blocks[0], dict)
+    assert content_blocks[0].get("type") == "audio"
+
+    # Test we can pass back in
+    # TODO: no model currently supports audio input
 
 
 def test_chat_google_genai_invoke_thinking_default() -> None:
@@ -241,11 +263,37 @@ def test_chat_google_genai_invoke_thinking() -> None:
         assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
-# TODO: parametrize this test to use output_version=v1 and then assert `content` is
-# proper ReasoningContentBlock with google-specific thinking fields in `extras`
-def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
+def _check_thinking_output(content: list, output_version: str) -> None:
+    if output_version == "v0":
+        thinking_key = "thinking"
+        assert isinstance(content[-1], str)
+
+    else:
+        # v1
+        thinking_key = "reasoning"
+        assert isinstance(content[-1], dict)
+        assert content[-1].get("type") == "text"
+        assert isinstance(content[-1].get("text"), str)
+
+    assert isinstance(content, list)
+    thinking_blocks = [
+        item
+        for item in content
+        if isinstance(item, dict) and item.get("type") == thinking_key
+    ]
+    assert thinking_blocks
+    for block in thinking_blocks:
+        assert isinstance(block[thinking_key], str)
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_chat_google_genai_invoke_thinking_include_thoughts(
+    output_version: str,
+) -> None:
     """Test invoke thinking model with `include_thoughts` on the chat model."""
-    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, include_thoughts=True)
+    llm = ChatGoogleGenerativeAI(
+        model=_THINKING_MODEL, include_thoughts=True, output_version=output_version
+    )
 
     input_message = {
         "role": "user",
@@ -255,29 +303,150 @@ def test_chat_google_genai_invoke_thinking_include_thoughts() -> None:
         ),
     }
 
-    result = llm.invoke([input_message])
+    full: AIMessageChunk | None = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+
+    assert isinstance(full, AIMessage)
+
+    response_metadata = full.response_metadata
+    model_provider = response_metadata.get("model_provider", "google_genai")
+    assert model_provider == "google_genai"
+
+    _check_thinking_output(cast(list, full.content), output_version)
+    _check_usage_metadata(full)
+    assert full.usage_metadata is not None
+    if (
+        "output_token_details" in full.usage_metadata
+        and "reasoning" in full.usage_metadata["output_token_details"]
+    ):
+        assert full.usage_metadata["output_token_details"]["reasoning"] > 0
+
+    # Test we can pass back in
+    next_message = {"role": "user", "content": "Thanks!"}
+    result = llm.invoke([input_message, full, next_message])
+    assert isinstance(result, AIMessage)
+    _check_thinking_output(cast(list, result.content), output_version)
+
+
+@pytest.mark.flaky(retries=5, delay=1)
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_chat_google_genai_invoke_thinking_with_tools(
+    output_version: str,
+) -> None:
+    """Test thinking with function calling to get thought signatures.
+
+    Ensure we can pass the response back in.
+    """
+
+    @tool
+    def analyze_weather(location: str, date: str) -> dict:
+        """Analyze weather patterns for a location on a specific date.
+
+        Args:
+            location: The city or region to analyze.
+            date: The date in YYYY-MM-DD format.
+
+        Returns:
+            A dictionary with weather analysis.
+        """
+        return {
+            "location": location,
+            "date": date,
+            "temperature": "72F",
+            "conditions": "sunny",
+            "analysis": "Pleasant weather expected",
+        }
+
+    llm = ChatGoogleGenerativeAI(
+        model=_THINKING_MODEL, include_thoughts=True, output_version=output_version
+    )
+    llm_with_tools = llm.bind_tools([analyze_weather])
+
+    input_message = {
+        "role": "user",
+        "content": (
+            "I'm planning a trip to Paris. Should I check the weather for "
+            "tomorrow (2025-01-22) before deciding what to pack? "
+            "Please think through whether you need to use the weather tool, "
+            "and if so, use it to help me decide."
+        ),
+    }
+
+    result = llm_with_tools.invoke([input_message])
 
     assert isinstance(result, AIMessage)
     content = result.content
 
-    assert isinstance(content[0], dict)
-    assert content[0].get("type") == "thinking"
-    assert isinstance(content[0].get("thinking"), str)
+    response_metadata = result.response_metadata
+    model_provider = response_metadata.get("model_provider", "google_genai")
+    assert model_provider == "google_genai"
 
-    assert isinstance(content[1], str)
+    if output_version == "v0":
+        # v0 format:
+        # Signatures are attached to function_call Parts, not thinking Parts.
+        # They appear as separate function_call_signature blocks in content.
+        # [{"type": "thinking", "thinking": "..."},
+        #  {"type": "function_call_signature", "signature": "..."}]
 
-    _check_usage_metadata(result)
+        # Check for thinking blocks (should exist)
+        thinking_blocks = [
+            item
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "thinking"
+        ]
+        assert thinking_blocks, "Should have thinking blocks when include_thoughts=True"
 
-    assert result.usage_metadata is not None
-    if (
-        "output_token_details" in result.usage_metadata
-        and "reasoning" in result.usage_metadata["output_token_details"]
-    ):
-        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
+        # Check for function_call_signature blocks (not in thinking blocks)
+        signature_blocks = [
+            item
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "function_call_signature"
+        ]
+        if signature_blocks:
+            # Signature should be present when using function calling
+            assert "signature" in signature_blocks[0]
+            assert isinstance(signature_blocks[0]["signature"], str)
+            assert len(signature_blocks[0]["signature"]) > 0
 
-    # Test we can pass back in
-    next_message = {"role": "user", "content": "Thanks!"}
-    _ = llm.invoke([input_message, result, next_message])
+        # Test we can pass the result back in (with signature)
+        next_message = {"role": "user", "content": "Thanks!"}
+        _ = llm_with_tools.invoke([input_message, result, next_message])
+    else:
+        # v1 format:
+        # Signatures are attached to function_call Parts, not reasoning Parts.
+        # They appear as separate function_call_signature blocks in content.
+        # [{"type": "reasoning", "reasoning": "..."},
+        #  {"type": "function_call_signature", "signature": "..."}]
+        assert isinstance(content, list)
+
+        # Check for reasoning blocks (should exist)
+        reasoning_blocks = [
+            block
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "reasoning"
+        ]
+        assert reasoning_blocks, (
+            "Should have reasoning blocks when include_thoughts=True"
+        )
+
+        # Check for function_call_signature blocks (not in reasoning blocks)
+        signature_blocks = [
+            block
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "function_call_signature"
+        ]
+        if signature_blocks:
+            # Signature should be present when using function calling
+            assert "signature" in signature_blocks[0]
+            assert isinstance(signature_blocks[0]["signature"], str)
+            assert len(signature_blocks[0]["signature"]) > 0
+
+        # Test we can pass the result back in (with signature)
+        next_message = {"role": "user", "content": "Thanks!"}
+        _ = llm_with_tools.invoke([input_message, result, next_message])
 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
@@ -522,7 +691,6 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     assert "brown" in content_str.lower()
 
 
-# TODO: check .content_blocks result
 def test_chat_vertexai_gemini_function_calling() -> None:
     """Test function calling with Gemini models.
 
@@ -584,6 +752,13 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     arguments_str = tool_call_chunk["args"]
     arguments = json.loads(str(arguments_str))
     _check_tool_call_args(arguments)
+
+    # Test .content_blocks property
+    content_blocks = response.content_blocks
+    assert isinstance(content_blocks, list)
+    assert len(content_blocks) == 1
+    assert isinstance(content_blocks[0], dict)
+    assert content_blocks[0].get("type") == "tool_call"
 
 
 @pytest.mark.parametrize(
@@ -726,92 +901,209 @@ def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) ->
         assert isinstance(invoke_result, AIMessage)
 
 
-# TODO: in unit tests, translate to new content blocks in langchain-core
+def _check_web_search_output(message: AIMessage, output_version: str) -> None:
+    assert "grounding_metadata" in message.response_metadata
+
+    # Lazy parsing
+    content_blocks = message.content_blocks
+    text_blocks = [block for block in content_blocks if block["type"] == "text"]
+    assert len(text_blocks) == 1
+    text_block = text_blocks[0]
+    assert text_block["annotations"]
+
+    if output_version == "v1":
+        text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[misc,index]
+        assert len(text_blocks) == 1
+        text_block = text_blocks[0]
+        assert text_block["annotations"]
 
 
-@pytest.mark.parametrize("use_streaming", [False, True])
-def test_search_builtin(use_streaming: bool) -> None:
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
-        [{"google_search": {}}]
-    )
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_search_builtin(output_version: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-2.0-flash-001", output_version=output_version
+    ).bind_tools([{"google_search": {}}])
     input_message = {
         "role": "user",
         "content": "What is today's news?",
     }
 
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
+    _check_web_search_output(full, output_version)
+
+    # Test we can process chat history without raising errors
+    next_message = {
+        "role": "user",
+        "content": "Tell me more about that last story.",
+    }
+    response = llm.invoke([input_message, full, next_message])
+    _check_web_search_output(response, output_version)
+
+
+@pytest.mark.parametrize("use_streaming", [False, True])
+def test_search_builtin_with_citations(use_streaming: bool) -> None:
+    """Test that citations are properly extracted from grounding metadata."""
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").bind_tools(
+        [{"google_search": {}}]
+    )
+    input_message = {
+        "role": "user",
+        "content": "Who won the 2024 UEFA Euro championship? Use search/citations.",
+    }
+
     if use_streaming:
-        # Test streaming
         full: Optional[BaseMessageChunk] = None
         for chunk in llm.stream([input_message]):
             assert isinstance(chunk, AIMessageChunk)
             full = chunk if full is None else full + chunk
         assert isinstance(full, AIMessageChunk)
-        assert "grounding_metadata" in full.response_metadata
 
-        # Test we can process chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Tell me more about that last story.",
-        }
-        _ = llm.invoke([input_message, full, next_message])
+        assert "grounding_metadata" in full.response_metadata
+        grounding = full.response_metadata["grounding_metadata"]
+
+        assert "grounding_chunks" in grounding or "grounding_chunks" in grounding
+        assert "grounding_supports" in grounding or "grounding_supports" in grounding
+
+        content_blocks = full.content_blocks
+        text_blocks_with_citations = [
+            block
+            for block in content_blocks
+            if block.get("type") == "text" and block.get("annotations")
+        ]
+
+        assert len(text_blocks_with_citations) > 0, (
+            "Expected citations in text block if grounding metadata present"
+        )
+
+        for block in text_blocks_with_citations:
+            annotations = block.get("annotations", [])
+            citations = [
+                ann
+                for ann in annotations  # type: ignore[attr-defined]
+                if annotations and ann.get("type") == "citation"
+            ]
+
+            for citation in citations:
+                # Required fields
+                assert citation.get("type") == "citation"
+                assert "id" in citation
+
+                # Optional but expected fields from Google AI
+                if "url" in citation:
+                    assert isinstance(citation["url"], str)
+                    assert citation["url"].startswith("http")
+                if "title" in citation:
+                    assert isinstance(citation["title"], str)
+                if "start_index" in citation:
+                    assert isinstance(citation["start_index"], int)
+                    assert citation["start_index"] >= 0
+                if "end_index" in citation:
+                    assert isinstance(citation["end_index"], int)
+                    assert citation["end_index"] > citation.get("start_index", 0)
+                if "cited_text" in citation:
+                    assert isinstance(citation["cited_text"], str)
+                if "extras" in citation:
+                    google_metadata = citation["extras"].get("google_ai_metadata", {})
+                    if google_metadata:
+                        assert isinstance(google_metadata, dict)
     else:
         # Test invoke
         response = llm.invoke([input_message])
+        assert isinstance(response, AIMessage)
+
         assert "grounding_metadata" in response.response_metadata
+        grounding = response.response_metadata["grounding_metadata"]
 
-        # Test we can process chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Tell me more about that last story.",
-        }
-        _ = llm.invoke([input_message, response, next_message])
+        assert "grounding_chunks" in grounding or "grounding_chunks" in grounding
+        assert "grounding_supports" in grounding or "grounding_supports" in grounding
+
+        content_blocks = response.content_blocks
+        text_blocks_with_citations = [
+            block
+            for block in content_blocks
+            if block.get("type") == "text" and block.get("annotations")
+        ]
+
+        assert len(text_blocks_with_citations) > 0, (
+            "Expected citations in text blocks if grounding metadata present"
+        )
+
+        for block in text_blocks_with_citations:
+            block_annotations = block.get("annotations", [])
+            citations = [
+                ann
+                for ann in block_annotations  # type: ignore[attr-defined]
+                if ann.get("type") == "citation"
+            ]
+
+            for citation in citations:
+                # Required fields
+                assert citation.get("type") == "citation"
+                assert "id" in citation
+
+                # Optional but expected fields from Google AI
+                if "url" in citation:
+                    assert isinstance(citation["url"], str)
+                    assert citation["url"].startswith("http")
+                if "title" in citation:
+                    assert isinstance(citation["title"], str)
+                if "start_index" in citation:
+                    assert isinstance(citation["start_index"], int)
+                    assert citation["start_index"] >= 0
+                if "end_index" in citation:
+                    assert isinstance(citation["end_index"], int)
+                    assert citation["end_index"] > citation.get("start_index", 0)
+                if "cited_text" in citation:
+                    assert isinstance(citation["cited_text"], str)
+                if "extras" in citation:
+                    google_metadata = citation["extras"].get("google_ai_metadata", {})
+                    if google_metadata:
+                        assert isinstance(google_metadata, dict)
 
 
-@pytest.mark.parametrize("use_streaming", [False, True])
-def test_code_execution_builtin(use_streaming: bool) -> None:
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash-001").bind_tools(
-        [{"code_execution": {}}]
-    )
+def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
+    if output_version == "v0":
+        blocks = [block for block in message.content if isinstance(block, dict)]
+        expected_block_types = {"executable_code", "code_execution_result"}
+        assert {block.get("type") for block in blocks} == expected_block_types
+
+    else:
+        # v1
+        expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+        assert {block["type"] for block in message.content} == expected_block_types  # type: ignore[index]
+
+    # Lazy parsing
+    expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+    assert {block["type"] for block in message.content_blocks} == expected_block_types
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_code_execution_builtin(output_version: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-2.0-flash-001", output_version=output_version
+    ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",
         "content": "What is 3^3?",
     }
 
-    if use_streaming:
-        # Test streaming mode
-        full: Optional[BaseMessageChunk] = None
-        with pytest.warns(match="executable_code"):
-            for chunk in llm.stream([input_message]):
-                assert isinstance(chunk, AIMessageChunk)
-                full = chunk if full is None else full + chunk
-        assert isinstance(full, AIMessageChunk)
+    full: Optional[BaseMessageChunk] = None
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
 
-        # Should get both code and result blocks
-        blocks = [block for block in full.content if isinstance(block, dict)]
-        expected_block_types = {"executable_code", "code_execution_result"}
-        assert {block.get("type") for block in blocks} == expected_block_types
+    _check_code_execution_output(full, output_version)
 
-        # Test we can process chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Can you show me the calculation again with comments?",
-        }
-        with pytest.warns(match="executable_code"):
-            _ = llm.invoke([input_message, full, next_message])
-    else:
-        # Test invoke mode
-        with pytest.warns(match="executable_code"):
-            response = llm.invoke([input_message])
-        blocks = [block for block in response.content if isinstance(block, dict)]
-
-        # Should get both code and result blocks
-        expected_block_types = {"executable_code", "code_execution_result"}
-        assert {block.get("type") for block in blocks} == expected_block_types
-
-        # Test we can process chat history without raising errors
-        next_message = {
-            "role": "user",
-            "content": "Can you show me the calculation again with comments?",
-        }
-        with pytest.warns(match="executable_code"):
-            _ = llm.invoke([input_message, response, next_message])
+    # Test passing back in chat history without raising errors
+    next_message = {
+        "role": "user",
+        "content": "Can you show me the calculation again with comments?",
+    }
+    response = llm.invoke([input_message, full, next_message])
+    _check_code_execution_output(response, output_version)

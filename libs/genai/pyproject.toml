@@ -4,16 +4,16 @@ build-backend = "pdm.backend"
 
 [project]
 name = "langchain-google-genai"
-version = "2.1.12"
+version = "3.0.0rc1"
 description = "An integration package connecting Google's genai package and LangChain"
 authors = []
 license = {text = "MIT"}
-requires-python = ">=3.9.0,<4.0.0"
+requires-python = ">=3.10.0,<4.0.0"
 readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=0.3.75,<2.0.0",
+    "langchain-core>=1.0.0rc2,<2.0.0",
     "google-ai-generativelanguage>=0.7.0,<1.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "filetype>=1.2.0,<2.0.0",
@@ -25,7 +25,7 @@ dependencies = [
 repository = "https://github.com/langchain-ai/langchain-google"
 
 [dependency-groups]
-lint = ["ruff>=0.12.2,<0.13.0"]
+lint = ["ruff>=0.13.1,<0.14.0"]
 typing = [
     "mypy>=1.18.1,<1.19.0",
     "types-requests>=2.31.0,<3.0.0",
@@ -46,7 +46,7 @@ test = [
     "pytest-socket>=0.7.0,<1.0.0",
     "numpy>=1.26.4; python_version<'3.13'",
     "numpy>=2.1.0; python_version>='3.13'",
-    "langchain-tests>=0.3.0,<2.0.0",
+    "langchain-tests>=1.0.0rc1,<2.0.0",
 ]
 
 test_integration = [
@@ -86,7 +86,6 @@ ignore = [
     # 3.9 needs
     "UP007",
     "UP006",
-    "UP038",
     "UP045",
     "FA100",
 

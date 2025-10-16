@@ -1,4 +1,7 @@
-"""Wrapper around Google VertexAI chat-based models."""
+"""Wrapper around Google VertexAI chat-based models.
+
+Vertex supports both v1 and v1beta1 endpoints (`endpoint_version` parameter).
+"""
 
 from __future__ import annotations  # noqa
 import ast
@@ -7,7 +10,6 @@ from functools import cached_property
 import json
 import logging
 import re
-from dataclasses import dataclass, field
 from operator import itemgetter
 import uuid
 from typing import (
@@ -16,6 +18,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Type,
     Union,
     cast,
@@ -24,7 +27,7 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
 
@@ -51,6 +54,7 @@ from langchain_core.messages import (
     convert_to_openai_image_block,
     is_data_content_block,
 )
+from langchain_core.messages import content as lc_content
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.messages.tool import (
     tool_call_chunk,
@@ -75,6 +79,7 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from vertexai.generative_models import (
+    Candidate as VertexCandidate,
     Tool as VertexTool,  # TODO: migrate to google-genai since this is deprecated
 )
 from vertexai.generative_models._generative_models import (
@@ -85,7 +90,6 @@ from vertexai.generative_models._generative_models import (
     _convert_schema_dict_to_gapic,
 )
 from vertexai.language_models import (
-    ChatMessage,  # TODO: migrate to google-genai since this is deprecated
     InputOutputTextPair,
 )
 from google.cloud.aiplatform_v1.types import (
@@ -119,6 +123,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     VideoMetadata,
 )
 from langchain_google_vertexai._base import _VertexAICommon
+from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
@@ -193,14 +198,6 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
-@dataclass
-class _ChatHistory:
-    """Represents a context and a history of messages."""
-
-    history: List[ChatMessage] = field(default_factory=list)
-    context: Optional[str] = None
-
-
 class _GeminiGenerateContentKwargs(TypedDict):
     generation_config: Optional[GenerationConfigType]
     safety_settings: Optional[SafetySettingsType]
@@ -208,41 +205,46 @@ class _GeminiGenerateContentKwargs(TypedDict):
     tool_config: Optional[ToolConfig]
 
 
-def _parse_chat_history(history: List[BaseMessage]) -> _ChatHistory:
-    """Parse a sequence of messages into history.
-
-    Args:
-        history: The list of messages to re-create the history of the chat.
-
-    Returns:
-        A parsed chat history.
-
-    Raises:
-        ValueError: If a sequence of message has a SystemMessage not at the
-        first place.
-    """
-    vertex_messages, context = [], None
-    for i, message in enumerate(history):
-        content = cast("str", message.content)
-        if i == 0 and isinstance(message, SystemMessage):
-            context = content
-        elif isinstance(message, AIMessage):
-            vertex_message = ChatMessage(content=content, author="bot")
-            vertex_messages.append(vertex_message)
-        elif isinstance(message, HumanMessage):
-            vertex_message = ChatMessage(content=content, author="user")
-            vertex_messages.append(vertex_message)
-        else:
-            msg = f"Unexpected message with type {type(message)} at the position {i}."
-            raise ValueError(msg)
-    return _ChatHistory(context=context, history=vertex_messages)
-
-
 def _parse_chat_history_gemini(
     history: List[BaseMessage],
     imageBytesLoader: ImageBytesLoader,
     perform_literal_eval_on_string_raw_content: Optional[bool] = False,
 ) -> tuple[Content | None, list[Content]]:
+    """Parse LangChain message history into Gemini format.
+
+    .. warning::
+        perform_literal_eval_on_string_raw_content should only be set to True if you
+        fully trust the input, as it may execute arbitrary code.
+
+    Args:
+        history: List of LangChain messages.
+        imageBytesLoader: An ImageBytesLoader instance to handle image loading.
+        perform_literal_eval_on_string_raw_content: Whether to attempt to parse string
+            content as Python literals (e.g., lists or dicts). Defaults to False.
+
+    Returns:
+        Tuple of (system_instruction, aiplatform_v1beta1 content).
+    """
+
+    # Case where content was serialized to v1 format
+    for idx, message in enumerate(history):
+        if (
+            isinstance(message, AIMessage)
+            and message.response_metadata.get("output_version") == "v1"
+        ):
+            # Unpack known v1 content to v1beta format for the request
+            #
+            # Old content types and any previously serialized messages passed back in to
+            # history will skip this, but hit and processed in `_convert_to_parts`
+            history[idx] = message.model_copy(
+                update={
+                    "content": _convert_from_v1_to_vertex(
+                        cast(list[lc_content.ContentBlock], message.content),
+                        message.response_metadata.get("model_provider"),
+                    )
+                }
+            )
+
     def _convert_to_prompt(part: Union[str, Dict]) -> Optional[Part]:
         if isinstance(part, str):
             return Part(text=part)
@@ -283,12 +285,13 @@ def _parse_chat_history_gemini(
 
         if is_data_content_block(part):
             # LangChain standard format
-            if part["type"] == "image" and part["source_type"] == "url":
+            if part["type"] == "image" and "url" in part:
                 oai_content_block = convert_to_openai_image_block(part)
                 url = oai_content_block["image_url"]["url"]
                 return imageBytesLoader.load_gapic_part(url)
-            if part["source_type"] == "base64":
-                bytes_ = base64.b64decode(part["data"])
+            if "base64" in part or part.get("source_type") == "base64":
+                key_name = "base64" if "base64" in part else "data"
+                bytes_ = base64.b64decode(part[key_name])
             else:
                 msg = "source_type must be url or base64."
                 raise ValueError(msg)
@@ -333,6 +336,12 @@ def _parse_chat_history_gemini(
         raise ValueError(msg)
 
     def _convert_to_parts(message: BaseMessage) -> List[Part]:
+        """Parse LangChain message content into Google parts.
+
+        Used when preparing Human, System and AI messages for sending to the API.
+        Handles both legacy (pre-v1) dict-based content blocks and v1 ContentBlock
+        objects.
+        """
         raw_content = message.content
 
         # If a user sends a multimodal request with agents, then the full input
@@ -608,18 +617,19 @@ def _append_to_content(
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[False] = False
+    response_candidate: Union[Candidate, VertexCandidate],
+    streaming: Literal[False] = False,
 ) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: Literal[True]
+    response_candidate: Union[Candidate, VertexCandidate], streaming: Literal[True]
 ) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Union[Candidate, VertexCandidate], streaming: bool = False
 ) -> AIMessage:
     content: Union[None, str, List[Union[str, dict[str, Any]]]] = None
     additional_kwargs = {}
@@ -635,7 +645,7 @@ def _parse_response_candidate(
         except AttributeError:
             pass
 
-        if part.thought:
+        if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
@@ -694,7 +704,9 @@ def _parse_response_candidate(
 
             if getattr(part, "thought_signature", None):
                 # store dict of {tool_call_id: thought_signature}
-                if isinstance(part.thought_signature, bytes):
+                if hasattr(part, "thought_signature") and isinstance(
+                    part.thought_signature, bytes
+                ):
                     thought_signature = _bytes_to_base64(part.thought_signature)
                     if (
                         _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY
@@ -1381,9 +1393,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     {"type": "text", "text": "describe the document in a sentence"},
                     {
                         "type": "file",
-                        "source_type": "base64",
                         "mime_type": "application/pdf",
-                        "data": pdf_base64,
+                        "base64": pdf_base64,
                     },
                 ]
             )
@@ -1434,9 +1445,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     },
                     {
                         "type": "file",
-                        "source_type": "base64",
                         "mime_type": "video/mp4",
-                        "data": video_base64,
+                        "base64": video_base64,
                     },
                 ]
             )
@@ -1509,9 +1519,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     {"type": "text", "text": "summarize this audio in a sentence"},
                     {
                         "type": "file",
-                        "source_type": "base64",
                         "mime_type": "audio/mp3",
-                        "data": audio_base64,
+                        "base64": audio_base64,
                     },
                 ]
             )
@@ -2042,8 +2051,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
         else:
             pass
-        # Type conversion handled internally
-        safety_settings = self._safety_settings_gemini(safety_settings)  # type: ignore[assignment]
+        formatted_safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
         generation_config = self._generation_config_gemini(
@@ -2111,17 +2119,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     )
                 )
 
-            if safety_settings:
+            if formatted_safety_settings:
                 v1_safety_settings = [
                     v1SafetySetting(
-                        # Ignores needed due to complex union type where mypy cannot
-                        # infer which variant of SafetySetting is being used
-                        # (Different SDK e.g. vertexai vs gapic has same name)
-                        category=s.category,  # type: ignore[union-attr]
-                        method=s.method,  # type: ignore[union-attr]
-                        threshold=s.threshold,  # type: ignore[union-attr]
+                        category=s.category,
+                        method=s.method,
+                        threshold=s.threshold,
                     )
-                    for s in safety_settings
+                    for s in formatted_safety_settings
                 ]
 
         if (self.cached_content is not None) or (cached_content is not None):
@@ -2146,7 +2151,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             return GenerateContentRequest(
                 contents=contents,
                 model=self.full_model_name,
-                safety_settings=safety_settings,
+                safety_settings=formatted_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
             )
@@ -2168,7 +2173,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             system_instruction=system_instruction,
             tools=formatted_tools,
             tool_config=tool_config,
-            safety_settings=safety_settings,
+            safety_settings=formatted_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
             labels=self.labels,
@@ -2621,7 +2626,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         *,
         tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
 
         Assumes model is compatible with Vertex tool-calling API.
@@ -2664,14 +2669,19 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            # Using default streaming=False, but mypy can't verify due to type mismatch
-            message = _parse_response_candidate(candidate)  # type: ignore[call-overload]
+            message = _parse_response_candidate(candidate)
+            message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
+            if "grounding_metadata" in info:
+                message.response_metadata["grounding_metadata"] = info.pop(
+                    "grounding_metadata"
+                )
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
             generations.append(ChatGeneration(message=message, generation_info=info))
         if not response.candidates:
             message = AIMessage(content="")
+            message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
             if usage:
                 generation_info = {"usage_metadata": usage}
@@ -2713,8 +2723,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            # Type ignore since mypy infers literal as bool
-            message = _parse_response_candidate(top_candidate, streaming=True)  # type: ignore[call-overload]
+            message = _parse_response_candidate(top_candidate, streaming=True)
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(
@@ -2728,6 +2737,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be marged
             generation_info.pop("is_blocked", None)
+
+        message.response_metadata["model_provider"] = "google_vertexai"
+
         return ChatGenerationChunk(
             message=message,
             generation_info=generation_info,

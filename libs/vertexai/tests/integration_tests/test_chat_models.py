@@ -5,7 +5,12 @@ import io
 import json
 import os
 import re
-from typing import List, Literal, Optional, cast
+from typing import Any, List, Literal, Optional, cast
+
+try:
+    from langgraph.graph.state import CompiledStateGraph
+except ImportError:
+    CompiledStateGraph = Any  # type: ignore[misc,assignment]
 
 import pytest
 import requests
@@ -53,7 +58,7 @@ from tests.integration_tests.conftest import (
 model_names_to_test = [_DEFAULT_MODEL_NAME]
 endpoint_versions = ["v1", "v1beta1"]
 
-rate_limiter = InMemoryRateLimiter(requests_per_second=1.0)
+RATE_LIMITER = InMemoryRateLimiter(requests_per_second=1.0)
 
 
 def _check_usage_metadata(message: AIMessage) -> None:
@@ -66,26 +71,63 @@ def _check_usage_metadata(message: AIMessage) -> None:
     ) == message.usage_metadata["total_tokens"]
 
 
+def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
+    """Check tool calls are as expected."""
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert response.content == ""
+    function_call = response.additional_kwargs.get("function_call")
+    assert function_call
+    assert function_call["name"] == expected_name
+    arguments_str = function_call.get("arguments")
+    assert arguments_str
+    arguments = json.loads(arguments_str)
+    assert arguments == {
+        "name": "Erick",
+        "age": 27.0,
+    }
+    tool_calls = response.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == expected_name
+    assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
+
+
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
 def test_initialization(model_name: Optional[str], endpoint_version: str) -> None:
-    """Test chat model initialization."""
+    """Test `ChatVertexAI` initialization.
+
+    TODO: why is this a integration test?
+    """
     model = ChatVertexAI(
         model_name=model_name,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
         endpoint_version=endpoint_version,
     )
     assert model._llm_type == "vertexai"
+
+
+@pytest.mark.xfail(reason="can't create service account key on gcp")
+@pytest.mark.release
+def test_init_from_credentials_obj() -> None:
+    credentials_dict = json.loads(os.environ["GOOGLE_VERTEX_AI_WEB_CREDENTIALS"])
+    credentials = service_account.Credentials.from_service_account_info(
+        credentials_dict
+    )
+    llm = ChatVertexAI(model="gemini-2.0-flash-001", credentials=credentials)
+    llm.invoke("how are you")
 
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
 def test_vertexai_single_call(model_name: Optional[str], endpoint_version: str) -> None:
+    """Test making a single invoke call."""
     model = ChatVertexAI(
         model_name=model_name,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
         endpoint_version=endpoint_version,
     )
     message = HumanMessage(content="Hello")
@@ -98,8 +140,12 @@ def test_vertexai_single_call(model_name: Optional[str], endpoint_version: str) 
 @pytest.mark.release
 @pytest.mark.xfail(reason="vertex api doesn't respect n/candidate_count")
 def test_candidates() -> None:
+    """Test making a single invoke call with `n>1`.
+
+    # TODO: what is chat-bison@001? is it marked for deprecation?
+    """
     model = ChatVertexAI(
-        model_name="chat-bison@001", temperature=0.3, n=2, rate_limiter=rate_limiter
+        model_name="chat-bison@001", temperature=0.3, n=2, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
     response = model.generate(messages=[[message]])
@@ -109,9 +155,10 @@ def test_candidates() -> None:
 
 
 @pytest.mark.release
-async def test_vertexai_agenerate() -> None:
+async def test_vertexai_generate() -> None:
+    # TODO: parameterize with sync/async generate method
     model = ChatVertexAI(
-        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter
+        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
     response = await model.agenerate([[message]])
@@ -134,8 +181,9 @@ async def test_vertexai_agenerate() -> None:
 
 @pytest.mark.release
 def test_vertexai_stream() -> None:
+    # TODO: parameterize with astream equivalent
     model = ChatVertexAI(
-        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter
+        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
 
@@ -161,8 +209,9 @@ def test_vertexai_stream() -> None:
 
 @pytest.mark.release
 async def test_vertexai_astream() -> None:
+    # TODO: parameterize with stream equivalent
     model = ChatVertexAI(
-        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter
+        temperature=0, model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
 
@@ -187,7 +236,8 @@ async def test_vertexai_astream() -> None:
 
 @pytest.mark.release
 def test_multimodal() -> None:
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    """Test multimodal input with a gcs image URL in chat completions format."""
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     gcs_url = (
         "gs://cloud-samples-data/generative-ai/image/320px-Felis_catus-cat_on_snow.jpg"
     )
@@ -205,18 +255,18 @@ def test_multimodal() -> None:
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
-    llm = ChatVertexAI(model_name="gemini-2.5-pro", rate_limiter=rate_limiter)
+    llm = ChatVertexAI(model_name="gemini-2.5-pro", rate_limiter=RATE_LIMITER)
     for chunk in llm.stream([message]):
         assert isinstance(chunk, AIMessageChunk)
 
 
-video_param = pytest.param(
+VIDEO_PARAM = pytest.param(
     "gs://cloud-samples-data/generative-ai/video/pixel8.mp4",
     "video/mp4",
     id="video",
 )
-multimodal_inputs = [
-    video_param,
+MULTIMODAL_INPUTS = [
+    VIDEO_PARAM,
     pytest.param(
         "gs://cloud-samples-data/generative-ai/audio/pixel.mp3", "audio/mp3", id="audio"
     ),
@@ -229,9 +279,10 @@ multimodal_inputs = [
 
 
 @pytest.mark.release
-@pytest.mark.parametrize(("file_uri", "mime_type"), multimodal_inputs)
+@pytest.mark.parametrize(("file_uri", "mime_type"), MULTIMODAL_INPUTS)
 def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    """Test multimodal input with gcs file URIs (video, audio, image)."""
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     media_message = {
         "type": "media",
         "file_uri": file_uri,
@@ -247,10 +298,11 @@ def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize(("file_uri", "mime_type"), multimodal_inputs)
+@pytest.mark.parametrize(("file_uri", "mime_type"), MULTIMODAL_INPUTS)
 @pytest.mark.first
 def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    """Test multimodal input with base64 encoded media content (video, audio, image)."""
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     storage_client = storage.Client()
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
@@ -271,6 +323,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
 @pytest.mark.release
 @pytest.mark.first
 def test_multimodal_media_inline_base64_template() -> None:
+    """Test multimodal input with base64 encoded media content using prompt template."""
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt_template = ChatPromptTemplate(
         [
@@ -304,6 +357,7 @@ def test_multimodal_media_inline_base64_template() -> None:
 
 @pytest.mark.extended
 def test_multimodal_media_inline_base64_agent() -> None:
+    """Test multimodal input with base64 encoded media content using a ReAct agent."""
     from langchain import agents
 
     @tool
@@ -317,7 +371,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
     )
     prompt_template = ChatPromptTemplate.from_messages(
         [
-            ("human", "{input}"),
+            ("placeholder", "{messages}"),
             ("placeholder", "{agent_scratchpad}"),
         ]
     )
@@ -336,26 +390,23 @@ def test_multimodal_media_inline_base64_agent() -> None:
         "mime_type": mime_type,
     }
     text_message = {"type": "text", "text": "Describe the attached media in 5 words."}
-    message = [media_message, text_message]
     tools = [get_climate_info]
-    agent = agents.create_tool_calling_agent(
-        llm=llm,
+    agent: CompiledStateGraph[Any, Any] = agents.create_agent(
+        model=llm,
         tools=tools,
         prompt=prompt_template,
     )
-    agent_executor = agents.AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=False,
+    output = agent.invoke(
+        {"messages": [{"role": "user", "content": [text_message, media_message]}]}
     )
-    output = agent_executor.invoke({"input": message})
-    assert isinstance(output["output"], str)
+    assert "messages" in output
+    assert len(output["messages"]) > 0
 
 
 @pytest.mark.flaky(retries=3)
 def test_audio_timestamp() -> None:
     storage_client = storage.Client()
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
 
     file_uri = (
         "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
@@ -415,9 +466,9 @@ def test_parse_history_gemini_multimodal_FC() -> None:
 
 @pytest.mark.xfail(reason="investigating")
 @pytest.mark.release
-@pytest.mark.parametrize(("file_uri", "mime_type"), [video_param])
+@pytest.mark.parametrize(("file_uri", "mime_type"), [VIDEO_PARAM])
 def test_multimodal_video_metadata(file_uri, mime_type) -> None:
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     media_message = {
         "type": "media",
         "file_uri": file_uri,
@@ -440,7 +491,7 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
-    model = ChatVertexAI(model_name=model_name, rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=model_name, rate_limiter=RATE_LIMITER)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
@@ -453,7 +504,7 @@ def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
 
 @pytest.mark.release
 def test_vertexai_system_message() -> None:
-    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     system_instruction = """CymbalBank is a bank located in London"""
     text_question1 = "Where is Cymbal located? Provide only the name of the city."
     sys_message = SystemMessage(content=system_instruction)
@@ -467,7 +518,7 @@ def test_vertexai_system_message() -> None:
 
 @pytest.mark.release
 def test_vertexai_single_call_with_no_system_messages() -> None:
-    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
@@ -480,10 +531,11 @@ def test_vertexai_single_call_with_no_system_messages() -> None:
 
 @pytest.mark.release
 def test_vertexai_single_call_previous_blocked_response() -> None:
-    """If a previous call was blocked, the AIMessage will have empty content which
-    should be ignored.
+    """If a previous call was blocked, the AIMessage will have empty content.
+
+    Empty content should be ignored.
     """
-    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     text_question2 = "How much is 3+3?"
     # Previous blocked response included in history. This can happen with a LangGraph
     # ReAct agent.
@@ -514,34 +566,12 @@ def test_vertexai_single_call_previous_blocked_response() -> None:
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_get_num_tokens_from_messages(model_name: str) -> None:
     model = ChatVertexAI(
-        model_name=model_name, temperature=0.0, rate_limiter=rate_limiter
+        model_name=model_name, temperature=0.0, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
     token = model.get_num_tokens_from_messages(messages=[message])
     assert isinstance(token, int)
     assert token == 3
-
-
-def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
-    """Check tool calls are as expected."""
-    assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content == ""
-    function_call = response.additional_kwargs.get("function_call")
-    assert function_call
-    assert function_call["name"] == expected_name
-    arguments_str = function_call.get("arguments")
-    assert arguments_str
-    arguments = json.loads(arguments_str)
-    assert arguments == {
-        "name": "Erick",
-        "age": 27.0,
-    }
-    tool_calls = response.tool_calls
-    assert len(tool_calls) == 1
-    tool_call = tool_calls[0]
-    assert tool_call["name"] == expected_name
-    assert tool_call["args"] == {"age": 27.0, "name": "Erick"}
 
 
 @pytest.mark.extended
@@ -559,7 +589,7 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         safety_settings=safety,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
         endpoint_version=endpoint_version,
     ).bind_tools([MyModel])
     response = model.invoke([message])
@@ -572,7 +602,7 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         safety_settings=safety,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     ).bind_tools([my_model])
     response = model.invoke([message])
     _check_tool_calls(response, "my_model")
@@ -617,7 +647,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         safety_settings=safety,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     ).bind(
         functions=[MyModel],
         tool_config={
@@ -698,7 +728,7 @@ def test_chat_vertexai_gemini_with_structured_output(
     llm = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         safety_settings=safety,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     )
     model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
@@ -785,7 +815,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
         model_name=_DEFAULT_MODEL_NAME,
         safety_settings=safety,
         temperature=0,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     )
     llm_with_search = llm.bind(
         functions=tools,
@@ -917,39 +947,64 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     )
 
 
+def _check_thinking_output(content: list, output_version: str) -> None:
+    if output_version == "v0":
+        thinking_key = "thinking"
+        assert isinstance(content[-1], str)
+
+    else:
+        # v1
+        thinking_key = "reasoning"
+        assert isinstance(content[-1], dict)
+        assert content[-1].get("type") == "text"
+        assert isinstance(content[-1].get("text"), str)
+
+    assert isinstance(content, list)
+    thinking_blocks = [
+        item
+        for item in content
+        if isinstance(item, dict) and item.get("type") == thinking_key
+    ]
+    assert thinking_blocks
+    for block in thinking_blocks:
+        assert isinstance(block[thinking_key], str)
+
+
 @pytest.mark.flaky(retries=3)
 @pytest.mark.release
-def test_chat_vertexai_gemini_thinking_auto_include_thoughts() -> None:
-    model = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
+    output_version: str,
+) -> None:
+    model = ChatVertexAI(
+        model=_DEFAULT_THINKING_MODEL_NAME,
+        include_thoughts=True,
+        output_version=output_version,
+    )
 
     input_message = {
         "role": "user",
         "content": "How many O's are in Google? Think before you answer.",
     }
 
-    response = model.invoke([input_message])
+    full: AIMessageChunk | None = None
+    for chunk in model.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        full = chunk if full is None else full + chunk
+    assert isinstance(full, AIMessageChunk)
 
-    assert isinstance(response, AIMessage)
-    content = response.content
+    _check_thinking_output(cast(list, full.content), output_version)
 
-    assert isinstance(content[0], dict)
-    assert content[0].get("type") == "thinking"
-    assert isinstance(content[0].get("thinking"), str)
-
-    text_response = next(block for block in content if isinstance(block, str))
-    assert text_response
-
-    assert response.usage_metadata is not None
-    assert response.usage_metadata["output_token_details"]["reasoning"] > 0
+    assert full.usage_metadata is not None
+    assert full.usage_metadata["output_token_details"]["reasoning"] > 0
     assert (
-        response.usage_metadata["total_tokens"]
-        > response.usage_metadata["input_tokens"]
-        + response.usage_metadata["output_tokens"]
+        full.usage_metadata["total_tokens"]
+        > full.usage_metadata["input_tokens"] + full.usage_metadata["output_tokens"]
     )
 
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
-    _ = model.invoke([input_message, response, next_message])
+    _ = model.invoke([input_message, full, next_message])
 
 
 @pytest.mark.release
@@ -1021,13 +1076,13 @@ def test_chat_vertexai_gemini_thinking_configurable() -> None:
 @pytest.mark.extended
 @pytest.mark.first
 def test_prediction_client_transport() -> None:
-    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
 
     assert model.prediction_client.transport.kind == "grpc"
     assert model.async_prediction_client.transport.kind == "grpc_asyncio"
 
     model = ChatVertexAI(
-        model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter, api_transport="rest"
+        model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER, api_transport="rest"
     )
 
     assert model.prediction_client.transport.kind == "rest"
@@ -1039,7 +1094,7 @@ def test_prediction_client_transport() -> None:
 @pytest.mark.extended
 def test_structured_output_schema_json() -> None:
     model = ChatVertexAI(
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
         model_name=_DEFAULT_MODEL_NAME,
         response_mime_type="application/json",
         response_schema={
@@ -1079,7 +1134,7 @@ def test_structured_output_schema_json() -> None:
                 "required": ["recipe_name"],
             },
         },
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     )
     with pytest.raises(ValueError, match="response_mime_type"):
         response = model.invoke("List a few popular cookie recipes")
@@ -1093,7 +1148,7 @@ def test_json_mode_typeddict() -> None:
 
     llm = ChatVertexAI(
         model_name="gemini-2.0-flash-exp",
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     )
     model = llm.with_structured_output(MyModel, method="json_mode")
     message = HumanMessage(content="My name is Erick and I am 28 years old")
@@ -1115,7 +1170,7 @@ def test_structured_output_schema_enum() -> None:
         model_name=_DEFAULT_MODEL_NAME,
         response_schema={"type": "STRING", "enum": ["drama", "comedy", "documentary"]},
         response_mime_type="text/x.enum",
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     )
 
     response = model.invoke(
@@ -1150,7 +1205,7 @@ def test_context_catching() -> None:
     cached_content = create_context_cache(
         ChatVertexAI(
             model_name=_DEFAULT_MODEL_NAME,
-            rate_limiter=rate_limiter,
+            rate_limiter=RATE_LIMITER,
         ),
         messages=[
             SystemMessage(content=system_instruction),
@@ -1177,7 +1232,7 @@ def test_context_catching() -> None:
     chat = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         cached_content=cached_content,
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
     )
 
     response = chat.invoke("What is the secret number?")
@@ -1186,7 +1241,7 @@ def test_context_catching() -> None:
     assert isinstance(response.content, str)
 
     # Using cached content in request
-    chat = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=rate_limiter)
+    chat = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
@@ -1247,18 +1302,20 @@ def test_context_catching_tools() -> None:
 
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("human", "{input}"),
+            ("placeholder", "{messages}"),
             ("placeholder", "{agent_scratchpad}"),
         ]
     )
-    agent = agents.create_tool_calling_agent(
-        llm=chat,
+    agent: CompiledStateGraph[Any, Any] = agents.create_agent(
+        model=chat,
         tools=tools,
         prompt=prompt,
     )
-    agent_executor = agents.AgentExecutor(agent=agent, tools=tools, verbose=False)
-    response = agent_executor.invoke({"input": "what is the secret number?"})
-    assert isinstance(response["output"], str)
+    response = agent.invoke(
+        {"messages": [{"role": "user", "content": "what is the secret number?"}]}
+    )
+    assert "messages" in response
+    assert len(response["messages"]) > 0
 
 
 @pytest.mark.release
@@ -1324,7 +1381,7 @@ def test_langgraph_example() -> None:
         [
             *messages,
             step1,
-            ToolMessage(content="9", tool_call_id=step1.tool_calls[0]["id"]),  # type: ignore[attr-defined]
+            ToolMessage(content="9", tool_call_id=step1.tool_calls[0]["id"]),
         ],
         tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
     )
@@ -1388,17 +1445,6 @@ async def test_astream_events_langgraph_example() -> None:
     assert output.additional_kwargs["function_call"]["name"] == "multiply"
 
 
-@pytest.mark.xfail(reason="can't create service account key on gcp")
-@pytest.mark.release
-def test_init_from_credentials_obj() -> None:
-    credentials_dict = json.loads(os.environ["GOOGLE_VERTEX_AI_WEB_CREDENTIALS"])
-    credentials = service_account.Credentials.from_service_account_info(
-        credentials_dict
-    )
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, credentials=credentials)
-    llm.invoke("how are you")
-
-
 @pytest.mark.xfail(reason="can't add labels to the gemini content")
 @pytest.mark.release
 def test_label_metadata() -> None:
@@ -1423,15 +1469,6 @@ def test_label_metadata_invoke_method() -> None:
             "environment": "testing",
         },
     )
-
-
-@pytest.mark.release
-def test_response_metadata_avg_logprobs() -> None:
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
-    response = llm.invoke("Hello!")
-    probs = response.response_metadata.get("avg_logprobs")
-    if probs is not None:
-        assert isinstance(probs, float)
 
 
 @pytest.fixture
@@ -1459,6 +1496,7 @@ def multimodal_pdf_chain() -> RunnableSerializable:
 
 @pytest.mark.release
 def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) -> None:
+    # TODO: parallelize with url and b64 tests
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf"
     # GCS URI
     response = multimodal_pdf_chain.invoke({"image": gcs_uri})
@@ -1467,7 +1505,8 @@ def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) ->
 
 @pytest.mark.release
 def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) -> None:
-    url = "https://s206.q4cdn.com/479360582/files/doc_financials/2025/q1/2025q1-alphabet-earnings-release.pdf"
+    # TODO: parallelize with gcs and b64 tests
+    url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     # URL
     response = multimodal_pdf_chain.invoke({"image": url})
     assert isinstance(response, AIMessage)
@@ -1475,7 +1514,8 @@ def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) ->
 
 @pytest.mark.release
 def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) -> None:
-    url = "https://s206.q4cdn.com/479360582/files/doc_financials/2025/q1/2025q1-alphabet-earnings-release.pdf"
+    # TODO: parallelize with gcs and url tests
+    url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     request_response = requests.get(url, allow_redirects=True)
     # B64
     with io.BytesIO() as stream:
@@ -1484,6 +1524,15 @@ def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) ->
         image = f"data:application/pdf;base64,{image_data}"
         response = multimodal_pdf_chain.invoke({"image": image})
         assert isinstance(response, AIMessage)
+
+
+@pytest.mark.release
+def test_response_metadata_avg_logprobs() -> None:
+    llm = ChatVertexAI(model="gemini-2.0-flash-001")
+    response = llm.invoke("Hello!")
+    probs = response.response_metadata.get("avg_logprobs")
+    if probs is not None:
+        assert isinstance(probs, float)
 
 
 @pytest.mark.xfail(reason="logprobs are subject to daily quotas")
@@ -1516,6 +1565,7 @@ def test_logprobs() -> None:
 
 
 def test_location_init() -> None:
+    """Test how location is set in ChatVertexAI depending on vertexai.init settings."""
     # If I don't initialize vertexai before, defaults to us-central-1
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=2)
     assert llm.location == "us-central1"
@@ -1545,7 +1595,7 @@ def test_vertexai_global_location_single_call(
     model = ChatVertexAI(
         model_name=model_name,
         location="global",
-        rate_limiter=rate_limiter,
+        rate_limiter=RATE_LIMITER,
         endpoint_version=endpoint_version,
     )
     assert model.location == "global"
@@ -1574,59 +1624,89 @@ def test_nested_bind_tools() -> None:
     assert response.tool_calls[0]["name"] == "People"
 
 
-def test_search_builtin() -> None:
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"google_search": {}}])
+def _check_web_search_output(message: AIMessage, output_version: str) -> None:
+    assert "grounding_metadata" in message.response_metadata
+
+    # Lazy parsing
+    content_blocks = message.content_blocks
+    text_blocks = [block for block in content_blocks if block["type"] == "text"]
+    assert len(text_blocks) == 1
+    text_block = text_blocks[0]
+    assert text_block["annotations"]
+
+    if output_version == "v1":
+        text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[misc,index]
+        assert len(text_blocks) == 1
+        text_block = text_blocks[0]
+        assert text_block["annotations"]
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_search_builtin(output_version: str) -> None:
+    """Test the built-in search tool."""
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME, output_version=output_version
+    ).bind_tools([{"google_search": {}}])
     input_message = {
         "role": "user",
         "content": "What is today's news?",
     }
-    response = llm.invoke([input_message])
-    # Grounding metadata is optional and may not be present in all responses
-    if "grounding_metadata" in response.response_metadata:
-        assert response.response_metadata["grounding_metadata"] is not None
 
     # Test streaming
-    full: Optional[BaseMessageChunk] = None
+    full: AIMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
-    # Grounding metadata is optional and may not be present in all responses
-    if "grounding_metadata" in full.response_metadata:
-        assert full.response_metadata["grounding_metadata"] is not None
+    _check_web_search_output(full, output_version)
 
     # Test we can process chat history
     next_message = {
         "role": "user",
         "content": "Tell me more about that last story.",
     }
-    _ = llm.invoke([input_message, full, next_message])
+    response = llm.invoke([input_message, full, next_message])
+    _check_web_search_output(response, output_version)
 
 
-def test_code_execution_builtin() -> None:
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME).bind_tools([{"code_execution": {}}])
+def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
+    if output_version == "v0":
+        blocks = [block for block in message.content if isinstance(block, dict)]
+        expected_block_types = {"executable_code", "code_execution_result"}
+        assert {block.get("type") for block in blocks} == expected_block_types
+
+    else:
+        # v1
+        expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+        assert {block["type"] for block in message.content} == expected_block_types  # type: ignore[index]
+
+    # Lazy parsing
+    expected_block_types = {"server_tool_call", "server_tool_result", "text"}
+    assert {block["type"] for block in message.content_blocks} == expected_block_types
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_code_execution_builtin(output_version: str) -> None:
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME, output_version=output_version
+    ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",
         "content": "What is 3^3?",
     }
-    response = llm.invoke([input_message])
-    content_blocks = [block for block in response.content if isinstance(block, dict)]
-    expected_block_types = {"executable_code", "code_execution_result"}
-    assert {block.get("type") for block in content_blocks} == expected_block_types
 
-    # Test streaming
-    full: Optional[BaseMessageChunk] = None
+    full: AIMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
-    content_blocks = [block for block in full.content if isinstance(block, dict)]
-    expected_block_types = {"executable_code", "code_execution_result"}
-    assert {block.get("type") for block in content_blocks} == expected_block_types
 
-    # Test we can process chat history
+    _check_code_execution_output(full, output_version)
+
+    # Test passing back in chat history without raising errors
     next_message = {
         "role": "user",
-        "content": "Can you add some comments to the code?",
+        "content": "Can you show me the calculation again with comments?",
     }
-    _ = llm.invoke([input_message, full, next_message])
+    response = llm.invoke([input_message, full, next_message])
+    _check_code_execution_output(response, output_version)
