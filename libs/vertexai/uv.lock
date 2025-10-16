@@ -918,7 +918,7 @@ wheels = [
 [[package]]
 name = "langchain-core"
 version = "1.0.0rc1"
-source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore#0c8cbfb7deb33ce8062e63c5a0360435aac41885" }
+source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore#c9018f81ec16f481c0b476b17ae26fa88b6c0321" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
