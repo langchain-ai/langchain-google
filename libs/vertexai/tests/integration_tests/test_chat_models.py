@@ -947,7 +947,7 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     )
 
 
-def _check_thinking_output(content: list, output_version: Literal["v0", "v1"]) -> None:
+def _check_thinking_output(content: list, output_version: str) -> None:
     if output_version == "v0":
         thinking_key = "thinking"
         assert isinstance(content[-1], str)
@@ -993,7 +993,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
 
-    _check_thinking_output(full.content, output_version)
+    _check_thinking_output(cast(list, full.content), output_version)
 
     assert full.usage_metadata is not None
     assert full.usage_metadata["output_token_details"]["reasoning"] > 0
