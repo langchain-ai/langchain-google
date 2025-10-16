@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "langchain-google-vertexai"
-version = "2.1.2"
+version = "3.0.0rc1"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 license = {text = "MIT"}

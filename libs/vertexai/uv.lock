@@ -935,7 +935,7 @@ wheels = [
 
 [[package]]
 name = "langchain-google-vertexai"
-version = "2.1.2"
+version = "3.0.0rc1"
 source = { editable = "." }
 dependencies = [
     { name = "bottleneck" },
