@@ -4,16 +4,14 @@ This module contains all read-related tools for Google Sheets, including
 base schemas, base tool class, and specific read implementations.
 """
 
-import json
-from typing import List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from langchain_core.callbacks import CallbackManagerForToolRun
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .base import SheetsBaseTool
 from .enums import (
     DateTimeRenderOption,
-    FilterConditionType,
     MajorDimension,
     ValueRenderOption,
 )
@@ -148,31 +146,47 @@ class BaseReadTool(SheetsBaseTool):
 
         return values
 
+    def _extract_simple_data_all(self, grid_data: List[dict]) -> List[List[str]]:
+        """Extract a simple 2D array from ALL GridData segments, preserving order.
+
+        This method processes ALL grid segments returned by the API, not just the
+        first one. This is critical for preventing data loss when the API returns
+        multiple segments (e.g., filtered reads, paginated responses).
+
+        Args:
+            grid_data: List of GridData segments from Google Sheets API
+
+        Returns:
+            List[List[str]]: Simple 2D array of values from all segments concatenated
+        """
+        if not grid_data:
+            return []
+
+        result: List[List[str]] = []
+        for grid in grid_data:
+            for row_data in grid.get("rowData", []) or []:
+                row_values: List[str] = []
+                for cell_data in row_data.get("values", []) or []:
+                    row_values.append(self._safe_get_cell_value(cell_data))
+                # Keep empty rows as [] if the API returns them
+                result.append(row_values)
+
+        return result
+
     def _extract_simple_data(self, grid_data: List[dict]) -> List[List[str]]:
         """Extract simple 2D array from complex GridData structure.
+
+        Backward-compatible method name. Now processes ALL segments to prevent
+        data loss.
 
         Args:
             grid_data: GridData from Google Sheets API
 
         Returns:
-            List[List[str]]: Simple 2D array of values
+            List[List[str]]: Simple 2D array of values from all segments
         """
-        if not grid_data:
-            return []
-
-        # Get the first GridData (usually contains all data)
-        grid = grid_data[0]
-
-        # Extract simple data using safe extraction
-        result = []
-        for row_data in grid.get("rowData", []):
-            row_values = []
-            for cell_data in row_data.get("values", []):
-                value = self._safe_get_cell_value(cell_data)
-                row_values.append(value)
-            result.append(row_values)
-
-        return result
+        # Delegate to the new multi-segment implementation
+        return self._extract_simple_data_all(grid_data)
 
 
 # ============================================================================
@@ -197,41 +211,44 @@ class SheetsReadDataTool(BaseReadTool):
     with full control over how the data is processed and returned.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsReadDataTool
 
-            from langchain_google_community.sheets import SheetsReadDataTool
-
-            tool = SheetsReadDataTool(
-                api_key="your_api_key",
-                value_render_option=ValueRenderOption.FORMATTED_VALUE,
-                convert_to_records=True,
-                numericise_values=True,
-            )
+        tool = SheetsReadDataTool(
+            api_key="your_api_key",
+            value_render_option=ValueRenderOption.FORMATTED_VALUE,
+            convert_to_records=True,
+            numericise_values=True,
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                    "range_name": "A1:E10",
-                    "convert_to_records": True,
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "range_name": "A1:E10",
+                "convert_to_records": True,
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
+        ```python
+        agent.invoke(
+            {"input": ("Read the first 10 rows from the student data spreadsheet")}
+        )
+        ```
 
-            agent.invoke(
-                {"input": "Read the first 10 rows from the student data spreadsheet"}
-            )
-
-    Tool Output:
-        str: JSON string containing:
-            - Raw data: 2D array of values as returned by Google Sheets API
-            - Records format: List of dictionaries with first row as headers
-            - Metadata: Information about the data structure and processing
-            - Error handling: Detailed error messages for troubleshooting
+    Returns:
+        Dictionary containing:
+            - success (bool): Always True for successful operations
+            - spreadsheet_id (str): The spreadsheet ID
+            - range (str): The actual range that was read (A1 notation)
+            - values (List or List[Dict]): Processed data (2D array or records)
+            - major_dimension (str): The major dimension ("ROWS" or "COLUMNS")
+            - render_options (Dict): Applied rendering options
+            - processing_options (Dict): Applied processing options
 
     Data Processing Options:
         - value_render_option: Control how cell values are rendered
@@ -244,16 +261,12 @@ class SheetsReadDataTool(BaseReadTool):
         - convert_to_records: Transform 2D array to list of dictionaries
         - numericise_values: Automatically convert numeric strings to numbers
 
-    Example Response:
+    Example Response (with convert_to_records=True):
         {
+            "success": True,
             "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "range_name": "A1:E3",
+            "range": "Class Data!A1:E3",
             "values": [
-                ["Name", "Age", "Grade", "Subject", "Score"],
-                ["Alice", "16", "10th", "Math", "95"],
-                ["Bob", "17", "11th", "Science", "87"]
-            ],
-            "records": [
                 {
                     "Name": "Alice", "Age": 16, "Grade": "10th",
                     "Subject": "Math", "Score": 95
@@ -263,11 +276,14 @@ class SheetsReadDataTool(BaseReadTool):
                     "Subject": "Science", "Score": 87
                 }
             ],
-            "metadata": {
-                "total_rows": 3,
-                "total_columns": 5,
-                "has_headers": true,
-                "data_types": ["string", "number", "string", "string", "number"]
+            "major_dimension": "ROWS",
+            "render_options": {
+                "value_render_option": "FORMATTED_VALUE",
+                "date_time_render_option": "SERIAL_NUMBER"
+            },
+            "processing_options": {
+                "convert_to_records": True,
+                "numericise_values": True
             }
         }
 
@@ -296,7 +312,7 @@ class SheetsReadDataTool(BaseReadTool):
         convert_to_records: bool = False,
         numericise_values: bool = True,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Read data from a Google Spreadsheet."""
         try:
             # Validate inputs
@@ -327,6 +343,8 @@ class SheetsReadDataTool(BaseReadTool):
             )
 
             result = {
+                "success": True,
+                "spreadsheet_id": spreadsheet_id,
                 "range": response.get("range", range_name),
                 "values": processed_data,
                 "major_dimension": response.get("majorDimension", "ROWS"),
@@ -340,7 +358,7 @@ class SheetsReadDataTool(BaseReadTool):
                 },
             }
 
-            return json.dumps(result, indent=2, default=str)
+            return result
 
         except Exception as error:
             raise Exception(f"Error reading sheet data: {error}") from error
@@ -373,39 +391,47 @@ class SheetsBatchReadDataTool(BaseReadTool):
     performance.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsBatchReadDataTool
 
-            from langchain_google_community.sheets import SheetsBatchReadDataTool
-
-            tool = SheetsBatchReadDataTool(
-                api_key="your_api_key",
-                value_render_option=ValueRenderOption.FORMATTED_VALUE,
-                convert_to_records=True,
-                numericise_values=True,
-            )
+        tool = SheetsBatchReadDataTool(
+            api_key="your_api_key",
+            value_render_option=ValueRenderOption.FORMATTED_VALUE,
+            convert_to_records=True,
+            numericise_values=True,
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                    "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
-                    "convert_to_records": True,
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
+                "convert_to_records": True,
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
+        ```python
+        agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
+        ```
 
-            agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
-
-    Tool Output:
-        str: JSON string containing:
-            - Batch results: Dictionary with range names as keys
-            - Individual range data: Each range processed according to options
-            - Metadata: Information about each range and processing results
-            - Error handling: Detailed error messages for failed ranges
+    Returns:
+        Dictionary containing:
+            - success (bool): Always True for successful operations
+            - spreadsheet_id (str): The spreadsheet ID
+            - requested_ranges (List[str]): The ranges that were requested
+            - total_ranges (int): Total number of ranges processed
+            - successful_ranges (int): Number of successfully processed ranges
+            - failed_ranges (int): Number of failed ranges
+            - results (List[Dict]): List of results for each range
+            - value_render_option (str): Applied value rendering option
+            - date_time_render_option (str): Applied date/time rendering option
+            - major_dimension (str): Applied major dimension
+            - convert_to_records (bool): Whether data was converted to records
+            - numericise_values (bool): Whether values were numericised
 
     Performance Benefits:
         - Single API call: Reduces network overhead and rate limiting
@@ -413,40 +439,40 @@ class SheetsBatchReadDataTool(BaseReadTool):
         - Efficient batching: Optimized for multiple data extraction scenarios
         - Consistent formatting: All ranges processed with same options
 
-    Example Response:
+    Example Response (with convert_to_records=True):
         {
+            "success": True,
             "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "ranges": ["A1:C3", "F1:H3"],
-            "results": {
-                "A1:C3": {
-                    "values": [
-                        ["Name", "Age", "Grade"],
-                        ["Alice", "16", "10th"],
-                        ["Bob", "17", "11th"]
-                    ],
-                    "records": [
+            "requested_ranges": ["Class Data!A1:C3", "Class Data!F1:H3"],
+            "total_ranges": 2,
+            "successful_ranges": 2,
+            "failed_ranges": 0,
+            "results": [
+                {
+                    "range": "Class Data!A1:C3",
+                    "data": [
                         {"Name": "Alice", "Age": 16, "Grade": "10th"},
                         {"Name": "Bob", "Age": 17, "Grade": "11th"}
-                    ]
-                },
-                "F1:H3": {
-                    "values": [
-                        ["Subject", "Score", "Date"],
-                        ["Math", "95", "2024-01-15"],
-                        ["Science", "87", "2024-01-16"]
                     ],
-                    "records": [
-                        {"Subject": "Math", "Score": 95, "Date": "2024-01-15"},
-                        {"Subject": "Science", "Score": 87, "Date": "2024-01-16"}
-                    ]
+                    "error": None
+                },
+                {
+                    "range": "Class Data!F1:H3",
+                    "data": [
+                        {"Subject": "Math", "Score": 95, "Teacher": "Mr. Smith"},
+                        {
+                            "Subject": "Science", "Score": 87,
+                            "Teacher": "Ms. Johnson"
+                        }
+                    ],
+                    "error": None
                 }
-            },
-            "metadata": {
-                "total_ranges": 2,
-                "successful_ranges": 2,
-                "failed_ranges": 0,
-                "processing_time": "0.5s"
-            }
+            ],
+            "value_render_option": "FORMATTED_VALUE",
+            "date_time_render_option": "SERIAL_NUMBER",
+            "major_dimension": "ROWS",
+            "convert_to_records": True,
+            "numericise_values": True
         }
 
     Raises:
@@ -475,7 +501,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
         convert_to_records: bool = False,
         numericise_values: bool = True,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Read data from multiple ranges in a Google Spreadsheet."""
         try:
             # Validate inputs
@@ -534,6 +560,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
                 )
 
             batch_metadata = {
+                "success": True,
                 "spreadsheet_id": spreadsheet_id,
                 "requested_ranges": ranges,
                 "value_render_option": value_render_option.value,
@@ -547,7 +574,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
                 "results": results,
             }
 
-            return json.dumps(batch_metadata, indent=2, default=str)
+            return batch_metadata
 
         except Exception as error:
             raise Exception(f"Error batch reading sheet data: {error}") from error
@@ -559,28 +586,67 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
 
 class DataFilterSchema(BaseModel):
-    """Schema for data filter criteria."""
+    """Schema for DataFilter used with getByDataFilter API.
 
-    column_index: int = Field(
-        ...,
-        description="The column index (0-based) to filter on.",
+    DataFilters specify which ranges or metadata to read from a spreadsheet.
+    Must specify exactly ONE of: a1Range, gridRange, or developerMetadataLookup.
+
+    Note: This is for range selection, NOT conditional filtering (like "score > 50").
+    For conditional filtering, use Filter Views via the batchUpdate API.
+
+    See: https://developers.google.com/sheets/api/reference/rest/v4/DataFilter
+    """
+
+    a1Range: Optional[str] = Field(
+        None,
+        description=(
+            "A1 notation range to read (e.g., 'Sheet1!A1:D5', 'NamedRange'). "
+            "This is the most common way to specify a range."
+        ),
     )
-    condition: FilterConditionType = Field(
-        ...,
-        description="The condition type to apply for filtering.",
+    gridRange: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Grid coordinates to read. Example: "
+            "{'sheetId': 0, 'startRowIndex': 0, 'endRowIndex': 10, "
+            "'startColumnIndex': 0, 'endColumnIndex': 5}"
+        ),
     )
-    value: str = Field(
-        ...,
-        description="The value to compare against.",
+    developerMetadataLookup: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Developer metadata lookup to select ranges. "
+            "Advanced feature for ranges tagged with metadata."
+        ),
     )
+
+    @model_validator(mode="after")
+    def check_one_filter_type(self) -> "DataFilterSchema":
+        """Validate that exactly one filter type is specified."""
+        count = sum(
+            [
+                bool(self.a1Range),
+                bool(self.gridRange),
+                bool(self.developerMetadataLookup),
+            ]
+        )
+        if count != 1:
+            raise ValueError(
+                "Must specify exactly one of: a1Range, gridRange, or "
+                "developerMetadataLookup"
+            )
+        return self
 
 
 class FilteredReadSheetDataSchema(ReadBaseSchema):
-    """Input schema for FilteredReadSheetData."""
+    """Input schema for reading data using DataFilters (getByDataFilter API)."""
 
     data_filters: List[DataFilterSchema] = Field(
         ...,
-        description="List of data filters to apply to the spreadsheet.",
+        description=(
+            "List of DataFilters specifying which ranges to read. "
+            "Each filter selects a range using a1Range, gridRange, or metadata lookup."
+        ),
     )
     include_grid_data: bool = Field(
         default=False,
@@ -592,89 +658,128 @@ class FilteredReadSheetDataSchema(ReadBaseSchema):
 
 
 class SheetsFilteredReadDataTool(BaseReadTool):
-    """Tool that reads data from Google Sheets with advanced filtering capabilities.
+    """Tool that reads data from Google Sheets using DataFilters (getByDataFilter API).
 
-    This tool provides advanced data filtering capabilities using Google Sheets'
-    getByDataFilter API method. It allows you to apply complex filtering conditions
-    to extract specific data based on criteria, supporting various data types and
-    comparison operators. Requires OAuth2 authentication for full functionality.
+    This tool reads data from spreadsheets using the getByDataFilter API, which
+    allows you to specify ranges using A1 notation, grid coordinates, or developer
+    metadata. It also provides detailed cell formatting and properties when
+    include_grid_data=True.
+
+    Note: This tool is for RANGE SELECTION, not conditional filtering like
+    "score > 50". For conditional filtering, create a Filter View using the
+    Sheets UI or batchUpdate API.
+
+    Use cases:
+    - Read multiple ranges in a single API call
+    - Get detailed cell formatting and properties (gridData)
+    - Select ranges by developer metadata tags
+    - Use grid coordinates instead of A1 notation
+
+    Requires OAuth2 authentication for full functionality.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsFilteredReadDataTool
 
-            from langchain_google_community.sheets import SheetsFilteredReadDataTool
-
-            tool = SheetsFilteredReadDataTool(
-                credentials_path="path/to/credentials.json",
-                include_grid_data=True,
-                convert_to_records=True,
-                numericise_values=True,
-            )
+        tool = SheetsFilteredReadDataTool(
+            credentials_path="path/to/credentials.json",
+            include_grid_data=True,
+            convert_to_records=True,
+            numericise_values=True,
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
+        ```python
+        # Example 1: Read using A1 notation
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "data_filters": [{"a1Range": "Class Data!A1:E10"}],
+                "include_grid_data": True,
+            }
+        )
 
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                    "data_filters": [
-                        {
-                            "column_index": 1,
-                            "condition": "NUMBER_GREATER",
-                            "value": "50",
+        # Example 2: Read using grid coordinates
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "data_filters": [
+                    {
+                        "gridRange": {
+                            "sheetId": 0,
+                            "startRowIndex": 0,
+                            "endRowIndex": 10,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": 5,
                         }
-                    ],
-                    "include_grid_data": True,
-                }
-            )
+                    }
+                ],
+                "include_grid_data": True,
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
+        ```python
+        agent.invoke(
+            {"input": ("Read the range Class Data!A1:E10 with formatting details")}
+        )
+        ```
 
-            agent.invoke({"input": "Find all students with scores above 80"})
+    Returns:
+        Dictionary containing:
+            - success (bool): Always True for successful operations
+            - spreadsheet_id (str): The spreadsheet ID
+            - properties (Dict): Spreadsheet-level properties
+            - sheets (List[Dict]): List of sheets with filtered data
+                Each sheet contains:
+                - properties (Dict): Sheet properties (title, sheetId, etc.)
+                - data (List): List of data segments
+                    Each segment is either List[List] or List[Dict]
+                    depending on convert_to_records setting
 
-    Tool Output:
-        str: JSON string containing:
-            - Filtered data: Only rows matching the filter criteria
-            - Grid data: Detailed cell information with formatting (optional)
-            - Metadata: Information about filtering results and data structure
-            - Error handling: Detailed error messages for troubleshooting
-
-    Filter Conditions Available:
-        - Number conditions: GREATER, LESS, EQUAL, BETWEEN, etc.
-        - Text conditions: CONTAINS, STARTS_WITH, ENDS_WITH, EQUAL, etc.
-        - Date conditions: IS_AFTER, IS_BEFORE, IS_ON_OR_AFTER, etc.
-        - Boolean conditions: IS_TRUE, IS_FALSE
+    DataFilter Types:
+        - a1Range: Most common, uses A1 notation (e.g., "Sheet1!A1:D5")
+        - gridRange: Uses grid coordinates (sheetId, row/column indices)
+        - developerMetadataLookup: Selects ranges tagged with metadata
 
     Authentication Requirements:
         - Requires OAuth2 credentials (not API key)
         - Full access to spreadsheet data
         - Supports private and shared spreadsheets
 
-    Example Response:
+    Example Response (with convert_to_records=True):
         {
+            "success": True,
             "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "data_filters": [
+            "properties": {
+                "title": "Student Data",
+                "locale": "en_US",
+                "timeZone": "America/New_York"
+            },
+            "sheets": [
                 {
-                    "column_index": 1,
-                    "condition": "NUMBER_GREATER",
-                    "value": "50"
+                    "properties": {
+                        "sheetId": 0,
+                        "title": "Students",
+                        "index": 0,
+                        "sheetType": "GRID"
+                    },
+                    "data": [
+                        [
+                            {
+                                "Name": "Alice", "Score": 95,
+                                "Subject": "Math", "Grade": "A"
+                            },
+                            {
+                                "Name": "Charlie", "Score": 87,
+                                "Subject": "Science", "Grade": "B"
+                            }
+                        ]
+                    ]
                 }
-            ],
-            "filtered_data": [
-                ["Alice", "95", "Math", "A"],
-                ["Charlie", "87", "Science", "B"]
-            ],
-            "records": [
-                {"Name": "Alice", "Score": 95, "Subject": "Math", "Grade": "A"},
-                {"Name": "Charlie", "Score": 87, "Subject": "Science", "Grade": "B"}
-            ],
-            "metadata": {
-                "total_matching_rows": 2,
-                "total_rows_scanned": 10,
-                "filter_applied": "Score > 50",
-                "processing_time": "0.3s"
-            }
+            ]
         }
 
     Raises:
@@ -682,35 +787,15 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         Exception: For API errors, authentication issues, or connection problems
     """
 
-    name: str = "sheets_filtered_read_data"
+    name: str = "sheets_get_by_data_filter"
     description: str = (
-        "Read data from Google Sheets with advanced filtering capabilities using "
-        "getByDataFilter API. Supports complex filtering conditions, grid data "
-        "extraction, and various data types. Requires OAuth2 authentication for "
-        "full functionality. Perfect for extracting specific data based on criteria."
+        "Read data from Google Sheets using DataFilters (getByDataFilter API). "
+        "Select ranges using A1 notation, grid coordinates, or developer metadata. "
+        "Optionally include detailed cell formatting and properties (gridData). "
+        "Useful for reading multiple ranges or ranges with specific metadata tags. "
+        "Requires OAuth2 authentication."
     )
     args_schema: Type[BaseModel] = FilteredReadSheetDataSchema
-
-    def _convert_to_dict_list(self, items: list) -> list:
-        """Convert a list of items to dictionaries.
-
-        Handles both Pydantic models and dicts.
-
-        Args:
-            items: List of items that may be Pydantic models or dictionaries
-
-        Returns:
-            list: List of dictionaries
-        """
-        result = []
-        for item in items:
-            if hasattr(item, "model_dump"):
-                # It's a Pydantic model, convert to dict
-                result.append(item.model_dump())
-            else:
-                # It's already a dict
-                result.append(item)
-        return result
 
     def _run(
         self,
@@ -724,7 +809,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         convert_to_records: bool = False,
         numericise_values: bool = True,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Read data from Google Sheets with filtering."""
         try:
             # Validate inputs
@@ -756,7 +841,10 @@ class SheetsFilteredReadDataTool(BaseReadTool):
                 response, convert_to_records, numericise_values
             )
 
-            return json.dumps(result, indent=2, default=str)
+            # Add success field
+            result["success"] = True
+
+            return result
 
         except Exception as error:
             raise Exception(f"Error filtered reading sheet data: {error}") from error
