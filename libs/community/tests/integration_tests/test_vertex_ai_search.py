@@ -56,7 +56,7 @@ def test_google_vertex_ai_search_get_relevant_documents(spec: Optional[Dict]) ->
         )
     else:
         retriever = VertexAIMultiTurnSearchRetriever(data_store_id=data_store_id)
-    documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
+    documents = retriever.invoke("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
         assert isinstance(doc, Document)
@@ -70,7 +70,7 @@ def test_google_vertex_ai_search_boostspec() -> None:
     """Test the get_relevant_documents() method."""
     data_store_id = os.environ["DATA_STORE_ID"]
     retriever = VertexAIMultiTurnSearchRetriever(data_store_id=data_store_id)
-    documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
+    documents = retriever.invoke("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
         assert isinstance(doc, Document)
@@ -86,7 +86,7 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents() -> None:
     retriever = VertexAISearchRetriever(
         data_store_id=data_store_id, get_extractive_answers=True
     )
-    documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
+    documents = retriever.invoke("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
         assert isinstance(doc, Document)
@@ -104,7 +104,7 @@ def test_google_vertex_ai_multiturnsearch_get_relevant_documents_segments() -> N
         max_extractive_segment_count=1,
         return_extractive_segment_score=True,
     )
-    documents = retriever.get_relevant_documents("What are Alphabet's Other Bets?")
+    documents = retriever.invoke("What are Alphabet's Other Bets?")
     assert len(documents) > 0
     for doc in documents:
         assert isinstance(doc, Document)
