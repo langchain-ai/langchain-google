@@ -369,12 +369,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
         model_name=_DEFAULT_MODEL_NAME,
         perform_literal_eval_on_string_raw_content=True,
     )
-    prompt_template = ChatPromptTemplate.from_messages(
-        [
-            ("placeholder", "{messages}"),
-            ("placeholder", "{agent_scratchpad}"),
-        ]
-    )
+
     storage_client = storage.Client()
     # Can't use the pixel.mp3, since it has too many tokens it will hit quota
     # error.
@@ -394,13 +389,12 @@ def test_multimodal_media_inline_base64_agent() -> None:
     agent: CompiledStateGraph[Any, Any] = agents.create_agent(
         model=llm,
         tools=tools,
-        prompt=prompt_template,
     )
     output = agent.invoke(
         {"messages": [{"role": "user", "content": [text_message, media_message]}]}
     )
     assert "messages" in output
-    assert len(output["messages"]) > 0
+    assert isinstance(output["messages"][-1], AIMessage)
 
 
 @pytest.mark.flaky(retries=3)
@@ -1300,22 +1294,16 @@ def test_context_catching_tools() -> None:
         cached_content=cached_content,
     )
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("placeholder", "{messages}"),
-            ("placeholder", "{agent_scratchpad}"),
-        ]
-    )
     agent: CompiledStateGraph[Any, Any] = agents.create_agent(
         model=chat,
         tools=tools,
-        prompt=prompt,
     )
     response = agent.invoke(
         {"messages": [{"role": "user", "content": "what is the secret number?"}]}
     )
     assert "messages" in response
     assert len(response["messages"]) > 0
+    assert isinstance(response["messages"][-1], AIMessage)
 
 
 @pytest.mark.release

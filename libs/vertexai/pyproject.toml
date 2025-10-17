@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "langchain-google-vertexai"
-version = "3.0.0rc1"
+version = "3.0.0"
 description = "An integration package connecting Google VertexAI and LangChain"
 authors = []
 license = {text = "MIT"}
@@ -13,7 +13,7 @@ readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=1.0.0rc2,<2.0.0",
+    "langchain-core>=1.0.0,<2.0.0",
     "google-cloud-aiplatform>=1.97.0,<2.0.0",
     "google-cloud-storage>=2.18.0,<3.0.0",
     "httpx>=0.28.0,<1.0.0",
@@ -57,10 +57,10 @@ test = [
     "types-requests>=2.31.0,<3.0.0",
     "types-protobuf>=4.24.0.4,<7.0.0.0",
     "google-api-python-client>=2.117.0,<3.0.0",
-    "langchain>=1.0.0a10,<2.0.0",
+    "langchain>=1.0.0rc2,<2.0.0",
     "anthropic>=0.64.0,<1.0.0",
     "validators>=0.35.0,<1.0.0",
-    "langchain-tests>=1.0.0rc1,<2.0.0",
+    "langchain-tests>=1.0.0,<2.0.0",
 ]
 
 test_integration = [
@@ -70,7 +70,7 @@ test_integration = [
     "google-api-python-client>=2.114.0,<3.0.0",
     "google-cloud-datastore>=2.19.0,<3.0.0",
     "langchain-mistralai>=0.2.12,<2.0.0",
-    "langchain-tests>=1.0.0rc1,<2.0.0",
+    "langchain-tests>=1.0.0,<2.0.0",
 ]
 
 dev = []
