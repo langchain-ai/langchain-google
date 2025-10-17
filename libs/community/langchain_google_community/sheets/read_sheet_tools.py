@@ -211,34 +211,34 @@ class SheetsReadDataTool(BaseReadTool):
     with full control over how the data is processed and returned.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsReadDataTool
 
-            from langchain_google_community.sheets import SheetsReadDataTool
-
-            tool = SheetsReadDataTool(
-                api_key="your_api_key",
-                value_render_option=ValueRenderOption.FORMATTED_VALUE,
-                convert_to_records=True,
-                numericise_values=True,
-            )
+        tool = SheetsReadDataTool(
+            api_key="your_api_key",
+            value_render_option=ValueRenderOption.FORMATTED_VALUE,
+            convert_to_records=True,
+            numericise_values=True,
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
-                    "range_name": "A1:E10",
-                    "convert_to_records": True,
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "range_name": "A1:E10",
+                "convert_to_records": True,
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke(
-                {"input": ("Read the first 10 rows from the student data spreadsheet")}
-            )
+        ```python
+        agent.invoke(
+            {"input": ("Read the first 10 rows from the student data spreadsheet")}
+        )
+        ```
 
     Returns:
         Dictionary containing:
@@ -391,32 +391,32 @@ class SheetsBatchReadDataTool(BaseReadTool):
     performance.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsBatchReadDataTool
 
-            from langchain_google_community.sheets import SheetsBatchReadDataTool
-
-            tool = SheetsBatchReadDataTool(
-                api_key="your_api_key",
-                value_render_option=ValueRenderOption.FORMATTED_VALUE,
-                convert_to_records=True,
-                numericise_values=True,
-            )
+        tool = SheetsBatchReadDataTool(
+            api_key="your_api_key",
+            value_render_option=ValueRenderOption.FORMATTED_VALUE,
+            convert_to_records=True,
+            numericise_values=True,
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
-                    "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
-                    "convert_to_records": True,
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
+                "convert_to_records": True,
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
+        ```python
+        agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
+        ```
 
     Returns:
         Dictionary containing:
@@ -678,54 +678,54 @@ class SheetsFilteredReadDataTool(BaseReadTool):
     Requires OAuth2 authentication for full functionality.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsFilteredReadDataTool
 
-            from langchain_google_community.sheets import SheetsFilteredReadDataTool
-
-            tool = SheetsFilteredReadDataTool(
-                credentials_path="path/to/credentials.json",
-                include_grid_data=True,
-                convert_to_records=True,
-                numericise_values=True,
-            )
+        tool = SheetsFilteredReadDataTool(
+            credentials_path="path/to/credentials.json",
+            include_grid_data=True,
+            convert_to_records=True,
+            numericise_values=True,
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
+        ```python
+        # Example 1: Read using A1 notation
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "data_filters": [{"a1Range": "Class Data!A1:E10"}],
+                "include_grid_data": True,
+            }
+        )
 
-            # Example 1: Read using A1 notation
-            result = tool.run(
-                {
-                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
-                    "data_filters": [{"a1Range": "Class Data!A1:E10"}],
-                    "include_grid_data": True,
-                }
-            )
-
-            # Example 2: Read using grid coordinates
-            result = tool.run(
-                {
-                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
-                    "data_filters": [
-                        {
-                            "gridRange": {
-                                "sheetId": 0,
-                                "startRowIndex": 0,
-                                "endRowIndex": 10,
-                                "startColumnIndex": 0,
-                                "endColumnIndex": 5,
-                            }
+        # Example 2: Read using grid coordinates
+        result = tool.run(
+            {
+                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "data_filters": [
+                    {
+                        "gridRange": {
+                            "sheetId": 0,
+                            "startRowIndex": 0,
+                            "endRowIndex": 10,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": 5,
                         }
-                    ],
-                    "include_grid_data": True,
-                }
-            )
+                    }
+                ],
+                "include_grid_data": True,
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke(
-                {"input": ("Read the range Class Data!A1:E10 with formatting details")}
-            )
+        ```python
+        agent.invoke(
+            {"input": ("Read the range Class Data!A1:E10 with formatting details")}
+        )
+        ```
 
     Returns:
         Dictionary containing:

@@ -54,26 +54,30 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
     and other organizational information. It's essential for exploring spreadsheet
     contents before reading data and understanding the overall structure.
     Instantiate:
-        .. code-block:: python
-            from langchain_google_community.sheets import SheetsGetSpreadsheetInfoTool
-            tool = SheetsGetSpreadsheetInfoTool(
-                api_key="your_api_key",
-                include_grid_data=False,
-                include_formatting=False,
-                include_validation=False,
-            )
+        ```python
+        from langchain_google_community.sheets import SheetsGetSpreadsheetInfoTool
+
+        tool = SheetsGetSpreadsheetInfoTool(
+            api_key="your_api_key",
+            include_grid_data=False,
+            include_formatting=False,
+            include_validation=False,
+        )
+        ```
     Invoke directly:
-        .. code-block:: python
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                    "include_grid_data": False,
-                    "fields": "properties,sheets.properties",
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "include_grid_data": False,
+                "fields": "properties,sheets.properties",
+            }
+        )
+        ```
     Invoke with agent:
-        .. code-block:: python
-            agent.invoke({"input": "Get information about the spreadsheet structure"})
+        ```python
+        agent.invoke({"input": "Get information about the spreadsheet structure"})
+        ```
     Returns:
         Dictionary containing:
             - success (bool): Always True for successful operations

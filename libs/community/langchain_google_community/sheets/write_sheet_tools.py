@@ -70,34 +70,34 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
     data, adding formulas, or bulk updating specific sections of a spreadsheet.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsUpdateValuesTool
 
-            from langchain_google_community.sheets import SheetsUpdateValuesTool
-
-            tool = SheetsUpdateValuesTool(
-                api_resource=service, value_input_option="USER_ENTERED"
-            )
+        tool = SheetsUpdateValuesTool(
+            api_resource=service, value_input_option="USER_ENTERED"
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-                    "range": "Sheet1!A1:C3",
-                    "values": [
-                        ["Name", "Age", "City"],
-                        ["Alice", "25", "New York"],
-                        ["Bob", "30", "San Francisco"],
-                    ],
-                    "value_input_option": "USER_ENTERED",
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
+                "range": "Sheet1!A1:C3",
+                "values": [
+                    ["Name", "Age", "City"],
+                    ["Alice", "25", "New York"],
+                    ["Bob", "30", "San Francisco"],
+                ],
+                "value_input_option": "USER_ENTERED",
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke({"input": "Update cells A1:C3 with employee data"})
+        ```python
+        agent.invoke({"input": "Update cells A1:C3 with employee data"})
+        ```
 
     Returns:
         Dictionary containing:
@@ -235,36 +235,36 @@ class SheetsAppendValuesTool(SheetsBaseTool):
     logging events, or incrementally building datasets without manual row tracking.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsAppendValuesTool
 
-            from langchain_google_community.sheets import SheetsAppendValuesTool
-
-            tool = SheetsAppendValuesTool(
-                api_resource=service,
-                value_input_option="USER_ENTERED",
-                insert_data_option="INSERT_ROWS",
-            )
+        tool = SheetsAppendValuesTool(
+            api_resource=service,
+            value_input_option="USER_ENTERED",
+            insert_data_option="INSERT_ROWS",
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-                    "range": "Sheet1!A1:D100",
-                    "values": [
-                        ["Eve", "27", "Seattle", "91"],
-                        ["Frank", "32", "Denver", "85"],
-                    ],
-                    "value_input_option": "USER_ENTERED",
-                    "insert_data_option": "INSERT_ROWS",
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
+                "range": "Sheet1!A1:D100",
+                "values": [
+                    ["Eve", "27", "Seattle", "91"],
+                    ["Frank", "32", "Denver", "85"],
+                ],
+                "value_input_option": "USER_ENTERED",
+                "insert_data_option": "INSERT_ROWS",
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke({"input": "Add two new employee records to the spreadsheet"})
+        ```python
+        agent.invoke({"input": "Add two new employee records to the spreadsheet"})
+        ```
 
     Returns:
         Dictionary containing:
@@ -398,26 +398,26 @@ class SheetsClearValuesTool(SheetsBaseTool):
     outdated information without destroying the spreadsheet structure.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsClearValuesTool
 
-            from langchain_google_community.sheets import SheetsClearValuesTool
-
-            tool = SheetsClearValuesTool(api_resource=service)
+        tool = SheetsClearValuesTool(api_resource=service)
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-                    "range": "Sheet1!A1:Z100",
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
+                "range": "Sheet1!A1:Z100",
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke({"input": "Clear all data from column F"})
+        ```python
+        agent.invoke({"input": "Clear all data from column F"})
+        ```
 
     Returns:
         Dictionary containing:
@@ -536,43 +536,43 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
     multiple sheets simultaneously while minimizing API calls and latency.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsBatchUpdateValuesTool
 
-            from langchain_google_community.sheets import SheetsBatchUpdateValuesTool
-
-            tool = SheetsBatchUpdateValuesTool(
-                api_resource=service,
-                value_input_option="USER_ENTERED",
-            )
+        tool = SheetsBatchUpdateValuesTool(
+            api_resource=service,
+            value_input_option="USER_ENTERED",
+        )
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-                    "data": [
-                        {
-                            "range": "Sheet1!G1:G3",
-                            "values": [["Status"], ["Active"], ["Active"]],
-                        },
-                        {
-                            "range": "Sheet1!H1:H3",
-                            "values": [["Country"], ["USA"], ["USA"]],
-                        },
-                        {
-                            "range": "Sheet1!I1:I3",
-                            "values": [["Department"], ["Engineering"], ["Sales"]],
-                        },
-                    ],
-                    "value_input_option": "RAW",
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
+                "data": [
+                    {
+                        "range": "Sheet1!G1:G3",
+                        "values": [["Status"], ["Active"], ["Active"]],
+                    },
+                    {
+                        "range": "Sheet1!H1:H3",
+                        "values": [["Country"], ["USA"], ["USA"]],
+                    },
+                    {
+                        "range": "Sheet1!I1:I3",
+                        "values": [["Department"], ["Engineering"], ["Sales"]],
+                    },
+                ],
+                "value_input_option": "RAW",
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke({"input": "Update status, country, and department columns"})
+        ```python
+        agent.invoke({"input": "Update status, country, and department columns"})
+        ```
 
     Returns:
         Dictionary containing:

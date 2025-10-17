@@ -74,35 +74,35 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
     with pre-populated templates.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_community.sheets import SheetsCreateSpreadsheetTool
 
-            from langchain_google_community.sheets import SheetsCreateSpreadsheetTool
-
-            tool = SheetsCreateSpreadsheetTool(api_resource=service)
+        tool = SheetsCreateSpreadsheetTool(api_resource=service)
+        ```
 
     Invoke directly:
-        .. code-block:: python
-
-            result = tool.run(
-                {
-                    "title": "Test Spreadsheet - Full Options",
-                    "locale": "en_US",
-                    "time_zone": "America/Los_Angeles",
-                    "auto_recalc": "ON_CHANGE",
-                    "initial_data": [
-                        ["Name", "Age", "City", "Score"],
-                        ["Alice", "25", "New York", "95"],
-                        ["Bob", "30", "San Francisco", "87"],
-                        ["Charlie", "28", "Chicago", "92"],
-                    ],
-                    "initial_range": "A1",
-                }
-            )
+        ```python
+        result = tool.run(
+            {
+                "title": "Test Spreadsheet - Full Options",
+                "locale": "en_US",
+                "time_zone": "America/Los_Angeles",
+                "auto_recalc": "ON_CHANGE",
+                "initial_data": [
+                    ["Name", "Age", "City", "Score"],
+                    ["Alice", "25", "New York", "95"],
+                    ["Bob", "30", "San Francisco", "87"],
+                    ["Charlie", "28", "Chicago", "92"],
+                ],
+                "initial_range": "A1",
+            }
+        )
+        ```
 
     Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke({"input": "Create a new employee tracking spreadsheet"})
+        ```python
+        agent.invoke({"input": "Create a new employee tracking spreadsheet"})
+        ```
 
     Returns:
         Dictionary containing:
