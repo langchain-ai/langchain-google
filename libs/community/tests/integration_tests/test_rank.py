@@ -166,7 +166,7 @@ def test_compression_retriever(
         base_retriever=mock_vector_store_retriever, ranker=ranker
     )
     query = "What was the name of einstein's mother? Was she a scientist too?"
-    compressed_docs = compression_retriever.get_relevant_documents(query)
+    compressed_docs = compression_retriever.invoke(query)
 
     expected_docs = [
         Document(
