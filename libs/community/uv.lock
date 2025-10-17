@@ -1159,7 +1159,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.0a4"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -1170,14 +1170,14 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/2b/8e9ef668d3bba713cc98e586dfb1077f739cac7b8f68fa89fcbb79aa26e6/langchain_core-1.0.0a4.tar.gz", hash = "sha256:eaa507393f14a081a2468bd31b5ac6e8439929d226bf9406943623c8fca22ded", size = 609907, upload-time = "2025-09-18T18:28:25.793Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/d0/9db6d375ecf8bd498fcc87016e43c3d930ddbfbacf9a1e99018ada4e824f/langchain_core-1.0.0.tar.gz", hash = "sha256:8e81c94a22fa3a362a0f101bbd1271bf3725e50cf1e31c84e8f4a1c731279785", size = 764484, upload-time = "2025-10-17T13:48:24.408Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/47/5c9c8952988bd59290371e43f3744bc10abc678e3d438111d861be94bc72/langchain_core-1.0.0a4-py3-none-any.whl", hash = "sha256:c8ae93a30f735c5c49276a2f619b80f5924677662570c7b3fc91ab9f07122fbf", size = 477704, upload-time = "2025-09-18T18:28:23.927Z" },
+    { url = "https://files.pythonhosted.org/packages/68/6a/8dd566cb7379d6e3a921f94713babba2f71cbed65c73c784c649c1fd7d4e/langchain_core-1.0.0-py3-none-any.whl", hash = "sha256:a94561bf75dd097c7d6e3864950f28dadc963f0bd810114de4095f41f634059b", size = 467157, upload-time = "2025-10-17T13:48:23.138Z" },
 ]
 
 [[package]]
 name = "langchain-google-community"
-version = "2.0.10"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-core" },
@@ -1309,7 +1309,7 @@ requires-dist = [
     { name = "googlemaps", marker = "extra == 'places'", specifier = ">=4.10.0,<5.0.0" },
     { name = "grpcio", specifier = ">=1.74.0,<2.0.0" },
     { name = "langchain-community", specifier = ">=0.3.29,<2.0.0" },
-    { name = "langchain-core", specifier = ">=1.0.0a3,<2.0.0" },
+    { name = "langchain-core", specifier = ">=1.0.0,<2.0.0" },
     { name = "pandas", marker = "python_full_version >= '3.12' and extra == 'featurestore'", specifier = ">=2.0.0,<3.0.0" },
     { name = "pandas", marker = "python_full_version < '3.12' and extra == 'featurestore'", specifier = ">=1.0.0" },
     { name = "pyarrow", marker = "extra == 'featurestore'", specifier = ">=6.0.1" },
