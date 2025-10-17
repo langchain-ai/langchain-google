@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "langchain-google-genai"
-version = "3.0.0rc1"
+version = "3.0.0"
 description = "An integration package connecting Google's genai package and LangChain"
 authors = []
 license = {text = "MIT"}
@@ -13,7 +13,7 @@ readme = "README.md"
 repository = "https://github.com/langchain-ai/langchain-google"
 
 dependencies = [
-    "langchain-core>=1.0.0rc2,<2.0.0",
+    "langchain-core>=1.0.0,<2.0.0",
     "google-ai-generativelanguage>=0.7.0,<1.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "filetype>=1.2.0,<2.0.0",
@@ -46,7 +46,7 @@ test = [
     "pytest-socket>=0.7.0,<1.0.0",
     "numpy>=1.26.4; python_version<'3.13'",
     "numpy>=2.1.0; python_version>='3.13'",
-    "langchain-tests>=1.0.0rc1,<2.0.0",
+    "langchain-tests>=1.0.0,<2.0.0",
 ]
 
 test_integration = [
