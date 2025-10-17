@@ -456,7 +456,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.0rc2"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -467,14 +467,14 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/07/2e30517581acdaa5b2e3cf5527182eb26f2d1d99e80b4735209863e4045a/langchain_core-1.0.0rc2.tar.gz", hash = "sha256:dda7a126fd9b51c9bc836fcb7fc9491a1a7be7ee0f281447b3bf1f897098453d", size = 761288, upload-time = "2025-10-16T17:41:31.878Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/d0/9db6d375ecf8bd498fcc87016e43c3d930ddbfbacf9a1e99018ada4e824f/langchain_core-1.0.0.tar.gz", hash = "sha256:8e81c94a22fa3a362a0f101bbd1271bf3725e50cf1e31c84e8f4a1c731279785", size = 764484, upload-time = "2025-10-17T13:48:24.408Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/bb/231a5c9a151c8bb4d1765a713e6581136f0510c3e09a6bada00290188f86/langchain_core-1.0.0rc2-py3-none-any.whl", hash = "sha256:7056a68895c6025ceab5ef034cae41a4ce3ec633ef3352b33fc558faffaf2f5c", size = 466704, upload-time = "2025-10-16T17:41:30.303Z" },
+    { url = "https://files.pythonhosted.org/packages/68/6a/8dd566cb7379d6e3a921f94713babba2f71cbed65c73c784c649c1fd7d4e/langchain_core-1.0.0-py3-none-any.whl", hash = "sha256:a94561bf75dd097c7d6e3864950f28dadc963f0bd810114de4095f41f634059b", size = 467157, upload-time = "2025-10-17T13:48:23.138Z" },
 ]
 
 [[package]]
 name = "langchain-google-genai"
-version = "3.0.0rc1"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "filetype" },
@@ -517,7 +517,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-ai-generativelanguage", specifier = ">=0.7.0,<1.0.0" },
-    { name = "langchain-core", specifier = ">=1.0.0rc2,<2.0.0" },
+    { name = "langchain-core", specifier = ">=1.0.0,<2.0.0" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
 ]
 
@@ -526,7 +526,7 @@ dev = []
 lint = [{ name = "ruff", specifier = ">=0.13.1,<0.14.0" }]
 test = [
     { name = "freezegun", specifier = ">=1.5.0,<2.0.0" },
-    { name = "langchain-tests", specifier = ">=1.0.0rc1,<2.0.0" },
+    { name = "langchain-tests", specifier = ">=1.0.0,<2.0.0" },
     { name = "numpy", marker = "python_full_version < '3.13'", specifier = ">=1.26.4" },
     { name = "numpy", marker = "python_full_version >= '3.13'", specifier = ">=2.1.0" },
     { name = "pytest", specifier = ">=8.4.0,<9.0.0" },
@@ -548,7 +548,7 @@ typing = [
 
 [[package]]
 name = "langchain-tests"
-version = "1.0.0rc1"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -564,9 +564,9 @@ dependencies = [
     { name = "syrupy" },
     { name = "vcrpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5d/b8/130b1083a698a30bff3d967ccbff3aefb5611566b0f903d3309d0c5e03fe/langchain_tests-1.0.0rc1.tar.gz", hash = "sha256:0fb849f919be0f1f664daa4b4cd6b0a9fda2b284a64c754d83bbac4e35f46cfb", size = 155525, upload-time = "2025-10-16T18:11:59.584Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2d/fb/7a16b5955be9744f8842b41526c9048692f1deb4de2ad98a1e03c5a41f5d/langchain_tests-1.0.0.tar.gz", hash = "sha256:f918bcccd84f9e7448fa382c0956b1ef1ddc87ac1083fa55b13f42c40fd3024c", size = 155507, upload-time = "2025-10-17T13:56:00.66Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/6d/8a77d7d6982e68a6e4683bc1ca2de5f8aa0a8c03fe2be49634c8619a39ee/langchain_tests-1.0.0rc1-py3-none-any.whl", hash = "sha256:5b42c5b88239d639b64dd7769a525aed188f8f54a826cbf18c0aecccc89866d1", size = 49920, upload-time = "2025-10-16T18:11:58.368Z" },
+    { url = "https://files.pythonhosted.org/packages/71/1d/055ca9d7d56f5ecb8f1f4a888879c92edd350520c14932559c285c00772f/langchain_tests-1.0.0-py3-none-any.whl", hash = "sha256:c3fdf290ce79d84382dda37cfb20ab56f7ccdd2d9c921f876b77bc3eb5e9f7fb", size = 49900, upload-time = "2025-10-17T13:55:59.489Z" },
 ]
 
 [[package]]
