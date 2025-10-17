@@ -227,7 +227,7 @@ class SheetsReadDataTool(BaseReadTool):
 
             result = tool.run(
                 {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
                     "range_name": "A1:E10",
                     "convert_to_records": True,
                 }
@@ -237,17 +237,9 @@ class SheetsReadDataTool(BaseReadTool):
         .. code-block:: python
 
             agent.invoke(
-                {"input": "Read the first 10 rows from the student data spreadsheet"}
+                {"input": ("Read the first 10 rows from the student data spreadsheet")}
             )
 
-<<<<<<< HEAD
-    Tool Output:
-        str: JSON string containing:
-            - Raw data: 2D array of values as returned by Google Sheets API
-            - Records format: List of dictionaries with first row as headers
-            - Metadata: Information about the data structure and processing
-            - Error handling: Detailed error messages for troubleshooting
-=======
     Returns:
         Dictionary containing:
             - success (bool): Always True for successful operations
@@ -257,7 +249,6 @@ class SheetsReadDataTool(BaseReadTool):
             - major_dimension (str): The major dimension ("ROWS" or "COLUMNS")
             - render_options (Dict): Applied rendering options
             - processing_options (Dict): Applied processing options
->>>>>>> c0dd7b4 (fix(community): improve Sheets read tools and utilities)
 
     Data Processing Options:
         - value_render_option: Control how cell values are rendered
@@ -416,7 +407,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
             result = tool.run(
                 {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
                     "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
                     "convert_to_records": True,
                 }
@@ -427,14 +418,6 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
             agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
 
-<<<<<<< HEAD
-    Tool Output:
-        str: JSON string containing:
-            - Batch results: Dictionary with range names as keys
-            - Individual range data: Each range processed according to options
-            - Metadata: Information about each range and processing results
-            - Error handling: Detailed error messages for failed ranges
-=======
     Returns:
         Dictionary containing:
             - success (bool): Always True for successful operations
@@ -449,7 +432,6 @@ class SheetsBatchReadDataTool(BaseReadTool):
             - major_dimension (str): Applied major dimension
             - convert_to_records (bool): Whether data was converted to records
             - numericise_values (bool): Whether values were numericised
->>>>>>> c0dd7b4 (fix(community): improve Sheets read tools and utilities)
 
     Performance Benefits:
         - Single API call: Reduces network overhead and rate limiting
@@ -713,7 +695,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
             # Example 1: Read using A1 notation
             result = tool.run(
                 {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
                     "data_filters": [{"a1Range": "Class Data!A1:E10"}],
                     "include_grid_data": True,
                 }
@@ -722,7 +704,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
             # Example 2: Read using grid coordinates
             result = tool.run(
                 {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
                     "data_filters": [
                         {
                             "gridRange": {
@@ -742,17 +724,9 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         .. code-block:: python
 
             agent.invoke(
-                {"input": "Read the range Class Data!A1:E10 with formatting details"}
+                {"input": ("Read the range Class Data!A1:E10 with formatting details")}
             )
 
-<<<<<<< HEAD
-    Tool Output:
-        str: JSON string containing:
-            - Filtered data: Only rows matching the filter criteria
-            - Grid data: Detailed cell information with formatting (optional)
-            - Metadata: Information about filtering results and data structure
-            - Error handling: Detailed error messages for troubleshooting
-=======
     Returns:
         Dictionary containing:
             - success (bool): Always True for successful operations
@@ -764,7 +738,6 @@ class SheetsFilteredReadDataTool(BaseReadTool):
                 - data (List): List of data segments
                     Each segment is either List[List] or List[Dict]
                     depending on convert_to_records setting
->>>>>>> c0dd7b4 (fix(community): improve Sheets read tools and utilities)
 
     DataFilter Types:
         - a1Range: Most common, uses A1 notation (e.g., "Sheet1!A1:D5")
