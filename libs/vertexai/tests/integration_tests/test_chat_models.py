@@ -1300,22 +1300,16 @@ def test_context_catching_tools() -> None:
         cached_content=cached_content,
     )
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("placeholder", "{messages}"),
-            ("placeholder", "{agent_scratchpad}"),
-        ]
-    )
     agent: CompiledStateGraph[Any, Any] = agents.create_agent(
         model=chat,
         tools=tools,
-        prompt=prompt,
     )
     response = agent.invoke(
         {"messages": [{"role": "user", "content": "what is the secret number?"}]}
     )
     assert "messages" in response
     assert len(response["messages"]) > 0
+    assert isinstance(response["messages"][-1], AIMessage)
 
 
 @pytest.mark.release
