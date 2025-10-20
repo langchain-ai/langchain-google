@@ -106,8 +106,8 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            Sequence[Document]: Translated documents with updated metadata including
-                `model`, `detected_language_code`, and original metadata fields.
+            Translated documents with updated metadata including `model`,
+            `detected_language_code`, and original metadata fields.
 
         Raises:
             ValueError: If `target_language_code` is not provided.

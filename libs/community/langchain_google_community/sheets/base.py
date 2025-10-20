@@ -105,7 +105,7 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             cell_data: Cell data dictionary from Google Sheets API
 
         Returns:
-            str: The cell value as a string
+            The cell value as a string.
         """
         if cell_data.get("formattedValue"):
             return cell_data["formattedValue"]
@@ -135,7 +135,7 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             items: List of items that may be Pydantic models or dictionaries
 
         Returns:
-            list: List of dictionaries with all Pydantic models converted
+            List of dictionaries with all Pydantic models converted.
         """
         result = []
         for item in items:

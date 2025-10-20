@@ -43,7 +43,8 @@ class CalendarToolkit(BaseToolkit):
         See [Security Best Practices](https://python.langchain.com/docs/security)
         for more information.
     """
-    #TODO: update to site-relative /security/ after docs are ported
+
+    # TODO: update to site-relative /security/ after docs are ported
 
     api_resource: Resource = Field(default_factory=build_calendar_service)
 

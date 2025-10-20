@@ -67,7 +67,7 @@ class VertexAIRank(BaseDocumentCompressor):
         """Get RankServiceClient for Vertex AI Ranking API calls.
 
         Returns:
-            discoveryengine_v1alpha.RankServiceClient: Client instance for ranking API.
+            Client instance for ranking API.
         """
         try:
             from google.cloud import discoveryengine_v1alpha  # type: ignore
@@ -97,7 +97,7 @@ class VertexAIRank(BaseDocumentCompressor):
             documents: Documents to rerank.
 
         Returns:
-            Sequence[Document]: Reranked documents with relevance scores.
+            Reranked documents with relevance scores.
         """
         from google.cloud import discoveryengine_v1alpha  # type: ignore
 
@@ -167,7 +167,7 @@ class VertexAIRank(BaseDocumentCompressor):
             callbacks: Callbacks to execute during compression.
 
         Returns:
-            Sequence[Document]: Compressed documents with relevance scores.
+            Compressed documents with relevance scores.
         """
         return self._rerank_documents(query, documents)
 

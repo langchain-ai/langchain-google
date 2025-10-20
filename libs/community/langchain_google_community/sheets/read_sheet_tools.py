@@ -65,7 +65,7 @@ class BaseReadTool(SheetsBaseTool):
             value: String value to convert
 
         Returns:
-            Union[str, int, float]: Converted value or original string
+            Converted value or original string.
         """
         if not isinstance(value, str):
             return value
@@ -92,7 +92,7 @@ class BaseReadTool(SheetsBaseTool):
             values: 2D array of data values
 
         Returns:
-            List[dict]: List of dictionaries with headers as keys
+            List of dictionaries with headers as keys.
         """
         return [dict(zip(headers, row)) for row in values]
 
@@ -110,7 +110,7 @@ class BaseReadTool(SheetsBaseTool):
             numericise_values: Whether to convert string numbers to numeric types
 
         Returns:
-            Union[List[List], List[dict]]: Processed data as 2D array or records
+            Processed data as 2D array or records.
         """
         if not values:
             return []
@@ -150,7 +150,7 @@ class BaseReadTool(SheetsBaseTool):
             grid_data: List of GridData segments from Google Sheets API
 
         Returns:
-            List[List[str]]: Simple 2D array of values from all segments concatenated
+            Simple 2D array of values from all segments concatenated.
         """
         if not grid_data:
             return []
@@ -176,7 +176,7 @@ class BaseReadTool(SheetsBaseTool):
             grid_data: GridData from Google Sheets API
 
         Returns:
-            List[List[str]]: Simple 2D array of values from all segments
+            Simple 2D array of values from all segments.
         """
         # Delegate to the new multi-segment implementation
         return self._extract_simple_data_all(grid_data)

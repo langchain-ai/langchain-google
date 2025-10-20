@@ -96,7 +96,7 @@ class GoogleSearchAPIWrapper(BaseModel):
             search_params: Additional search parameters.
 
         Returns:
-            List[Dict]: Search results with snippet, title, and link for each result.
+            Search results with snippet, title, and link for each result.
         """
         metadata_results = []
         results = self._google_search_results(
@@ -143,7 +143,7 @@ class GoogleSearchRun(BaseTool):
             run_manager: Optional callback manager.
 
         Returns:
-            str: Concatenated snippets from search results.
+            Concatenated snippets from search results.
         """
         return self.api_wrapper.run(query)
 
@@ -176,6 +176,6 @@ class GoogleSearchResults(BaseTool):
             run_manager: Optional callback manager.
 
         Returns:
-            str: JSON string of search results with title, link, and snippet.
+            JSON string of search results with title, link, and snippet.
         """
         return str(self.api_wrapper.results(query, self.num_results))

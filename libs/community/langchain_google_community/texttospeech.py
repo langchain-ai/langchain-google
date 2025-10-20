@@ -92,7 +92,7 @@ class TextToSpeechTool(BaseTool):
             run_manager: Optional callback manager.
 
         Returns:
-            str: Path to temporary file containing synthesized audio.
+            Path to temporary file containing synthesized audio.
         """
         texttospeech = _import_google_cloud_texttospeech()
         ssml_gender = ssml_gender or texttospeech.SsmlVoiceGender.NEUTRAL

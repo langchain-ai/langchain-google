@@ -157,6 +157,6 @@ class GooglePlacesTool(BaseTool):
             run_manager: Optional callback manager.
 
         Returns:
-            str: Formatted string with place details for each result.
+            Formatted string with place details for each result.
         """
         return self.api_wrapper.run(query)

@@ -84,7 +84,7 @@ def validate_spreadsheet_id(spreadsheet_id: str) -> str:
         spreadsheet_id: The spreadsheet ID to validate.
 
     Returns:
-        str: The validated spreadsheet ID.
+        The validated spreadsheet ID.
 
     Raises:
         ValueError: If the spreadsheet ID is invalid.
@@ -212,7 +212,7 @@ def validate_range_name(range_name: str) -> str:
         range_name: The range name to validate (e.g., "A1:Z100", "Sheet1!A1:B2").
 
     Returns:
-        str: The validated range name.
+        The validated range name.
 
     Raises:
         ValueError: If the range name is invalid.
