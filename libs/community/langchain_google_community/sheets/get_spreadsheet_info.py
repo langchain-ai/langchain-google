@@ -1,4 +1,4 @@
-"""Get metadata information from Google Sheets."""
+"""Tool for retrieving Google Sheets metadata and structure information."""
 
 from typing import Any, Dict, List, Optional, Type
 
@@ -10,7 +10,7 @@ from .utils import validate_spreadsheet_id
 
 
 class GetSpreadsheetInfoSchema(BaseModel):
-    """Input schema for GetSpreadsheetInfo."""
+    """Input schema for SheetsGetSpreadsheetInfoTool."""
 
     spreadsheet_id: str = Field(
         ...,
@@ -48,96 +48,67 @@ class GetSpreadsheetInfoSchema(BaseModel):
 
 
 class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
-    """Tool that retrieves comprehensive metadata information from Google Sheets.
-    This tool provides detailed metadata extraction capabilities from Google Sheets,
-    allowing you to understand spreadsheet structure, sheet properties, named ranges,
-    and other organizational information. It's essential for exploring spreadsheet
-    contents before reading data and understanding the overall structure.
-    Instantiate:
+    """Tool for retrieving Google Sheets metadata and structure information.
+
+    Inherits from
+    [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+    Retrieves spreadsheet properties, sheet details, named ranges, and
+    organizational structure. Essential for understanding spreadsheet contents
+    before reading data.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        title (str): Spreadsheet title.
+        locale (str): Spreadsheet locale (e.g., 'en_US').
+        time_zone (str): Spreadsheet timezone (e.g., 'America/New_York').
+        auto_recalc (str): Auto-recalculation setting.
+        default_format (dict): Default cell format.
+        sheets (list): List of sheet information with properties.
+        named_ranges (list): List of named ranges with locations.
+        developer_metadata (list): Developer metadata entries.
+        grid_data (list): Detailed cell data (when include_grid_data=True).
+
+    ??? example "Basic Usage"
+        Get basic spreadsheet information:
         ```python
         from langchain_google_community.sheets import SheetsGetSpreadsheetInfoTool
 
-        tool = SheetsGetSpreadsheetInfoTool(
-            api_key="your_api_key",
-            include_grid_data=False,
-            include_formatting=False,
-            include_validation=False,
+        tool = SheetsGetSpreadsheetInfoTool(api_key="your_api_key")
+        result = tool.run(
+            {"spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"}
         )
+        print(f"Title: {result['title']}")
+        print(f"Sheets: {[s['title'] for s in result['sheets']]}")
         ```
-    Invoke directly:
+
+    ??? example "With Specific Fields"
+        Get only specific fields to reduce response size:
         ```python
         result = tool.run(
             {
                 "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                "include_grid_data": False,
-                "fields": "properties,sheets.properties",
+                "fields": "properties.title,sheets.properties",
             }
         )
         ```
-    Invoke with agent:
+
+    ??? example "Include Grid Data"
+        Get detailed cell data and formatting:
         ```python
-        agent.invoke({"input": "Get information about the spreadsheet structure"})
+        result = tool.run(
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "include_grid_data": True,
+                "include_formatting": True,
+                "ranges": ["Sheet1!A1:D10"],
+            }
+        )
         ```
-    Returns:
-        Dictionary containing:
-            - success: Always True for successful operations
-            - spreadsheet_id: The spreadsheet ID
-            - title: Spreadsheet title
-            - locale: Spreadsheet locale (e.g., "en_US")
-            - time_zone: Spreadsheet timezone (e.g., "America/New_York")
-            - auto_recalc: Auto-recalculation setting
-            - default_format: Default cell format
-            - sheets (List[Dict]): List of sheet information with properties
-            - named_ranges (List[Dict]): List of named ranges with locations
-            - developer_metadata (List[Dict]): Developer metadata entries
-            - grid_data (optional): Detailed cell data when include_grid_data=True
-    Information Types Available:
-        - Basic info: Title, locale, timezone, creation date
-        - Sheet details: Names, IDs, row/column counts, properties
-        - Named ranges: Defined ranges and their sheet references
-        - Grid data: Cell properties, formatting, validation rules
-        - Developer metadata: Custom properties and annotations
-    Example Response:
-        {
-            "success": True,
-            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "title": "Student Data",
-            "locale": "en_US",
-            "time_zone": "America/New_York",
-            "auto_recalc": "ON_CHANGE",
-            "default_format": {},
-            "sheets": [
-                {
-                    "sheet_id": 0,
-                    "title": "Students",
-                    "sheet_type": "GRID",
-                    "grid_properties": {
-                        "rowCount": 100,
-                        "columnCount": 10
-                    },
-                    "tab_color": {},
-                    "hidden": False,
-                    "right_to_left": False
-                }
-            ],
-            "named_ranges": [
-                {
-                    "name": "StudentList",
-                    "range": {
-                        "sheetId": 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": 100,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": 5
-                    },
-                    "named_range_id": "123456"
-                }
-            ],
-            "developer_metadata": []
-        }
+
     Raises:
-        ValueError: If spreadsheet_id is invalid
-        Exception: For API errors or connection issues
+        ValueError: If spreadsheet_id is invalid.
+        Exception: For API errors or connection issues.
     """
 
     name: str = "sheets_get_spreadsheet_info"
@@ -159,7 +130,36 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         fields: Optional[str] = None,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> Dict[str, Any]:
-        """Run the tool to get spreadsheet information."""
+        """Get spreadsheet metadata and structure information.
+
+        Args:
+            spreadsheet_id: ID of the spreadsheet to retrieve information about.
+            include_grid_data: Whether to include detailed grid data.
+                Default: False.
+            include_formatting: Whether to include cell formatting. Default: False.
+            include_validation: Whether to include data validation rules.
+                Default: False.
+            ranges: Specific ranges to get information about.
+            fields: Specific fields to return (reduces response size).
+            run_manager: Optional callback manager.
+
+        Returns:
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            title (str): Spreadsheet title.
+            locale (str): Spreadsheet locale.
+            time_zone (str): Spreadsheet timezone.
+            auto_recalc (str): Auto-recalculation setting.
+            default_format (dict): Default cell format.
+            sheets (list): List of sheet information with properties.
+            named_ranges (list): List of named ranges with locations.
+            developer_metadata (list): Developer metadata entries.
+            grid_data (list): Detailed cell data (if include_grid_data=True).
+
+        Raises:
+            ValueError: If spreadsheet_id is invalid.
+            Exception: For API errors or connection issues.
+        """
         try:
             # Validate spreadsheet ID
             validated_spreadsheet_id = validate_spreadsheet_id(spreadsheet_id)

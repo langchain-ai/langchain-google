@@ -36,25 +36,16 @@ else:
 class SheetsToolkit(BaseToolkit):
     """Toolkit for interacting with Google Sheets.
 
-    This toolkit provides comprehensive Google Sheets integration with both
-    read and write capabilities.
+    Inherits from [`BaseToolkit`][langchain_core.tools.base.BaseToolkit].
+    Provides comprehensive Google Sheets integration with read and write capabilities.
 
-    *Security Note*: This toolkit contains tools that can read and write data
-        to Google Sheets.
+    !!! warning "Security Note"
+        This toolkit contains tools that can read and write data to Google Sheets.
+        Ensure proper authentication and access controls.
 
-        Read operations: Can use either API key (public sheets) or OAuth2
-        Write operations: Require OAuth2 credentials (api_resource)
-
-        For example, this toolkit can be used to:
-        - Read spreadsheet data and metadata
-        - Create new spreadsheets
-        - Update, append, and clear cell values
-        - Perform batch operations for efficiency
-
-    Authentication:
-        - api_resource: OAuth2 credentials for full read/write access
-        - api_key: API key for read-only access to public spreadsheets
-
+    !!! info "Authentication Requirements"
+        - **Read operations**: Require only API key (for public spreadsheets)
+        - **Write operations**: Require OAuth2 credentials (api_resource)
     """
 
     api_resource: Resource = Field(default=None)  # type: ignore[assignment]
@@ -68,9 +59,8 @@ class SheetsToolkit(BaseToolkit):
         """Get the tools in the toolkit.
 
         Returns:
-            List[BaseTool]: List of tools available based on authentication method.
-                - API key: Read-only tools (public spreadsheets)
-                - OAuth2: Full read/write tools (private spreadsheets)
+            List[BaseTool]: List of tools based on authentication method. API key
+                provides read-only tools. OAuth2 provides full read/write tools.
         """
         # If api_key is provided, return read-only tools
         if self.api_key:

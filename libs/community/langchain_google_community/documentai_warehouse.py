@@ -22,13 +22,20 @@ if TYPE_CHECKING:
 
 
 class DocumentAIWarehouseRetriever(BaseRetriever):
-    """A retriever based on Document AI Warehouse.
+    """Retriever for Google Cloud Document AI Warehouse.
 
-    Documents should be created and documents should be uploaded
-        in a separate flow, and this retriever uses only Document AI
-        schema_id provided to search for relevant documents.
+    Inherits from [`BaseRetriever`][langchain_core.retrievers.BaseRetriever].
+    Searches documents using Document AI Warehouse schema. Documents must be
+    created and uploaded separately before retrieval.
 
-    More info: https://cloud.google.com/document-ai-warehouse.
+    See [Document AI Warehouse documentation](https://cloud.google.com/document-ai-warehouse)
+    for more information.
+
+    !!! note "Installation"
+        Requires additional dependencies:
+        ```bash
+        pip install langchain-google-community[docai]
+        ```
     """
 
     location: str = "us"

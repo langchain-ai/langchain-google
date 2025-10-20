@@ -18,43 +18,26 @@ if TYPE_CHECKING:
 
 
 class VertexAIRank(BaseDocumentCompressor):
-    """
-    Initializes the Vertex AI Ranker with configurable parameters.
+    """Document compressor using Vertex AI Ranking API.
 
-    Inherits from BaseDocumentCompressor for document processing
-    and validation features, respectively.
+    Inherits from
+    [`BaseDocumentCompressor`][langchain_core.documents.compressor.BaseDocumentCompressor].
+    Reranks documents based on relevance to a query using Google's semantic
+    ranking model.
 
     Attributes:
-        project_id: Google Cloud project ID
-        location_id: Location ID for the ranking service.
-        ranking_config (str):
-            Required. The  name of the rank service config, such as default_config.
-            It is set to default_config by default if unspecified.
-        model (str):
-            The identifier of the model to use. It is one of:
-
-            - ``semantic-ranker-512@latest``: Semantic ranking model
-                with maximum input token size 512.
-
-            It is set to ``semantic-ranker-512@latest`` by default if unspecified.
-        top_n (int):
-            The number of results to return. If this is
-            unset or no bigger than zero, returns all
-            results.
-        ignore_record_details_in_response (bool):
-            If true, the response will contain only
-            record ID and score. By default, it is false,
-            the response will contain record details.
-        id_field (Optional[str]):
-            Specifies a unique document metadata field to use as an id.
-        title_field (Optional[str]):
-            Specifies the document metadata field to use as title.
-        credentials (Optional[Credentials]):
-            Google Cloud credentials object.
-        credentials_path (Optional[str]):
-            Path to the Google Cloud service account credentials file.
-        timeout (Optional[int]):
-            Timeout for API calls in seconds.
+        project_id: Google Cloud project ID.
+        location_id: Location ID for the ranking service. Default: 'global'.
+        ranking_config: Name of the rank service config. Default: 'default_config'.
+        model: Model identifier. Default: `semantic-ranker-512@latest`.
+        top_n: Number of results to return. Default: 10.
+        ignore_record_details_in_response: If True, response contains only record ID
+            and score. Default: False.
+        id_field: Unique document metadata field to use as an ID.
+        title_field: Document metadata field to use as title.
+        credentials: Google Cloud credentials object.
+        credentials_path: Path to the Google Cloud service account credentials file.
+        timeout: Timeout for API calls in seconds.
     """
 
     project_id: str = Field(default=None)  # type: ignore
@@ -71,11 +54,9 @@ class VertexAIRank(BaseDocumentCompressor):
     client: Any = None
 
     def __init__(self, **kwargs: Any):
-        """
-        Constructor for VertexAIRanker, allowing for specification of
-        ranking configuration and initialization of Google Cloud services.
+        """Initialize the Vertex AI Ranker.
 
-        The parameters accepted are the same as the attributes listed above.
+        Configures ranking parameters and initializes Google Cloud services.
         """
         super().__init__(**kwargs)
         self.client = kwargs.get("client")  # type: ignore
@@ -83,12 +64,10 @@ class VertexAIRank(BaseDocumentCompressor):
             self.client = self._get_rank_service_client()
 
     def _get_rank_service_client(self) -> "discoveryengine_v1alpha.RankServiceClient":
-        """
-        Returns a RankServiceClient instance for making API calls to the
-        Vertex AI Ranking service.
+        """Get RankServiceClient for Vertex AI Ranking API calls.
 
         Returns:
-            A RankServiceClient instance.
+            discoveryengine_v1alpha.RankServiceClient: Client instance for ranking API.
         """
         try:
             from google.cloud import discoveryengine_v1alpha  # type: ignore
@@ -111,15 +90,14 @@ class VertexAIRank(BaseDocumentCompressor):
     def _rerank_documents(
         self, query: str, documents: Sequence[Document]
     ) -> Sequence[Document]:
-        """
-        Reranks documents based on the provided query.
+        """Rerank documents based on query relevance.
 
         Args:
-            query: The query to use for reranking.
-            documents: The list of documents to rerank.
+            query: Query to use for reranking.
+            documents: Documents to rerank.
 
         Returns:
-            A list of reranked documents.
+            Sequence[Document]: Reranked documents with relevance scores.
         """
         from google.cloud import discoveryengine_v1alpha  # type: ignore
 
@@ -181,16 +159,15 @@ class VertexAIRank(BaseDocumentCompressor):
         query: str,
         callbacks: Optional[Callbacks] = None,
     ) -> Sequence[Document]:
-        """
-        Compresses documents using Vertex AI's rerank API.
+        """Compress documents using Vertex AI rerank API.
 
         Args:
-            documents: List of Document instances to compress.
-            query: Query string to use for compressing the documents.
-            callbacks: Callbacks to execute during compression (not used here).
+            documents: Document instances to compress.
+            query: Query string for document compression.
+            callbacks: Callbacks to execute during compression.
 
         Returns:
-            A list of Document instances, compressed.
+            Sequence[Document]: Compressed documents with relevance scores.
         """
         return self._rerank_documents(query, documents)
 

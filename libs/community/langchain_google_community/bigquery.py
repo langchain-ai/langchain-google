@@ -20,13 +20,17 @@ def import_bigquery() -> Any:
 
 
 class BigQueryLoader(BaseLoader):
-    """Load from the Google Cloud Platform `BigQuery`.
+    """Load documents from Google Cloud BigQuery.
 
-    Each document represents one row of the result. The `page_content_columns`
-    are written into the `page_content` of the document. The `metadata_columns`
-    are written into the `metadata` of the document. By default, all columns
-    are written into the `page_content` and none into the `metadata`.
+    Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+    Each row becomes a document. Columns can be mapped to `page_content` or
+    `metadata`. By default, all columns map to `page_content`.
 
+    !!! note "Installation"
+        Requires additional dependencies:
+        ```bash
+        pip install langchain-google-community[bigquery]
+        ```
     """
 
     def __init__(
@@ -48,8 +52,8 @@ class BigQueryLoader(BaseLoader):
                 document.
             credentials: Optional. Credentials for accessing Google APIs. Use this
                 parameter to override default credentials, such as to use Compute Engine
-                (``google.auth.compute_engine.Credentials``) or Service Account
-                (``google.oauth2.service_account.Credentials``) credentials directly.
+                (`google.auth.compute_engine.Credentials`) or Service Account
+                (`google.oauth2.service_account.Credentials`) credentials directly.
         """
         import_bigquery()
         self.query = query

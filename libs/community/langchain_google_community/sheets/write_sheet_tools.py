@@ -1,10 +1,4 @@
-"""Write tools for Google Sheets.
-
-This module contains all write-related tools for Google Sheets, including
-base schemas, base tool class, and specific write implementations.
-
-Note: All write operations require OAuth2 authentication (api_resource).
-"""
+"""Tools for writing data to Google Sheets."""
 
 from typing import Any, Dict, List, Optional, Type
 
@@ -24,10 +18,7 @@ from .utils import (
 
 
 class WriteBaseSchema(BaseModel):
-    """Base schema for all write operations.
-
-    Contains common fields that are shared across all write tools.
-    """
+    """Base schema for write operations with common fields."""
 
     spreadsheet_id: str = Field(
         description="The ID of the Google Spreadsheet to write to."
@@ -48,7 +39,7 @@ class WriteBaseSchema(BaseModel):
 
 
 class UpdateValuesSchema(WriteBaseSchema):
-    """Schema for updating values in a Google Spreadsheet."""
+    """Input schema for SheetsUpdateValuesTool."""
 
     range: str = Field(
         description="The A1 notation of the range to update (e.g., 'Sheet1!A1:C3')."
@@ -62,24 +53,30 @@ class UpdateValuesSchema(WriteBaseSchema):
 
 
 class SheetsUpdateValuesTool(SheetsBaseTool):
-    """Tool for updating values in a single range of a Google Spreadsheet.
+    """Tool for updating values in a single range of Google Sheets.
 
-    This tool updates cell values in a specified range, overwriting existing data.
-    Values can be interpreted as raw strings or parsed as user-entered data
-    (including formulas, numbers, and dates). Perfect for modifying existing
-    data, adding formulas, or bulk updating specific sections of a spreadsheet.
+    Inherits from
+    [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+    Updates cell values in a specified range, overwriting existing data.
 
-    Instantiate:
+    !!! note "Authentication Required"
+        Requires OAuth2 authentication. Use `api_resource` parameter with
+        authenticated Google Sheets service.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        updated_range (str): The A1 notation of updated range.
+        updated_rows (int): Number of rows updated.
+        updated_columns (int): Number of columns updated.
+        updated_cells (int): Total number of cells updated.
+
+    ???+ example "Basic Usage"
+        Update a range with data:
         ```python
         from langchain_google_community.sheets import SheetsUpdateValuesTool
 
-        tool = SheetsUpdateValuesTool(
-            api_resource=service, value_input_option="USER_ENTERED"
-        )
-        ```
-
-    Invoke directly:
-        ```python
+        tool = SheetsUpdateValuesTool(api_resource=service)
         result = tool.run(
             {
                 "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
@@ -89,41 +86,27 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
                     ["Alice", "25", "New York"],
                     ["Bob", "30", "San Francisco"],
                 ],
+            }
+        )
+        ```
+
+    ??? example "With Formulas"
+        Update cells with formulas using USER_ENTERED:
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
+                "range": "Sheet1!D2:D3",
+                "values": [["=SUM(B2:C2)"], ["=SUM(B3:C3)"]],
                 "value_input_option": "USER_ENTERED",
             }
         )
         ```
 
-    Invoke with agent:
-        ```python
-        agent.invoke({"input": "Update cells A1:C3 with employee data"})
-        ```
-
-    Returns:
-        Dictionary containing:
-            - success: bool - Whether the operation succeeded
-            - spreadsheet_id: str - The spreadsheet ID
-            - updated_range: str - The A1 notation of updated range
-            - updated_rows: int - Number of rows updated
-            - updated_columns: int - Number of columns updated
-            - updated_cells: int - Total number of cells updated
-
-    Value Input Options:
-        - RAW: Values stored exactly as provided (e.g., "=1+2" as text)
-        - USER_ENTERED: Values parsed as if typed by user (formulas evaluated)
-
-    Example Response:
-        {
-            "success": True,
-            "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-            "updated_range": "Sheet1!F1:F3",
-            "updated_rows": 3,
-            "updated_columns": 1,
-            "updated_cells": 3
-        }
-
     Raises:
-        Exception: If spreadsheet_id is invalid, range is malformed, or API errors occur
+        ValueError: If write permissions unavailable or validation fails.
+        Exception: If spreadsheet_id is invalid, range is malformed, or API
+            errors occur.
     """
 
     name: str = "sheets_update_values"
@@ -144,17 +127,23 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
         """Update values in a Google Spreadsheet range.
 
         Args:
-            spreadsheet_id: The ID of the spreadsheet to update.
-            range: The A1 notation range to update.
+            spreadsheet_id: ID of the spreadsheet to update.
+            range: A1 notation range to update (e.g., 'Sheet1!A1:C3').
             values: 2D array of values to write.
-            value_input_option: How to interpret input.
+            value_input_option: How to interpret input values. Default: USER_ENTERED.
             run_manager: Optional callback manager.
 
         Returns:
-            Dict containing the update results.
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            updated_range (str): The A1 notation of updated range.
+            updated_rows (int): Number of rows updated.
+            updated_columns (int): Number of columns updated.
+            updated_cells (int): Total number of cells updated.
 
         Raises:
-            ValueError: If write permissions are not available or validation fails.
+            ValueError: If write permissions unavailable or validation fails.
+            Exception: For API errors or connection issues.
         """
         # Check write permissions (requires OAuth2)
         self._check_write_permissions()
@@ -203,7 +192,7 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
 
 
 class AppendValuesSchema(WriteBaseSchema):
-    """Schema for appending values to a Google Spreadsheet."""
+    """Input schema for SheetsAppendValuesTool."""
 
     range: str = Field(
         description=(
@@ -230,23 +219,30 @@ class AppendValuesSchema(WriteBaseSchema):
 class SheetsAppendValuesTool(SheetsBaseTool):
     """Tool for appending values to a Google Spreadsheet table.
 
-    This tool appends data to the end of a table, automatically finding
-    the last row with data. Perfect for adding new records to existing data,
-    logging events, or incrementally building datasets without manual row tracking.
+    Inherits from
+    [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+    Appends data to the end of a table, automatically finding the last row with
+    data.
 
-    Instantiate:
+    !!! note "Authentication Required"
+        Requires OAuth2 authentication. Use `api_resource` parameter with
+        authenticated Google Sheets service.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        table_range (str): The range of the entire table.
+        updated_range (str): The specific range where data was appended.
+        updated_rows (int): Number of rows appended.
+        updated_columns (int): Number of columns appended.
+        updated_cells (int): Total number of cells updated.
+
+    ???+ example "Basic Usage"
+        Append new records to a table:
         ```python
         from langchain_google_community.sheets import SheetsAppendValuesTool
 
-        tool = SheetsAppendValuesTool(
-            api_resource=service,
-            value_input_option="USER_ENTERED",
-            insert_data_option="INSERT_ROWS",
-        )
-        ```
-
-    Invoke directly:
-        ```python
+        tool = SheetsAppendValuesTool(api_resource=service)
         result = tool.run(
             {
                 "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
@@ -255,44 +251,27 @@ class SheetsAppendValuesTool(SheetsBaseTool):
                     ["Eve", "27", "Seattle", "91"],
                     ["Frank", "32", "Denver", "85"],
                 ],
-                "value_input_option": "USER_ENTERED",
+            }
+        )
+        ```
+
+    ??? example "With Insert Rows Option"
+        Insert rows instead of overwriting:
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
+                "range": "Sheet1!A1:D100",
+                "values": [["New", "Record", "Data", "Here"]],
                 "insert_data_option": "INSERT_ROWS",
             }
         )
         ```
 
-    Invoke with agent:
-        ```python
-        agent.invoke({"input": "Add two new employee records to the spreadsheet"})
-        ```
-
-    Returns:
-        Dictionary containing:
-            - success: bool - Whether the operation succeeded
-            - spreadsheet_id: str - The spreadsheet ID
-            - table_range: str - The range of the entire table
-            - updated_range: str - The specific range where data was appended
-            - updated_rows: int - Number of rows appended
-            - updated_columns: int - Number of columns appended
-            - updated_cells: int - Total number of cells updated
-
-    Insert Data Options:
-        - OVERWRITE: Data overwrites existing data after the table (default)
-        - INSERT_ROWS: New rows are inserted, existing data shifted down
-
-    Example Response:
-        {
-            "success": True,
-            "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-            "table_range": "Sheet1!A1:F5",
-            "updated_range": "Sheet1!A6:D7",
-            "updated_rows": 2,
-            "updated_columns": 4,
-            "updated_cells": 8
-        }
-
     Raises:
-        Exception: If spreadsheet_id is invalid, range is malformed, or API errors occur
+        ValueError: If write permissions unavailable or validation fails.
+        Exception: If spreadsheet_id is invalid, range is malformed, or API
+            errors occur.
     """
 
     name: str = "sheets_append_values"
@@ -314,18 +293,25 @@ class SheetsAppendValuesTool(SheetsBaseTool):
         """Append values to a Google Spreadsheet table.
 
         Args:
-            spreadsheet_id: The ID of the spreadsheet.
-            range: The A1 notation table range.
+            spreadsheet_id: ID of the spreadsheet.
+            range: A1 notation table range to append to.
             values: 2D array of values to append.
-            value_input_option: How to interpret input.
-            insert_data_option: How to handle existing data.
+            value_input_option: How to interpret input values. Default: USER_ENTERED.
+            insert_data_option: How to handle existing data. Default: INSERT_ROWS.
             run_manager: Optional callback manager.
 
         Returns:
-            Dict containing the append results.
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            table_range (str): The range of the entire table.
+            updated_range (str): The specific range where data was appended.
+            updated_rows (int): Number of rows appended.
+            updated_columns (int): Number of columns appended.
+            updated_cells (int): Total number of cells updated.
 
         Raises:
-            ValueError: If write permissions are not available or validation fails.
+            ValueError: If write permissions unavailable or validation fails.
+            Exception: For API errors or connection issues.
         """
         # Check write permissions (requires OAuth2)
         self._check_write_permissions()
@@ -378,7 +364,7 @@ class SheetsAppendValuesTool(SheetsBaseTool):
 
 
 class ClearValuesSchema(BaseModel):
-    """Schema for clearing values in a Google Spreadsheet."""
+    """Input schema for SheetsClearValuesTool."""
 
     spreadsheet_id: str = Field(description="The ID of the Google Spreadsheet.")
     range: str = Field(
@@ -392,20 +378,30 @@ class ClearValuesSchema(BaseModel):
 class SheetsClearValuesTool(SheetsBaseTool):
     """Tool for clearing values from a Google Spreadsheet range.
 
-    This tool clears cell values from a specified range while preserving
-    formatting, data validation, and other cell properties. Perfect for
-    resetting data sections, clearing temporary calculations, or removing
-    outdated information without destroying the spreadsheet structure.
+    Inherits from
+    [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+    Clears cell values from a specified range while preserving formatting and
+    structure.
 
-    Instantiate:
+    !!! note "Authentication Required"
+        Requires OAuth2 authentication. Use `api_resource` parameter with
+        authenticated Google Sheets service.
+
+    !!! info "Formatting Preserved"
+        Only values are cleared. Formatting, borders, colors, fonts, and data
+        validation rules remain intact.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        cleared_range (str): The A1 notation of the cleared range.
+
+    ???+ example "Basic Usage"
+        Clear a range of cells:
         ```python
         from langchain_google_community.sheets import SheetsClearValuesTool
 
         tool = SheetsClearValuesTool(api_resource=service)
-        ```
-
-    Invoke directly:
-        ```python
         result = tool.run(
             {
                 "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
@@ -414,33 +410,10 @@ class SheetsClearValuesTool(SheetsBaseTool):
         )
         ```
 
-    Invoke with agent:
-        ```python
-        agent.invoke({"input": "Clear all data from column F"})
-        ```
-
-    Returns:
-        Dictionary containing:
-            - success: bool - Whether the operation succeeded
-            - spreadsheet_id: str - The spreadsheet ID
-            - cleared_range: str - The A1 notation of the cleared range
-
-    Important Notes:
-        - Only values are cleared; formatting remains intact
-        - Cell borders, colors, and fonts are preserved
-        - Data validation rules are not affected
-        - Formulas and structure remain unchanged
-        - Can clear entire rows, columns, or specific ranges
-
-    Example Response:
-        {
-            "success": True,
-            "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-            "cleared_range": "Sheet1!E2:E10"
-        }
-
     Raises:
-        Exception: If spreadsheet_id is invalid, range is malformed, or API errors occur
+        ValueError: If write permissions unavailable or validation fails.
+        Exception: If spreadsheet_id is invalid, range is malformed, or API
+            errors occur.
     """
 
     name: str = "sheets_clear_values"
@@ -459,15 +432,18 @@ class SheetsClearValuesTool(SheetsBaseTool):
         """Clear values from a Google Spreadsheet range.
 
         Args:
-            spreadsheet_id: The ID of the spreadsheet.
-            range: The A1 notation range to clear.
+            spreadsheet_id: ID of the spreadsheet.
+            range: A1 notation range to clear.
             run_manager: Optional callback manager.
 
         Returns:
-            Dict containing the clear results.
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            cleared_range (str): The A1 notation of the cleared range.
 
         Raises:
-            ValueError: If write permissions are not available or validation fails.
+            ValueError: If write permissions unavailable or validation fails.
+            Exception: For API errors or connection issues.
         """
         # Check write permissions (requires OAuth2)
         self._check_write_permissions()
@@ -520,7 +496,7 @@ class BatchUpdateDataSchema(BaseModel):
 
 
 class BatchUpdateValuesSchema(WriteBaseSchema):
-    """Schema for batch updating values in a Google Spreadsheet."""
+    """Input schema for SheetsBatchUpdateValuesTool."""
 
     data: List[BatchUpdateDataSchema] = Field(
         description="List of range/values pairs to update."
@@ -528,25 +504,29 @@ class BatchUpdateValuesSchema(WriteBaseSchema):
 
 
 class SheetsBatchUpdateValuesTool(SheetsBaseTool):
-    """Tool for batch updating multiple ranges in a Google Spreadsheet.
+    """Tool for batch updating multiple ranges in Google Sheets efficiently.
 
-    This tool updates multiple ranges in a single API call, dramatically
-    improving efficiency when updating multiple sections of a spreadsheet.
-    Perfect for complex updates, synchronized data changes, or updating
-    multiple sheets simultaneously while minimizing API calls and latency.
+    Inherits from
+    [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+    Updates multiple ranges in a single API call, dramatically improving
+    efficiency.
 
-    Instantiate:
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        total_updated_ranges (int): Number of ranges updated.
+        total_updated_cells (int): Total cells updated across all ranges.
+        total_updated_rows (int): Total rows updated.
+        total_updated_columns (int): Total columns updated.
+        responses (list): Individual results for each range with updated_range
+            and updated_cells.
+
+    ???+ example "Basic Usage"
+        Update multiple ranges in one call:
         ```python
         from langchain_google_community.sheets import SheetsBatchUpdateValuesTool
 
-        tool = SheetsBatchUpdateValuesTool(
-            api_resource=service,
-            value_input_option="USER_ENTERED",
-        )
-        ```
-
-    Invoke directly:
-        ```python
+        tool = SheetsBatchUpdateValuesTool(api_resource=service)
         result = tool.run(
             {
                 "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
@@ -555,59 +535,35 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
                         "range": "Sheet1!G1:G3",
                         "values": [["Status"], ["Active"], ["Active"]],
                     },
-                    {
-                        "range": "Sheet1!H1:H3",
-                        "values": [["Country"], ["USA"], ["USA"]],
-                    },
-                    {
-                        "range": "Sheet1!I1:I3",
-                        "values": [["Department"], ["Engineering"], ["Sales"]],
-                    },
+                    {"range": "Sheet1!H1:H3", "values": [["Country"], ["USA"]]},
+                    {"range": "Sheet1!I1:I3", "values": [["Dept"], ["Eng"]]},
                 ],
-                "value_input_option": "RAW",
             }
         )
         ```
 
-    Invoke with agent:
+    ??? example "Update Multiple Sheets"
+        Update ranges across different sheets:
         ```python
-        agent.invoke({"input": "Update status, country, and department columns"})
+        result = tool.run(
+            {
+                "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
+                "data": [
+                    {
+                        "range": "Sheet1!A1:A5",
+                        "values": [["Data1"], ["Data2"], ["Data3"]],
+                    },
+                    {"range": "Sheet2!B1:B3", "values": [["Value1"], ["Value2"]]},
+                ],
+                "value_input_option": "USER_ENTERED",
+            }
+        )
         ```
 
-    Returns:
-        Dictionary containing:
-            - success: bool - Whether the operation succeeded
-            - spreadsheet_id: str - The spreadsheet ID
-            - total_updated_ranges: int - Number of ranges updated
-            - total_updated_cells: int - Total cells updated across all ranges
-            - total_updated_rows: int - Total rows updated
-            - total_updated_columns: int - Total columns updated
-            - responses: List[Dict] - Individual results for each range
-
-    Performance Benefits:
-        - Single API call: Reduces network overhead significantly
-        - Atomic operation: All updates succeed or fail together
-        - Faster execution: 10x faster than individual updates
-        - Consistent state: Ensures data integrity across ranges
-
-    Example Response:
-        {
-            "success": True,
-            "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-            "total_updated_ranges": 3,
-            "total_updated_cells": 9,
-            "total_updated_rows": 9,
-            "total_updated_columns": 3,
-            "responses": [
-                {"updated_range": "Sheet1!G1:G3", "updated_cells": 3},
-                {"updated_range": "Sheet1!H1:H3", "updated_cells": 3},
-                {"updated_range": "Sheet1!I1:I3", "updated_cells": 3}
-            ]
-        }
-
     Raises:
-        Exception: If spreadsheet_id is invalid, any range is malformed,
-            or API errors occur
+        ValueError: If write permissions unavailable or validation fails.
+        Exception: If spreadsheet_id is invalid, any range is malformed, or
+            API errors occur.
     """
 
     name: str = "sheets_batch_update_values"
@@ -627,16 +583,24 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
         """Batch update multiple ranges in a Google Spreadsheet.
 
         Args:
-            spreadsheet_id: The ID of the spreadsheet.
+            spreadsheet_id: ID of the spreadsheet.
             data: List of range/values pairs to update.
-            value_input_option: How to interpret input.
+            value_input_option: How to interpret input values. Default: USER_ENTERED.
             run_manager: Optional callback manager.
 
         Returns:
-            Dict containing the batch update results.
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            total_updated_ranges (int): Number of ranges updated.
+            total_updated_cells (int): Total cells updated.
+            total_updated_rows (int): Total rows updated.
+            total_updated_columns (int): Total columns updated.
+            responses (list): Individual results for each range.
 
         Raises:
-            ValueError: If write permissions are not available or validation fails.
+            ValueError: If write permissions unavailable, validation fails, or
+                data list is empty.
+            Exception: For API errors or connection issues.
         """
         # Check write permissions (requires OAuth2)
         self._check_write_permissions()

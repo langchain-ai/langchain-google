@@ -136,11 +136,6 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
 
         Returns:
             list: List of dictionaries with all Pydantic models converted
-
-        Example:
-            >>> items = [SomeSchema(field="value"), {"field": "value"}]
-            >>> self._convert_to_dict_list(items)
-            [{"field": "value"}, {"field": "value"}]
         """
         result = []
         for item in items:

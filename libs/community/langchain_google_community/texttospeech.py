@@ -38,10 +38,20 @@ def _encoding_file_extension_map(encoding: texttospeech.AudioEncoding) -> Option
 
 
 class TextToSpeechTool(BaseTool):
-    """Tool that queries the Google Cloud Text to Speech API.
+    """Tool that queries the Google Cloud Text-to-Speech API.
 
-    In order to set this up, follow instructions at:
-    https://cloud.google.com/text-to-speech/docs/before-you-begin
+    Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+    Synthesizes audio from text with support for multiple languages and voice options.
+
+    !!! note "Installation"
+        Requires additional dependencies:
+        ```bash
+        pip install langchain-google-community[texttospeech]
+        ```
+
+    !!! note "Setup Required"
+        Follow [setup instructions](https://cloud.google.com/text-to-speech/docs/before-you-begin)
+        to configure Google Cloud Text-to-Speech API.
     """
 
     name: str = "google_cloud_texttospeech"
@@ -72,7 +82,18 @@ class TextToSpeechTool(BaseTool):
         audio_encoding: Optional[texttospeech.AudioEncoding] = None,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
-        """Use the tool."""
+        """Synthesize speech from text.
+
+        Args:
+            input_text: Text to convert to speech.
+            language_code: Language code (e.g., 'en-US', 'de-DE'). Default: 'en-US'.
+            ssml_gender: Voice gender. Default: NEUTRAL.
+            audio_encoding: Audio format. Default: MP3.
+            run_manager: Optional callback manager.
+
+        Returns:
+            str: Path to temporary file containing synthesized audio.
+        """
         texttospeech = _import_google_cloud_texttospeech()
         ssml_gender = ssml_gender or texttospeech.SsmlVoiceGender.NEUTRAL
         audio_encoding = audio_encoding or texttospeech.AudioEncoding.MP3
