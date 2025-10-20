@@ -188,7 +188,7 @@ class BaseReadTool(SheetsBaseTool):
 
 
 class ReadSheetDataSchema(ReadBaseSchema):
-    """Input schema for SheetsReadDataTool."""
+    """Input schema for `SheetsReadDataTool`."""
 
     range_name: str = Field(
         description="A1 notation range to read from the spreadsheet."
@@ -359,7 +359,7 @@ class SheetsReadDataTool(BaseReadTool):
 
 
 class BatchReadSheetDataSchema(ReadBaseSchema):
-    """Input schema for SheetsBatchReadDataTool."""
+    """Input schema for `SheetsBatchReadDataTool`."""
 
     ranges: List[str] = Field(
         description="List of A1 notation ranges to read from the spreadsheet."
@@ -607,7 +607,7 @@ class DataFilterSchema(BaseModel):
 
 
 class FilteredReadSheetDataSchema(ReadBaseSchema):
-    """Input schema for SheetsFilteredReadDataTool."""
+    """Input schema for `SheetsFilteredReadDataTool`."""
 
     data_filters: List[DataFilterSchema] = Field(
         ...,

@@ -14,7 +14,7 @@ from .utils import validate_range_name
 
 
 class CreateSpreadsheetSchema(BaseModel):
-    """Input schema for SheetsCreateSpreadsheetTool."""
+    """Input schema for `SheetsCreateSpreadsheetTool`."""
 
     title: str = Field(description="The title of the new spreadsheet.")
     locale: Optional[str] = Field(

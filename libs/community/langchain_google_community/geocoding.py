@@ -402,7 +402,7 @@ class GoogleGeocodingAPIWrapper(BaseModel):
 
 
 class GoogleGeocodeInput(BaseModel):
-    """Input schema for GoogleGeocodingTool."""
+    """Input schema for `GoogleGeocodingTool`."""
 
     query: str = Field(description="Locations for query.")
 

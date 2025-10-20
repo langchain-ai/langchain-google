@@ -39,7 +39,7 @@ class WriteBaseSchema(BaseModel):
 
 
 class UpdateValuesSchema(WriteBaseSchema):
-    """Input schema for SheetsUpdateValuesTool."""
+    """Input schema for `SheetsUpdateValuesTool`."""
 
     range: str = Field(
         description="The A1 notation of the range to update (e.g., 'Sheet1!A1:C3')."
@@ -192,7 +192,7 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
 
 
 class AppendValuesSchema(WriteBaseSchema):
-    """Input schema for SheetsAppendValuesTool."""
+    """Input schema for `SheetsAppendValuesTool`."""
 
     range: str = Field(
         description=(
@@ -364,7 +364,7 @@ class SheetsAppendValuesTool(SheetsBaseTool):
 
 
 class ClearValuesSchema(BaseModel):
-    """Input schema for SheetsClearValuesTool."""
+    """Input schema for `SheetsClearValuesTool`."""
 
     spreadsheet_id: str = Field(description="The ID of the Google Spreadsheet.")
     range: str = Field(
@@ -496,7 +496,7 @@ class BatchUpdateDataSchema(BaseModel):
 
 
 class BatchUpdateValuesSchema(WriteBaseSchema):
-    """Input schema for SheetsBatchUpdateValuesTool."""
+    """Input schema for `SheetsBatchUpdateValuesTool`."""
 
     data: List[BatchUpdateDataSchema] = Field(
         description="List of range/values pairs to update."

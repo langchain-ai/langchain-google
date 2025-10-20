@@ -123,7 +123,7 @@ class GooglePlacesAPIWrapper(BaseModel):
 
 
 class GooglePlacesSchema(BaseModel):
-    """Input schema for GooglePlacesTool."""
+    """Input schema for `GooglePlacesTool`."""
 
     query: str = Field(..., description="Search query for Google Maps")
 
