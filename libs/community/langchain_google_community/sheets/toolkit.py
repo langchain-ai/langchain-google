@@ -59,8 +59,8 @@ class SheetsToolkit(BaseToolkit):
         """Get the tools in the toolkit.
 
         Returns:
-            List[BaseTool]: List of tools based on authentication method. API key
-                provides read-only tools. OAuth2 provides full read/write tools.
+            List of tools based on authentication method. API key provides read-only
+            tools. OAuth2 provides full read/write tools.
         """
         # If api_key is provided, return read-only tools
         if self.api_key:
