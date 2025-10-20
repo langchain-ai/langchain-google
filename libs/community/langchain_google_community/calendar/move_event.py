@@ -9,7 +9,7 @@ from langchain_google_community.calendar.base import CalendarBaseTool
 
 
 class MoveEventSchema(BaseModel):
-    """Input for CalendarMoveEvent."""
+    """Input schema for `CalendarMoveEvent`."""
 
     event_id: str = Field(..., description="The event ID to move.")
     origin_calendar_id: str = Field(..., description="The origin calendar ID.")

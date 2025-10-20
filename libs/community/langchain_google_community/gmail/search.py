@@ -18,7 +18,7 @@ class Resource(str, Enum):
 
 
 class SearchArgsSchema(BaseModel):
-    """Input for SearchGmailTool."""
+    """Input schema for `SearchGmailTool`."""
 
     # From https://support.google.com/mail/answer/7190?hl=en
     query: str = Field(

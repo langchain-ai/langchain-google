@@ -12,7 +12,7 @@ from langchain_google_community.gmail.base import GmailBaseTool
 
 
 class SendMessageSchema(BaseModel):
-    """Input for SendMessageTool."""
+    """Input schema for `SendMessageTool`."""
 
     message: str = Field(
         ...,

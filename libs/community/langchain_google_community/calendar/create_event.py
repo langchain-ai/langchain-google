@@ -14,7 +14,7 @@ from langchain_google_community.calendar.utils import is_all_day_event
 
 
 class CreateEventSchema(BaseModel):
-    """Input for CalendarCreateEvent."""
+    """Input schema for `CalendarCreateEvent`."""
 
     summary: str = Field(..., description="The title of the event.")
     start_datetime: str = Field(

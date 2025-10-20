@@ -12,7 +12,7 @@ from langchain_google_community.calendar.base import CalendarBaseTool
 
 
 class SearchEventsSchema(BaseModel):
-    """Input for CalendarSearchEvents."""
+    """Input schema for `CalendarSearchEvents`."""
 
     calendars_info: str = Field(
         ...,

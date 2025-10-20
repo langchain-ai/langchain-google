@@ -10,7 +10,7 @@ from .utils import validate_spreadsheet_id
 
 
 class GetSpreadsheetInfoSchema(BaseModel):
-    """Input schema for SheetsGetSpreadsheetInfoTool."""
+    """Input schema for `SheetsGetSpreadsheetInfoTool`."""
 
     spreadsheet_id: str = Field(
         ...,
