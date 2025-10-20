@@ -17,22 +17,22 @@ from pydantic import (
 class GooglePlacesAPIWrapper(BaseModel):
     """Wrapper around Google Places API.
 
-    To use, you should have the ``googlemaps`` python package installed,
-     **an API key for the google maps platform**,
-     and the environment variable ''GPLACES_API_KEY''
-     set with your API key , or pass 'gplaces_api_key'
-     as a named parameter to the constructor.
+    Searches for places using Google Maps Platform. Returns detailed information
+    including addresses, phone numbers, and websites.
 
-    By default, this will return the all the results on the input query.
-     You can use the top_k_results argument to limit the number of results.
+    !!! note "Installation"
+        Requires additional dependencies:
+        ```bash
+        pip install langchain-google-community[places]
+        ```
 
-    Example:
-        .. code-block:: python
+    !!! note "Setup Required"
+        Set `GPLACES_API_KEY` environment variable or pass `gplaces_api_key`
+        parameter with your Google Maps Platform API key.
 
-
-            from langchain_community.utilities import GooglePlacesAPIWrapper
-
-            gplaceapi = GooglePlacesAPIWrapper()
+    Attributes:
+        gplaces_api_key: Google Maps Platform API key.
+        top_k_results: Maximum number of results to return.
     """
 
     gplaces_api_key: Optional[str] = None
@@ -123,19 +123,23 @@ class GooglePlacesAPIWrapper(BaseModel):
 
 
 class GooglePlacesSchema(BaseModel):
-    """Input for GooglePlacesTool."""
+    """Input schema for GooglePlacesTool."""
 
-    query: str = Field(..., description="Query for google maps")
+    query: str = Field(..., description="Search query for Google Maps")
 
 
 class GooglePlacesTool(BaseTool):
-    """Tool that queries the Google places API."""
+    """Tool that queries the Google Places API.
+
+    Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+    Validates and discovers addresses from ambiguous text using Google Maps Platform.
+    """
 
     name: str = "google_places"
     description: str = (
         "A wrapper around Google Places. "
         "Useful for when you need to validate or "
-        "discover addressed from ambiguous text. "
+        "discover addresses from ambiguous text. "
         "Input should be a search query."
     )
     api_wrapper: GooglePlacesAPIWrapper = Field(default_factory=GooglePlacesAPIWrapper)  # type: ignore[arg-type]
@@ -146,5 +150,13 @@ class GooglePlacesTool(BaseTool):
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
-        """Use the tool."""
+        """Search for places matching the query.
+
+        Args:
+            query: Search query for Google Maps.
+            run_manager: Optional callback manager.
+
+        Returns:
+            str: Formatted string with place details for each result.
+        """
         return self.api_wrapper.run(query)

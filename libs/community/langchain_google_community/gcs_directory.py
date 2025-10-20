@@ -8,7 +8,17 @@ from langchain_google_community.gcs_file import GCSFileLoader
 
 
 class GCSDirectoryLoader(BaseLoader):
-    """Load from GCS directory."""
+    """Load documents from Google Cloud Storage directory.
+
+    Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+    Loads all files from a GCS bucket with optional prefix filtering.
+
+    !!! note "Installation"
+        Requires additional dependencies:
+        ```bash
+        pip install langchain-google-community[gcs]
+        ```
+    """
 
     def __init__(
         self,

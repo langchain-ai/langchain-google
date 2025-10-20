@@ -64,24 +64,21 @@ def _get_message_data(service: Any, message: Any) -> ChatSession:
 
 
 class GMailLoader(BaseChatLoader):
-    """Load data from `GMail`.
+    """Load chat sessions from Gmail.
 
-    There are many ways you could want to load data from GMail.
-    This loader is currently fairly opinionated in how to do so.
-    The way it does it is it first looks for all messages that you have sent.
-    It then looks for messages where you are responding to a previous email.
-    It then fetches that previous email, and creates a training example
-    of that email, followed by your email.
+    Inherits from
+    [`BaseChatLoader`][langchain_community.chat_loaders.base.BaseChatLoader].
+    Loads sent messages and their preceding emails to create chat training
+    examples.
 
-    Note that there are clear limitations here. For example,
-    all examples created are only looking at the previous email for context.
+    This loader finds messages you've sent in reply to previous emails and creates
+    chat sessions from the original email and your response. Each session contains
+    only the immediate previous email for context.
 
-    To use:
-
-    - Set up a Google Developer Account:
-        Go to the Google Developer Console, create a project,
-        and enable the Gmail API for that project.
-        This will give you a credentials.json file that you'll need later.
+    !!! note "Setup Required"
+        Requires Google Developer Account with Gmail API enabled. See
+        [Gmail API documentation](https://developers.google.com/gmail/api/guides)
+        for setup instructions.
     """
 
     def __init__(self, creds: Any, n: int = 100, raise_error: bool = False) -> None:

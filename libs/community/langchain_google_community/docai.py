@@ -37,10 +37,20 @@ class DocAIParsingResults:
 
 
 class DocAIParser(BaseBlobParser):
-    """`Google Cloud Document AI` parser.
+    """Google Cloud Document AI parser.
 
-    For a detailed explanation of Document AI, refer to the product documentation.
-    https://cloud.google.com/document-ai/docs/overview
+    Inherits from [`BaseBlobParser`][langchain_core.document_loaders.BaseBlobParser].
+    Parses documents using Google Cloud Document AI for text extraction and
+    layout analysis.
+
+    See [Document AI documentation](https://cloud.google.com/document-ai/docs/overview)
+    for detailed information.
+
+    !!! note "Installation"
+        Requires additional dependencies:
+        ```bash
+        pip install langchain-google-community[docai]
+        ```
     """
 
     def __init__(
