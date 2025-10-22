@@ -1960,6 +1960,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "n": self.n,
             "safety_settings": self.safety_settings,
             "response_modalities": self.response_modalities,
+            "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
         }
@@ -2037,6 +2038,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
+                "media_resolution": self.media_resolution,
                 "thinking_config": (
                     (
                         (

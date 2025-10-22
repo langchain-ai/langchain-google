@@ -6,7 +6,7 @@ from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
 from pydantic import BaseModel, Field, SecretStr
 
-from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality, MediaResolution
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
@@ -90,6 +90,11 @@ Examples:
 
     thinking_budget: Optional[int] = Field(
         default=None, description="Indicates the thinking budget in tokens."
+    )
+
+    media_resolution: Optional[MediaResolution] = Field(
+        default=None,
+        description="Media resolution for the input media.",
     )
 
     include_thoughts: Optional[bool] = Field(
