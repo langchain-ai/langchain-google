@@ -57,7 +57,12 @@ The package also supports creating embeddings with Google's models, useful for t
 
 """  # noqa: E501
 
-from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory, Modality, MediaResolution
+from langchain_google_genai._enums import (
+    HarmBlockThreshold,
+    HarmCategory,
+    MediaResolution,
+    Modality,
+)
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from langchain_google_genai.genai_aqa import (
