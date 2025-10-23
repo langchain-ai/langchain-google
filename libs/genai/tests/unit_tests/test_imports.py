@@ -12,6 +12,7 @@ EXPECTED_ALL = [
     "HarmBlockThreshold",
     "HarmCategory",
     "Modality",
+    "MediaResolution",
     "DoesNotExistsException",
 ]
 
