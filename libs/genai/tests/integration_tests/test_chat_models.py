@@ -23,6 +23,7 @@ from langchain_google_genai import (
     ChatGoogleGenerativeAI,
     HarmBlockThreshold,
     HarmCategory,
+    MediaResolution,
     Modality,
 )
 
@@ -555,6 +556,42 @@ def test_chat_google_genai_multimodal(
         assert isinstance(response, AIMessage)
         assert isinstance(response.content, str)
         assert len(response.content.strip()) > 0
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "Guess what's in this picture! You have 3 guesses.",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": "https://picsum.photos/seed/picsum/200/300",
+                },
+            ]
+        ),
+    ],
+)
+def test_chat_google_genai_invoke_media_resolution(message: BaseMessage) -> None:
+    """Test invoke vision model with `media_resolution` set to low and without."""
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
+    result = llm.invoke([message])
+    result_low_res = llm.invoke(
+        [message], media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW
+    )
+
+    assert isinstance(result_low_res, AIMessage)
+    _check_usage_metadata(result_low_res)
+
+    assert result.usage_metadata is not None
+    assert result_low_res.usage_metadata is not None
+    assert (
+        result_low_res.usage_metadata["input_tokens"]
+        < result.usage_metadata["input_tokens"] / 3
+    )
 
 
 def test_chat_google_genai_single_call_with_history() -> None:
