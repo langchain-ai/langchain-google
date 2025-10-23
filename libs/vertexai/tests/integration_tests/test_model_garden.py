@@ -9,6 +9,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.outputs import LLMResult
 from langchain_core.tools import tool
@@ -287,3 +288,97 @@ def test_anthropic_with_structured_output() -> None:
     assert isinstance(response, MyModel)
     assert response.name == "Erick"
     assert response.age == 27
+
+
+@pytest.mark.extended
+@pytest.mark.flaky(retries=3)
+def test_anthropic_multiturn_tool_calling() -> None:
+    """Test multi-turn conversation with tool calls and responses.
+
+    This test ensures that ToolMessages with streaming metadata are properly
+    cleaned before being sent back to the API (fixes issue #1227).
+    """
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+        model=_ANTHROPIC_CLAUDE35_MODEL_NAME,
+    )
+
+    @tool
+    def get_weather(city: str) -> str:
+        """Get current weather for a city."""
+        return f"Sunny, 22°C in {city}"
+
+    # Bind tools to model
+    model_with_tools = model.bind_tools([get_weather])
+
+    # First turn - user asks question, model calls tool
+    user_message = HumanMessage("What's the weather in Paris?")
+    response1 = model_with_tools.invoke([user_message])
+
+    # Verify model made a tool call
+    assert isinstance(response1, AIMessage)
+    assert response1.tool_calls
+    assert len(response1.tool_calls) == 1
+    assert response1.tool_calls[0]["name"] == "get_weather"
+    assert response1.tool_calls[0]["args"]["city"] == "Paris"
+
+    # Second turn - provide tool result (this is where the bug was)
+    # The ToolMessage might contain streaming metadata that needs cleaning
+    tool_result = ToolMessage(
+        content="Sunny, 22°C in Paris", tool_call_id=response1.tool_calls[0]["id"]
+    )
+
+    # This should NOT raise "Extra inputs are not permitted" error
+    response2 = model.invoke([user_message, response1, tool_result])
+
+    # Verify model responded with final answer
+    assert isinstance(response2, AIMessage)
+    assert isinstance(response2.content, str)
+    assert "paris" in response2.content.lower()
+
+
+@pytest.mark.extended
+@pytest.mark.flaky(retries=3)
+def test_anthropic_tool_error_handling() -> None:
+    """Test that tool errors are properly communicated with is_error flag."""
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+        model=_ANTHROPIC_CLAUDE35_MODEL_NAME,
+    )
+
+    @tool
+    def failing_tool(x: int) -> str:
+        """A tool that simulates failure."""
+        return "result"
+
+    model_with_tools = model.bind_tools([failing_tool])
+
+    # First turn - model calls tool
+    response1 = model_with_tools.invoke([HumanMessage("Use failing_tool with x=5")])
+
+    # Verify tool call
+    assert isinstance(response1, AIMessage)
+    assert response1.tool_calls
+    assert response1.tool_calls[0]["name"] == "failing_tool"
+
+    # Second turn - simulate tool error with status="error"
+    error_result = ToolMessage(
+        content="Tool execution failed: API error",
+        tool_call_id=response1.tool_calls[0]["id"],
+        status="error",
+    )
+
+    # Should handle error gracefully (is_error flag should be sent)
+    response2 = model.invoke(
+        [HumanMessage("Use failing_tool with x=5"), response1, error_result]
+    )
+
+    # Verify model acknowledged the error
+    assert isinstance(response2, AIMessage)
+    assert isinstance(response2.content, str)

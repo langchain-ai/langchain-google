@@ -346,6 +346,46 @@ def convert_to_anthropic_tool(
     )
 
 
+def _clean_content_block(block: Any) -> Any:
+    """Remove streaming metadata fields from content blocks.
+
+    Anthropic's streaming API adds 'index' and 'partial_json' fields to content blocks
+    during streaming. These fields must be removed before sending back to the API.
+
+    Args:
+        block: Content block (dict, string, or other type)
+
+    Returns:
+        Cleaned content block with streaming metadata removed
+    """
+    if not isinstance(block, dict):
+        return block
+
+    # Remove known streaming metadata fields
+    # 'index' - added during streaming to track block position
+    # 'partial_json' - added during streaming for incremental JSON parsing
+    return {k: v for k, v in block.items() if k not in ("index", "partial_json")}
+
+
+def _clean_content(content: Any) -> Any:
+    """Recursively clean content (string, list, or dict).
+
+    Args:
+        content: Content to clean (can be str, list, dict, or other)
+
+    Returns:
+        Cleaned content with streaming metadata removed
+    """
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        return [_clean_content_block(block) for block in content]
+    elif isinstance(content, dict):
+        return _clean_content_block(content)
+    else:
+        return content
+
+
 def _merge_messages(
     messages: Sequence[BaseMessage],
 ) -> List[Union[SystemMessage, AIMessage, HumanMessage]]:
@@ -354,21 +394,33 @@ def _merge_messages(
     for curr in messages:
         curr = curr.model_copy(deep=True)
         if isinstance(curr, ToolMessage):
+            # Check if already in tool_result format (backward compatibility)
             if isinstance(curr.content, list) and all(
                 isinstance(block, dict) and block.get("type") == "tool_result"
                 for block in curr.content
             ):
-                curr = HumanMessage(curr.content)
+                # Already formatted - just convert to HumanMessage and clean content
+                cleaned_content = _clean_content(curr.content)
+                curr = HumanMessage(cleaned_content)
             else:
-                curr = HumanMessage(
-                    [
-                        {
-                            "type": "tool_result",
-                            "content": curr.content,
-                            "tool_use_id": curr.tool_call_id,
-                        }
-                    ]
-                )
+                # Convert to tool_result format
+                tool_result_block = {
+                    "type": "tool_result",
+                    "content": _clean_content(curr.content),
+                    "tool_use_id": curr.tool_call_id,
+                }
+                # Add error flag if present
+                if curr.status == "error":
+                    tool_result_block["is_error"] = True
+
+                curr = HumanMessage([tool_result_block])
+        elif isinstance(curr, AIMessage):
+            # Clean streaming metadata from AIMessage content blocks
+            if isinstance(curr.content, list):
+                cleaned_content = _clean_content(curr.content)
+                if cleaned_content != curr.content:
+                    curr = curr.model_copy(deep=True)
+                    curr.content = cleaned_content
         last = merged[-1] if merged else None
         if isinstance(last, HumanMessage) and isinstance(curr, HumanMessage):
             if isinstance(last.content, str):
