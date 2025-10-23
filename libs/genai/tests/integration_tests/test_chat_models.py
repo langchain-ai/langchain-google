@@ -578,11 +578,10 @@ def test_chat_google_genai_multimodal(
 def test_chat_google_genai_invoke_media_resolution(message: BaseMessage) -> None:
     """Test invoke vision model with `media_resolution` set to low and without."""
     llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
-    llm_low_res = ChatGoogleGenerativeAI(
-        model=_VISION_MODEL, media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW
-    )
     result = llm.invoke([message])
-    result_low_res = llm_low_res.invoke([message])
+    result_low_res = llm.invoke(
+        [message], media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW
+    )
 
     assert isinstance(result_low_res, AIMessage)
     _check_usage_metadata(result_low_res)

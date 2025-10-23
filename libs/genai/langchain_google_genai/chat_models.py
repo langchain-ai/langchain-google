@@ -2038,7 +2038,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
-                "media_resolution": self.media_resolution,
                 "thinking_config": (
                     (
                         (
@@ -2079,6 +2078,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gapic_response_schema = _dict_to_gapic_schema(response_schema)
             if gapic_response_schema is not None:
                 gen_config["response_schema"] = gapic_response_schema
+
+        media_resolution = kwargs.get("media_resolution", self.media_resolution)
+        if media_resolution is not None:
+            gen_config["media_resolution"] = media_resolution
+
         return GenerationConfig(**gen_config)
 
     def _generate(
