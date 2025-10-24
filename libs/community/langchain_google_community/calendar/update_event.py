@@ -14,7 +14,7 @@ from langchain_google_community.calendar.utils import is_all_day_event
 
 
 class UpdateEventSchema(BaseModel):
-    """Input for CalendarUpdateEvent."""
+    """Input schema for `CalendarUpdateEvent`."""
 
     event_id: str = Field(..., description="The event ID to update.")
     calendar_id: str = Field(

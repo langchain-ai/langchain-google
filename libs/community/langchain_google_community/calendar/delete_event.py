@@ -9,7 +9,7 @@ from langchain_google_community.calendar.base import CalendarBaseTool
 
 
 class DeleteEventSchema(BaseModel):
-    """Input for CalendarDeleteEvent."""
+    """Input schema for `CalendarDeleteEvent`."""
 
     event_id: str = Field(..., description="The event ID to delete.")
     calendar_id: Optional[str] = Field(

@@ -17,7 +17,17 @@ from pydantic import BaseModel, field_validator, model_validator
 
 
 class GoogleDriveLoader(BaseLoader, BaseModel):
-    """Load Google Docs from `Google Drive`."""
+    """Load documents from Google Drive.
+
+    Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+    Supports loading from folders, specific documents, or file IDs with authentication.
+
+    !!! note "Installation"
+        Requires additional dependencies:
+        ```bash
+        pip install langchain-google-community[drive]
+        ```
+    """
 
     # Generated from https://developers.google.com/drive/api/guides/api-specific-auth
     # limiting to the scopes that are required to read the files

@@ -11,7 +11,7 @@ from langchain_google_community.calendar.base import CalendarBaseTool
 
 
 class CurrentDatetimeSchema(BaseModel):
-    """Input for GetCurrentDatetime."""
+    """Input schema for `GetCurrentDatetime`."""
 
     calendar_id: Optional[str] = Field(
         default="primary", description="The calendar ID. Defaults to 'primary'."

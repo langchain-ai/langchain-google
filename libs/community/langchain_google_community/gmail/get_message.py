@@ -10,7 +10,7 @@ from langchain_google_community.gmail.utils import clean_email_body
 
 
 class SearchArgsSchema(BaseModel):
-    """Input for GetMessageTool."""
+    """Input schema for `GetMessageTool`."""
 
     message_id: str = Field(
         ...,

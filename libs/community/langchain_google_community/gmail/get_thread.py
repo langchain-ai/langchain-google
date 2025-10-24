@@ -7,7 +7,7 @@ from langchain_google_community.gmail.base import GmailBaseTool
 
 
 class GetThreadSchema(BaseModel):
-    """Input for GetMessageTool."""
+    """Input schema for `GetThreadTool`."""
 
     # From https://support.google.com/mail/answer/7190?hl=en
     thread_id: str = Field(
