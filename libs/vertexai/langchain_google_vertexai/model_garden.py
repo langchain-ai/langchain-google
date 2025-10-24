@@ -186,6 +186,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     )
     http_client: Any = Field(default=None, exclude=True)
     async_http_client: Any = Field(default=None, exclude=True)
+    additional_headers: Optional[Dict[str, str]] = Field(default=None)
+    "A key-value dictionary representing additional headers for the model call"
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -217,6 +219,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         project_id: str = self.project
 
         # Always disable Anthropic's retries, we handle it using the retry decorator
+        kwargs = (
+            {"default_headers": self.additional_headers}
+            if self.additional_headers
+            else {}
+        )
         self.client = AnthropicVertex(
             project_id=project_id,
             region=self.location,
@@ -226,6 +233,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             credentials=self.credentials,
             timeout=self.timeout,
             http_client=self.http_client,
+            **kwargs,  # type: ignore[arg-type]
         )
         self.async_client = AsyncAnthropicVertex(
             project_id=project_id,
@@ -236,6 +244,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             credentials=self.credentials,
             timeout=self.timeout,
             http_client=self.async_http_client,
+            **kwargs,  # type: ignore[arg-type]
         )
         return self
 
@@ -266,6 +275,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             params["model"] = params["model_name"]
         if kwargs.get("model"):
             params["model"] = kwargs["model"]
+        if kwargs.get("betas"):
+            params["betas"] = kwargs["betas"]
         params.pop("model_name", None)
         params.update(
             {
@@ -321,6 +332,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
+            has_betas = True if params.get("betas") else False
+            if has_betas:
+                return self.client.beta.messages.create(**params)
             return self.client.messages.create(**params)
 
         data = _completion_with_retry_inner(**params)
@@ -379,6 +393,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
+            has_betas = True if params.get("betas") else False
+            if has_betas:
+                return self.client.beta.messages.create(**params, stream=True)
             return self.client.messages.create(**params, stream=True)
 
         stream = _stream_with_retry(**params)
