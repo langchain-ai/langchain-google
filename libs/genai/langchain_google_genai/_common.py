@@ -16,6 +16,12 @@ from langchain_google_genai._enums import (
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
+# Cache package version at module import time to avoid blocking I/O in async contexts
+try:
+    _LANGCHAIN_GENAI_VERSION = metadata.version("langchain-google-genai")
+except metadata.PackageNotFoundError:
+    _LANGCHAIN_GENAI_VERSION = "0.0.0"
+
 
 class GoogleGenerativeAIError(Exception):
     """Custom exception class for errors associated with the `Google GenAI` API."""
@@ -150,12 +156,9 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     Returns:
         Tuple[str, str]
     """
-    try:
-        langchain_version = metadata.version("langchain-google-genai")
-    except metadata.PackageNotFoundError:
-        langchain_version = "0.0.0"
+    # Use cached version to avoid blocking I/O in async contexts
     client_library_version = (
-        f"{langchain_version}-{module}" if module else langchain_version
+        f"{_LANGCHAIN_GENAI_VERSION}-{module}" if module else _LANGCHAIN_GENAI_VERSION
     )
     if os.environ.get(_TELEMETRY_ENV_VARIABLE_NAME):
         client_library_version += f"+{_TELEMETRY_TAG}"
