@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, NoReturn
 from unittest.mock import MagicMock, patch
 
@@ -142,11 +143,10 @@ def test_retry_decorator_for_invalid_argument() -> None:
 
 
 @patch("langchain_google_vertexai._utils.os.environ.get")
-@patch("langchain_google_vertexai._utils.metadata.version")
+@patch("langchain_google_vertexai._utils._LANGCHAIN_VERTEXAI_VERSION", "1.2.3")
 def test_get_user_agent_with_telemetry_env_variable(
-    mock_version: MagicMock, mock_environ_get: MagicMock
+    mock_environ_get: MagicMock,
 ) -> None:
-    mock_version.return_value = "1.2.3"
     mock_environ_get.return_value = True
     client_lib_version, user_agent_str = get_user_agent(module="test-module")
     assert client_lib_version == "1.2.3-test-module+remote_reasoning_engine"
@@ -156,11 +156,10 @@ def test_get_user_agent_with_telemetry_env_variable(
 
 
 @patch("langchain_google_vertexai._utils.os.environ.get")
-@patch("langchain_google_vertexai._utils.metadata.version")
+@patch("langchain_google_vertexai._utils._LANGCHAIN_VERTEXAI_VERSION", "1.2.3")
 def test_get_user_agent_without_telemetry_env_variable(
-    mock_version: MagicMock, mock_environ_get: MagicMock
+    mock_environ_get: MagicMock,
 ) -> None:
-    mock_version.return_value = "1.2.3"
     mock_environ_get.return_value = False
     client_lib_version, user_agent_str = get_user_agent(module="test-module")
     assert client_lib_version == "1.2.3-test-module"
@@ -290,3 +289,41 @@ def test_get_generation_info_with_none_finish_reason() -> None:
 
     # (Should be None for None finish_reason)
     assert result.get("finish_reason") is None
+
+
+def test_version_is_cached_at_module_level() -> None:
+    """Test that version is cached at module level and doesn't call metadata.version."""
+    from langchain_google_vertexai import _utils
+
+    # The cached version should be a string
+    assert isinstance(_utils._LANGCHAIN_VERTEXAI_VERSION, str)
+    # Should be either a valid version or "0.0.0" (fallback)
+    assert _utils._LANGCHAIN_VERTEXAI_VERSION != ""
+
+
+async def test_get_user_agent_no_blocking_in_async_context() -> None:
+    """Test that get_user_agent doesn't perform blocking I/O in async context.
+
+    This test verifies that get_user_agent uses the cached version
+    and doesn't call metadata.version() which would be blocking I/O.
+    """
+    # Mock metadata.version to raise an error if it's called
+    with patch("langchain_google_vertexai._utils.metadata.version") as mock_version:
+        mock_version.side_effect = RuntimeError(
+            "metadata.version() should not be called - version should be cached"
+        )
+
+        # This should work without calling metadata.version()
+        client_lib_version, user_agent_str = get_user_agent(module="test-async")
+
+        # Verify the call didn't happen
+        mock_version.assert_not_called()
+
+        # Verify we got valid output (using the cached version)
+        assert "test-async" in client_lib_version
+        assert "langchain-google-vertexai" in user_agent_str
+
+
+def test_async_context_execution() -> None:
+    """Run the async test to ensure it works in event loop."""
+    asyncio.run(test_get_user_agent_no_blocking_in_async_context())
