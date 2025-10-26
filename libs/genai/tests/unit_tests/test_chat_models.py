@@ -146,10 +146,13 @@ def test_logprobs() -> None:
     )
     assert llm.logprobs == 10
 
+    # Create proper mock response with logprobs_result
     raw_response = {
         "candidates": [
             {
                 "content": {"parts": [{"text": "Test response"}]},
+                "finish_reason": 1,
+                "safety_ratings": [],
                 "logprobs_result": {
                     "top_candidates": [
                         {
@@ -161,6 +164,12 @@ def test_logprobs() -> None:
                 },
             }
         ],
+        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 2,
+            "total_token_count": 7,
+        },
     }
     response = GenerateContentResponse(raw_response)
 
@@ -185,25 +194,39 @@ def test_logprobs() -> None:
             ]
         }
 
+        mock_chat_with_retry.assert_called_once()
+        request = mock_chat_with_retry.call_args.kwargs["request"]
+        assert request.generation_config.logprobs == 1
+        assert request.generation_config.response_logprobs is True
 
-def test_client_transport() -> None:
+@patch("langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient")
+@patch("langchain_google_genai._genai_extension.v1betaGenerativeServiceClient")
+def test_client_transport(mock_client: Mock, mock_async_client: Mock) -> None:
     """Test client transport configuration."""
+    mock_client.return_value.transport = Mock()
+    mock_client.return_value.transport.kind = "grpc"
     model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
     assert model.client.transport.kind == "grpc"
 
+    mock_client.return_value.transport.kind = "rest"
     model = ChatGoogleGenerativeAI(
         model=MODEL_NAME, google_api_key="fake-key", transport="rest"
     )
     assert model.client.transport.kind == "rest"
 
     async def check_async_client() -> None:
+        mock_async_client.return_value.transport = Mock()
+        mock_async_client.return_value.transport.kind = "grpc_asyncio"
         model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
+        _ = model.async_client
         assert model.async_client.transport.kind == "grpc_asyncio"
 
         # Test auto conversion of transport to "grpc_asyncio" from "rest"
         model = ChatGoogleGenerativeAI(
             model=MODEL_NAME, google_api_key="fake-key", transport="rest"
         )
+        model.async_client_running = None
+        _ = model.async_client
         assert model.async_client.transport.kind == "grpc_asyncio"
 
     asyncio.run(check_async_client())

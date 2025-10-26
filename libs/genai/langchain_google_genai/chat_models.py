@@ -935,9 +935,10 @@ def _parse_response_candidate(
         if function_call_signatures and content is not None:
             for sig_block in function_call_signatures:
                 content = _append_to_content(content, sig_block)
-        if hasattr(response_candidate, "logprobs_result"):
-            response_metadata["logprobs"] = proto.Message.to_dict(
-                response_candidate.logprobs_result
+        if hasattr(response_candidate, "logprobs_result") and response_candidate.logprobs_result:
+            response_metadata["logprobs"] = MessageToDict(
+                response_candidate.logprobs_result._pb,
+                preserving_proto_field_name=True,
             )
         if content is None:
             content = ""
@@ -1969,6 +1970,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
+            "logprobs": self.logprobs,
         }
 
     def invoke(
