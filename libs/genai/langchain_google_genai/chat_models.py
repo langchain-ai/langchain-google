@@ -929,14 +929,16 @@ def _parse_response_candidate(
                 }
                 function_call_signatures.append(sig_block)
 
-    # Add function call signatures to content only if there's already other content
-    # This preserves backward compatibility where content is "" for
-    # function-only responses
+        # Add function call signatures to content only if there's already other content
+        # This preserves backward compatibility where content is "" for
+        # function-only responses
         if function_call_signatures and content is not None:
             for sig_block in function_call_signatures:
                 content = _append_to_content(content, sig_block)
         if hasattr(response_candidate, "logprobs_result"):
-            response_metadata["logprobs"] = proto.Message.to_dict(response_candidate.logprobs_result)
+            response_metadata["logprobs"] = proto.Message.to_dict(
+                response_candidate.logprobs_result
+            )
         if content is None:
             content = ""
     if isinstance(content, list) and any(
@@ -2063,8 +2065,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             }.items()
             if v is not None
         }
-        if getattr(self, "logprobs", None) is not None:       
-            gen_config["response_logprobs"] = True   
+        if getattr(self, "logprobs", None) is not None:
+            gen_config["response_logprobs"] = True
         if generation_config:
             gen_config = {**gen_config, **generation_config}
 

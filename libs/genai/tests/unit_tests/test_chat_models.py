@@ -137,6 +137,55 @@ def test_initialization_inside_threadpool() -> None:
         ).result()
 
 
+def test_logprobs() -> None:
+    """Test that logprobs parameter is set correctly and is in the response."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("secret-api-key"),
+        logprobs=10,
+    )
+    assert llm.logprobs == 10
+
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Test response"}]},
+                "logprobs_result": {
+                    "top_candidates": [
+                        {
+                            "candidates": [
+                                {"token": "Test", "log_probability": -0.1},
+                            ]
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+    response = GenerateContentResponse(raw_response)
+
+    with patch(
+        "langchain_google_genai.chat_models._chat_with_retry"
+    ) as mock_chat_with_retry:
+        mock_chat_with_retry.return_value = response
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key="test-key",
+            logprobs=1,
+        )
+        result = llm.invoke("test")
+        assert "logprobs" in result.response_metadata
+        assert result.response_metadata["logprobs"] == {
+            "top_candidates": [
+                {
+                    "candidates": [
+                        {"token": "Test", "log_probability": -0.1},
+                    ]
+                }
+            ]
+        }
+
+
 def test_client_transport() -> None:
     """Test client transport configuration."""
     model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
