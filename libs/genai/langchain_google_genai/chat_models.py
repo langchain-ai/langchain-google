@@ -932,12 +932,13 @@ def _parse_response_candidate(
     # Add function call signatures to content only if there's already other content
     # This preserves backward compatibility where content is "" for
     # function-only responses
-    if function_call_signatures and content is not None:
-        for sig_block in function_call_signatures:
-            content = _append_to_content(content, sig_block)
-
-    if content is None:
-        content = ""
+        if function_call_signatures and content is not None:
+            for sig_block in function_call_signatures:
+                content = _append_to_content(content, sig_block)
+        if hasattr(response_candidate, "logprobs_result"):
+            response_metadata["logprobs"] = proto.Message.to_dict(response_candidate.logprobs_result)
+        if content is None:
+            content = ""
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
@@ -1825,6 +1826,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     stop: Optional[List[str]] = None
     """Stop sequences for the model."""
 
+    logprobs: Optional[int] = None
+    """The number of logprobs to return."""
+
     streaming: Optional[bool] = None
     """Whether to stream responses from the model."""
 
@@ -2037,6 +2041,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "max_output_tokens": self.max_output_tokens,
                 "top_k": self.top_k,
                 "top_p": self.top_p,
+                "logprobs": getattr(self, "logprobs", None),
                 "response_modalities": self.response_modalities,
                 "thinking_config": (
                     (
@@ -2058,6 +2063,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             }.items()
             if v is not None
         }
+        if getattr(self, "logprobs", None) is not None:       
+            gen_config["response_logprobs"] = True   
         if generation_config:
             gen_config = {**gen_config, **generation_config}
 
