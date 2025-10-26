@@ -199,6 +199,8 @@ def test_logprobs() -> None:
         assert request.generation_config.logprobs == 1
         assert request.generation_config.response_logprobs is True
 
+
+@pytest.mark.enable_socket
 @patch("langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient")
 @patch("langchain_google_genai._genai_extension.v1betaGenerativeServiceClient")
 def test_client_transport(mock_client: Mock, mock_async_client: Mock) -> None:
@@ -240,6 +242,7 @@ def test_initalization_without_async() -> None:
     assert chat.async_client is None
 
 
+@pytest.mark.enable_socket
 def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         model = ChatGoogleGenerativeAI(
@@ -1356,6 +1359,7 @@ def test_grounding_metadata_multiple_parts() -> None:
     assert grounding["grounding_supports"][0]["segment"]["part_index"] == 1
 
 
+@pytest.mark.enable_socket
 @pytest.mark.parametrize(
     "is_async,mock_target,method_name",
     [
@@ -1482,6 +1486,7 @@ def test_timeout_streaming_parameter_handling(
         assert "timeout" not in call_kwargs
 
 
+@pytest.mark.enable_socket
 @pytest.mark.parametrize(
     "is_async,mock_target,method_name",
     [

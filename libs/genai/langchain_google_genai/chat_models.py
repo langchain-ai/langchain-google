@@ -935,7 +935,10 @@ def _parse_response_candidate(
         if function_call_signatures and content is not None:
             for sig_block in function_call_signatures:
                 content = _append_to_content(content, sig_block)
-        if hasattr(response_candidate, "logprobs_result") and response_candidate.logprobs_result:
+        if (
+            hasattr(response_candidate, "logprobs_result")
+            and response_candidate.logprobs_result
+        ):
             response_metadata["logprobs"] = MessageToDict(
                 response_candidate.logprobs_result._pb,
                 preserving_proto_field_name=True,
