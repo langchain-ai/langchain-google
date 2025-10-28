@@ -788,6 +788,8 @@ def _parse_response_candidate(
             except (AttributeError, TypeError):
                 thought_sig = None
 
+        has_function_call = hasattr(part, "function_call") and part.function_call
+        
         if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
@@ -797,7 +799,7 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
-        elif text is not None and text:
+        elif text is not None and text.strip() and not has_function_call:
             # Check if this text Part has a signature attached
             if thought_sig:
                 # Text with signature needs structured block to preserve signature
@@ -935,16 +937,16 @@ def _parse_response_candidate(
         if function_call_signatures and content is not None:
             for sig_block in function_call_signatures:
                 content = _append_to_content(content, sig_block)
-        if (
-            hasattr(response_candidate, "logprobs_result")
-            and response_candidate.logprobs_result
-        ):
-            response_metadata["logprobs"] = MessageToDict(
-                response_candidate.logprobs_result._pb,
-                preserving_proto_field_name=True,
-            )
-        if content is None:
-            content = ""
+    
+    if content is None:
+        content = ""
+    
+    if hasattr(response_candidate, "logprobs_result") and response_candidate.logprobs_result:
+        response_metadata["logprobs"] = MessageToDict(
+            response_candidate.logprobs_result._pb,
+            preserving_proto_field_name=True,
+        )
+    
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
