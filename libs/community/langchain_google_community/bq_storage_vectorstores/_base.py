@@ -277,7 +277,7 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                 {"url": "www.myurl2.com", "title": "title2"}]`)
         Returns:
             List of IDs from adding the texts into the `VectorStore`.
-        """
+        """  # noqa: E501
         import pandas as pd
 
         ids = [uuid.uuid4().hex for _ in texts]

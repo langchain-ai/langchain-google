@@ -128,8 +128,9 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         Returns:
             List of `Document` objects most similar to the query text and either
-                cosine distance in float for each or dictionary with both dense and sparse
-                scores if running hybrid search.
+                cosine distance in float for each or dictionary with both dense and
+                sparse scores if running hybrid search.
+
                 Higher score represents more similarity.
         """
         if sparse_embedding is not None and not isinstance(sparse_embedding, dict):
