@@ -141,24 +141,98 @@ def test_initialization_inside_threadpool() -> None:
         ).result()
 
 
-def test_client_transport() -> None:
+def test_logprobs() -> None:
+    """Test that logprobs parameter is set correctly and is in the response."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("secret-api-key"),
+        logprobs=10,
+    )
+    assert llm.logprobs == 10
+
+    # Create proper mock response with logprobs_result
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Test response"}]},
+                "finish_reason": 1,
+                "safety_ratings": [],
+                "logprobs_result": {
+                    "top_candidates": [
+                        {
+                            "candidates": [
+                                {"token": "Test", "log_probability": -0.1},
+                            ]
+                        }
+                    ]
+                },
+            }
+        ],
+        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 2,
+            "total_token_count": 7,
+        },
+    }
+    response = GenerateContentResponse(raw_response)
+
+    with patch(
+        "langchain_google_genai.chat_models._chat_with_retry"
+    ) as mock_chat_with_retry:
+        mock_chat_with_retry.return_value = response
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key="test-key",
+            logprobs=1,
+        )
+        result = llm.invoke("test")
+        assert "logprobs" in result.response_metadata
+        assert result.response_metadata["logprobs"] == {
+            "top_candidates": [
+                {
+                    "candidates": [
+                        {"token": "Test", "log_probability": -0.1},
+                    ]
+                }
+            ]
+        }
+
+        mock_chat_with_retry.assert_called_once()
+        request = mock_chat_with_retry.call_args.kwargs["request"]
+        assert request.generation_config.logprobs == 1
+        assert request.generation_config.response_logprobs is True
+
+
+@pytest.mark.enable_socket
+@patch("langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient")
+@patch("langchain_google_genai._genai_extension.v1betaGenerativeServiceClient")
+def test_client_transport(mock_client: Mock, mock_async_client: Mock) -> None:
     """Test client transport configuration."""
+    mock_client.return_value.transport = Mock()
+    mock_client.return_value.transport.kind = "grpc"
     model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
     assert model.client.transport.kind == "grpc"
 
+    mock_client.return_value.transport.kind = "rest"
     model = ChatGoogleGenerativeAI(
         model=MODEL_NAME, google_api_key="fake-key", transport="rest"
     )
     assert model.client.transport.kind == "rest"
 
     async def check_async_client() -> None:
+        mock_async_client.return_value.transport = Mock()
+        mock_async_client.return_value.transport.kind = "grpc_asyncio"
         model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
+        _ = model.async_client
         assert model.async_client.transport.kind == "grpc_asyncio"
 
         # Test auto conversion of transport to "grpc_asyncio" from "rest"
         model = ChatGoogleGenerativeAI(
             model=MODEL_NAME, google_api_key="fake-key", transport="rest"
         )
+        model.async_client_running = None
+        _ = model.async_client
         assert model.async_client.transport.kind == "grpc_asyncio"
 
     asyncio.run(check_async_client())
@@ -172,6 +246,7 @@ def test_initalization_without_async() -> None:
     assert chat.async_client is None
 
 
+@pytest.mark.enable_socket
 def test_initialization_with_async() -> None:
     async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
         model = ChatGoogleGenerativeAI(
@@ -1288,6 +1363,7 @@ def test_grounding_metadata_multiple_parts() -> None:
     assert grounding["grounding_supports"][0]["segment"]["part_index"] == 1
 
 
+@pytest.mark.enable_socket
 @pytest.mark.parametrize(
     "is_async,mock_target,method_name",
     [
@@ -1414,6 +1490,7 @@ def test_timeout_streaming_parameter_handling(
         assert "timeout" not in call_kwargs
 
 
+@pytest.mark.enable_socket
 @pytest.mark.parametrize(
     "is_async,mock_target,method_name",
     [
