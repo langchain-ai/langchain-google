@@ -27,6 +27,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.messages import content as types
 from langchain_core.messages.block_translators.google_genai import (
     _convert_to_v1_from_genai,
 )
@@ -36,6 +37,9 @@ from pydantic import SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
 from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai._compat import (
+    _convert_from_v1_to_generativelanguage_v1beta,
+)
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     _chat_with_retry,
@@ -1859,3 +1863,15 @@ def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     assert audio_block["type"] == "audio"
     assert "base64" in audio_block
     assert audio_block["base64"] == base64.b64encode(wav_bytes).decode()
+
+
+def test_compat() -> None:
+    block: types.TextContentBlock = {"type": "text", "text": "foo"}
+    result = _convert_from_v1_to_generativelanguage_v1beta([block], "google_genai")
+    expected = [{"text": "foo"}]
+    assert result == expected
+
+    block = {"type": "text", "text": "foo", "extras": {"signature": "bar"}}
+    result = _convert_from_v1_to_generativelanguage_v1beta([block], "google_genai")
+    expected = [{"text": "foo", "thought_signature": "bar"}]
+    assert result == expected
