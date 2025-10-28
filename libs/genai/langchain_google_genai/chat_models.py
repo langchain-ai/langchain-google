@@ -789,7 +789,7 @@ def _parse_response_candidate(
                 thought_sig = None
 
         has_function_call = hasattr(part, "function_call") and part.function_call
-        
+
         if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
@@ -937,16 +937,19 @@ def _parse_response_candidate(
         if function_call_signatures and content is not None:
             for sig_block in function_call_signatures:
                 content = _append_to_content(content, sig_block)
-    
+
     if content is None:
         content = ""
-    
-    if hasattr(response_candidate, "logprobs_result") and response_candidate.logprobs_result:
+
+    if (
+        hasattr(response_candidate, "logprobs_result")
+        and response_candidate.logprobs_result
+    ):
         response_metadata["logprobs"] = MessageToDict(
             response_candidate.logprobs_result._pb,
             preserving_proto_field_name=True,
         )
-    
+
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
