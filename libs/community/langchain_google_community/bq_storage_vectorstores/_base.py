@@ -89,17 +89,19 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         filter: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> List[Document]:
-        """Search documents by their ids or metadata values.
+        """Search documents by their IDs or metadata values.
 
         Args:
-            ids: List of ids of documents to retrieve from the vectorstore.
+            ids: List of IDs of documents to retrieve from the `VectorStore`.
             filter: Filter on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
+                ```json
+                {
+                    "str_property": "foo",
+                    "int_property": 123
+                }
+                ```
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         ...
 
@@ -242,16 +244,16 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         metadatas: Optional[List[dict]] = None,
         **kwargs: Any,
     ) -> List[str]:
-        """Run more texts through the embeddings and add to the vectorstore.
+        """Run more texts through the embeddings and add to the `VectorStore`.
 
         Args:
-            texts: List of strings to add to the vectorstore.
+            texts: List of strings to add to the `VectorStore`.
             metadatas: Optional list of metadata records associated with the texts.
                 (ie [{"url": "www.myurl1.com", "title": "title1"},
                 {"url": "www.myurl2.com", "title": "title2"}])
 
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         embs = self.embedding.embed_documents(texts)
         return self.add_texts_with_embeddings(
@@ -264,18 +266,18 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         embs: List[List[float]],
         metadatas: Optional[List[dict]] = None,
     ) -> List[str]:
-        """Add precomputed embeddings and relative texts / metadatas to the vectorstore.
+        """Add precomputed embeddings and relative texts / metadatas to the `VectorStore`.
 
         Args:
-            ids: List of unique ids in string format
-            texts: List of strings to add to the vectorstore.
+            ids: List of unique IDs in string format
+            texts: List of strings to add to the `VectorStore`.
             embs: List of lists of floats with text embeddings for texts.
             metadatas: Optional list of metadata records associated with the texts.
-                (ie [{"url": "www.myurl1.com", "title": "title1"},
-                {"url": "www.myurl2.com", "title": "title2"}])
+                (ie `[{"url": "www.myurl1.com", "title": "title1"},
+                {"url": "www.myurl2.com", "title": "title2"}]`)
         Returns:
-            List of ids from adding the texts into the vectorstore.
-        """
+            List of IDs from adding the texts into the `VectorStore`.
+        """  # noqa: E501
         import pandas as pd
 
         ids = [uuid.uuid4().hex for _ in texts]
@@ -307,12 +309,12 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         """Delete documents by record IDs
 
         Args:
-            ids: List of ids to delete.
+            ids: List of IDs to delete.
             **kwargs: Other keyword arguments that subclasses might use.
 
         Returns:
-            Optional[bool]: True if deletion is successful,
-            False otherwise, None if not implemented.
+            `True` if deletion is successful, `False` otherwise, `None` if not
+                implemented.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
@@ -338,12 +340,12 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         """Delete by vector ID or other criteria.
 
         Args:
-            ids: List of ids to delete.
+            ids: List of IDs to delete.
             **kwargs: Other keyword arguments that subclasses might use.
 
         Returns:
-            Optional[bool]: True if deletion is successful,
-            False otherwise, None if not implemented.
+            `True` if deletion is successful, `False` otherwise, `None` if not
+                implemented.
         """
         return await asyncio.get_running_loop().run_in_executor(
             None, partial(self.delete, **kwargs), ids
@@ -511,10 +513,10 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                                 "int_property": 123
                             }
             k: Number of Documents to return. Defaults to 5.
-            fetch_k: Number of Documents to fetch to pass to MMR algorithm.
-            lambda_mult: Number between 0 and 1 that determines the degree
+            fetch_k: Number of `Document` objects to fetch to pass to MMR algorithm.
+            lambda_mult: Number between `0` and `1` that determines the degree
                         of diversity among the results with 0 corresponding
-                        to maximum diversity and 1 to minimum diversity.
+                        to maximum diversity and `1` to minimum diversity.
                         Defaults to 0.5.
         Returns:
             List of Documents selected by maximal marginal relevance.
@@ -544,12 +546,11 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
                                 "str_property": "foo",
                                 "int_property": 123
                             }
-            k: Number of Documents to return. Defaults to 5.
-            fetch_k: Number of Documents to fetch to pass to MMR algorithm.
-            lambda_mult: Number between 0 and 1 that determines the degree
-                        of diversity among the results with 0 corresponding
-                        to maximum diversity and 1 to minimum diversity.
-                        Defaults to 0.5.
+            k: Number of Documents to return.
+            fetch_k: Number of `Document` objects to fetch to pass to MMR algorithm.
+            lambda_mult: Number between `0` and `1` that determines the degree
+                of diversity among the results with 0 corresponding
+                to maximum diversity and `1` to minimum diversity.
         Returns:
             List of Documents selected by maximal marginal relevance.
         """
