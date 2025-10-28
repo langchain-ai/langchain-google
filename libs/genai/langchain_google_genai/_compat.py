@@ -143,6 +143,10 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         # TextContentBlock
         if block_dict["type"] == "text":
             new_block = {"text": block_dict.get("text", "")}
+            if (
+                thought_signature := (block_dict.get("extras") or {}).get("signature")  # type: ignore[attr-defined]
+            ) and model_provider == "google_genai":
+                new_block["thought_signature"] = thought_signature
             new_content.append(new_block)
             # Citations are only handled on output. Can't pass them back :/
 
