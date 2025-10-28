@@ -40,9 +40,9 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
     folder_id: Optional[str] = None
     """The folder id to load from."""
     document_ids: Optional[List[str]] = None
-    """The document ids to load from."""
+    """The document IDs to load from."""
     file_ids: Optional[List[str]] = None
-    """The file ids to load from."""
+    """The file IDs to load from."""
     recursive: bool = False
     """Whether to load recursively. Only applies when folder_id is given."""
     file_types: Optional[Sequence[str]] = None
@@ -60,7 +60,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
     load_extended_metadata: bool = False
     """Whether to load extended metadata."""
     scopes: List[str] = ["https://www.googleapis.com/auth/drive.file"]
-    """The credential scopes to use for Google Drive API access. Default is 
+    """The credential scopes to use for Google Drive API access. Default is
     drive.file scope."""
 
     def _get_file_size_from_id(self, id: str) -> str:

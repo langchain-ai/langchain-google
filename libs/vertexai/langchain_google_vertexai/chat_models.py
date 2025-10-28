@@ -584,7 +584,7 @@ def _parse_examples(examples: List[BaseMessage]) -> List[InputOutputTextPair]:
 
 
 def _get_question(messages: List[BaseMessage]) -> HumanMessage:
-    """Get the human message at the end of a list of input messages to a chat model."""
+    """Get The `HumanMessage` at the end of a list of input messages to a chat model."""
     if not messages:
         msg = "You should provide at least one message to start the chat!"
         raise ValueError(msg)

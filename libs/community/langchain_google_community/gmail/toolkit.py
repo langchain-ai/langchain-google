@@ -37,7 +37,7 @@ class GmailToolkit(BaseToolkit):
         For example, this toolkit can be used to send emails on behalf of the
         associated account.
 
-        See https://python.langchain.com/docs/security for more information.
+        See https://docs.langchain.com/oss/python/security-policy for more information.
     """
 
     api_resource: Resource = Field(default_factory=build_gmail_service)
