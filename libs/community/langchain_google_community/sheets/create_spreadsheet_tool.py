@@ -106,19 +106,19 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
 
     Returns:
         Dictionary containing:
-            - success (bool): Always True for successful operations
-            - spreadsheet_id (str): The unique ID of the created spreadsheet
-            - spreadsheet_url (str): Direct URL to open the spreadsheet
-            - title (str): The spreadsheet title
-            - locale (str): The locale setting
-            - time_zone (str): The timezone setting
-            - auto_recalc (str): The recalculation setting
-            - created (bool): Whether creation succeeded
-            - initial_data_added (bool): Whether initial data was added
+            - success: Always True for successful operations
+            - spreadsheet_id: The unique ID of the created spreadsheet
+            - spreadsheet_url: Direct URL to open the spreadsheet
+            - title: The spreadsheet title
+            - locale: The locale setting
+            - time_zone: The timezone setting
+            - auto_recalc: The recalculation setting
+            - created: Whether creation succeeded
+            - initial_data_added: Whether initial data was added
                 (if initial_data provided)
-            - initial_data_cells_updated (int): Number of cells populated
+            - initial_data_cells_updated: Number of cells populated
                 (if data added)
-            - initial_data_range (str): Where data was placed (if data added)
+            - initial_data_range: Where data was placed (if data added)
 
     Configuration Options:
         - title: Required - The spreadsheet name

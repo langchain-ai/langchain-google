@@ -258,7 +258,7 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
         Evaluate findings from Model Armor.
 
         Args:
-            content (str): User prompt or model response.
+            content: User prompt or model response.
             findings (SanitizationResult): SanitizationResult object from
                 Model Armor sanitization request.
             config (Optional[RunnableConfig]): A config to use when invoking

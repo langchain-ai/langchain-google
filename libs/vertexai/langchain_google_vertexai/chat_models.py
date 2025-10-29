@@ -1798,7 +1798,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     @classmethod
     def get_lc_namespace(cls) -> List[str]:
-        """Get the namespace of the langchain object."""
+        """Get the namespace of the langchain object.
+
+        Returns:
+            `["langchain", "chat_models", "vertexai"]`
+        """
         return ["langchain", "chat_models", "vertexai"]
 
     @model_validator(mode="before")

@@ -23,8 +23,8 @@ class VertexAICheckGroundingWrapper(
     chunks. Output is of the type CheckGroundingResponse.
 
     Attributes:
-        project_id (str): Google Cloud project ID
-        location_id (str): Location ID for the ranking service.
+        project_id: Google Cloud project ID
+        location_id: Location ID for the ranking service.
         grounding_config (str):
             Required. The resource name of the grounding config, such as
             ``default_grounding_config``.
@@ -133,7 +133,7 @@ class VertexAICheckGroundingWrapper(
                 CheckGroundingResponse.Claim]):
                 Claim texts and citation info across all
                 claims in the answer candidate.
-            
+
             answer_with_citations (str):
                 Complete formed answer formatted with inline citations
         """
