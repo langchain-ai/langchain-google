@@ -80,13 +80,13 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         ```
     Returns:
         Dictionary containing:
-            - success (bool): Always True for successful operations
-            - spreadsheet_id (str): The spreadsheet ID
-            - title (str): Spreadsheet title
-            - locale (str): Spreadsheet locale (e.g., "en_US")
-            - time_zone (str): Spreadsheet timezone (e.g., "America/New_York")
-            - auto_recalc (str): Auto-recalculation setting
-            - default_format (Dict): Default cell format
+            - success: Always True for successful operations
+            - spreadsheet_id: The spreadsheet ID
+            - title: Spreadsheet title
+            - locale: Spreadsheet locale (e.g., "en_US")
+            - time_zone: Spreadsheet timezone (e.g., "America/New_York")
+            - auto_recalc: Auto-recalculation setting
+            - default_format: Default cell format
             - sheets (List[Dict]): List of sheet information with properties
             - named_ranges (List[Dict]): List of named ranges with locations
             - developer_metadata (List[Dict]): Developer metadata entries

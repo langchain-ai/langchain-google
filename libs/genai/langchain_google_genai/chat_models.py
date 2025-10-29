@@ -199,7 +199,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
     Args:
         generation_method (Callable): The chat generation method to be executed.
-        **kwargs (Any): Additional keyword arguments to pass to the generation method.
+        **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
         Any: The result from the chat generation method.
@@ -256,7 +256,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
     Args:
         generation_method (Callable): The chat generation method to be executed.
-        **kwargs (Any): Additional keyword arguments to pass to the generation method.
+        **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
         Any: The result from the chat generation method.
@@ -360,7 +360,7 @@ def _convert_to_parts(
                     if "mime_type" in part:
                         inline_data["mime_type"] = part["mime_type"]
                     else:
-                        # Guess mime type based on data field if not provided
+                        # Guess MIME type based on data field if not provided
                         source = cast(
                             "str",
                             part.get("url") or part.get("base64") or part.get("data"),

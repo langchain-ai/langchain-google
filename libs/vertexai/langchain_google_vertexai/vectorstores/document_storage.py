@@ -210,7 +210,7 @@ class GCSDocumentStorage(DocumentStorage):
         """Deletes one document by its key.
 
         Args:
-            key (str): Id of the document to delete.
+            key: Id of the document to delete.
         """
         blob_name = self._get_blob_name(key)
         blob = self._bucket.blob(blob_name)

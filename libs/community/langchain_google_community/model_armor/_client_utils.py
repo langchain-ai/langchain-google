@@ -20,7 +20,7 @@ def _get_model_armor_client(
     Initialize the Model Armor client.
 
     Args:
-        location (str): The location of the Model Armor client.
+        location: The location of the Model Armor client.
         credentials (Optional[credentials.Credentials]): The credentials to use when
             making API calls.
         transport (Optional[str]): The desired API transport method, can be either

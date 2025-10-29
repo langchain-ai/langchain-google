@@ -607,21 +607,19 @@ def test_chat_google_genai_single_call_with_history() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model_name", "convert_system_message_to_human"),
-    [(_MODEL, True), ("models/gemini-2.5-pro", False)],
+    "model_name",
+    [_MODEL, "models/gemini-2.5-pro"],
 )
 def test_chat_google_genai_system_message(
-    model_name: str, convert_system_message_to_human: bool
+    model_name: str,
 ) -> None:
     """Test system message handling in ChatGoogleGenerativeAI.
 
-    Parameterized to test different models and system message conversion settings.
-
-    Useful since I think some models (e.g. Gemini Pro) do not like system messages?
+    Tests that system messages are properly converted to system instructions
+    for different models.
     """
     model = ChatGoogleGenerativeAI(
         model=model_name,
-        convert_system_message_to_human=convert_system_message_to_human,
     )
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"

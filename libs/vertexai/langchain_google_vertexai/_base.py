@@ -204,7 +204,7 @@ class _VertexAICommon(_VertexAIBase):
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     """Token limit determines the maximum amount of text output from one prompt."""
     top_p: Optional[float] = None
-    """Tokens are selected from most probable to least until the sum of their 
+    """Tokens are selected from most probable to least until the sum of their
     probabilities equals the top-p value. Top-p is ignored for Codey models."""
     top_k: Optional[int] = None
     """How the model selects tokens for output, the next token is selected from
@@ -219,7 +219,7 @@ class _VertexAICommon(_VertexAIBase):
     """The default safety settings to use for all generations.
 
         For example:
-
+            ```python
             from langchain_google_vertexai import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
@@ -229,6 +229,7 @@ class _VertexAICommon(_VertexAIBase):
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             }
+            ```
     """  # noqa: E501
 
     tuned_model_name: Optional[str] = None
