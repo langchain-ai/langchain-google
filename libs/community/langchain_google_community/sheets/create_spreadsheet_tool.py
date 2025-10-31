@@ -66,6 +66,7 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
     [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
     Creates spreadsheets with configurable properties and optional initial data.
 
+
     !!! note "Authentication Required"
         Requires OAuth2 authentication. Use `api_resource` parameter with
         authenticated Google Sheets service.
