@@ -35,6 +35,7 @@ class CalendarToolkit(BaseToolkit):
     Provides tools for calendar operations including creating, searching,
     updating, moving, and deleting events.
 
+
     !!! warning "Security"
         This toolkit contains tools that can read and modify the state of a
         service. For example, it can create, update, and delete calendar events
