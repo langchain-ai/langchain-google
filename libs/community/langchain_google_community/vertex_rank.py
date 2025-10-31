@@ -64,7 +64,7 @@ class VertexAIRank(BaseDocumentCompressor):
             self.client = self._get_rank_service_client()
 
     def _get_rank_service_client(self) -> "discoveryengine_v1alpha.RankServiceClient":
-        """Get RankServiceClient for Vertex AI Ranking API calls.
+        """Get `RankServiceClient` for Vertex AI Ranking API calls.
 
         Returns:
             Client instance for ranking API.

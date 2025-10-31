@@ -67,7 +67,7 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         sheets (list): List of sheet information with properties.
         named_ranges (list): List of named ranges with locations.
         developer_metadata (list): Developer metadata entries.
-        grid_data (list): Detailed cell data (when include_grid_data=True).
+        grid_data (list): Detailed cell data (when `include_grid_data=True`).
 
     ??? example "Basic Usage"
         Get basic spreadsheet information:

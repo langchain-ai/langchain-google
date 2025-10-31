@@ -38,11 +38,10 @@ class GmailToolkit(BaseToolkit):
         service. For example, it can send emails and read messages on behalf
         of the associated account.
 
-        See [Security Best Practices](https://python.langchain.com/docs/security)
+        See [Security Best Practices](https://docs.langchain.com/oss/python/security-policy)
         for more information.
     """
 
-    # TODO: update to site-relative /security/ after docs are ported
 
     api_resource: Resource = Field(default_factory=build_gmail_service)
 

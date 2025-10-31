@@ -84,7 +84,9 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
         initial_data_range (str): Range where data was placed (if data added).
 
     ???+ example "Basic Usage"
+
         Create a simple spreadsheet:
+
         ```python
         from langchain_google_community.sheets import SheetsCreateSpreadsheetTool
 
@@ -93,8 +95,10 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
         print(f"Created: {result['spreadsheet_url']}")
         ```
 
+
     ??? example "With Initial Data"
         Create spreadsheet with pre-populated data:
+
         ```python
         result = tool.run(
             {
@@ -109,8 +113,10 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
         )
         ```
 
+
     ??? example "Custom Configuration"
         Create with locale and timezone settings:
+
         ```python
         result = tool.run(
             {
@@ -148,11 +154,11 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
 
         Args:
             title: Title of the new spreadsheet.
-            locale: Locale of the spreadsheet. Default: 'en_US'.
-            time_zone: Timezone of the spreadsheet. Default: 'America/New_York'.
-            auto_recalc: Recalculation setting. Default: 'ON_CHANGE'.
+            locale: Locale of the spreadsheet.
+            time_zone: Timezone of the spreadsheet.
+            auto_recalc: Recalculation setting.
             initial_data: Optional 2D array of initial data to populate.
-            initial_range: Range where initial data should be placed. Default: 'A1'.
+            initial_range: Range where initial data should be placed.
             run_manager: Optional callback manager.
 
         Returns:
