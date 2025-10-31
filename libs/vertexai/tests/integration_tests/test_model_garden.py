@@ -21,7 +21,7 @@ from langchain_google_vertexai.model_garden import (
 )
 
 _ANTHROPIC_LOCATION = "us-east5"
-_ANTHROPIC_CLAUDE35_MODEL_NAME = "claude-3-5-sonnet-v2@20241022"
+_ANTHROPIC_CLAUDE_MODEL_NAME = "claude-sonnet-4-5@20250929"
 
 
 @pytest.mark.extended
@@ -123,9 +123,7 @@ def test_anthropic() -> None:
     )
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
-    response = model.invoke(
-        [context, message], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
-    )
+    response = model.invoke([context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME)
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -142,7 +140,7 @@ def test_anthropic_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message], model=_ANTHROPIC_CLAUDE35_MODEL_NAME)
+    sync_response = model.stream([message], model=_ANTHROPIC_CLAUDE_MODEL_NAME)
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
@@ -166,7 +164,7 @@ def test_anthropic_thinking_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message], model="claude-3-7-sonnet@20250219")
+    sync_response = model.stream([message], model="claude-sonnet-4-5@20250929")
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
@@ -189,7 +187,7 @@ async def test_anthropic_async() -> None:
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
     response = await model.ainvoke(
-        [context, message], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME, temperature=0.2
+        [context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME, temperature=0.2
     )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -223,7 +221,7 @@ def test_anthropic_tool_calling() -> None:
     # Test .bind_tools with BaseModel
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     model_with_tools = model.bind_tools(
-        [MyModel], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+        [MyModel], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "MyModel")
@@ -233,7 +231,7 @@ def test_anthropic_tool_calling() -> None:
         """Invoke this with names and ages."""
 
     model_with_tools = model.bind_tools(
-        [my_model], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+        [my_model], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "my_model")
@@ -244,7 +242,7 @@ def test_anthropic_tool_calling() -> None:
         """Invoke this with names and ages."""
 
     model_with_tools = model.bind_tools(
-        [my_tool], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+        [my_tool], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "my_tool")
@@ -274,7 +272,7 @@ def test_anthropic_with_structured_output() -> None:
     model = ChatAnthropicVertex(
         project=project,
         location=location,
-        model=_ANTHROPIC_CLAUDE35_MODEL_NAME,
+        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
     )
 
     class MyModel(BaseModel):
@@ -303,7 +301,7 @@ def test_anthropic_multiturn_tool_calling() -> None:
     model = ChatAnthropicVertex(
         project=project,
         location=location,
-        model=_ANTHROPIC_CLAUDE35_MODEL_NAME,
+        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
     )
 
     @tool
@@ -349,7 +347,7 @@ def test_anthropic_tool_error_handling() -> None:
     model = ChatAnthropicVertex(
         project=project,
         location=location,
-        model=_ANTHROPIC_CLAUDE35_MODEL_NAME,
+        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
     )
 
     @tool

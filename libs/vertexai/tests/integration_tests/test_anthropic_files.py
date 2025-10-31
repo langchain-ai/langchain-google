@@ -13,7 +13,7 @@ from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 def test_pdf_gcs_uri() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
-        model="claude-3-5-sonnet-v2@20241022",
+        model="claude-sonnet-4-5@20250929",
         location="us-east5",
         temperature=0.8,
         project=os.environ["PROJECT_ID"],
@@ -37,7 +37,7 @@ def test_pdf_gcs_uri() -> None:
 def test_pdf_byts() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
-        model="claude-3-5-sonnet-v2@20241022",
+        model="claude-sonnet-4-5@20250929",
         location="us-east5",
         temperature=0.8,
         project=os.environ["PROJECT_ID"],
@@ -64,7 +64,7 @@ def test_https_image() -> None:
     uri = "https://picsum.photos/seed/picsum/200/300.jpg"
 
     llm = ChatAnthropicVertex(
-        model="claude-3-5-sonnet-v2@20241022",
+        model="claude-sonnet-4-5@20250929",
         location="us-east5",
         temperature=0.8,
         project=os.environ["PROJECT_ID"],
