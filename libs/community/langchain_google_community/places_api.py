@@ -21,12 +21,15 @@ class GooglePlacesAPIWrapper(BaseModel):
     including addresses, phone numbers, and websites.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[places]
         ```
 
     !!! note "Setup Required"
+
         Set `GPLACES_API_KEY` environment variable or pass `gplaces_api_key`
         parameter with your Google Maps Platform API key.
 

@@ -97,6 +97,7 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
 
 
     ??? example "With Initial Data"
+
         Create spreadsheet with pre-populated data:
 
         ```python
@@ -115,6 +116,7 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
 
 
     ??? example "Custom Configuration"
+
         Create with locale and timezone settings:
 
         ```python

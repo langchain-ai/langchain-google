@@ -76,6 +76,7 @@ class GMailLoader(BaseChatLoader):
     only the immediate previous email for context.
 
     !!! note "Setup Required"
+
         Requires Google Developer Account with Gmail API enabled. See
         [Gmail API documentation](https://developers.google.com/gmail/api/guides)
         for setup instructions.

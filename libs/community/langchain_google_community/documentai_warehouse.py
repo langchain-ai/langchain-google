@@ -32,7 +32,9 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
     for more information.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[docai]
         ```

@@ -60,6 +60,7 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
     Updates cell values in a specified range, overwriting existing data.
 
     !!! note "Authentication Required"
+
         Requires OAuth2 authentication. Use `api_resource` parameter with
         authenticated Google Sheets service.
 
@@ -72,7 +73,9 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
         updated_cells (int): Total number of cells updated.
 
     ???+ example "Basic Usage"
+
         Update a range with data:
+
         ```python
         from langchain_google_community.sheets import SheetsUpdateValuesTool
 
@@ -91,7 +94,9 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
         ```
 
     ??? example "With Formulas"
+
         Update cells with formulas using USER_ENTERED:
+
         ```python
         result = tool.run(
             {
@@ -225,6 +230,7 @@ class SheetsAppendValuesTool(SheetsBaseTool):
     data.
 
     !!! note "Authentication Required"
+
         Requires OAuth2 authentication. Use `api_resource` parameter with
         authenticated Google Sheets service.
 
@@ -238,7 +244,9 @@ class SheetsAppendValuesTool(SheetsBaseTool):
         updated_cells (int): Total number of cells updated.
 
     ???+ example "Basic Usage"
+
         Append new records to a table:
+
         ```python
         from langchain_google_community.sheets import SheetsAppendValuesTool
 
@@ -256,7 +264,9 @@ class SheetsAppendValuesTool(SheetsBaseTool):
         ```
 
     ??? example "With Insert Rows Option"
+
         Insert rows instead of overwriting:
+
         ```python
         result = tool.run(
             {
@@ -296,8 +306,8 @@ class SheetsAppendValuesTool(SheetsBaseTool):
             spreadsheet_id: ID of the spreadsheet.
             range: A1 notation table range to append to.
             values: 2D array of values to append.
-            value_input_option: How to interpret input values. Default: USER_ENTERED.
-            insert_data_option: How to handle existing data. Default: INSERT_ROWS.
+            value_input_option: How to interpret input values.
+            insert_data_option: How to handle existing data.
             run_manager: Optional callback manager.
 
         Returns:
@@ -384,10 +394,12 @@ class SheetsClearValuesTool(SheetsBaseTool):
     structure.
 
     !!! note "Authentication Required"
+
         Requires OAuth2 authentication. Use `api_resource` parameter with
         authenticated Google Sheets service.
 
     !!! info "Formatting Preserved"
+
         Only values are cleared. Formatting, borders, colors, fonts, and data
         validation rules remain intact.
 
@@ -397,7 +409,9 @@ class SheetsClearValuesTool(SheetsBaseTool):
         cleared_range (str): The A1 notation of the cleared range.
 
     ???+ example "Basic Usage"
+
         Clear a range of cells:
+
         ```python
         from langchain_google_community.sheets import SheetsClearValuesTool
 
@@ -412,7 +426,7 @@ class SheetsClearValuesTool(SheetsBaseTool):
 
     Raises:
         ValueError: If write permissions unavailable or validation fails.
-        Exception: If spreadsheet_id is invalid, range is malformed, or API
+        Exception: If `spreadsheet_id` is invalid, range is malformed, or API
             errors occur.
     """
 
@@ -522,7 +536,9 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
             and updated_cells.
 
     ???+ example "Basic Usage"
+
         Update multiple ranges in one call:
+
         ```python
         from langchain_google_community.sheets import SheetsBatchUpdateValuesTool
 
@@ -543,7 +559,9 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
         ```
 
     ??? example "Update Multiple Sheets"
+
         Update ranges across different sheets:
+
         ```python
         result = tool.run(
             {

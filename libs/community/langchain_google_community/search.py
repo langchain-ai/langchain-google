@@ -15,6 +15,7 @@ class GoogleSearchAPIWrapper(BaseModel):
     with snippets, titles, and links.
 
     !!! note "Setup Required"
+
         1. Enable [Custom Search API](https://console.cloud.google.com/apis/library/customsearch.googleapis.com)
         2. Create API key in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
         3. Create custom search engine at [Programmable Search Engine](https://programmablesearchengine.google.com)

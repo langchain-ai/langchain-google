@@ -47,7 +47,9 @@ class DocAIParser(BaseBlobParser):
     for detailed information.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[docai]
         ```
@@ -282,16 +284,23 @@ class DocAIParser(BaseBlobParser):
             process_options_kwargs: optional parameters to pass to the Document
                 AI processors
 
-        This is a long-running operation. A recommended way is to decouple
-            parsing from creating LangChain Documents:
-            >>> operations = parser.docai_parse(blobs, gcs_path)
-            >>> parser.is_running(operations)
-            You can get operations names and save them:
-            >>> names = [op.operation.name for op in operations]
-            And when all operations are finished, you can use their results:
-            >>> operations = parser.operations_from_names(operation_names)
-            >>> results = parser.get_results(operations)
-            >>> docs = parser.parse_from_results(results)
+        ??? example "Long-running operation"
+
+            ```python
+            # Submit async jobs
+            operations = parser.docai_parse(blobs, gcs_path)
+
+            # Optionally poll until finished
+            parser.is_running(operations)
+
+            # Save operation names
+            operation_names = [op.operation.name for op in operations]
+
+            # Later, load results and build Documents
+            operations = parser.operations_from_names(operation_names)
+            results = parser.get_results(operations)
+            docs = parser.parse_from_results(results)
+            ```
         """
         output_path = gcs_output_path or self._gcs_output_path
         if not output_path:

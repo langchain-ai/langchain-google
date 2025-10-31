@@ -14,7 +14,9 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
     Translation API with support for custom models and glossaries.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[translate]
         ```
@@ -42,10 +44,10 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
 
         Args:
             project_id: Google Cloud Project ID.
-            location: Translation service location. Default: 'global'.
-            model_id: Custom translation model ID. Optional.
-            glossary_id: Glossary ID for specialized translations. Optional.
-            api_endpoint: Regional API endpoint. Optional.
+            location: Translation service location.
+            model_id: Custom translation model ID.
+            glossary_id: Glossary ID for specialized translations.
+            api_endpoint: Regional API endpoint.
 
         Raises:
             ImportError: If `google-cloud-translate` package is not installed.

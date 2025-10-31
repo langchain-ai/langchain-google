@@ -14,7 +14,9 @@ class GCSDirectoryLoader(BaseLoader):
     Loads all files from a GCS bucket with optional prefix filtering.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[gcs]
         ```
@@ -34,7 +36,7 @@ class GCSDirectoryLoader(BaseLoader):
             bucket: The name of the GCS bucket.
             prefix: The prefix of the GCS bucket.
             loader_func: A loader function that instantiates a loader based on a
-                file_path argument. If nothing is provided, the  GCSFileLoader
+                file_path argument. If nothing is provided, the  `GCSFileLoader`
                 would use its default loader.
         """
         self.project_name = project_name

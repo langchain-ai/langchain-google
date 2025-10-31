@@ -44,12 +44,15 @@ class TextToSpeechTool(BaseTool):
     Synthesizes audio from text with support for multiple languages and voice options.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[texttospeech]
         ```
 
     !!! note "Setup Required"
+
         Follow [setup instructions](https://cloud.google.com/text-to-speech/docs/before-you-begin)
         to configure Google Cloud Text-to-Speech API.
     """
@@ -87,8 +90,8 @@ class TextToSpeechTool(BaseTool):
         Args:
             input_text: Text to convert to speech.
             language_code: Language code (e.g., 'en-US', 'de-DE'). Default: 'en-US'.
-            ssml_gender: Voice gender. Default: NEUTRAL.
-            audio_encoding: Audio format. Default: MP3.
+            ssml_gender: Voice gender.
+            audio_encoding: Audio format.
             run_manager: Optional callback manager.
 
         Returns:

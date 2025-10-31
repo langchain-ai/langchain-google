@@ -42,7 +42,6 @@ class GmailToolkit(BaseToolkit):
         for more information.
     """
 
-
     api_resource: Resource = Field(default_factory=build_gmail_service)
 
     model_config = ConfigDict(

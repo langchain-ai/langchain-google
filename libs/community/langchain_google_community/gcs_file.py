@@ -15,7 +15,9 @@ class GCSFileLoader(BaseLoader):
     Downloads and loads a single file from GCS bucket using configurable loader.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[gcs]
         ```
@@ -39,6 +41,7 @@ class GCSFileLoader(BaseLoader):
                 UnstructuredFileLoader is used.
 
         ??? example "Using Alternative PDF Loader"
+
             ```python
             from langchain_community.document_loaders import PyPDFLoader
 
@@ -46,6 +49,7 @@ class GCSFileLoader(BaseLoader):
             ```
 
         ??? example "Using UnstructuredFileLoader with Custom Arguments"
+
             ```python
             from langchain_community.document_loaders import UnstructuredFileLoader
 

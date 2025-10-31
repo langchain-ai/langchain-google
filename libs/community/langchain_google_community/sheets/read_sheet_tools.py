@@ -213,7 +213,9 @@ class SheetsReadDataTool(BaseReadTool):
         processing_options (dict): Applied processing options.
 
     ???+ example "Basic Usage"
+
         Read data from a range:
+
         ```python
         from langchain_google_community.sheets import SheetsReadDataTool
 
@@ -228,7 +230,9 @@ class SheetsReadDataTool(BaseReadTool):
         ```
 
     ??? example "Convert to Records"
+
         Convert 2D array to list of dictionaries using first row as headers:
+
         ```python
         result = tool.run(
             {
@@ -241,7 +245,9 @@ class SheetsReadDataTool(BaseReadTool):
         ```
 
     ??? example "Custom Rendering Options"
+
         Get unformatted values and formulas:
+
         ```python
         result = tool.run(
             {
@@ -393,7 +399,9 @@ class SheetsBatchReadDataTool(BaseReadTool):
         numericise_values (bool): Whether values were numericised.
 
     ???+ example "Basic Usage"
+
         Read multiple ranges in one call:
+
         ```python
         from langchain_google_community.sheets import SheetsBatchReadDataTool
 
@@ -409,7 +417,9 @@ class SheetsBatchReadDataTool(BaseReadTool):
         ```
 
     ??? example "With Record Conversion"
+
         Read and convert to dictionaries:
+
         ```python
         result = tool.run(
             {
@@ -635,9 +645,11 @@ class SheetsFilteredReadDataTool(BaseReadTool):
     formatting.
 
     !!! note "Authentication Required"
+
         Requires OAuth2 authentication (not API key).
 
     !!! warning "Range Selection Only"
+
         This tool is for RANGE SELECTION, not conditional filtering like
         "score > 50". For conditional filtering, create a Filter View using
         Sheets UI or batchUpdate API.
@@ -650,7 +662,9 @@ class SheetsFilteredReadDataTool(BaseReadTool):
             and data segments.
 
     ???+ example "Basic Usage with A1 Notation"
+
         Read using A1 notation:
+
         ```python
         from langchain_google_community.sheets import SheetsFilteredReadDataTool
 
@@ -665,7 +679,9 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         ```
 
     ??? example "Using Grid Coordinates"
+
         Read using grid coordinates:
+
         ```python
         result = tool.run(
             {
@@ -718,14 +734,11 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         Args:
             spreadsheet_id: ID of the spreadsheet to read from.
             data_filters: List of DataFilter objects specifying ranges to read.
-            include_grid_data: Include detailed cell formatting. Default: False.
+            include_grid_data: Include detailed cell formatting.
             value_render_option: How values should be rendered.
-                Default: FORMATTED_VALUE.
             date_time_render_option: How dates/times should be rendered.
-                Default: SERIAL_NUMBER.
-            convert_to_records: Convert to list of dictionaries. Default: False.
+            convert_to_records: Convert to list of dictionaries.
             numericise_values: Convert string numbers to numeric types.
-                Default: True.
             run_manager: Optional callback manager.
 
         Returns:

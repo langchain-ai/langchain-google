@@ -23,7 +23,9 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
     Supports loading from folders, specific documents, or file IDs with authentication.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[drive]
         ```

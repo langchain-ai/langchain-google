@@ -23,7 +23,9 @@ class SpeechToTextLoader(BaseLoader):
     for detailed information.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[speech]
         ```

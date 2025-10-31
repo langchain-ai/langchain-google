@@ -44,7 +44,6 @@ class CalendarToolkit(BaseToolkit):
         for more information.
     """
 
-
     api_resource: Resource = Field(default_factory=build_calendar_service)
 
     model_config = ConfigDict(

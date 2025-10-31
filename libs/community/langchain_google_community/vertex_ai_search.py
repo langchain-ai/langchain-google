@@ -269,7 +269,8 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
     For a detailed explanation of the Vertex AI Search concepts
     and configuration parameters, refer to the product documentation.
-    https://cloud.google.com/generative-ai-app-builder/docs/enterprise-search-introduction
+    For a detailed explanation of Vertex AI Search concepts and configuration parameters
+    see the [Vertex AI Search documentation](https://cloud.google.com/generative-ai-app-builder/docs/enterprise-search-introduction).
     """
 
     filter: Optional[str] = None

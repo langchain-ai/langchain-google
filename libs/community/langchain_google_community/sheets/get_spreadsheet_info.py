@@ -70,7 +70,9 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         grid_data (list): Detailed cell data (when `include_grid_data=True`).
 
     ??? example "Basic Usage"
+
         Get basic spreadsheet information:
+
         ```python
         from langchain_google_community.sheets import SheetsGetSpreadsheetInfoTool
 
@@ -83,7 +85,9 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         ```
 
     ??? example "With Specific Fields"
+
         Get only specific fields to reduce response size:
+
         ```python
         result = tool.run(
             {
@@ -94,7 +98,9 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         ```
 
     ??? example "Include Grid Data"
+
         Get detailed cell data and formatting:
+
         ```python
         result = tool.run(
             {
@@ -135,10 +141,8 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         Args:
             spreadsheet_id: ID of the spreadsheet to retrieve information about.
             include_grid_data: Whether to include detailed grid data.
-                Default: False.
-            include_formatting: Whether to include cell formatting. Default: False.
+            include_formatting: Whether to include cell formatting.
             include_validation: Whether to include data validation rules.
-                Default: False.
             ranges: Specific ranges to get information about.
             fields: Specific fields to return (reduces response size).
             run_manager: Optional callback manager.
@@ -154,10 +158,10 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
             sheets (list): List of sheet information with properties.
             named_ranges (list): List of named ranges with locations.
             developer_metadata (list): Developer metadata entries.
-            grid_data (list): Detailed cell data (if include_grid_data=True).
+            grid_data (list): Detailed cell data (when `include_grid_data=True`).
 
         Raises:
-            ValueError: If spreadsheet_id is invalid.
+            ValueError: If `spreadsheet_id` is invalid.
             Exception: For API errors or connection issues.
         """
         try:

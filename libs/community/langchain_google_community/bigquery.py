@@ -27,7 +27,9 @@ class BigQueryLoader(BaseLoader):
     `metadata`. By default, all columns map to `page_content`.
 
     !!! note "Installation"
+
         Requires additional dependencies:
+
         ```bash
         pip install langchain-google-community[bigquery]
         ```

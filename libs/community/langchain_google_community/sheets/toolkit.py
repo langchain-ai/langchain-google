@@ -40,10 +40,12 @@ class SheetsToolkit(BaseToolkit):
     Provides comprehensive Google Sheets integration with read and write capabilities.
 
     !!! warning "Security Note"
+
         This toolkit contains tools that can read and write data to Google Sheets.
         Ensure proper authentication and access controls.
 
     !!! info "Authentication Requirements"
+
         - **Read operations**: Require only API key (for public spreadsheets)
         - **Write operations**: Require OAuth2 credentials (api_resource)
     """

@@ -132,9 +132,9 @@ class GoogleGeocodingAPIWrapper(BaseModel):
         Args:
             query: Location(s) to geocode (e.g., "Eiffel Tower" or
                 "Times Square, Central Park").
-            language: Language code for results (e.g., "en", "fr", "ja"). Optional.
-            region: Region bias (e.g., "us", "fr", "jp"). Optional.
-            max_results: Maximum number of results to return. Default: 10.
+            language: Language code for results (e.g., "en", "fr", "ja").
+            region: Region bias (e.g., "us", "fr", "jp").
+            max_results: Maximum number of results to return.
 
         Returns:
             status (str): Request status ("OK" or error status).
