@@ -40,11 +40,10 @@ class CalendarToolkit(BaseToolkit):
         service. For example, it can create, update, and delete calendar events
         on behalf of the associated account.
 
-        See [Security Best Practices](https://python.langchain.com/docs/security)
+        See [Security Best Practices](https://docs.langchain.com/oss/python/security-policy)
         for more information.
     """
 
-    # TODO: update to site-relative /security/ after docs are ported
 
     api_resource: Resource = Field(default_factory=build_calendar_service)
 
