@@ -34,6 +34,7 @@ class GmailToolkit(BaseToolkit):
     searching emails, and retrieving messages and threads.
 
     !!! warning "Security"
+
         This toolkit contains tools that can read and modify the state of a
         service. For example, it can send emails and read messages on behalf
         of the associated account.
