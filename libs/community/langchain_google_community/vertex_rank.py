@@ -25,8 +25,8 @@ class VertexAIRank(BaseDocumentCompressor):
     and validation features, respectively.
 
     Attributes:
-        project_id (str): Google Cloud project ID
-        location_id (str): Location ID for the ranking service.
+        project_id: Google Cloud project ID
+        location_id: Location ID for the ranking service.
         ranking_config (str):
             Required. The  name of the rank service config, such as default_config.
             It is set to default_config by default if unspecified.
@@ -34,7 +34,7 @@ class VertexAIRank(BaseDocumentCompressor):
             The identifier of the model to use. It is one of:
 
             - ``semantic-ranker-512@latest``: Semantic ranking model
-              with maximum input token size 512.
+                with maximum input token size 512.
 
             It is set to ``semantic-ranker-512@latest`` by default if unspecified.
         top_n (int):

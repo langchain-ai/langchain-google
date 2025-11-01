@@ -199,7 +199,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
     Args:
         generation_method (Callable): The chat generation method to be executed.
-        **kwargs (Any): Additional keyword arguments to pass to the generation method.
+        **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
         Any: The result from the chat generation method.
@@ -256,7 +256,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
     Args:
         generation_method (Callable): The chat generation method to be executed.
-        **kwargs (Any): Additional keyword arguments to pass to the generation method.
+        **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
         Any: The result from the chat generation method.
@@ -360,7 +360,7 @@ def _convert_to_parts(
                     if "mime_type" in part:
                         inline_data["mime_type"] = part["mime_type"]
                     else:
-                        # Guess mime type based on data field if not provided
+                        # Guess MIME type based on data field if not provided
                         source = cast(
                             "str",
                             part.get("url") or part.get("base64") or part.get("data"),
@@ -1960,6 +1960,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "n": self.n,
             "safety_settings": self.safety_settings,
             "response_modalities": self.response_modalities,
+            "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
         }
@@ -2077,6 +2078,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gapic_response_schema = _dict_to_gapic_schema(response_schema)
             if gapic_response_schema is not None:
                 gen_config["response_schema"] = gapic_response_schema
+
+        media_resolution = kwargs.get("media_resolution", self.media_resolution)
+        if media_resolution is not None:
+            gen_config["media_resolution"] = media_resolution
+
         return GenerationConfig(**gen_config)
 
     def _generate(

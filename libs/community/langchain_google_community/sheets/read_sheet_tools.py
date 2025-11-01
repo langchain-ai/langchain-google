@@ -242,13 +242,13 @@ class SheetsReadDataTool(BaseReadTool):
 
     Returns:
         Dictionary containing:
-            - success (bool): Always True for successful operations
-            - spreadsheet_id (str): The spreadsheet ID
-            - range (str): The actual range that was read (A1 notation)
+            - success: Always True for successful operations
+            - spreadsheet_id: The spreadsheet ID
+            - range: The actual range that was read (A1 notation)
             - values (List or List[Dict]): Processed data (2D array or records)
-            - major_dimension (str): The major dimension ("ROWS" or "COLUMNS")
-            - render_options (Dict): Applied rendering options
-            - processing_options (Dict): Applied processing options
+            - major_dimension: The major dimension ("ROWS" or "COLUMNS")
+            - render_options: Applied rendering options
+            - processing_options: Applied processing options
 
     Data Processing Options:
         - value_render_option: Control how cell values are rendered
@@ -420,18 +420,18 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
     Returns:
         Dictionary containing:
-            - success (bool): Always True for successful operations
-            - spreadsheet_id (str): The spreadsheet ID
+            - success: Always True for successful operations
+            - spreadsheet_id: The spreadsheet ID
             - requested_ranges (List[str]): The ranges that were requested
-            - total_ranges (int): Total number of ranges processed
-            - successful_ranges (int): Number of successfully processed ranges
-            - failed_ranges (int): Number of failed ranges
+            - total_ranges: Total number of ranges processed
+            - successful_ranges: Number of successfully processed ranges
+            - failed_ranges: Number of failed ranges
             - results (List[Dict]): List of results for each range
-            - value_render_option (str): Applied value rendering option
-            - date_time_render_option (str): Applied date/time rendering option
-            - major_dimension (str): Applied major dimension
-            - convert_to_records (bool): Whether data was converted to records
-            - numericise_values (bool): Whether values were numericised
+            - value_render_option: Applied value rendering option
+            - date_time_render_option: Applied date/time rendering option
+            - major_dimension: Applied major dimension
+            - convert_to_records: Whether data was converted to records
+            - numericise_values: Whether values were numericised
 
     Performance Benefits:
         - Single API call: Reduces network overhead and rate limiting
@@ -729,13 +729,13 @@ class SheetsFilteredReadDataTool(BaseReadTool):
 
     Returns:
         Dictionary containing:
-            - success (bool): Always True for successful operations
-            - spreadsheet_id (str): The spreadsheet ID
-            - properties (Dict): Spreadsheet-level properties
+            - success: Always True for successful operations
+            - spreadsheet_id: The spreadsheet ID
+            - properties: Spreadsheet-level properties
             - sheets (List[Dict]): List of sheets with filtered data
                 Each sheet contains:
-                - properties (Dict): Sheet properties (title, sheetId, etc.)
-                - data (List): List of data segments
+                - properties: Sheet properties (title, sheetId, etc.)
+                - data: List of data segments
                     Each segment is either List[List] or List[Dict]
                     depending on convert_to_records setting
 

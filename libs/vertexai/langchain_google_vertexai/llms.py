@@ -80,7 +80,11 @@ class VertexAI(_VertexAICommon, BaseLLM):
 
     @classmethod
     def get_lc_namespace(cls) -> List[str]:
-        """Get the namespace of the langchain object."""
+        """Get the namespace of the langchain object.
+
+        Returns:
+            `["langchain", "llms", "vertexai"]`
+        """
         return ["langchain", "llms", "vertexai"]
 
     @model_validator(mode="after")

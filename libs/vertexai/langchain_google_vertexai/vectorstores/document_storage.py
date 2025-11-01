@@ -123,11 +123,11 @@ class GCSDocumentStorage(DocumentStorage):
         this method.
 
         Args:
-            keys: List of ids for the text.
+            keys: List of IDs for the text.
 
         Returns:
-            List of documents. If the key id is not found for any id record returns a
-                None instead.
+            List of `Document` objects. If the key id is not found for any id record
+                returns `None` instead.
         """
         if self._threaded:
             download_docs = [
@@ -156,7 +156,7 @@ class GCSDocumentStorage(DocumentStorage):
         """Deletes a batch of documents by id.
 
         Args:
-            keys: List of ids for the text.
+            keys: List of IDs for the text.
         """
         for i in range(0, len(keys), GCS_MAX_BATCH_SIZE):
             batch = keys[i : i + GCS_MAX_BATCH_SIZE]
@@ -210,7 +210,7 @@ class GCSDocumentStorage(DocumentStorage):
         """Deletes one document by its key.
 
         Args:
-            key (str): Id of the document to delete.
+            key: Id of the document to delete.
         """
         blob_name = self._get_blob_name(key)
         blob = self._bucket.blob(blob_name)
@@ -259,10 +259,10 @@ class DataStoreDocumentStorage(DocumentStorage):
         """Gets a batch of documents by id.
 
         Args:
-            keys: List of ids for the text.
+            keys: List of IDs for the text.
 
         Returns:
-            List of texts. If the key id is not found for any id record returns a None
+            List of texts. If the key id is not found for any id record returns a `None`
                 instead.
         """
         ds_keys = [self._client.key(self._kind, id_) for id_ in keys]

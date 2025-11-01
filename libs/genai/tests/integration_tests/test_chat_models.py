@@ -23,6 +23,7 @@ from langchain_google_genai import (
     ChatGoogleGenerativeAI,
     HarmBlockThreshold,
     HarmCategory,
+    MediaResolution,
     Modality,
 )
 
@@ -557,6 +558,42 @@ def test_chat_google_genai_multimodal(
         assert len(response.content.strip()) > 0
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "Guess what's in this picture! You have 3 guesses.",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": "https://picsum.photos/seed/picsum/200/300",
+                },
+            ]
+        ),
+    ],
+)
+def test_chat_google_genai_invoke_media_resolution(message: BaseMessage) -> None:
+    """Test invoke vision model with `media_resolution` set to low and without."""
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
+    result = llm.invoke([message])
+    result_low_res = llm.invoke(
+        [message], media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW
+    )
+
+    assert isinstance(result_low_res, AIMessage)
+    _check_usage_metadata(result_low_res)
+
+    assert result.usage_metadata is not None
+    assert result_low_res.usage_metadata is not None
+    assert (
+        result_low_res.usage_metadata["input_tokens"]
+        < result.usage_metadata["input_tokens"] / 3
+    )
+
+
 def test_chat_google_genai_single_call_with_history() -> None:
     model = ChatGoogleGenerativeAI(model=_MODEL)
     text_question1, text_answer1 = "How much is 2+2?", "4"
@@ -570,21 +607,19 @@ def test_chat_google_genai_single_call_with_history() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model_name", "convert_system_message_to_human"),
-    [(_MODEL, True), ("models/gemini-2.5-pro", False)],
+    "model_name",
+    [_MODEL, "models/gemini-2.5-pro"],
 )
 def test_chat_google_genai_system_message(
-    model_name: str, convert_system_message_to_human: bool
+    model_name: str,
 ) -> None:
     """Test system message handling in ChatGoogleGenerativeAI.
 
-    Parameterized to test different models and system message conversion settings.
-
-    Useful since I think some models (e.g. Gemini Pro) do not like system messages?
+    Tests that system messages are properly converted to system instructions
+    for different models.
     """
     model = ChatGoogleGenerativeAI(
         model=model_name,
-        convert_system_message_to_human=convert_system_message_to_human,
     )
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"

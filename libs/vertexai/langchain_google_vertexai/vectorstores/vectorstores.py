@@ -63,7 +63,7 @@ class _BaseVertexAIVectorStore(VectorStore):
         Args:
             query: String query look up documents similar to.
             k: Number of Documents to return. Defaults to 4.
-            filter: Optional. A list of Namespaces for filtering
+            filter: A list of `Namespace` objects for filtering
                 the matching results.
                 For example:
                 [Namespace("color", ["red"], []), Namespace("shape", [], ["squared"])]
@@ -71,15 +71,14 @@ class _BaseVertexAIVectorStore(VectorStore):
                 datapoints with "squared shape". Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
-            numeric_filter: Optional. A list of NumericNamespaces for filterning
-                the matching results. Please refer to
+            numeric_filter: A list of `NumericNamespace` objects for filterning the
+                matching results. Please refer to
                 https://cloud.google.com/vertex-ai/docs/matching-engine/filtering#json
                 for more detail.
 
         Returns:
-            List[Tuple[Document, float]]: List of documents most similar to
-            the query text and cosine distance in float for each.
-            Higher score represents more similarity.
+            List of `Document` objects most similar to the query text and cosine
+            distance in float for each. Higher score represents more similarity.
         """
         embedding = self._embeddings.embed_query(query)
 
@@ -128,11 +127,11 @@ class _BaseVertexAIVectorStore(VectorStore):
                 for more detail.
 
         Returns:
-            List[Tuple[Document, Union[float, Dict[str, float]]]]:
-            List of documents most similar to the query text and either
-            cosine distance in float for each or dictionary with both dense and sparse
-            scores if running hybrid search.
-            Higher score represents more similarity.
+            List of `Document` objects most similar to the query text and either
+                cosine distance in float for each or dictionary with both dense and
+                sparse scores if running hybrid search.
+
+                Higher score represents more similarity.
         """
         if sparse_embedding is not None and not isinstance(sparse_embedding, dict):
             msg = (  # type: ignore[unreachable]
@@ -181,21 +180,21 @@ class _BaseVertexAIVectorStore(VectorStore):
         """Delete by vector ID.
 
         Args:
-            ids: List of ids to delete.
+            ids: List of IDs to delete.
             **kwargs: If added metadata={}, deletes the documents
-                that match the metadata filter and the parameter ids is not needed.
+                that match the metadata filter and the parameter IDs is not needed.
 
         Returns:
-            True if deletion is successful.
+            `True` if deletion is successful.
 
         Raises:
-            ValueError: If ids is None or an empty list.
+            ValueError: If `ids` is `None` or an empty list.
             RuntimeError: If an error occurs during the deletion process.
         """
         metadata = kwargs.get("metadata")
         if (not ids and not metadata) or (ids and metadata):
             msg = (
-                "You should provide ids (as list of id's) or a metadata"
+                "You should provide ids (as list of IDs) or a metadata"
                 "filter for deleting documents."
             )
             raise ValueError(msg)
@@ -255,19 +254,19 @@ class _BaseVertexAIVectorStore(VectorStore):
         is_complete_overwrite: bool = False,
         **kwargs: Any,
     ) -> List[str]:
-        """Run more texts through the embeddings and add to the vectorstore.
+        """Run more texts through the embeddings and add to the `VectorStore`.
 
         Args:
-            texts: Iterable of strings to add to the vectorstore.
+            texts: Iterable of strings to add to the `VectorStore`.
             metadatas: Optional list of metadatas associated with the texts.
-            ids: Optional list of ids to be assigned to the texts in the index.
-                If None, unique ids will be generated.
+            ids: Optional list of IDs to be assigned to the texts in the index.
+                If `None`, unique ids will be generated.
             is_complete_overwrite: Optional, determines whether this is an append or
-                overwrite operation. Only relevant for BATCH UPDATE indexes.
-            kwargs: vectorstore specific parameters.
+                overwrite operation. Only relevant for `BATCH UPDATE` indexes.
+            kwargs: `VectorStore` specific parameters.
 
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         # Makes sure is a list and can get the length, should we support iterables?
         # metadata is a list so probably not?
@@ -299,7 +298,7 @@ class _BaseVertexAIVectorStore(VectorStore):
     ) -> List[str]:
         if ids is not None and len(set(ids)) != len(ids):
             msg = (
-                "All provided ids should be unique."
+                "All provided IDs should be unique."
                 f"There are {len(ids) - len(set(ids))} duplicates."
             )
             raise ValueError(msg)

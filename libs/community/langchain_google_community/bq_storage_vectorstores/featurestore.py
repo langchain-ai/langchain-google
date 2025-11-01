@@ -67,10 +67,10 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         crowding_column (str, optional): Column to use for crowding.
         distance_measure_type (str, optional): Distance measure type (default:
             DOT_PRODUCT_DISTANCE).
-        enable_private_service_connect (bool, optional): Whether to enable Private 
-            Service Connect for the online store at creation time. Defaults to False. 
-        transport (Optional[Union[str, FeatureOnlineStoreServiceTransport, 
-            Callable[..., FeatureOnlineStoreServiceTransport]]]): Transport 
+        enable_private_service_connect (bool, optional): Whether to enable Private
+            Service Connect for the online store at creation time. Defaults to False.
+        transport (Optional[Union[str, FeatureOnlineStoreServiceTransport,
+            Callable[..., FeatureOnlineStoreServiceTransport]]]): Transport
             configuration for API requests. Can be a transport instance, string
             identifier, or callable that returns a transport.
             Required when using Private Service Connect for querying. Example:
@@ -86,11 +86,11 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
                     transport=transport,
                     Your other params....
                 )
-                vertex_fs.similarity_search("My query") 
+                vertex_fs.similarity_search("My query")
                 ```
-        project_allowlist (List[str], optional): Only needed when 
-            `enable_private_service_connect` is set to true. List of projects allowed 
-            to access the online store. Required at creation time. 
+        project_allowlist (List[str], optional): Only needed when
+            `enable_private_service_connect` is set to true. List of projects allowed
+            to access the online store. Required at creation time.
             Defaults to empty list.
     """
 
@@ -300,16 +300,18 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         filter: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> List[Document]:
-        """Search documents by their ids or metadata values.
+        """Search documents by their IDs or metadata values.
         Args:
-            ids: List of ids of documents to retrieve from the vectorstore.
+            ids: List of IDs of documents to retrieve from the `VectorStore`.
             filter: Filter on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
+                ```json
+                {
+                    "str_property": "foo",
+                    "int_property": 123
+                }
+                ```
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         from google.cloud import aiplatform
 
@@ -543,13 +545,13 @@ class VertexFSVectorStore(BaseBigQueryVectorStore):
         """Return VectorStore initialized from input texts
 
         Args:
-            texts: List of strings to add to the vectorstore.
+            texts: List of strings to add to the `VectorStore`.
             embedding: An embedding model instance for text to vector transformations.
             metadatas: Optional list of metadata records associated with the texts.
                 (ie [{"url": "www.myurl1.com", "title": "title1"},
                 {"url": "www.myurl2.com", "title": "title2"}])
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         vs_obj = VertexFSVectorStore(embedding=embedding, **kwargs)
         vs_obj.add_texts(texts, metadatas)

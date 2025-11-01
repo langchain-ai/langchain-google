@@ -116,7 +116,7 @@ Some Gemini models supports both text and inline image outputs.
 ```python
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-image-preview")
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-image")
 
 response = llm.invoke(
     "Generate an image of a cat and say meow",
@@ -164,7 +164,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI, Modality
 
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-image-preview",
+    model="gemini-2.5-flash-image",
     response_modalities=[Modality.TEXT, Modality.IMAGE],
 )
 
