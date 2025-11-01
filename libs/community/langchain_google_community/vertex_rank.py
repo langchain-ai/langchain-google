@@ -27,12 +27,12 @@ class VertexAIRank(BaseDocumentCompressor):
 
     Attributes:
         project_id: Google Cloud project ID.
-        location_id: Location ID for the ranking service. Default: 'global'.
+        location_id: Location ID for the ranking service.
         ranking_config: Name of the rank service config. Default: 'default_config'.
         model: Model identifier. Default: `semantic-ranker-512@latest`.
         top_n: Number of results to return. Default: 10.
         ignore_record_details_in_response: If True, response contains only record ID
-            and score. Default: False.
+            and score.
         id_field: Unique document metadata field to use as an ID.
         title_field: Document metadata field to use as title.
         credentials: Google Cloud credentials object.

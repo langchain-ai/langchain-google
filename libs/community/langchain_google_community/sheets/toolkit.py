@@ -47,7 +47,7 @@ class SheetsToolkit(BaseToolkit):
     !!! info "Authentication Requirements"
 
         - **Read operations**: Require only API key (for public spreadsheets)
-        - **Write operations**: Require OAuth2 credentials (api_resource)
+        - **Write operations**: Require OAuth2 credentials (`api_resource`)
     """
 
     api_resource: Resource = Field(default=None)  # type: ignore[assignment]

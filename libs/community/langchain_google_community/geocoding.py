@@ -130,14 +130,14 @@ class GoogleGeocodingAPIWrapper(BaseModel):
         Handles both single and batch geocoding requests with detailed location data.
 
         Args:
-            query: Location(s) to geocode (e.g., "Eiffel Tower" or
+            query: Location(s) to geocode (e.g., `'Eiffel Tower'` or
                 "Times Square, Central Park").
             language: Language code for results (e.g., "en", "fr", "ja").
             region: Region bias (e.g., "us", "fr", "jp").
             max_results: Maximum number of results to return.
 
         Returns:
-            status (str): Request status ("OK" or error status).
+            status (str): Request status (`"OK"` or error status).
             total_results (int): Number of locations found.
             results (list): Location data with address, geometry, metadata,
                 and navigation.
@@ -200,10 +200,10 @@ class GoogleGeocodingAPIWrapper(BaseModel):
         """Process multiple locations in batch.
 
         Args:
-            locations: List of locations (e.g., ["Eiffel Tower", "Times Square"]).
+            locations: List of locations (e.g., `["Eiffel Tower", "Times Square"]`).
             language: Language code for results. Optional.
             region: Region bias. Optional.
-            components: Component filters (e.g., {"country": "US"}). Optional.
+            components: Component filters (e.g., `{"country": "US"}`). Optional.
 
         Returns:
             status (str): Overall batch status.
