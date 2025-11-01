@@ -259,7 +259,7 @@ class SheetsReadDataTool(BaseReadTool):
         ```
 
     Raises:
-        ValueError: If spreadsheet_id or range_name is invalid.
+        ValueError: If `spreadsheet_id` or `range_name` is invalid.
         Exception: For API errors or connection issues.
     """
 
@@ -288,7 +288,7 @@ class SheetsReadDataTool(BaseReadTool):
 
         Args:
             spreadsheet_id: ID of the spreadsheet to read from.
-            range_name: A1 notation range (e.g., 'A1:E10' or 'Sheet1!A1:D5').
+            range_name: A1 notation range (e.g., `'A1:E10'` or `'Sheet1!A1:D5'`).
             value_render_option: How values should be rendered.
             date_time_render_option: How dates/times should be rendered.
             convert_to_records: Convert to list of dictionaries using first row
@@ -306,7 +306,7 @@ class SheetsReadDataTool(BaseReadTool):
             processing_options (dict): Applied processing options.
 
         Raises:
-            ValueError: If spreadsheet_id or range_name is invalid.
+            ValueError: If `spreadsheet_id` or `range_name` is invalid.
             Exception: For API errors or connection issues.
         """
         try:
@@ -431,7 +431,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
         ```
 
     Raises:
-        ValueError: If spreadsheet_id is invalid or ranges list is empty.
+        ValueError: If `spreadsheet_id` is invalid or ranges list is empty.
         Exception: For API errors or connection issues.
     """
 
@@ -463,13 +463,10 @@ class SheetsBatchReadDataTool(BaseReadTool):
             spreadsheet_id: ID of the spreadsheet to read from.
             ranges: List of A1 notation ranges to read.
             value_render_option: How values should be rendered.
-                Default: FORMATTED_VALUE.
             date_time_render_option: How dates/times should be rendered.
-                Default: SERIAL_NUMBER.
-            major_dimension: Major dimension for results. Default: ROWS.
-            convert_to_records: Convert to list of dictionaries. Default: False.
+            major_dimension: Major dimension for results.
+            convert_to_records: Convert to list of dictionaries.
             numericise_values: Convert string numbers to numeric types.
-                Default: True.
             run_manager: Optional callback manager.
 
         Returns:
@@ -487,7 +484,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
             numericise_values (bool): Whether values were numericised.
 
         Raises:
-            ValueError: If spreadsheet_id is invalid or ranges list is empty.
+            ValueError: If `spreadsheet_id` is invalid or ranges list is empty.
             Exception: For API errors or connection issues.
         """
         try:
@@ -573,7 +570,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
 
 class DataFilterSchema(BaseModel):
-    """Schema for DataFilter used with getByDataFilter API."""
+    """Schema for `DataFilter` used with `getByDataFilter` API."""
 
     a1Range: Optional[str] = Field(
         None,
@@ -650,9 +647,9 @@ class SheetsFilteredReadDataTool(BaseReadTool):
 
     !!! warning "Range Selection Only"
 
-        This tool is for RANGE SELECTION, not conditional filtering like
-        "score > 50". For conditional filtering, create a Filter View using
-        Sheets UI or batchUpdate API.
+        This tool is for `RANGE SELECTION`, not conditional filtering like
+        `'score > 50'`. For conditional filtering, create a Filter View using
+        Sheets UI or `batchUpdate` API.
 
     Tool Output:
         success (bool): Whether operation succeeded.
@@ -702,7 +699,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         ```
 
     Raises:
-        ValueError: If spreadsheet_id is invalid or data_filters is empty.
+        ValueError: If `spreadsheet_id` is invalid or `data_filters` is empty.
         Exception: For API errors, authentication issues, or connection problems.
     """
 
@@ -748,7 +745,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
             sheets (list): List of sheets with filtered data.
 
         Raises:
-            ValueError: If spreadsheet_id is invalid or data_filters is empty.
+            ValueError: If `spreadsheet_id` is invalid or `data_filters` is empty.
             Exception: For API errors, authentication issues, or connection problems.
         """
         try:
