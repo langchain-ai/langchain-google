@@ -95,7 +95,7 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
 
     ??? example "With Formulas"
 
-        Update cells with formulas using USER_ENTERED:
+        Update cells with formulas using `USER_ENTERED`:
 
         ```python
         result = tool.run(
@@ -110,7 +110,7 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
 
     Raises:
         ValueError: If write permissions unavailable or validation fails.
-        Exception: If spreadsheet_id is invalid, range is malformed, or API
+        Exception: If `spreadsheet_id` is invalid, range is malformed, or API
             errors occur.
     """
 
@@ -133,9 +133,9 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
 
         Args:
             spreadsheet_id: ID of the spreadsheet to update.
-            range: A1 notation range to update (e.g., 'Sheet1!A1:C3').
+            range: A1 notation range to update (e.g., `'Sheet1!A1:C3'`).
             values: 2D array of values to write.
-            value_input_option: How to interpret input values. Default: USER_ENTERED.
+            value_input_option: How to interpret input values.
             run_manager: Optional callback manager.
 
         Returns:
@@ -280,7 +280,7 @@ class SheetsAppendValuesTool(SheetsBaseTool):
 
     Raises:
         ValueError: If write permissions unavailable or validation fails.
-        Exception: If spreadsheet_id is invalid, range is malformed, or API
+        Exception: If `spreadsheet_id` is invalid, range is malformed, or API
             errors occur.
     """
 
@@ -532,8 +532,8 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
         total_updated_cells (int): Total cells updated across all ranges.
         total_updated_rows (int): Total rows updated.
         total_updated_columns (int): Total columns updated.
-        responses (list): Individual results for each range with updated_range
-            and updated_cells.
+        responses (list): Individual results for each range with `updated_range`
+            and `updated_cells`.
 
     ???+ example "Basic Usage"
 
@@ -580,7 +580,7 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
 
     Raises:
         ValueError: If write permissions unavailable or validation fails.
-        Exception: If spreadsheet_id is invalid, any range is malformed, or
+        Exception: If `spreadsheet_id` is invalid, any range is malformed, or
             API errors occur.
     """
 
@@ -603,7 +603,7 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
         Args:
             spreadsheet_id: ID of the spreadsheet.
             data: List of range/values pairs to update.
-            value_input_option: How to interpret input values. Default: USER_ENTERED.
+            value_input_option: How to interpret input values.
             run_manager: Optional callback manager.
 
         Returns:
