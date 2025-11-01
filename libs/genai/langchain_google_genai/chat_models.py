@@ -2416,6 +2416,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ] = "function_calling",
         *,
         include_raw: bool = False,
+        force_property_ordering: bool = False,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
         _ = kwargs.pop("strict", None)
@@ -2433,6 +2434,23 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 else:
                     schema_json = schema.model_json_schema()
                 parser = PydanticOutputParser(pydantic_object=schema)
+                if force_property_ordering:
+                    try:
+                        field_order = list(
+                            getattr(
+                                schema,
+                                "model_fields",
+                                getattr(schema, "__fields__", {}),
+                            ).keys()
+                        )
+                        if (
+                            schema_json.get("type") == "object"
+                            or "properties" in schema_json
+                        ):
+                            schema_json["propertyOrdering"] = field_order
+                    except AttributeError:
+                        pass
+
             else:
                 if is_typeddict(schema):
                     schema_json = convert_to_json_schema(schema)
