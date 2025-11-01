@@ -9,7 +9,7 @@ from langchain_google_community.gmail.base import GmailBaseTool
 
 
 class CreateDraftSchema(BaseModel):
-    """Input for CreateDraftTool."""
+    """Input schema for `CreateDraftTool`."""
 
     message: str = Field(
         ...,
