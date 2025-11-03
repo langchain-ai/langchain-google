@@ -1655,7 +1655,7 @@ def test_thinking_budget_in_params() -> None:
     assert params["thinking_config"]["include_thoughts"] is False
 
 
-def test_thinking_budget_in_ls_params() -> None:
+def test_thinking_budget_in_invocation_params() -> None:
     """Test that thinking parameters are available for LangSmith tracing."""
     # Init params
     llm = ChatVertexAI(
@@ -1665,24 +1665,23 @@ def test_thinking_budget_in_ls_params() -> None:
         include_thoughts=True,
     )
 
-    ls_params = llm._get_ls_params()
+    invocation_params = llm._get_invocation_params()
 
-    assert ls_params["ls_provider"] == "google_vertexai"
-    assert ls_params["ls_model_name"] == _DEFAULT_MODEL_NAME
-    assert ls_params["ls_model_type"] == "chat"
-
-    assert "thinking_budget" in ls_params
-    assert "include_thoughts" in ls_params
-    assert ls_params["thinking_budget"] == 1000
-    assert ls_params["include_thoughts"] is True
+    # Verify thinking parameters are included for tracing
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 1000
+    assert invocation_params["include_thoughts"] is True
 
     # Invocation params
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
-    ls_params = llm._get_ls_params(thinking_budget=500, include_thoughts=False)
+    invocation_params = llm._get_invocation_params(
+        thinking_budget=500, include_thoughts=False
+    )
 
     # Verify thinking parameters are included for tracing
-    assert "thinking_budget" in ls_params
-    assert "include_thoughts" in ls_params
-    assert ls_params["thinking_budget"] == 500
-    assert ls_params["include_thoughts"] is False
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 500
+    assert invocation_params["include_thoughts"] is False
