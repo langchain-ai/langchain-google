@@ -87,6 +87,10 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             "such as `api_endpoint`."
         ),
     )
+    base_url: Optional[str] = Field(
+        default=None,
+        description="The base URL to use for the API client. Alias of `client_options['api_endpoint']`.",
+    )
     transport: Optional[str] = Field(
         default=None,
         description="A string, one of: [``'rest'``, ``'grpc'``, ``'grpc_asyncio'``].",
@@ -109,11 +113,16 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
 
+        # Merge base_url into client_options if provided
+        client_options = self.client_options or {}
+        if self.base_url and "api_endpoint" not in client_options:
+            client_options = {**client_options, "api_endpoint": self.base_url}
+
         self.client = build_generative_service(
             credentials=self.credentials,
             api_key=google_api_key,
             client_info=client_info,
-            client_options=self.client_options,
+            client_options=client_options,
             transport=self.transport,
         )
         # Always defer async client initialization to first async call.
@@ -137,11 +146,16 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             if transport == "rest":
                 transport = "grpc_asyncio"
 
+            # Merge base_url into client_options if provided
+            client_options = self.client_options or {}
+            if self.base_url and "api_endpoint" not in client_options:
+                client_options = {**client_options, "api_endpoint": self.base_url}
+
             self.async_client = build_generative_async_service(
                 credentials=self.credentials,
                 api_key=google_api_key,
                 client_info=client_info,
-                client_options=self.client_options,
+                client_options=client_options,
                 transport=transport,
             )
         return self.async_client

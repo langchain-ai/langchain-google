@@ -42,6 +42,8 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
     "The default custom credentials (google.auth.credentials.Credentials) to use "
     "when making API calls. If not provided, credentials will be ascertained from "
     "the environment."
+    api_endpoint: Optional[str] = Field(default=None, alias="base_url")
+    "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
 
