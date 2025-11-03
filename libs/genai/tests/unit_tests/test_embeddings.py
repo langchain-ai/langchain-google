@@ -172,7 +172,7 @@ def test_base_url_support() -> None:
     with patch(
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_client:
-        embeddings = GoogleGenerativeAIEmbeddings(
+        _ = GoogleGenerativeAIEmbeddings(
             model=f"models/{MODEL_NAME}",
             google_api_key=param_secret_api_key,
             base_url=base_url,

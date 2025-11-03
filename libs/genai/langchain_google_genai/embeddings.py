@@ -89,8 +89,12 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     )
     base_url: Optional[str] = Field(
         default=None,
-        description="The base URL to use for the API client. Alias of `client_options['api_endpoint']`.",
     )
+    """The base URL to use for the API client.
+    
+    Alias of `client_options['api_endpoint']`.
+    """
+
     transport: Optional[str] = Field(
         default=None,
         description="A string, one of: [``'rest'``, ``'grpc'``, ``'grpc_asyncio'``].",
