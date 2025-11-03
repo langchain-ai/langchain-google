@@ -61,12 +61,13 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
     def supports_json_mode(self) -> bool:
         return True
 
-    @pytest.mark.skipif(
+    @pytest.mark.xfail(
         not _has_multimodal_secrets(),
         reason=(
-            "Multimodal tests require integration secrets (user agent to fetches "
+            "Multimodal tests require integration secrets (user agent to fetch "
             "external resources)"
         ),
+        run=False,
     )
     def test_audio_inputs(self, model: BaseChatModel) -> None:
         """Skip audio tests in PR context - requires external resource fetching."""
@@ -112,12 +113,13 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
     def supports_json_mode(self) -> bool:
         return True
 
-    @pytest.mark.skipif(
+    @pytest.mark.xfail(
         not _has_multimodal_secrets(),
         reason=(
-            "Multimodal tests require integration secrets (user agent to fetches "
+            "Multimodal tests require integration secrets (user agent to fetch "
             "external resources)"
         ),
+        run=False,
     )
     def test_audio_inputs(self, model: BaseChatModel) -> None:
         """Skip audio tests in PR context - requires external resource fetching."""

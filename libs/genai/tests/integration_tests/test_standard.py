@@ -54,23 +54,25 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
     def supports_audio_inputs(self) -> bool:
         return True
 
-    @pytest.mark.skipif(
+    @pytest.mark.xfail(
         not _has_multimodal_secrets(),
         reason=(
-            "Multimodal tests require integration secrets (user agent to fetches "
+            "Multimodal tests require integration secrets (user agent to fetch "
             "external resources)"
         ),
+        run=False,
     )
     def test_audio_inputs(self, model: BaseChatModel) -> None:
         """Skip audio tests in PR context - requires external resource fetching."""
         super().test_audio_inputs(model)
 
-    @pytest.mark.skipif(
+    @pytest.mark.xfail(
         not _has_multimodal_secrets(),
         reason=(
-            "Multimodal tests require integration secrets (user agent to fetches "
+            "Multimodal tests require integration secrets (user agent to fetch "
             "external resources)"
         ),
+        run=False,
     )
     def test_pdf_inputs(self, model: BaseChatModel) -> None:
         """Skip PDF tests in PR context - requires external resource fetching."""
