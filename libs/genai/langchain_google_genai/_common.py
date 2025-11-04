@@ -24,88 +24,112 @@ class GoogleGenerativeAIError(Exception):
 class _BaseGoogleGenerativeAI(BaseModel):
     """Base class for Google Generative AI LLMs."""
 
-    model: str = Field(
-        ...,
-        description="""The name of the model to use.
-Examples:
-    - gemini-2.5-flash
-    - models/text-bison-001""",
-    )
+    model: str = Field(...)
     """Model name to use."""
+
     google_api_key: Optional[SecretStr] = Field(
         alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
     )
     """Google AI API key.
-    If not specified will be read from env var ``GOOGLE_API_KEY``."""
+    
+    If not specified will be read from env var å`GOOGLE_API_KEY`.
+    """
 
     credentials: Any = None
-    "The default custom credentials (google.auth.credentials.Credentials) to use "
-    "when making API calls. If not provided, credentials will be ascertained from "
-    "the GOOGLE_API_KEY envvar"
+    """The default custom credentials (`google.auth.credentials.Credentials`) to use 
+    when making API calls.
+    
+    If not provided, credentials will be ascertained from the `GOOGLE_API_KEY` env var.
+    """
 
     temperature: float = 0.7
-    """Run inference with this temperature. Must be within ``[0.0, 2.0]``. If unset,
-    will default to ``0.7``."""
+    """Run inference with this temperature. Must be within `[0.0, 2.0]`.
+    
+    If unset, will default to `0.7`.
+    """
 
     top_p: Optional[float] = None
     """Decode using nucleus sampling: consider the smallest set of tokens whose
-    probability sum is at least ``top_p``. Must be within ``[0.0, 1.0]``."""
+    probability sum is at least `top_p`.
+    
+    Must be within `[0.0, 1.0]`.
+    """
 
     top_k: Optional[int] = None
-    """Decode using top-k sampling: consider the set of ``top_k`` most probable tokens.
-    Must be positive."""
+    """Decode using top-k sampling: consider the set of `top_k` most probable tokens.
+    
+    Must be positive.
+    """
 
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
     """Maximum number of tokens to include in a candidate. Must be greater than zero.
+    
     If unset, will use the model's default value, which varies by model.
-    See https://ai.google.dev/gemini-api/docs/models for model-specific limits."""
+    
+    See https://ai.google.dev/gemini-api/docs/models for model-specific limits.
+    """
 
     n: int = 1
-    """Number of chat completions to generate for each prompt. Note that the API may
-    not return the full ``n`` completions if duplicates are generated."""
+    """Number of chat completions to generate for each prompt.
+    
+    Note that the API may not return the full `n` completions if duplicates are
+    generated.
+    """
 
     max_retries: int = Field(default=6, alias="retries")
-    """The maximum number of retries to make when generating. If unset, will default
-    to ``6``."""
+    """The maximum number of retries to make when generating.
+    
+    If unset, will default to `6`.
+    """
 
     timeout: Optional[float] = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
 
     client_options: Optional[Dict] = Field(
         default=None,
-        description=(
-            "A dictionary of client options to pass to the Google API client, "
-            "such as `api_endpoint`."
-        ),
     )
+    """"A dictionary of client options to pass to the Google API client, such as
+    `api_endpoint`.
+    """
+
+    base_url: Optional[str] = Field(
+        default=None,
+    )
+    """The base URL to use for the API client.
+    
+    Alias of `client_options['api_endpoint']`.
+    """
+
     transport: Optional[str] = Field(
         default=None,
-        description="A string, one of: [`rest`, `grpc`, `grpc_asyncio`].",
         alias="api_transport",
     )
+    """A string, one of: `[rest, grpc, grpc_asyncio]`."""
+
     additional_headers: Optional[Dict[str, str]] = Field(
         default=None,
-        description=(
-            "A key-value dictionary representing additional headers for the model call"
-        ),
     )
+    """"Key-value dictionary representing additional headers for the model call"""
+
     response_modalities: Optional[List[Modality]] = Field(
-        default=None, description=("A list of modalities of the response")
+        default=None,
     )
+    """A list of modalities of the response"""
 
     thinking_budget: Optional[int] = Field(
-        default=None, description="Indicates the thinking budget in tokens."
+        default=None,
     )
+    """Indicates the thinking budget in tokens."""
 
     media_resolution: Optional[MediaResolution] = Field(
         default=None,
-        description="Media resolution for the input media.",
     )
+    """Media resolution for the input media."""
 
     include_thoughts: Optional[bool] = Field(
         default=None,
-        description="Indicates whether to include thoughts in the response.",
     )
+    """Indicates whether to include thoughts in the response."""
 
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
     """The default safety settings to use for all generations.

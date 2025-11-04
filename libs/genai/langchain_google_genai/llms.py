@@ -77,6 +77,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             timeout=self.timeout,
             model=self.model,
             client_options=self.client_options,
+            base_url=self.base_url,
             transport=self.transport,
             additional_headers=self.additional_headers,
             safety_settings=self.safety_settings,

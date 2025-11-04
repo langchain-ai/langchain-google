@@ -435,6 +435,46 @@ def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
     assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
 
 
+def test_base_url_support() -> None:
+    """Test that `base_url` is properly merged into `client_options`."""
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    base_url = "https://example.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+    param_transport = "rest"
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport=param_transport,
+        )
+
+    response = chat.invoke("test")
+    assert response.content == "test response"
+
+    mock_client.assert_called_once_with(
+        transport=param_transport,
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_key == param_api_key
+    assert call_client_options.api_endpoint == base_url
+    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
+    assert "langchain-google-genai" in call_client_info.user_agent
+    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+
+
 def test_default_metadata_field_alias() -> None:
     """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
     # Test with default_metadata_input field name (alias) - should accept None without

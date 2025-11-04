@@ -63,44 +63,61 @@ class _VertexAIBase(BaseModel):
     client: Any = Field(default=None, exclude=True)  #: :meta private:
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     project: Optional[str] = None
-    "The default GCP project to use when making Vertex API calls."
+    """The default GCP project to use when making Vertex API calls."""
+
     location: str = Field(default=_DEFAULT_LOCATION)
-    "The default location to use when making API calls."
+    """The default location to use when making API calls."""
+
     request_parallelism: int = 5
-    "The amount of parallelism allowed for requests issued to VertexAI models. "
-    "Default is 5."
+    """The amount of parallelism allowed for requests issued to VertexAI models.
+
+    Default is `5`.
+    """
+
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
+
     task_executor: ClassVar[Optional[Executor]] = Field(default=None, exclude=True)
+
     stop: Optional[List[str]] = Field(default=None, alias="stop_sequences")
-    "Optional list of stop words to use when generating."
+    """Optional list of stop words to use when generating."""
+
     model_name: Optional[str] = Field(default=None, alias="model")
-    "Underlying model name."
-    full_model_name: Optional[str] = Field(
-        default=None, exclude=True
-    )  #: :meta private:
-    "The full name of the model's endpoint."
-    client_options: Optional[ClientOptions] = Field(
-        default=None, exclude=True
-    )  #: :meta private:
+    """Underlying model name."""
+
+    full_model_name: Optional[str] = Field(default=None, exclude=True)
+    """The full name of the model's endpoint."""
+
+    client_options: Optional[ClientOptions] = Field(default=None, exclude=True)
+
     api_endpoint: Optional[str] = Field(default=None, alias="base_url")
-    "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
+    """Desired API endpoint, e.g., `us-central1-aiplatform.googleapis.com`."""
+
     api_transport: Optional[str] = None
-    """The desired API transport method, can be either 'grpc' or 'rest'.
-    Uses the default parameter in vertexai.init if defined.
+    """The desired API transport method, can be either `'grpc'` or `'rest'`.
+
+    Uses the default parameter in `vertexai.init` if defined.
     """
+
     default_metadata: Sequence[Tuple[str, str]] = Field(
         default_factory=list
     )  #: :meta private:
+
     additional_headers: Optional[Dict[str, str]] = Field(default=None)
-    "A key-value dictionary representing additional headers for the model call"
+    """Key-value dictionary representing additional headers for the model call."""
+
     client_cert_source: Optional[Callable[[], Tuple[bytes, bytes]]] = None
-    "A callback which returns client certificate bytes and private key bytes both "
-    "in PEM format."
+    """A callback which returns client certificate bytes and private key bytes.
+
+    Both should be in PEM format.
+    """
+
     credentials: Any = Field(default=None, exclude=True)
-    "The default custom credentials (google.auth.credentials.Credentials) to use "
-    "when making API calls. If not provided, credentials will be ascertained from "
-    "the environment."
+    """The default custom credentials (`google.auth.credentials.Credentials`) to use
+    when making API calls.
+
+    If not provided, credentials will be ascertained from the environment.
+    """
     endpoint_version: Literal["v1", "v1beta1"] = "v1beta1"
     """Whether to use v1 or v1beta1 endpoint.
 
@@ -236,20 +253,24 @@ class _VertexAICommon(_VertexAIBase):
     """The name of a tuned model."""
 
     response_modalities: Optional[List[Modality]] = Field(
-        default=None, description=("A list of modalities of the response")
+        default=None,
     )
+    """A list of modalities of the response."""
 
     thinking_budget: Optional[int] = Field(
-        default=None, description="Indicates the thinking budget in tokens."
+        default=None,
     )
+    """Indicates the thinking budget in tokens."""
+
     include_thoughts: Optional[bool] = Field(
         default=None,
-        description="Indicates whether to include thoughts in the response.",
     )
+    """Indicates whether to include thoughts in the response."""
+
     audio_timestamp: Optional[bool] = Field(
         default=None,
-        description="Enable timestamp understanding of audio-only files",
     )
+    """Enable timestamp understanding of audio-only files."""
 
     @property
     def _llm_type(self) -> str:

@@ -1912,11 +1912,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             else:
                 google_api_key = self.google_api_key
         transport: Optional[str] = self.transport
+
+        # Merge base_url into client_options if provided
+        client_options = self.client_options or {}
+        if self.base_url and "api_endpoint" not in client_options:
+            client_options = {**client_options, "api_endpoint": self.base_url}
+
         self.client = genaix.build_generative_service(
             credentials=self.credentials,
             api_key=google_api_key,
             client_info=client_info,
-            client_options=self.client_options,
+            client_options=client_options,
             transport=transport,
         )
         self.async_client_running = None
@@ -1941,11 +1947,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             transport = self.transport
             if transport == "rest":
                 transport = "grpc_asyncio"
+
+            # Merge base_url into client_options if provided
+            client_options = self.client_options or {}
+            if self.base_url and "api_endpoint" not in client_options:
+                client_options = {**client_options, "api_endpoint": self.base_url}
+
             self.async_client_running = genaix.build_generative_async_service(
                 credentials=self.credentials,
                 api_key=google_api_key,
                 client_info=get_client_info(f"ChatGoogleGenerativeAI:{self.model}"),
-                client_options=self.client_options,
+                client_options=client_options,
                 transport=transport,
             )
         return self.async_client_running
