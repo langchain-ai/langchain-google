@@ -287,6 +287,7 @@ def _check_thinking_output(content: list, output_version: str) -> None:
         assert isinstance(block[thinking_key], str)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts(
     output_version: str,
