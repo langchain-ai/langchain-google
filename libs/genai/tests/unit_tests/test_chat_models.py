@@ -436,7 +436,7 @@ def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
 
 
 def test_base_url_support() -> None:
-    """Test that base_url is properly merged into client_options."""
+    """Test that `base_url` is properly merged into `client_options`."""
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
