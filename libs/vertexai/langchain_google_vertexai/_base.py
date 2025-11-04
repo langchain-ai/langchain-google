@@ -85,14 +85,10 @@ class _VertexAIBase(BaseModel):
     model_name: Optional[str] = Field(default=None, alias="model")
     """Underlying model name."""
 
-    full_model_name: Optional[str] = Field(
-        default=None, exclude=True
-    )
+    full_model_name: Optional[str] = Field(default=None, exclude=True)
     """The full name of the model's endpoint."""
 
-    client_options: Optional[ClientOptions] = Field(
-        default=None, exclude=True
-    )
+    client_options: Optional[ClientOptions] = Field(default=None, exclude=True)
 
     api_endpoint: Optional[str] = Field(default=None, alias="base_url")
     """Desired API endpoint, e.g., `us-central1-aiplatform.googleapis.com`."""
