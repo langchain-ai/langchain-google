@@ -26,7 +26,7 @@
 #   • release    — prepare a new release
 #
 # Allowed Scopes (optional):
-#   genai, vertex, community, infra
+#   genai, vertexai, community, infra
 #
 # Rules & Tips for New Committers:
 #   1. Subject (type) must start with a lowercase letter and, if possible, be
@@ -80,7 +80,7 @@ jobs:
             release
           scopes: |
             genai
-            vertex
+            vertexai
             community
             infra
           requireScope: false
