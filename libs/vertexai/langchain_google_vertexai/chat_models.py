@@ -1880,6 +1880,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         if thinking_budget is not None:
             params["thinking_config"] = {"thinking_budget": thinking_budget}
+        # Remove from top-level params since GenerationConfig expects it nested
         _ = params.pop("thinking_budget", None)
 
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
@@ -1887,6 +1888,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             if "thinking_config" not in params:
                 params["thinking_config"] = {}
             params["thinking_config"]["include_thoughts"] = include_thoughts
+        # Remove from top-level params since GenerationConfig expects it nested
         _ = params.pop("include_thoughts", None)
 
         media_resolution = kwargs.get("media_resolution")
@@ -1900,11 +1902,28 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         return params
 
+    def _get_invocation_params(
+        self, stop: Optional[List[str]] = None, **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Get invocation parameters for tracing."""
+        # Get standard parameters from base (_type, model_name, etc.)
+        params = super()._get_invocation_params(stop=stop, **kwargs)
+
+        thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
+        if thinking_budget is not None:
+            params["thinking_budget"] = thinking_budget
+
+        include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
+        if include_thoughts is not None:
+            params["include_thoughts"] = include_thoughts
+
+        return params
+
     def _get_ls_params(
         self, stop: Optional[List[str]] = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
-        params = self._prepare_params(stop=stop, **kwargs)
+        params = self._get_invocation_params(stop=stop, **kwargs)
         ls_params = LangSmithParams(
             ls_provider="google_vertexai",
             ls_model_name=self.model_name,
@@ -1915,6 +1934,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             ls_params["ls_max_tokens"] = ls_max_tokens
         if ls_stop := stop or params.get("stop", None) or self.stop:
             ls_params["ls_stop"] = ls_stop
+
         return ls_params
 
     def _generate(
