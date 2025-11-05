@@ -6,7 +6,7 @@ import json
 import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Union
+from typing import Any, List, Optional, Union, cast
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -33,7 +33,7 @@ from langchain_core.messages.block_translators.google_genai import (
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.outputs import ChatGeneration, ChatResult
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
 from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
@@ -1597,7 +1597,7 @@ def test_with_structured_output_json_schema_alias() -> None:
         name: str
         age: int
 
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key="fake-key")
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
 
     structured_llm = llm.with_structured_output(TestModel, method="json_schema")
     assert structured_llm is not None
@@ -1608,7 +1608,7 @@ def test_with_structured_output_json_schema_alias() -> None:
 
 
 def test_modalities_override_in_generation_config() -> None:
-    """Test response modalities in invoke generation_config override model-defined."""
+    """Test response modalities in invoke `generation_config` override model-defined."""
     from langchain_google_genai import Modality
 
     # Mock response with both image and text content
@@ -1643,7 +1643,7 @@ def test_modalities_override_in_generation_config() -> None:
     )
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash-exp-image-generation",
+        model=MODEL_NAME,
         google_api_key="fake-key",
         response_modalities=[Modality.TEXT],  # Initially only TEXT
     )
@@ -1755,7 +1755,7 @@ def test_chat_google_genai_image_content_blocks() -> None:
     )
 
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
     )
 
@@ -1863,7 +1863,7 @@ def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     )
 
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-flash-preview-tts",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
         response_modalities=[Modality.AUDIO],
     )
@@ -1915,3 +1915,254 @@ def test_compat() -> None:
     result = _convert_from_v1_to_generativelanguage_v1beta([block], "google_genai")
     expected = [{"text": "foo", "thought_signature": "bar"}]
     assert result == expected
+
+
+def test_response_json_schema_parameter() -> None:
+    """Test that `response_json_schema` is properly set."""
+
+    class TestModel(BaseModel):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    schema_dict = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+        "required": ["name", "age"],
+    }
+
+    llm_with_json_schema = llm.bind(
+        response_mime_type="application/json", response_json_schema=schema_dict
+    )
+    bound_kwargs = cast(Any, llm_with_json_schema).kwargs
+    assert bound_kwargs["response_mime_type"] == "application/json"
+    assert bound_kwargs["response_json_schema"] == schema_dict
+
+
+def test_response_json_schema_precedence_over_response_schema() -> None:
+    """Test that `response_json_schema` takes precedence over `response_schema`."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    legacy_schema = {"type": "object", "properties": {"old_field": {"type": "string"}}}
+
+    new_schema = {
+        "type": "object",
+        "properties": {"new_field": {"type": "string"}},
+        "anyOf": [
+            {"properties": {"type": {"const": "A"}}},
+            {"properties": {"type": {"const": "B"}}},
+        ],
+    }
+
+    llm_with_both = llm.bind(
+        response_mime_type="application/json",
+        response_schema=legacy_schema,
+        response_json_schema=new_schema,
+    )
+
+    bound_kwargs = cast(Any, llm_with_both).kwargs
+    assert bound_kwargs["response_json_schema"] == new_schema
+    # (Still there but not used)
+    # TODO this isn't intuitive to me why it needs to be there
+    assert bound_kwargs["response_schema"] == legacy_schema
+
+
+def test_with_structured_output_json_schema_v2() -> None:
+    """Test `with_structured_output` using `json_schema_v2`."""
+
+    # Pydantic model schema
+    class Person(BaseModel):
+        name: str
+        age: int
+        skills: List[str]
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+    structured_llm = llm.with_structured_output(Person, method="json_schema_v2")
+    assert structured_llm is not None
+
+
+def test_ref_preservation_between_methods() -> None:
+    """Test difference in `$ref` handling between `json_schema` and `json_schema_v2`.
+
+    The legacy `json_schema` method loses `$defs` definitions, making recursive schemas
+    unusable.
+
+    The `json_schema_v2` method preserves the complete schema including `$defs`.
+    """
+
+    class RecursiveModel(BaseModel):
+        name: str
+        children: Optional[List["RecursiveModel"]] = None
+
+    RecursiveModel.model_rebuild()
+
+    # Get the raw schema with $defs
+    raw_schema = RecursiveModel.model_json_schema()
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    # Test legacy json_schema method
+    structured_legacy = llm.with_structured_output(RecursiveModel, method="json_schema")
+    legacy_llm = cast(Any, structured_legacy).first
+    legacy_schema = legacy_llm.kwargs["response_schema"]
+
+    # Test new json_schema_v2 method
+    structured_v2 = llm.with_structured_output(RecursiveModel, method="json_schema_v2")
+    v2_llm = cast(Any, structured_v2).first
+    v2_schema = v2_llm.kwargs["response_json_schema"]
+
+    assert "$defs" not in legacy_schema, "Legacy method should lose $defs definitions"
+    assert "$defs" in v2_schema, "json_schema_v2 should preserve $defs definitions"
+    assert v2_schema == raw_schema, "json_schema_v2 should preserve raw schema exactly"
+    assert legacy_schema == {"$ref": "#/$defs/RecursiveModel"}, (
+        "Legacy method should only preserve top-level $ref without definitions"
+    )
+
+
+def test_json_schema_v2_dict_support() -> None:
+    """Test `json_schema_v2` with dictionary schemas."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    dict_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
+
+    structured_llm_dict = llm.with_structured_output(
+        dict_schema, method="json_schema_v2"
+    )
+    assert structured_llm_dict is not None
+
+
+def test_recursive_schema_support() -> None:
+    """Test support for recursive schemas using `$ref`.
+
+    The `json_schema_v2` method preserves $ref for recursive schemas, while the legacy
+    `json_schema` method resolves them.
+    """
+
+    class TreeNode(BaseModel):
+        value: str
+        children: Optional[List["TreeNode"]] = None
+
+    TreeNode.model_rebuild()  # Rebuild to resolve forward references
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    # Test json_schema_v2 works with recursive schemas - should not raise an error
+    # Preserves $ref for better recursive schema support
+    structured_llm_v2 = llm.with_structured_output(TreeNode, method="json_schema_v2")
+    assert structured_llm_v2 is not None
+
+    # Test with a simple recursive schema dict that uses $ref
+    recursive_schema = {
+        "type": "object",
+        "properties": {
+            "value": {"type": "string"},
+            "children": {
+                "type": "array",
+                "items": {"$ref": "#"},  # Reference to root schema
+            },
+        },
+    }
+
+    # json_schema_v2 should handle $ref properly
+    structured_llm_dict = llm.with_structured_output(
+        recursive_schema, method="json_schema_v2"
+    )
+    assert structured_llm_dict is not None
+
+
+def test_union_schema_with_anyof() -> None:
+    """Test that `anyOf` schemas are properly handled."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    # Schema with anyOf for union support
+    union_schema = {
+        "anyOf": [
+            {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "text"},
+                    "content": {"type": "string"},
+                },
+                "required": ["type", "content"],
+            },
+            {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "number"},
+                    "value": {"type": "number"},
+                },
+                "required": ["type", "value"],
+            },
+        ]
+    }
+    structured_llm = llm.with_structured_output(union_schema, method="json_schema_v2")
+    assert structured_llm is not None
+
+    # Verify anyOf schemas work with previous (json_schema) method too
+    structured_llm_legacy = llm.with_structured_output(
+        union_schema, method="json_schema"
+    )
+    assert structured_llm_legacy is not None
+
+
+def test_response_schema_mime_type_validation() -> None:
+    """Test that both `response_schema` and `response_json_schema` require correct
+    MIME type."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    schema = {"type": "object", "properties": {"field": {"type": "string"}}}
+
+    # Test response_schema validation - error happens during _prepare_params
+    with pytest.raises(ValueError, match="response_schema.*is only supported when"):
+        llm._prepare_params(
+            stop=None, response_schema=schema, response_mime_type="text/plain"
+        )
+
+    # Test response_json_schema validation
+    with pytest.raises(
+        ValueError, match="response_json_schema.*is only supported when"
+    ):
+        llm._prepare_params(
+            stop=None, response_json_schema=schema, response_mime_type="text/plain"
+        )
+
+    # Test that binding succeeds (validation happens later during generation)
+    llm_with_schema = llm.bind(
+        response_schema=schema, response_mime_type="application/json"
+    )
+    assert llm_with_schema is not None
+
+    llm_with_json_schema = llm.bind(
+        response_json_schema=schema, response_mime_type="application/json"
+    )
+    assert llm_with_json_schema is not None
+
+
+def test_backward_compatibility_response_schema() -> None:
+    """Test that existing `response_schema` parameter continues to work."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    legacy_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    }
+
+    llm_legacy = llm.bind(
+        response_mime_type="application/json", response_schema=legacy_schema
+    )
+
+    legacy_kwargs = cast(Any, llm_legacy).kwargs
+    assert legacy_kwargs["response_mime_type"] == "application/json"
+    assert legacy_kwargs["response_schema"] == legacy_schema
+
+    # Test with_structured_output legacy methods still work
+    structured_llm = llm.with_structured_output(legacy_schema, method="json_schema")
+    assert structured_llm is not None
+
+    structured_llm_mode = llm.with_structured_output(legacy_schema, method="json_mode")
+    assert structured_llm_mode is not None
