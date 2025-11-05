@@ -6,7 +6,7 @@ import json
 import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, List, Optional, Union, cast
+from typing import Any, List, Literal, Optional, Union, cast
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -33,7 +33,7 @@ from langchain_core.messages.block_translators.google_genai import (
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.outputs import ChatGeneration, ChatResult
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
 from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
@@ -2034,6 +2034,55 @@ def test_json_schema_v2_dict_support() -> None:
         dict_schema, method="json_schema_v2"
     )
     assert structured_llm_dict is not None
+
+
+def test_union_schema_support() -> None:
+    """Test that Union types work correctly with both json_schema methods.
+
+    This addresses a bug where json_schema method would fail with KeyError
+    when processing Union types that generate anyOf arrays with $ref entries.
+    """
+
+    class SpamDetails(BaseModel):
+        """Details for content classified as spam."""
+
+        reason: str = Field(
+            description="The reason why the content is considered spam."
+        )
+        spam_type: Literal["phishing", "scam", "unsolicited promotion", "other"] = (
+            Field(description="The type of spam.")
+        )
+
+    class NotSpamDetails(BaseModel):
+        """Details for content classified as not spam."""
+
+        summary: str = Field(description="A brief summary of the content.")
+        is_safe: bool = Field(
+            description="Whether the content is safe for all audiences."
+        )
+
+    class ModerationResult(BaseModel):
+        """The result of content moderation."""
+
+        decision: Union[SpamDetails, NotSpamDetails]
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    structured_v1 = llm.with_structured_output(ModerationResult, method="json_schema")
+    structured_v2 = llm.with_structured_output(
+        ModerationResult, method="json_schema_v2"
+    )
+
+    v1_llm = cast(Any, structured_v1).first
+    v2_llm = cast(Any, structured_v2).first
+
+    # v1 should have response_schema (processed schema without $refs)
+    assert "response_schema" in v1_llm.kwargs
+    assert "response_json_schema" not in v1_llm.kwargs
+
+    # v2 should have response_json_schema (raw schema with $refs preserved)
+    assert "response_json_schema" in v2_llm.kwargs
+    assert "response_schema" not in v2_llm.kwargs
 
 
 def test_recursive_schema_support() -> None:

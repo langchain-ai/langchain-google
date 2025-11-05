@@ -587,29 +587,71 @@ def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -
     if new_defs is None or not isinstance(new_defs, dict):
         return original_schema.copy()
 
-    resulting_schema = {}
+    resulting_schema: dict = {}
 
     for key, value in original_schema.items():
         if key == "$defs":
             continue
 
-        if not isinstance(value, dict):
-            resulting_schema[key] = value
-        elif "$ref" in value:
-            new_value = value.copy()
+        if isinstance(value, list):
+            resulting_schema[key] = _replace_refs_in_list(value, new_defs)
+        elif isinstance(value, dict):
+            if "$ref" in value:
+                new_value = value.copy()
 
-            path = new_value.pop("$ref")
-            def_key = _get_def_key_from_schema_path(path)
-            new_item = new_defs.get(def_key)
+                path = new_value.pop("$ref")
+                def_key = _get_def_key_from_schema_path(path)
+                new_item = new_defs.get(def_key)
 
-            assert isinstance(new_item, dict)
-            new_value.update(new_item)
+                assert isinstance(new_item, dict)
+                new_value.update(new_item)
 
-            resulting_schema[key] = replace_defs_in_schema(new_value, defs=new_defs)
+                resulting_schema[key] = replace_defs_in_schema(new_value, defs=new_defs)
+            else:
+                resulting_schema[key] = replace_defs_in_schema(value, defs=new_defs)
         else:
-            resulting_schema[key] = replace_defs_in_schema(value, defs=new_defs)
+            # Primitive values
+            resulting_schema[key] = value
 
     return resulting_schema
+
+
+def _replace_refs_in_list(items: list[Any], defs: dict[str, Any]) -> list[Any]:
+    """Replace `$ref` references in a list of items.
+
+    Args:
+        items: List that may contain dictionaries with `$ref` keys
+        defs: Schema definitions to resolve references from
+
+    Returns:
+        List with `$ref` references replaced by their definitions
+    """
+    result: list[Any] = []
+    for item in items:
+        if isinstance(item, dict):
+            if "$ref" in item:
+                # Replace the $ref with the actual definition
+                ref_path = item["$ref"]
+                def_key = _get_def_key_from_schema_path(ref_path)
+                ref_definition = defs.get(def_key)
+
+                if ref_definition is not None:
+                    # Create new dict with the resolved definition
+                    resolved_item = item.copy()
+                    resolved_item.pop("$ref")
+                    resolved_item.update(ref_definition)
+                    result.append(replace_defs_in_schema(resolved_item, defs=defs))
+                else:
+                    result.append(item)
+            else:
+                # Recursively process nested dictionaries
+                result.append(replace_defs_in_schema(item, defs=defs))
+        elif isinstance(item, list):
+            # Recursively process nested lists
+            result.append(_replace_refs_in_list(item, defs))
+        else:
+            result.append(item)
+    return result
 
 
 def _get_def_key_from_schema_path(schema_path: str) -> str:
