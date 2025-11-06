@@ -1602,12 +1602,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         from pydantic import BaseModel
         from typing import Literal
 
+
         class Feedback(BaseModel):
             sentiment: Literal["positive", "neutral", "negative"]
             summary: str
 
+
         structured_llm = llm.with_structured_output(Feedback, method="json_schema_v2")
-        
+
         # Streaming returns dictionaries that need to be merged
         stream = structured_llm.stream("The new UI is intuitive and beautiful!")
         full = next(stream)
