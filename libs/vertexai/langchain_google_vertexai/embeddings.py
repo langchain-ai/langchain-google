@@ -33,15 +33,21 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
         protected_namespaces=(),
     )
     project: Optional[str] = None
-    "The default GCP project to use when making Vertex API calls."
+    """The default GCP project to use when making Vertex API calls."""
+
     location: str = Field(default="us-central1")
-    "The default location to use when making API calls."
+    """The default location to use when making API calls."""
+
     model_name: Optional[str] = Field(default=None, alias="model")
-    "Underlying model name."
+    """Underlying model name."""
+
     credentials: Any = Field(default=None, exclude=True)
-    "The default custom credentials (google.auth.credentials.Credentials) to use "
-    "when making API calls. If not provided, credentials will be ascertained from "
-    "the environment."
+    """The default custom credentials (`google.auth.credentials.Credentials`) to use
+    when making API calls.
+
+    If not provided, credentials will be ascertained from the environment.
+    """
+
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
 
