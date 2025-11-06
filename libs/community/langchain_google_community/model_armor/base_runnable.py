@@ -31,9 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class ModelArmorParams(BaseModel):
-    """
-    Model Armor parameters.
-    """
+    """Model Armor parameters."""
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -112,11 +110,12 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
     Setup:
         You must either:
             - Have credentials configured for your environment (gcloud, workload
-              identity , etc...)
+                identity , etc...)
             - Store the path to a service account JSON file as the
-              GOOGLE_APPLICATION_CREDENTIALS environment variable.
+                `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
 
         For more information, see:
+
         - https://cloud.google.com/docs/authentication/application-default-credentials#GAC
         - https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth
 
@@ -189,11 +188,11 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
 
         Args:
             value: Input content that can be:
-                - str: Direct string content
-                - BaseMessage: LangChain message (HumanMessage, AIMessage, etc.)
-                - BasePromptTemplate: LangChain prompt template
-                - List[BaseMessage]: List of LangChain messages
-                - Any other object with __str__, to_string(), or format() methods
+                - `str`: Direct string content
+                - `BaseMessage`: LangChain message (`HumanMessage`, `AIMessage`, etc.)
+                - `BasePromptTemplate`: LangChain prompt template
+                - `list[BaseMessage]`: List of LangChain messages
+                - Any other object with `__str__`, `to_string()`, or `format()` methods
 
         Returns:
             str: Extracted string content for Model Armor API sanitization requests
@@ -259,13 +258,14 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
 
         Args:
             content: User prompt or model response.
-            findings (SanitizationResult): SanitizationResult object from
-                Model Armor sanitization request.
-            config (Optional[RunnableConfig]): A config to use when invoking
-                the Runnable. Please refer to the RunnableConfig for more details.
+            findings: `SanitizationResult` object from Model Armor sanitization request.
+            config: Config to use when invoking the `Runnable`.
+
+                Please refer to the `RunnableConfig` for more details.
 
         Returns:
-            bool: True if all findings are safe, False if any are unsafe (MATCH_FOUND).
+            bool: `True` if all findings are safe, `False` if any are unsafe
+                (`MATCH_FOUND`).
         """
         is_safe = True
         if not findings:
