@@ -158,13 +158,17 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         if not check_bq_dataset_exists(
             client=self._bq_client, dataset_id=self.dataset_name
         ):
-            self._bq_client.create_dataset(dataset=self.dataset_name, exists_ok=True)
+            dataset = bigquery.Dataset(f"{self.project_id}.{self.dataset_name}")
+            dataset.location = self.location
+            self._bq_client.create_dataset(dataset, exists_ok=True)
         if not check_bq_dataset_exists(
             client=self._bq_client, dataset_id=self.temp_dataset_name
         ):
-            self._bq_client.create_dataset(
-                dataset=self.temp_dataset_name, exists_ok=True
+            temp_dataset = bigquery.Dataset(
+                f"{self.project_id}.{self.temp_dataset_name}"
             )
+            temp_dataset.location = self.location
+            self._bq_client.create_dataset(temp_dataset, exists_ok=True)
         table_ref = bigquery.TableReference.from_string(full_table_id)
         self._bq_client.create_table(table_ref, exists_ok=True)
         self._logger.info(
