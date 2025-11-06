@@ -25,17 +25,19 @@ class ImageBytesLoader:
     """Loads image bytes from multiple sources given a string.
 
     Currently supported:
-        - B64 Encoded image string
-        - URL
+
+    - B64 Encoded image string
+    - URL
     """
 
     def load_bytes(self, image_string: str) -> bytes:
-        """Routes to the correct loader based on the ``'image_string'``.
+        """Routes to the correct loader based on the `'image_string'`.
 
         Args:
             image_string: Can be either:
-                    - B64 Encoded image string
-                    - URL
+
+                - B64 Encoded image string
+                - URL
 
         Returns:
             Image bytes.
@@ -179,8 +181,8 @@ def image_bytes_to_b64_string(
 
     Args:
         image_bytes: Bytes of the image.
-        encoding: Type of encoding in the string. ``'ascii'`` by default.
-        image_format: Format of the image. ``'png'`` by default.
+        encoding: Type of encoding in the string. `'ascii'` by default.
+        image_format: Format of the image. `'png'` by default.
 
     Returns:
         B64 image encoded string.

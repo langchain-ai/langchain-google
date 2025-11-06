@@ -32,25 +32,25 @@ class _BaseGoogleGenerativeAI(BaseModel):
     )
     """Google AI API key.
     
-    If not specified will be read from env var å`GOOGLE_API_KEY`.
+    If not specified will be read from env var `GOOGLE_API_KEY`.
     """
 
     credentials: Any = None
-    """The default custom credentials (`google.auth.credentials.Credentials`) to use 
-    when making API calls.
+    """The default custom credentials to use when making API calls.
     
     If not provided, credentials will be ascertained from the `GOOGLE_API_KEY` env var.
     """
 
     temperature: float = 0.7
-    """Run inference with this temperature. Must be within `[0.0, 2.0]`.
+    """Run inference with this temperature.
     
-    If unset, will default to `0.7`.
+    Must be within `[0.0, 2.0]`.
     """
 
     top_p: Optional[float] = None
-    """Decode using nucleus sampling: consider the smallest set of tokens whose
-    probability sum is at least `top_p`.
+    """Decode using nucleus sampling.
+    
+    Consider the smallest set of tokens whose probability sum is at least `top_p`.
     
     Must be within `[0.0, 1.0]`.
     """
@@ -62,11 +62,13 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """
 
     max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
-    """Maximum number of tokens to include in a candidate. Must be greater than zero.
+    """Maximum number of tokens to include in a candidate.
+    
+    Must be greater than zero.
     
     If unset, will use the model's default value, which varies by model.
     
-    See https://ai.google.dev/gemini-api/docs/models for model-specific limits.
+    See [docs](https://ai.google.dev/gemini-api/docs/models) for model-specific limits.
     """
 
     n: int = 1
@@ -77,10 +79,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """
 
     max_retries: int = Field(default=6, alias="retries")
-    """The maximum number of retries to make when generating.
-    
-    If unset, will default to `6`.
-    """
+    """The maximum number of retries to make when generating."""
 
     timeout: Optional[float] = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
@@ -88,14 +87,15 @@ class _BaseGoogleGenerativeAI(BaseModel):
     client_options: Optional[Dict] = Field(
         default=None,
     )
-    """"A dictionary of client options to pass to the Google API client, such as
-    `api_endpoint`.
+    """"A dictionary of client options to pass to the Google API client.
+    
+    Example: `api_endpoint`
     """
 
     base_url: Optional[str] = Field(
         default=None,
     )
-    """The base URL to use for the API client.
+    """Base URL to use for the API client.
     
     Alias of `client_options['api_endpoint']`.
     """
@@ -104,7 +104,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         default=None,
         alias="api_transport",
     )
-    """A string, one of: `[rest, grpc, grpc_asyncio]`."""
+    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`."""
 
     additional_headers: Optional[Dict[str, str]] = Field(
         default=None,
@@ -132,11 +132,11 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """Indicates whether to include thoughts in the response."""
 
     safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
-    """The default safety settings to use for all generations.
+    """Default safety settings to use for all generations.
 
-        For example:
-
-        .. code-block:: python
+        !!! example
+        
+                ```python
             from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
@@ -145,6 +145,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             }
+            ```
     """  # noqa: E501
 
     @property
@@ -168,11 +169,7 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     r"""Returns a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
-
-    Returns:
-        Tuple[str, str]
+        module: The module for a custom user agent header.
     """
     try:
         langchain_version = metadata.version("langchain-google-genai")
@@ -190,11 +187,7 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     r"""Returns a client info object with a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
-
-    Returns:
-        ``google.api_core.gapic_v1.client_info.ClientInfo``
+        module: The module for a custom user agent header.
     """
     client_library_version, user_agent = get_user_agent(module)
     # TODO: remove ignore once google-auth has types.
@@ -206,4 +199,5 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
 
 class SafetySettingDict(TypedDict):
     category: HarmCategory
+
     threshold: HarmBlockThreshold

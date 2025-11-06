@@ -26,15 +26,17 @@ logger = logging.getLogger(__name__)
 class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     """Google GenerativeAI models.
 
-    Example:
-        .. code-block:: python
+    !!! example "Basic Usage"
 
-            from langchain_google_genai import GoogleGenerativeAI
+        ```python
+        from langchain_google_genai import GoogleGenerativeAI
 
-            llm = GoogleGenerativeAI(model="gemini-2.5-pro")
+        llm = GoogleGenerativeAI(model="gemini-2.5-pro")
+        ```
     """
 
-    client: Any = None  #: :meta private:
+    client: Any = None
+
     model_config = ConfigDict(
         populate_by_name=True,
     )

@@ -1,7 +1,7 @@
 """Temporary high-level library of the Google GenerativeAI API.
 
 (The content of this file should eventually go into the Python package
-google.generativeai.)
+`google.generativeai`)
 """
 
 import datetime
@@ -138,8 +138,9 @@ class Config:
     """Global configuration for Google Generative AI API.
 
     Normally, the defaults should work fine. Use this to pass Google Auth credentials
-    such as using a service account. Refer to for auth credentials documentation:
-    https://developers.google.com/identity/protocols/oauth2/service-account#creatinganaccount.
+    such as using a service account.
+
+    Refer to for [auth credentials documentation](https://developers.google.com/identity/protocols/oauth2/service-account#creatinganaccount)
 
     Attributes:
         api_endpoint: The Google Generative API endpoint address.
@@ -177,18 +178,16 @@ class TestCredentials(credentials.Credentials):
 
     @property
     def expired(self) -> bool:
-        """Returns ``False``, test credentials never expire."""
+        """Returns `False`, test credentials never expire."""
         return False
 
     @property
     def valid(self) -> bool:
-        """Returns ``True``, test credentials are always valid."""
+        """Returns `True`, test credentials are always valid."""
         return True
 
     def refresh(self, request: Any) -> None:
-        """Raises :class:``InvalidOperation``, test credentials cannot be
-        refreshed.
-        """
+        """Raises `InvalidOperation`, test credentials cannot be refreshed."""
         msg = "Test credentials cannot be refreshed."
         # TODO: remove ignore once google-auth has types.
         raise exceptions.InvalidOperation(msg)  # type: ignore[no-untyped-call]
@@ -196,7 +195,7 @@ class TestCredentials(credentials.Credentials):
     def apply(self, headers: Any, token: Any = None) -> None:
         """Anonymous credentials do nothing to the request.
 
-        The optional ``token`` argument is not supported.
+        The optional `token` argument is not supported.
 
         Raises:
             google.auth.exceptions.InvalidValue: If a token was specified.
@@ -213,11 +212,12 @@ class TestCredentials(credentials.Credentials):
 def _get_credentials() -> Optional[credentials.Credentials]:
     """Returns credential from config if set or fake credentials for unit testing.
 
-    If ``_config.testing`` is ``True``, a fake credential is returned.
-    Otherwise, we are in a real environment and will use credentials if provided
-    or ``None`` is returned.
+    If `_config.testing` is `True`, a fake credential is returned.
 
-    If ``None`` is passed to the clients later on, the actual credentials will be
+    Otherwise, we are in a real environment and will use credentials if provided or
+    `None` is returned.
+
+    If `None` is passed to the clients later on, the actual credentials will be
     inferred by the rules specified in google.auth package.
     """
     if _config.testing:

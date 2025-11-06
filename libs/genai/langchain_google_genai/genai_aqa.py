@@ -1,8 +1,9 @@
 """Google GenerativeAI Attributed Question and Answering (AQA) service.
 
 The GenAI Semantic AQA API is a managed end to end service that allows developers to
-create responses grounded on specified passages based on a user query. For more
-information visit: https://developers.generativeai.google/guide
+create responses grounded on specified passages based on a user query.
+
+For more information visit: https://ai.google.dev/gemini-api/docs
 """
 
 from typing import Any, List, Optional
@@ -20,7 +21,7 @@ class AqaInput(BaseModel):
 
     Attributes:
         prompt: The user's inquiry.
-        source_passages: A list of passage that the LLM should use only to answer the
+        source_passages: A list of passages that the LLM should use only to answer the
             user's inquiry.
     """
 
@@ -119,7 +120,7 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
             answer_style: See
                 `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
             safety_settings: See `google.ai.generativelanguage.SafetySetting`.
-            temperature: 0.0 to 1.0.
+            temperature: `0.0` to `1.0`.
         """
         super().__init__(**kwargs)
         self._client = _AqaModel(

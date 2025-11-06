@@ -2,7 +2,9 @@
 
 The GenAI Semantic Retriever API is a managed end-to-end service that allows developers
 to create a corpus of documents to perform semantic search on related passages given a
-user query. For more information visit: https://developers.generativeai.google/guide
+user query.
+
+For more information visit: https://ai.google.dev/gemini-api/docs
 """
 
 import asyncio
@@ -205,47 +207,62 @@ class GoogleVectorStore(VectorStore):
 
     Currently, it computes the embedding vectors on the server side.
 
-    Example: Add texts to an existing corpus.
+    !!! example "Add texts to an existing corpus"
 
+        ```python
         store = GoogleVectorStore(corpus_id="123")
         store.add_documents(documents, document_id="456")
+        ```
 
-    Example: Create a new corpus.
+    !!! example "Create a new corpus"
 
+        ```python
         store = GoogleVectorStore.create_corpus(
-            corpus_id="123", display_name="My Google corpus")
+            corpus_id="123", display_name="My Google corpus"
+        )
+        ```
 
-    Example: Query the corpus for relevant passages.
+    !!! example "Query the corpus for relevant passages"
 
-        store.as_retriever() \
-            .get_relevant_documents("Who caught the gingerbread man?")
+        ```python
+        store.as_retriever()
+            .get_relevant_documents("Who caught the gingerbread man?"
+        )
+        ```
 
-    Example: Ask the corpus for grounded responses!
+    !!! example "Ask the corpus for grounded responses"
 
+        ```python
         aqa = store.as_aqa()
         response = aqa.invoke("Who caught the gingerbread man?")
         print(response.answer)
         print(response.attributed_passages)
         print(response.answerability_probability)
+        ```
 
     You can also operate at Google's Document level.
 
-    Example: Add texts to an existing Google Vector Store Document.
+    !!! example "Add texts to an existing Google Vector Store Document"
 
+        ```python
         doc_store = GoogleVectorStore(corpus_id="123", document_id="456")
         doc_store.add_documents(documents)
+        ```
 
-    Example: Create a new Google Vector Store Document.
+    !!! example "Create a new Google Vector Store Document"
 
+        ```python
         doc_store = GoogleVectorStore.create_document(
-            corpus_id="123", document_id="456", display_name="My Google document")
+            corpus_id="123", document_id="456", display_name="My Google document"
+        )
+        ```
 
-    Example: Query the Google document.
+    !!! example "Query the Google document"
 
+        ```python
         doc_store.as_retriever() \
             .get_relevant_documents("Who caught the gingerbread man?")
-
-    For more details, see the class's methods.
+        ```
     """
 
     _retriever: _SemanticRetriever
@@ -263,8 +280,8 @@ class GoogleVectorStore(VectorStore):
 
         Raises:
             DoesNotExistsException: If the IDs do not match to anything on Google
-                server. In this case, consider using ``create_corpus`` or
-                ``create_document`` to create one.
+                server. In this case, consider using `create_corpus` or
+                `create_document` to create one.
         """
         super().__init__(**kwargs)
         self._retriever = _SemanticRetriever.from_ids(corpus_id, document_id)
@@ -314,7 +331,7 @@ class GoogleVectorStore(VectorStore):
 
         Returns:
             An instance of vector store that points to the newly created
-            document.
+                document.
         """
         client = genaix.build_semantic_retriever()
         document = genaix.create_document(
@@ -349,7 +366,7 @@ class GoogleVectorStore(VectorStore):
 
         Returns:
             A vector store pointing to the specified Google Semantic Retriever
-            Document.
+                Document.
 
         Raises:
             DoesNotExistsException: If the IDs do not match to anything at
@@ -436,7 +453,7 @@ class GoogleVectorStore(VectorStore):
         are the entity names returned by `add_texts`.
 
         Returns:
-            True if successful. Otherwise, you should get an exception anyway.
+            `True` if successful. Otherwise, you should get an exception anyway.
         """
         return self._retriever.delete(ids)
 
@@ -449,7 +466,7 @@ class GoogleVectorStore(VectorStore):
         are the entity names returned by `add_texts`.
 
         Returns:
-            True if successful. Otherwise, you should get an exception anyway.
+            `True` if successful. Otherwise, you should get an exception anyway.
         """
         return await asyncio.get_running_loop().run_in_executor(
             None, partial(self.delete, **kwargs), ids
@@ -459,7 +476,8 @@ class GoogleVectorStore(VectorStore):
         """TODO: Check with the team about this!
 
         The underlying vector store already returns a "score proper",
-        i.e. one in [0, 1] where higher means more *similar*.
+
+        i.e. one in `[0, 1]` where higher means more *similar*.
         """
         return lambda score: score
 
@@ -478,7 +496,7 @@ class GoogleVectorStore(VectorStore):
             answer_style: See
                 ``google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle``.
             safety_settings: See ``google.ai.generativelanguage.SafetySetting``.
-            temperature: Value between 0.0 and 1.0 controlling randomness.
+            temperature: Value between `0.0` and `1.0` controlling randomness.
         """
         return (
             RunnablePassthrough[str]()

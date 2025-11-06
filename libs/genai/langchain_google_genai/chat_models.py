@@ -151,9 +151,9 @@ _FunctionDeclarationType = Union[
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Custom exception class for errors associated with the `Google GenAI` API.
 
-    This exception is raised when there are specific issues related to the Google genai
-    API usage in the ChatGoogleGenerativeAI class, such as unsupported message types or
-    roles.
+    This exception is raised when there are specific issues related to the Google GenAI
+    API usage in the `ChatGoogleGenerativeAI` class, such as unsupported message types
+    or roles.
     """
 
 
@@ -166,12 +166,11 @@ def _create_retry_decorator(
     """Creates and returns a preconfigured tenacity retry decorator.
 
     The retry decorator is configured to handle specific Google API exceptions such as
-    ResourceExhausted and ServiceUnavailable. It uses an exponential backoff strategy
-    for retries.
+    `ResourceExhausted` and `ServiceUnavailable`. It uses an exponential backoff
+    strategy for retries.
 
     Returns:
-        Callable[[Any], Any]: A retry decorator configured for handling specific
-        Google API exceptions.
+        A retry decorator configured for handling specific Google API exceptions.
     """
     return retry(
         reraise=True,
@@ -198,7 +197,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     errors or temporary service unavailability.
 
     Args:
-        generation_method (Callable): The chat generation method to be executed.
+        generation_method: The chat generation method to be executed.
         **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
@@ -255,7 +254,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     errors or temporary service unavailability.
 
     Args:
-        generation_method (Callable): The chat generation method to be executed.
+        generation_method: The chat generation method to be executed.
         **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
@@ -299,11 +298,12 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 def _convert_to_parts(
     raw_content: Union[str, Sequence[Union[str, dict]]],
 ) -> List[Part]:
-    """Converts LangChain message content into generativelanguage_v1beta parts.
+    """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
     Used when preparing Human, System and AI messages for sending to the API.
 
-    Handles both legacy (pre-v1) dict-based content blocks and v1 ContentBlock objects.
+    Handles both legacy (pre-v1) dict-based content blocks and v1 `ContentBlock`
+    objects.
     """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
@@ -525,7 +525,7 @@ def _convert_to_parts(
 def _convert_tool_message_to_parts(
     message: ToolMessage | FunctionMessage, name: Optional[str] = None
 ) -> list[Part]:
-    """Converts a tool or function message to a Google part."""
+    """Converts a tool or function message to a Google `Part`."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
     name = message.name or name or message.additional_kwargs.get("name")
     response: Any
@@ -568,7 +568,7 @@ def _get_ai_message_tool_messages_parts(
     """Conversion.
 
     Finds relevant tool messages for the AI message and converts them to a single list
-    of Parts.
+    of `Part`s.
     """
     # We are interested only in the tool messages that are part of the AI message
     tool_calls_ids = {tool_call["id"]: tool_call for tool_call in ai_message.tool_calls}
@@ -595,14 +595,15 @@ def _parse_chat_history(
     Args:
         input_messages: Sequence of `BaseMessage` objects representing the chat history.
         convert_system_message_to_human: Whether to convert the first system message
-            into a human message. Deprecated, use system instructions instead.
+            into a `HumanMessage`. Deprecated, use system instructions instead.
 
     Returns:
         A tuple containing:
-        - An optional `google.ai.generativelanguage_v1beta.types.Content` representing
-            the system instruction (if any).
-        - A list of `google.ai.generativelanguage_v1beta.types.Content` representing the
-            formatted messages.
+
+            - An optional `google.ai.generativelanguage_v1beta.types.Content` representing
+                the system instruction (if any).
+            - A list of `google.ai.generativelanguage_v1beta.types.Content` representing the
+                formatted messages.
     """
 
     if convert_system_message_to_human:
@@ -1049,7 +1050,7 @@ def _response_to_result(
     stream: bool = False,
     prev_usage: Optional[UsageMetadata] = None,
 ) -> ChatResult:
-    """Converts a PaLM API response into a LangChain ChatResult."""
+    """Converts a PaLM API response into a LangChain `ChatResult`."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
 
     # Get usage metadata
@@ -1163,7 +1164,7 @@ def _is_event_loop_running() -> bool:
 
 
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
-    r"""`Google AI` chat models integration.
+    r"""Google AI chat models integration.
 
     Instantiation:
         To use, you must have either:
@@ -1172,180 +1173,180 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             2. Pass your API key using the ``google_api_key`` kwarg to the
             ChatGoogleGenerativeAI constructor.
 
-        .. code-block:: python
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-            from langchain_google_genai import ChatGoogleGenerativeAI
-
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-            llm.invoke("Write me a ballad about LangChain")
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        llm.invoke("Write me a ballad about LangChain")
+        ```
 
     Invoke:
-        .. code-block:: python
+        ```python
+        messages = [
+            ("system", "Translate the user sentence to French."),
+            ("human", "I love programming."),
+        ]
+        llm.invoke(messages)
+        ```
 
-            messages = [
-                ("system", "Translate the user sentence to French."),
-                ("human", "I love programming."),
-            ]
-            llm.invoke(messages)
-
-        .. code-block:: python
-
-            AIMessage(
-                content="J'adore programmer. \\n",
-                response_metadata={
-                    "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
-                    "finish_reason": "STOP",
-                    "safety_ratings": [
-                        {
-                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HATE_SPEECH",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HARASSMENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                    ],
-                },
-                id="run-56cecc34-2e54-4b52-a974-337e47008ad2-0",
-                usage_metadata={
-                    "input_tokens": 18,
-                    "output_tokens": 5,
-                    "total_tokens": 23,
-                },
-            )
+        ```python
+        AIMessage(
+            content="J'adore programmer. \\n",
+            response_metadata={
+                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "finish_reason": "STOP",
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                ],
+            },
+            id="run-56cecc34-2e54-4b52-a974-337e47008ad2-0",
+            usage_metadata={
+                "input_tokens": 18,
+                "output_tokens": 5,
+                "total_tokens": 23,
+            },
+        )
+        ```
 
     Stream:
-        .. code-block:: python
+        ```python
+        for chunk in llm.stream(messages):
+            print(chunk)
+        ```
 
-            for chunk in llm.stream(messages):
-                print(chunk)
+        ```python
+        AIMessageChunk(
+            content="J",
+            response_metadata={"finish_reason": "STOP", "safety_ratings": []},
+            id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
+            usage_metadata={
+                "input_tokens": 18,
+                "output_tokens": 1,
+                "total_tokens": 19,
+            },
+        )
+        AIMessageChunk(
+            content="'adore programmer. \\n",
+            response_metadata={
+                "finish_reason": "STOP",
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                ],
+            },
+            id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
+            usage_metadata={
+                "input_tokens": 18,
+                "output_tokens": 5,
+                "total_tokens": 23,
+            },
+        )
+        ```
 
-        .. code-block:: python
+        ```python
+        stream = llm.stream(messages)
+        full = next(stream)
+        for chunk in stream:
+            full += chunk
+        full
+        ```
 
-            AIMessageChunk(
-                content="J",
-                response_metadata={"finish_reason": "STOP", "safety_ratings": []},
-                id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
-                usage_metadata={
-                    "input_tokens": 18,
-                    "output_tokens": 1,
-                    "total_tokens": 19,
-                },
-            )
-            AIMessageChunk(
-                content="'adore programmer. \\n",
-                response_metadata={
-                    "finish_reason": "STOP",
-                    "safety_ratings": [
-                        {
-                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HATE_SPEECH",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HARASSMENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                    ],
-                },
-                id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
-                usage_metadata={
-                    "input_tokens": 18,
-                    "output_tokens": 5,
-                    "total_tokens": 23,
-                },
-            )
-
-        .. code-block:: python
-
-            stream = llm.stream(messages)
-            full = next(stream)
-            for chunk in stream:
-                full += chunk
-            full
-
-        .. code-block:: python
-
-            AIMessageChunk(
-                content="J'adore programmer. \\n",
-                response_metadata={
-                    "finish_reason": "STOPSTOP",
-                    "safety_ratings": [
-                        {
-                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HATE_SPEECH",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HARASSMENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                    ],
-                },
-                id="run-3ce13a42-cd30-4ad7-a684-f1f0b37cdeec",
-                usage_metadata={
-                    "input_tokens": 36,
-                    "output_tokens": 6,
-                    "total_tokens": 42,
-                },
-            )
+        ```python
+        AIMessageChunk(
+            content="J'adore programmer. \\n",
+            response_metadata={
+                "finish_reason": "STOPSTOP",
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                ],
+            },
+            id="run-3ce13a42-cd30-4ad7-a684-f1f0b37cdeec",
+            usage_metadata={
+                "input_tokens": 36,
+                "output_tokens": 6,
+                "total_tokens": 42,
+            },
+        )
+        ```
 
     Async:
-        .. code-block:: python
+        ```python
+        await llm.ainvoke(messages)
 
-            await llm.ainvoke(messages)
+        # stream:
+        # async for chunk in (await llm.astream(messages))
 
-            # stream:
-            # async for chunk in (await llm.astream(messages))
-
-            # batch:
-            # await llm.abatch([messages])
+        # batch:
+        # await llm.abatch([messages])
+        ```
 
     Context Caching:
         Context caching allows you to store and reuse content (e.g., PDFs, images) for
-        faster processing. The ``cached_content`` parameter accepts a cache name created
+        faster processing. The `cached_content` parameter accepts a cache name created
         via the Google Generative AI API. Below are two examples: caching a single file
-        directly and caching multiple files using ``Part``.
+        directly and caching multiple files using `Part`.
 
-        Single File Example:
-        This caches a single file and queries it.
+        !!! example "Single file example"
 
-        .. code-block:: python
+            This caches a single file and queries it.
 
+            ```python
             from google import genai
             from google.genai import types
             import time
@@ -1382,12 +1383,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
             message = HumanMessage(content="Summarize the main points of the content.")
             llm.invoke([message])
+            ```
 
-        Multiple Files Example:
-        This caches two files using `Part` and queries them together.
+        !!! example "Multiple files example"
 
-        .. code-block:: python
+            This caches two files using `Part` and queries them together.
 
+            ```python
             from google import genai
             from google.genai.types import CreateCachedContentConfig, Content, Part
             import time
@@ -1440,357 +1442,358 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 content="Provide a summary of the key information across both files."
             )
             llm.invoke([message])
+            ```
 
     Tool calling:
-        .. code-block:: python
-
-            from pydantic import BaseModel, Field
-
-
-            class GetWeather(BaseModel):
-                '''Get the current weather in a given location'''
-
-                location: str = Field(
-                    ..., description="The city and state, e.g. San Francisco, CA"
-                )
+        ```python
+        from pydantic import BaseModel, Field
 
 
-            class GetPopulation(BaseModel):
-                '''Get the current population in a given location'''
+        class GetWeather(BaseModel):
+            '''Get the current weather in a given location'''
 
-                location: str = Field(
-                    ..., description="The city and state, e.g. San Francisco, CA"
-                )
-
-
-            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
-            ai_msg = llm_with_tools.invoke(
-                "Which city is hotter today and which is bigger: LA or NY?"
+            location: str = Field(
+                ..., description="The city and state, e.g. San Francisco, CA"
             )
-            ai_msg.tool_calls
 
-        .. code-block:: python
 
-            [
-                {
-                    "name": "GetWeather",
-                    "args": {"location": "Los Angeles, CA"},
-                    "id": "c186c99f-f137-4d52-947f-9e3deabba6f6",
-                },
-                {
-                    "name": "GetWeather",
-                    "args": {"location": "New York City, NY"},
-                    "id": "cebd4a5d-e800-4fa5-babd-4aa286af4f31",
-                },
-                {
-                    "name": "GetPopulation",
-                    "args": {"location": "Los Angeles, CA"},
-                    "id": "4f92d897-f5e4-4d34-a3bc-93062c92591e",
-                },
-                {
-                    "name": "GetPopulation",
-                    "args": {"location": "New York City, NY"},
-                    "id": "634582de-5186-4e4b-968b-f192f0a93678",
-                },
-            ]
+        class GetPopulation(BaseModel):
+            '''Get the current population in a given location'''
 
-    Use Search with Gemini 2:
-        .. code-block:: python
-
-            from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
-
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-            resp = llm.invoke(
-                "When is the next total solar eclipse in US?",
-                tools=[GenAITool(google_search={})],
+            location: str = Field(
+                ..., description="The city and state, e.g. San Francisco, CA"
             )
+
+
+        llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
+        ai_msg = llm_with_tools.invoke(
+            "Which city is hotter today and which is bigger: LA or NY?"
+        )
+        ai_msg.tool_calls
+        ```
+
+        ```python
+        [
+            {
+                "name": "GetWeather",
+                "args": {"location": "Los Angeles, CA"},
+                "id": "c186c99f-f137-4d52-947f-9e3deabba6f6",
+            },
+            {
+                "name": "GetWeather",
+                "args": {"location": "New York City, NY"},
+                "id": "cebd4a5d-e800-4fa5-babd-4aa286af4f31",
+            },
+            {
+                "name": "GetPopulation",
+                "args": {"location": "Los Angeles, CA"},
+                "id": "4f92d897-f5e4-4d34-a3bc-93062c92591e",
+            },
+            {
+                "name": "GetPopulation",
+                "args": {"location": "New York City, NY"},
+                "id": "634582de-5186-4e4b-968b-f192f0a93678",
+            },
+        ]
+        ```
+
+    Search:
+        ```python
+        from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        resp = llm.invoke(
+            "When is the next total solar eclipse in US?",
+            tools=[GenAITool(google_search={})],
+        )
+        ```
 
     Structured output:
-        .. code-block:: python
+        ```python
+        from typing import Optional
 
-            from typing import Optional
-
-            from pydantic import BaseModel, Field
-
-
-            class Joke(BaseModel):
-                '''Joke to tell user.'''
-
-                setup: str = Field(description="The setup of the joke")
-                punchline: str = Field(description="The punchline to the joke")
-                rating: Optional[int] = Field(
-                    description="How funny the joke is, from 1 to 10"
-                )
+        from pydantic import BaseModel, Field
 
 
-            # Default method uses function calling
-            structured_llm = llm.with_structured_output(Joke)
+        class Joke(BaseModel):
+            '''Joke to tell user.'''
 
-            # For more reliable output, use json_schema with native responseSchema
-            structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
-            structured_llm_json.invoke("Tell me a joke about cats")
-
-        .. code-block:: python
-
-            Joke(
-                setup="Why are cats so good at video games?",
-                punchline="They have nine lives on the internet",
-                rating=None,
+            setup: str = Field(description="The setup of the joke")
+            punchline: str = Field(description="The punchline to the joke")
+            rating: Optional[int] = Field(
+                description="How funny the joke is, from 1 to 10"
             )
+
+
+        # Default method uses function calling
+        structured_llm = llm.with_structured_output(Joke)
+
+        # For more reliable output, use json_schema with native responseSchema
+        structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
+        structured_llm_json.invoke("Tell me a joke about cats")
+        ```
+
+        ```python
+        Joke(
+            setup="Why are cats so good at video games?",
+            punchline="They have nine lives on the internet",
+            rating=None,
+        )
+        ```
 
         Two methods are supported for structured output:
 
-        * ``method="function_calling"`` (default): Uses tool calling to extract
-        structured data. Compatible with all models.
-        * ``method="json_schema"``: Uses Gemini's native structured output with
-        responseSchema. More reliable but requires Gemini 1.5+ models.
-        ``method="json_mode"`` also works for backwards compatibility but is a misnomer.
+        * `method='function_calling'` (default): Uses tool calling to extract
+            structured data. Compatible with all models.
+        * `method='json_schema'`: Uses Gemini's native structured output with
+            `responseSchema`. `method="json_mode"` also works for backwards
+            compatibility but is a misnomer.
 
-        The ``json_schema`` method is recommended for better reliability as it
+        The `json_schema` method is recommended for better reliability as it
         constrains the model's generation process directly rather than relying on
         post-processing tool calls.
 
     Image input:
-        .. code-block:: python
+        ```python
+        import base64
+        import httpx
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            import httpx
-            from langchain_core.messages import HumanMessage
+        image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+        image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the weather in this image"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-            image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "describe the weather in this image"},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "The weather in this image appears to be sunny and pleasant. The sky is a
-            bright blue with scattered white clouds, suggesting fair weather. The lush
-            green grass and trees indicate a warm and possibly slightly breezy day.
-            There are no signs of rain or storms."
+        ```python
+        "The weather in this image appears to be sunny and pleasant. The sky is a
+        bright blue with scattered white clouds, suggesting fair weather. The lush
+        green grass and trees indicate a warm and possibly slightly breezy day.
+        There are no signs of rain or storms."
+        ```
 
     PDF input:
-        .. code-block:: python
+        ```python
+        import base64
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            from langchain_core.messages import HumanMessage
+        pdf_bytes = open("/path/to/your/test.pdf", "rb").read()
+        pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-            pdf_bytes = open("/path/to/your/test.pdf", "rb").read()
-            pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the document in a sentence"},
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "application/pdf",
+                    "data": pdf_base64,
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "describe the document in a sentence"},
-                    {
-                        "type": "file",
-                        "source_type": "base64",
-                        "mime_type": "application/pdf",
-                        "data": pdf_base64,
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "This research paper describes a system developed for SemEval-2025 Task 9,
-            which aims to automate the detection of food hazards from recall reports,
-            addressing the class imbalance problem by leveraging LLM-based data
-            augmentation techniques and transformer-based models to improve
-            performance."
+        ```python
+        "This research paper describes a system developed for SemEval-2025 Task 9,
+        which aims to automate the detection of food hazards from recall reports,
+        addressing the class imbalance problem by leveraging LLM-based data
+        augmentation techniques and transformer-based models to improve
+        performance."
+        ```
 
     Video input:
-        .. code-block:: python
+        ```python
+        import base64
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            from langchain_core.messages import HumanMessage
+        video_bytes = open("/path/to/your/video.mp4", "rb").read()
+        video_base64 = base64.b64encode(video_bytes).decode("utf-8")
 
-            video_bytes = open("/path/to/your/video.mp4", "rb").read()
-            video_base64 = base64.b64encode(video_bytes).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "describe what's in this video in a sentence",
+                },
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "video/mp4",
+                    "data": video_base64,
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": "describe what's in this video in a sentence",
-                    },
-                    {
-                        "type": "file",
-                        "source_type": "base64",
-                        "mime_type": "video/mp4",
-                        "data": video_base64,
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
-            adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
-            attempt to prepare a turkey dinner."
+        ```python
+        "Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
+        adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
+        attempt to prepare a turkey dinner."
+        ```
 
         You can also pass YouTube URLs directly:
 
-        .. code-block:: python
+        ```python
+        from langchain_core.messages import HumanMessage
 
-            from langchain_core.messages import HumanMessage
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "summarize the video in 3 sentences."},
+                {
+                    "type": "media",
+                    "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                    "mime_type": "video/mp4",
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "summarize the video in 3 sentences."},
-                    {
-                        "type": "media",
-                        "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
-                        "mime_type": "video/mp4",
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "The video is a demo of multimodal live streaming in Gemini 2.0. The
-            narrator is sharing his screen in AI Studio and asks if the AI can see it.
-            The AI then reads text that is highlighted on the screen, defines the word
-            “multimodal,” and summarizes everything that was seen and heard."
+        ```python
+        "The video is a demo of multimodal live streaming in Gemini 2.0. The
+        narrator is sharing his screen in AI Studio and asks if the AI can see it.
+        The AI then reads text that is highlighted on the screen, defines the word
+        “multimodal,” and summarizes everything that was seen and heard."
+        ```
 
     Audio input:
-        .. code-block:: python
+        ```python
+        import base64
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            from langchain_core.messages import HumanMessage
+        audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
-            audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
-            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "summarize this audio in a sentence"},
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "audio/mp3",
+                    "data": audio_base64,
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "summarize this audio in a sentence"},
-                    {
-                        "type": "file",
-                        "source_type": "base64",
-                        "mime_type": "audio/mp3",
-                        "data": audio_base64,
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "In this episode of the Made by Google podcast, Stephen Johnson and Simon
-            Tokumine discuss NotebookLM, a tool designed to help users understand
-            complex material in various modalities, with a focus on its unexpected uses,
-            the development of audio overviews, and the implementation of new features
-            like mind maps and source discovery."
+        ```python
+        "In this episode of the Made by Google podcast, Stephen Johnson and Simon
+        Tokumine discuss NotebookLM, a tool designed to help users understand
+        complex material in various modalities, with a focus on its unexpected uses,
+        the development of audio overviews, and the implementation of new features
+        like mind maps and source discovery."
+        ```
 
     File upload (URI-based):
         You can also upload files to Google's servers and reference them by URI.
         This works for PDFs, images, videos, and audio files.
 
-        .. code-block:: python
+        ```python
+        import time
+        from google import genai
+        from langchain_core.messages import HumanMessage
 
-            import time
-            from google import genai
-            from langchain_core.messages import HumanMessage
+        client = genai.Client()
 
-            client = genai.Client()
+        myfile = client.files.upload(file="/path/to/your/sample.pdf")
+        while myfile.state.name == "PROCESSING":
+            time.sleep(2)
+            myfile = client.files.get(name=myfile.name)
 
-            myfile = client.files.upload(file="/path/to/your/sample.pdf")
-            while myfile.state.name == "PROCESSING":
-                time.sleep(2)
-                myfile = client.files.get(name=myfile.name)
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "What is in the document?"},
+                {
+                    "type": "media",
+                    "file_uri": myfile.uri,
+                    "mime_type": "application/pdf",
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "What is in the document?"},
-                    {
-                        "type": "media",
-                        "file_uri": myfile.uri,
-                        "mime_type": "application/pdf",
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "This research paper assesses and mitigates multi-turn jailbreak
-            vulnerabilities in large language models using the Crescendo attack study,
-            evaluating attack success rates and mitigation strategies like prompt
-            hardening and LLM-as-guardrail."
+        ```python
+        "This research paper assesses and mitigates multi-turn jailbreak
+        vulnerabilities in large language models using the Crescendo attack study,
+        evaluating attack success rates and mitigation strategies like prompt
+        hardening and LLM-as-guardrail."
+        ```
 
     Token usage:
-        .. code-block:: python
+        ```python
+        ai_msg = llm.invoke(messages)
+        ai_msg.usage_metadata
+        ```
 
-            ai_msg = llm.invoke(messages)
-            ai_msg.usage_metadata
-
-        .. code-block:: python
-
-            {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
-
+        ```python
+        {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
+        ```
 
     Response metadata
-        .. code-block:: python
+        ```python
+        ai_msg = llm.invoke(messages)
+        ai_msg.response_metadata
+        ```
 
-            ai_msg = llm.invoke(messages)
-            ai_msg.response_metadata
-
-        .. code-block:: python
-
-            {
-                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
-                "finish_reason": "STOP",
-                "safety_ratings": [
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                ],
-            }
-
+        ```python
+        {
+            "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+            "finish_reason": "STOP",
+            "safety_ratings": [
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+            ],
+        }
+        ```
     """  # noqa: E501
 
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
-    async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
+    client: Any = Field(default=None, exclude=True)
+
+    async_client_running: Any = Field(default=None, exclude=True)
+
     default_metadata: Optional[Sequence[Tuple[str, str]]] = Field(
         default=None, alias="default_metadata_input"
-    )  #: :meta private:
+    )
 
     convert_system_message_to_human: bool = False
-    """Whether to merge any leading SystemMessage into the following HumanMessage.
+    """Whether to merge any leading `SystemMessage` into the following `HumanMessage`.
 
     Gemini does not support system messages; any unsupported messages will raise an
     error.
@@ -1801,12 +1804,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     supported in Gemini 1.5 and later models.
 
     Supported mimetype:
-        * ``'text/plain'``: (default) Text output.
-        * ``'application/json'``: JSON response in the candidates.
-        * ``'text/x.enum'``: Enum in plain text.
+        * `'text/plain'`: (default) Text output.
+        * `'application/json'`: JSON response in the candidates.
+        * `'text/x.enum'`: Enum in plain text.
 
     The model also needs to be prompted to output the appropriate response
-    type, otherwise the behavior is undefined. This is a preview feature.
+    type, otherwise the behavior is undefined. (This is a preview feature.)
     """
 
     response_schema: Optional[Dict[str, Any]] = None
@@ -1817,9 +1820,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     cached_content: Optional[str] = None
     """The name of the cached content used as context to serve the prediction.
 
-    Note: only used in explicit caching, where users can have control over caching
-    (e.g. what content to cache) and enjoy guaranteed cost savings. Format:
-    ``cachedContents/{cachedContent}``.
+    !!! note
+    
+        Only used in explicit caching, where users can have control over caching (e.g.
+        what content to cache) and enjoy guaranteed cost savings. Format:
+        `cachedContents/{cachedContent}`.
     """
 
     stop: Optional[List[str]] = None
@@ -1867,6 +1872,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @property
     def _supports_code_execution(self) -> bool:
+        """Whether the model supports code execution.
+
+        See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
+        full list.
+        """
         return (
             "gemini-1.5-pro" in self.model
             or "gemini-1.5-flash" in self.model
@@ -1886,7 +1896,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        """Validates params and passes them to google-generativeai package."""
+        """Validates params and passes them to `google-generativeai` package."""
         if self.temperature is not None and not 0 <= self.temperature <= 2.0:
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)
@@ -1986,19 +1996,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> AIMessage:
-        """Override invoke to add code_execution parameter.
+        """Override invoke to add `code_execution` parameter.
 
-        Supported on: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash, and
-        gemini-2.0-pro. When enabled, the model can execute code to solve problems.
+        See the [models page](https://ai.google.dev/gemini-api/docs/models) to see if
+        your chosen model supports code execution.
+
+        When enabled, the model can execute code to solve problems.
         """
 
         if code_execution is not None:
             if not self._supports_code_execution:
                 msg = (
-                    f"Code execution is only supported on Gemini 1.5 Pro, \
-                    Gemini 1.5 Flash, "
-                    f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. \
-                    Current model: {self.model}"
+                    "Code execution is only supported on Gemini 1.5, 2.0, and 2.5 "
+                    f"models. Current model: {self.model}"
                 )
                 raise ValueError(msg)
             if "tools" not in kwargs:
@@ -2519,12 +2529,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Args:
             tools: A list of tool definitions to bind to this chat model.
-                Can be a pydantic model, callable, or BaseTool. Pydantic models,
-                callables, and BaseTools will be automatically converted to their schema
-                dictionary representation. Tools with Union types in their arguments are
-                now supported and converted to `anyOf` schemas.
-            **kwargs: Any additional parameters to pass to the
-                :class:`~langchain.runnable.Runnable` constructor.
+
+                Can be a pydantic model, `Callable`, or `BaseTool`. Pydantic models,
+                `Callable`, and `BaseTool` objects will be automatically converted to
+                their schema dictionary representation.
+
+                Tools with Union types in their arguments are now supported and
+                converted to `anyOf` schemas.
+            **kwargs: Any additional parameters to pass to the `Runnable` constructor.
         """
         if tool_choice and tool_config:
             msg = (
@@ -2548,6 +2560,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @property
     def _supports_tool_choice(self) -> bool:
+        """Whether the model supports the `tool_choice` parameter.
+
+        See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
+        full list. Gemini calls this "function calling".
+        """
         return (
             "gemini-1.5-pro" in self.model
             or "gemini-1.5-flash" in self.model

@@ -12,7 +12,7 @@ def translate_citations_to_grounding_metadata(
     """Translate LangChain Citations to Google AI grounding metadata format.
 
     Args:
-        citations: List of Citation content blocks.
+        citations: List of `Citation` content blocks.
         web_search_queries: Optional list of search queries that generated
             the grounding data.
 
@@ -131,7 +131,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
     Returns:
         List of dictionaries in `google.ai.generativelanguage_v1beta.types.Content`
-        format, ready to be sent to the API.
+            format, ready to be sent to the API.
     """
     new_content: list = []
     for block in content:
