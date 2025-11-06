@@ -22,10 +22,12 @@ class GetCurrentDatetime(CalendarBaseTool):  # type: ignore[override, override]
     """Tool that gets the current datetime according to the calendar timezone."""
 
     name: str = "get_current_datetime"
+
     description: str = (
         "Use this tool to get the current datetime according to the calendar timezone."
         "The output datetime format is 'YYYY-MM-DD HH:MM:SS'"
     )
+
     args_schema: Type[CurrentDatetimeSchema] = CurrentDatetimeSchema
 
     def get_timezone(self, calendar_id: Optional[str]) -> str:

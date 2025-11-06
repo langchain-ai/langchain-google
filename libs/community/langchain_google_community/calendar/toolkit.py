@@ -41,7 +41,7 @@ class CalendarToolkit(BaseToolkit):
         service. For example, it can create, update, and delete calendar events
         on behalf of the associated account.
 
-        See [Security Best Practices](https://docs.langchain.com/oss/python/security-policy)
+        See [Security Policy](https://docs.langchain.com/oss/python/security-policy)
         for more information.
     """
 

@@ -21,6 +21,7 @@ class SearchEventsSchema(BaseModel):
             "Use the tool 'get_calendars_info' to get it."
         ),
     )
+
     min_datetime: str = Field(
         ...,
         description=(
@@ -28,12 +29,15 @@ class SearchEventsSchema(BaseModel):
             "If you do not know the current datetime, use the tool to get it."
         ),
     )
+
     max_datetime: str = Field(
         ..., description="The end datetime for the events search."
     )
+
     max_results: int = Field(
         default=10, description="The maximum number of results to return."
     )
+
     single_events: bool = Field(
         default=True,
         description=(
@@ -42,10 +46,12 @@ class SearchEventsSchema(BaseModel):
             "'startTime' or 'updated'."
         ),
     )
+
     order_by: str = Field(
         default="startTime",
         description="The order of the events, either 'startTime' or 'updated'.",
     )
+
     query: Optional[str] = Field(
         default=None,
         description=(
@@ -61,7 +67,9 @@ class CalendarSearchEvents(CalendarBaseTool):  # type: ignore[override, override
     """Tool that retrieves events from Google Calendar."""
 
     name: str = "search_events"
+
     description: str = "Use this tool to search events in the calendar."
+
     args_schema: Type[SearchEventsSchema] = SearchEventsSchema
 
     def _get_calendar_timezone(

@@ -22,35 +22,44 @@ class VertexAIRank(BaseDocumentCompressor):
 
     Inherits from
     [`BaseDocumentCompressor`][langchain_core.documents.compressor.BaseDocumentCompressor].
-    Reranks documents based on relevance to a query using Google's semantic
-    ranking model.
 
-    Attributes:
-        project_id: Google Cloud project ID.
-        location_id: Location ID for the ranking service.
-        ranking_config: Name of the rank service config. Default: 'default_config'.
-        model: Model identifier. Default: `semantic-ranker-512@latest`.
-        top_n: Number of results to return. Default: 10.
-        ignore_record_details_in_response: If True, response contains only record ID
-            and score.
-        id_field: Unique document metadata field to use as an ID.
-        title_field: Document metadata field to use as title.
-        credentials: Google Cloud credentials object.
-        credentials_path: Path to the Google Cloud service account credentials file.
-        timeout: Timeout for API calls in seconds.
+    Reranks documents based on relevance to a query using Google's semantic ranking
+    model.
     """
 
     project_id: str = Field(default=None)  # type: ignore
+    """Google Cloud project ID."""
+
     location_id: str = Field(default="global")
+    """Location ID for the ranking service."""
+
     ranking_config: str = Field(default="default_config")
+    """Name of the rank service config."""
+
     model: str = Field(default="semantic-ranker-512@latest")
+    """Model identifier."""
+
     top_n: int = Field(default=10)
+    """Number of results to return."""
+
     ignore_record_details_in_response: bool = Field(default=False)
+    """If `True`, response contains only record ID and score."""
+
     id_field: Optional[str] = Field(default=None)
+    """Unique document metadata field to use as an ID."""
+
     title_field: Optional[str] = Field(default=None)
+    """Document metadata field to use as title."""
+
     credentials: Optional[Credentials] = Field(default=None)
+    """Google Cloud credentials object."""
+
     credentials_path: Optional[str] = Field(default=None)
+    """Path to the Google Cloud service account credentials file."""
+
     timeout: Optional[int] = Field(default=None)
+    """Timeout for API calls in seconds."""
+
     client: Any = None
 
     def __init__(self, **kwargs: Any):

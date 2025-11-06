@@ -131,16 +131,16 @@ class GoogleGeocodingAPIWrapper(BaseModel):
 
         Args:
             query: Location(s) to geocode (e.g., `'Eiffel Tower'` or
-                "Times Square, Central Park").
-            language: Language code for results (e.g., "en", "fr", "ja").
-            region: Region bias (e.g., "us", "fr", "jp").
+                `'Times Square, Central Park'`).
+            language: Language code for results (e.g., `'en'`, `'fr'`, `'ja'`).
+            region: Region bias (e.g., `'us'`, `'fr'`, `'jp'`).
             max_results: Maximum number of results to return.
 
         Returns:
-            status (str): Request status (`"OK"` or error status).
+            status (str): Request status (`'OK'` or error status).
             total_results (int): Number of locations found.
-            results (list): Location data with address, geometry, metadata,
-                and navigation.
+            results (list): Location data with address, geometry, metadata, and
+                navigation.
             query_info (dict): Query metadata (original query, language, region).
         """
         try:
@@ -201,9 +201,9 @@ class GoogleGeocodingAPIWrapper(BaseModel):
 
         Args:
             locations: List of locations (e.g., `["Eiffel Tower", "Times Square"]`).
-            language: Language code for results. Optional.
-            region: Region bias. Optional.
-            components: Component filters (e.g., `{"country": "US"}`). Optional.
+            language: Language code for results.
+            region: Region bias.
+            components: Component filters (e.g., `{"country": "US"}`).
 
         Returns:
             status (str): Overall batch status.
@@ -364,8 +364,8 @@ class GoogleGeocodingAPIWrapper(BaseModel):
 
         Args:
             query: Location(s) to geocode.
-            language: Language code for results. Optional.
-            region: Region bias. Optional.
+            language: Language code for results.
+            region: Region bias.
 
         Returns:
             status (str): Request status.
@@ -411,16 +411,19 @@ class GoogleGeocodingTool(BaseTool):
     """Tool for geocoding locations using Google Maps Geocoding API.
 
     Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+
     Supports batch location lookups with detailed address and coordinate information.
 
     """
 
     name: str = "google_geocode"
+
     description: str = (
         "A geocoding tool for multiple locations. "
         "Input: comma-separated locations. "
         "Returns: location data."
     )
+
     args_schema: Type[BaseModel] = GoogleGeocodeInput
 
     # Configuration
@@ -447,11 +450,11 @@ class GoogleGeocodingTool(BaseTool):
 
         Args:
             query: Comma-separated locations to geocode.
-            run_manager: Callback manager. Optional.
+            run_manager: Callback manager.
 
         Returns:
-            results (list): Location data with coordinates and addresses.
-            response (dict): Raw response with status and query info.
+            results: Location data with coordinates and addresses.
+            response: Raw response with status and query info.
         """
         try:
             locations = [loc.strip() for loc in query.split(",") if loc.strip()]
@@ -496,11 +499,11 @@ class GoogleGeocodingTool(BaseTool):
 
         Args:
             query: Comma-separated locations to geocode.
-            run_manager: Async callback manager. Optional.
+            run_manager: Async callback manager.
 
         Returns:
-            results (list): Location data with coordinates and addresses.
-            response (dict): Raw response with status and query info.
+            results: Location data with coordinates and addresses.
+            response: Raw response with status and query info.
         """
         try:
             result = await self.api_wrapper.geocode_async(

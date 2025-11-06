@@ -25,6 +25,7 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
     """Retriever for Google Cloud Document AI Warehouse.
 
     Inherits from [`BaseRetriever`][langchain_core.retrievers.BaseRetriever].
+
     Searches documents using Document AI Warehouse schema. Documents must be
     created and uploaded separately before retrieval.
 
@@ -42,13 +43,19 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
 
     location: str = "us"
     """Google Cloud location where Document AI Warehouse is placed."""
+
     project_number: str
     """Google Cloud project number, should contain digits only."""
+
     schema_id: Optional[str] = None
     """Document AI Warehouse schema to query against.
-    If nothing is provided, all documents in the project will be searched."""
+    
+    If nothing is provided, all documents in the project will be searched.
+    """
+
     qa_size_limit: int = 5
     """The limit on the number of documents returned."""
+
     client: "DocumentServiceClient" = None  # type:ignore[assignment] #: :meta private:
 
     @model_validator(mode="before")

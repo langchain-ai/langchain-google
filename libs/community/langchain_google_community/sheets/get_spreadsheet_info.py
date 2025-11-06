@@ -17,6 +17,7 @@ class GetSpreadsheetInfoSchema(BaseModel):
         description="The ID of the Google Spreadsheet to get information about. "
         "Can be extracted from URL or provided directly.",
     )
+
     include_grid_data: bool = Field(
         default=False,
         description=(
@@ -24,21 +25,25 @@ class GetSpreadsheetInfoSchema(BaseModel):
             "Note: This can significantly increase response size."
         ),
     )
+
     include_formatting: bool = Field(
         default=False,
         description="Whether to include cell formatting information when "
         "include_grid_data is True.",
     )
+
     include_validation: bool = Field(
         default=False,
         description="Whether to include data validation rules when "
         "include_grid_data is True.",
     )
+
     ranges: Optional[List[str]] = Field(
         default=None,
         description="Specific ranges to get information about. "
         "If None, gets info for all sheets.",
     )
+
     fields: Optional[str] = Field(
         default=None,
         description="Specific fields to return (e.g., "
@@ -52,9 +57,9 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
 
     Inherits from
     [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
-    Retrieves spreadsheet properties, sheet details, named ranges, and
-    organizational structure. Essential for understanding spreadsheet contents
-    before reading data.
+
+    Retrieves spreadsheet properties, sheet details, named ranges, and organizational
+    structure. Essential for understanding spreadsheet contents before reading data.
 
     Tool Output:
         success (bool): Whether operation succeeded.
@@ -118,12 +123,14 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
     """
 
     name: str = "sheets_get_spreadsheet_info"
+
     description: str = (
         "Retrieve comprehensive metadata information from Google Sheets including "
         "spreadsheet properties, sheet details, named ranges, and organizational "
         "structure. Essential for understanding spreadsheet contents before reading "
         "data and exploring spreadsheet structure."
     )
+
     args_schema: Type[GetSpreadsheetInfoSchema] = GetSpreadsheetInfoSchema
 
     def _run(

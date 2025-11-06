@@ -10,8 +10,9 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
 
     Inherits from
     [`BaseDocumentTransformer`][langchain_core.documents.BaseDocumentTransformer].
-    Transforms documents by translating their content using Google Cloud
-    Translation API with support for custom models and glossaries.
+
+    Transforms documents by translating their content using Google Cloud Translation API
+    with support for custom models and glossaries.
 
     !!! note "Installation"
 
@@ -21,14 +22,8 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
         pip install langchain-google-community[translate]
         ```
 
-    See [Translation API documentation](https://cloud.google.com/translate/docs)
-    for detailed information.
-
-    Attributes:
-        project_id: Google Cloud project ID.
-        location: Translation service location. Default: 'global'.
-        model_id: Optional custom translation model ID.
-        glossary_id: Optional glossary ID for specialized translations.
+    See [Translation API documentation](https://cloud.google.com/translate/docs) for
+    detailed information.
     """
 
     def __init__(

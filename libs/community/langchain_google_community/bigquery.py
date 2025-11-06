@@ -23,6 +23,7 @@ class BigQueryLoader(BaseLoader):
     """Load documents from Google Cloud BigQuery.
 
     Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+
     Each row becomes a document. Columns can be mapped to `page_content` or
     `metadata`. By default, all columns map to `page_content`.
 

@@ -12,6 +12,7 @@ class GCSFileLoader(BaseLoader):
     """Load documents from Google Cloud Storage file.
 
     Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+
     Downloads and loads a single file from GCS bucket using configurable loader.
 
     !!! note "Installation"
@@ -37,8 +38,8 @@ class GCSFileLoader(BaseLoader):
             bucket: The name of the GCS bucket.
             blob: The name of the GCS blob to load.
             loader_func: A loader function that instantiates a loader based on a
-                file_path argument. If nothing is provided, the
-                UnstructuredFileLoader is used.
+                `file_path` argument. If nothing is provided, the
+                `UnstructuredFileLoader` is used.
 
         ??? example "Using Alternative PDF Loader"
 
@@ -89,7 +90,7 @@ class GCSFileLoader(BaseLoader):
                 "`pip install langchain-google-community[gcs]`"
             )
 
-        # initialize a client
+        # Initialize a client
         storage_client = storage.Client(
             self.project_name, client_info=get_client_info("google-cloud-storage")
         )

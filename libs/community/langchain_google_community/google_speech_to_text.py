@@ -16,6 +16,7 @@ class SpeechToTextLoader(BaseLoader):
     """Loader for Google Cloud Speech-to-Text audio transcripts.
 
     Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+
     Transcribes audio files using Google Cloud Speech-to-Text API and loads
     transcribed text into documents. Supports both GCS URIs and local file paths.
 
@@ -46,12 +47,12 @@ class SpeechToTextLoader(BaseLoader):
         Args:
             project_id: Google Cloud Project ID.
             file_path: Google Cloud Storage URI or local file path.
-            location: Speech-to-Text recognizer location. Default: 'us-central1'.
-            recognizer_id: Speech-to-Text recognizer ID. Default: '_'.
+            location: Speech-to-Text recognizer location.
+            recognizer_id: Speech-to-Text recognizer ID.
             config: Recognition options and features. See
-                [RecognitionConfig](https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognitionConfig).
+                [`RecognitionConfig`](https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognitionConfig).
             config_mask: Fields in config that override `default_recognition_config`
-                of the recognizer. See [RecognizeRequest](https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognizeRequest).
+                of the recognizer. See [`RecognizeRequest`](https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognizeRequest).
             is_long: Use async Cloud Speech recognition for long audio files. See
                 [batch recognize](https://cloud.google.com/speech-to-text/v2/docs/batch-recognize).
         """

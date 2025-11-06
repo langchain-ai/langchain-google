@@ -27,19 +27,23 @@ class ReadBaseSchema(BaseModel):
     spreadsheet_id: str = Field(
         description="The ID of the Google Spreadsheet to read from."
     )
+
     value_render_option: ValueRenderOption = Field(
         default=ValueRenderOption.FORMATTED_VALUE,
         description="How values should be rendered in the output.",
     )
+
     date_time_render_option: DateTimeRenderOption = Field(
         default=DateTimeRenderOption.SERIAL_NUMBER,
         description="How dates, times, and durations should be rendered.",
     )
+
     convert_to_records: bool = Field(
         default=False,
         description="Whether to convert data to records (list of dictionaries) "
         "using first row as headers.",
     )
+
     numericise_values: bool = Field(
         default=True,
         description="Whether to automatically convert string numbers to numeric types.",
@@ -54,8 +58,8 @@ class ReadBaseSchema(BaseModel):
 class BaseReadTool(SheetsBaseTool):
     """Base class for Google Sheets read operations.
 
-    Provides shared functionality for data processing, value extraction,
-    and record conversion that is common across all read tools.
+    Provides shared functionality for data processing, value extraction, and record
+    conversion that is common across all read tools.
     """
 
     def _numericise(self, value: str) -> Union[str, int, float]:
@@ -176,7 +180,7 @@ class BaseReadTool(SheetsBaseTool):
             grid_data: GridData from Google Sheets API
 
         Returns:
-            Simple 2D array of values from all segments.
+            2D array of values from all segments.
         """
         # Delegate to the new multi-segment implementation
         return self._extract_simple_data_all(grid_data)
@@ -200,8 +204,9 @@ class SheetsReadDataTool(BaseReadTool):
 
     Inherits from
     [`BaseReadTool`][langchain_google_community.sheets.read_sheet_tools.BaseReadTool].
-    Reads data from a single range with support for various rendering options
-    and data transformations.
+
+    Reads data from a single range with support for various rendering options and data
+    transformations.
 
     Tool Output:
         success (bool): Whether operation succeeded.
@@ -264,12 +269,14 @@ class SheetsReadDataTool(BaseReadTool):
     """
 
     name: str = "sheets_read_data"
+
     description: str = (
         "Read data from a single range in Google Sheets with comprehensive "
         "rendering options and data transformation capabilities. Supports "
         "formatted/unformatted values, record conversion, and numeric processing. "
         "Perfect for extracting specific data from single sheet ranges."
     )
+
     args_schema: Type[BaseModel] = ReadSheetDataSchema
 
     def _run(
@@ -370,6 +377,7 @@ class BatchReadSheetDataSchema(ReadBaseSchema):
     ranges: List[str] = Field(
         description="List of A1 notation ranges to read from the spreadsheet."
     )
+
     major_dimension: MajorDimension = Field(
         default=MajorDimension.ROWS,
         description="The major dimension that results should use.",
@@ -381,6 +389,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
     Inherits from
     [`BaseReadTool`][langchain_google_community.sheets.read_sheet_tools.BaseReadTool].
+
     Reads multiple ranges in a single API call, reducing network overhead and
     improving performance.
 
@@ -436,12 +445,14 @@ class SheetsBatchReadDataTool(BaseReadTool):
     """
 
     name: str = "sheets_batch_read_data"
+
     description: str = (
         "Read data from multiple ranges in Google Sheets efficiently using "
         "batch API calls. Supports multiple A1 notation ranges, various rendering "
         "options, and data transformation. Optimized for extracting data from "
         "multiple sheets or ranges simultaneously."
     )
+
     args_schema: Type[BaseModel] = BatchReadSheetDataSchema
 
     def _run(
@@ -579,6 +590,7 @@ class DataFilterSchema(BaseModel):
             "This is the most common way to specify a range."
         ),
     )
+
     gridRange: Optional[Dict[str, Any]] = Field(
         None,
         description=(
@@ -587,6 +599,7 @@ class DataFilterSchema(BaseModel):
             "'startColumnIndex': 0, 'endColumnIndex': 5}"
         ),
     )
+
     developerMetadataLookup: Optional[Dict[str, Any]] = Field(
         None,
         description=(
@@ -623,6 +636,7 @@ class FilteredReadSheetDataSchema(ReadBaseSchema):
             "Each filter selects a range using a1Range, gridRange, or metadata lookup."
         ),
     )
+
     include_grid_data: bool = Field(
         default=False,
         description=(
@@ -635,11 +649,10 @@ class FilteredReadSheetDataSchema(ReadBaseSchema):
 class SheetsFilteredReadDataTool(BaseReadTool):
     """Tool for reading data from Google Sheets using DataFilters.
 
-    Inherits from
     [`BaseReadTool`][langchain_google_community.sheets.read_sheet_tools.BaseReadTool].
-    Uses getByDataFilter API to read ranges specified by A1 notation, grid
-    coordinates, or developer metadata. Optionally includes detailed cell
-    formatting.
+
+    Uses `getByDataFilter` API to read ranges specified by A1 notation, grid
+    coordinates, or developer metadata. Optionally includes detailed cell formatting.
 
     !!! note "Authentication Required"
 
@@ -704,6 +717,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
     """
 
     name: str = "sheets_get_by_data_filter"
+
     description: str = (
         "Read data from Google Sheets using DataFilters (getByDataFilter API). "
         "Select ranges using A1 notation, grid coordinates, or developer metadata. "
@@ -711,6 +725,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         "Useful for reading multiple ranges or ranges with specific metadata tags. "
         "Requires OAuth2 authentication."
     )
+
     args_schema: Type[BaseModel] = FilteredReadSheetDataSchema
 
     def _run(

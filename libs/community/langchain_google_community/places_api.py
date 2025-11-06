@@ -32,15 +32,15 @@ class GooglePlacesAPIWrapper(BaseModel):
 
         Set `GPLACES_API_KEY` environment variable or pass `gplaces_api_key`
         parameter with your Google Maps Platform API key.
-
-    Attributes:
-        gplaces_api_key: Google Maps Platform API key.
-        top_k_results: Maximum number of results to return.
     """
 
     gplaces_api_key: Optional[str] = None
-    google_map_client: Any = None  #: :meta private:
+    """Google Maps Platform API key."""
+
+    google_map_client: Any = None
+
     top_k_results: Optional[int] = None
+    """Maximum number of results to return."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -50,7 +50,7 @@ class GooglePlacesAPIWrapper(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validate_environment(cls, values: Dict) -> Any:
-        """Validate that api key is in your environment variable."""
+        """Validate that API key is in your environment variable."""
         gplaces_api_key = get_from_dict_or_env(
             values, "gplaces_api_key", "GPLACES_API_KEY"
         )
@@ -128,24 +128,29 @@ class GooglePlacesAPIWrapper(BaseModel):
 class GooglePlacesSchema(BaseModel):
     """Input schema for `GooglePlacesTool`."""
 
-    query: str = Field(..., description="Search query for Google Maps")
+    query: str = Field(...)
+    """Search query for Google Maps"""
 
 
 class GooglePlacesTool(BaseTool):
     """Tool that queries the Google Places API.
 
     Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+
     Validates and discovers addresses from ambiguous text using Google Maps Platform.
     """
 
     name: str = "google_places"
+
     description: str = (
         "A wrapper around Google Places. "
         "Useful for when you need to validate or "
         "discover addresses from ambiguous text. "
         "Input should be a search query."
     )
+
     api_wrapper: GooglePlacesAPIWrapper = Field(default_factory=GooglePlacesAPIWrapper)  # type: ignore[arg-type]
+
     args_schema: Type[BaseModel] = GooglePlacesSchema
 
     def _run(

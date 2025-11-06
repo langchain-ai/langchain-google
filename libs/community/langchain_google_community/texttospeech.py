@@ -41,6 +41,7 @@ class TextToSpeechTool(BaseTool):
     """Tool that queries the Google Cloud Text-to-Speech API.
 
     Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+
     Synthesizes audio from text with support for multiple languages and voice options.
 
     !!! note "Installation"
@@ -88,8 +89,7 @@ class TextToSpeechTool(BaseTool):
         """Synthesize speech from text.
 
         Args:
-            input_text: Text to convert to speech.
-            language_code: Language code (e.g., 'en-US', 'de-DE'). Default: 'en-US'.
+            language_code: Language code (e.g., `'en-US'`, `'de-DE'`).
             ssml_gender: Voice gender.
             audio_encoding: Audio format.
             run_manager: Optional callback manager.

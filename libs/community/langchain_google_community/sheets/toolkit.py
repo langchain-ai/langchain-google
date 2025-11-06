@@ -37,6 +37,7 @@ class SheetsToolkit(BaseToolkit):
     """Toolkit for interacting with Google Sheets.
 
     Inherits from [`BaseToolkit`][langchain_core.tools.base.BaseToolkit].
+
     Provides comprehensive Google Sheets integration with read and write capabilities.
 
     !!! warning "Security Note"
@@ -51,6 +52,7 @@ class SheetsToolkit(BaseToolkit):
     """
 
     api_resource: Resource = Field(default=None)  # type: ignore[assignment]
+
     api_key: Optional[str] = Field(default=None)
 
     model_config = ConfigDict(

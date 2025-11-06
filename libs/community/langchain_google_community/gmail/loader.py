@@ -68,8 +68,8 @@ class GMailLoader(BaseChatLoader):
 
     Inherits from
     [`BaseChatLoader`][langchain_community.chat_loaders.base.BaseChatLoader].
-    Loads sent messages and their preceding emails to create chat training
-    examples.
+
+    Loads sent messages and their preceding emails to create chat training examples.
 
     This loader finds messages you've sent in reply to previous emails and creates
     chat sessions from the original email and your response. Each session contains

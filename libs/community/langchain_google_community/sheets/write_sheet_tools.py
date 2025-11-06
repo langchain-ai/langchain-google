@@ -23,6 +23,7 @@ class WriteBaseSchema(BaseModel):
     spreadsheet_id: str = Field(
         description="The ID of the Google Spreadsheet to write to."
     )
+
     value_input_option: ValueInputOption = Field(
         default=ValueInputOption.USER_ENTERED,
         description=(
@@ -44,6 +45,7 @@ class UpdateValuesSchema(WriteBaseSchema):
     range: str = Field(
         description="The A1 notation of the range to update (e.g., 'Sheet1!A1:C3')."
     )
+
     values: List[List[Any]] = Field(
         description=(
             "2D array of values to write. Each inner array represents a row. "
@@ -57,6 +59,7 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
 
     Inherits from
     [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+
     Updates cell values in a specified range, overwriting existing data.
 
     !!! note "Authentication Required"
@@ -115,10 +118,12 @@ class SheetsUpdateValuesTool(SheetsBaseTool):
     """
 
     name: str = "sheets_update_values"
+
     description: str = (
         "Update values in a single range of a Google Spreadsheet. "
         "Overwrites existing data in the specified range."
     )
+
     args_schema: Type[BaseModel] = UpdateValuesSchema
 
     def _run(
@@ -205,12 +210,14 @@ class AppendValuesSchema(WriteBaseSchema):
             "The API will find the last row of data and append below it."
         )
     )
+
     values: List[List[Any]] = Field(
         description=(
             "2D array of values to append. Each inner array represents a row. "
             "Supports strings, numbers, booleans, and formulas."
         )
     )
+
     insert_data_option: InsertDataOption = Field(
         default=InsertDataOption.INSERT_ROWS,
         description=(
@@ -226,6 +233,7 @@ class SheetsAppendValuesTool(SheetsBaseTool):
 
     Inherits from
     [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+
     Appends data to the end of a table, automatically finding the last row with
     data.
 
@@ -285,10 +293,12 @@ class SheetsAppendValuesTool(SheetsBaseTool):
     """
 
     name: str = "sheets_append_values"
+
     description: str = (
         "Append values to a table in a Google Spreadsheet. "
         "Automatically finds the last row and appends data below it."
     )
+
     args_schema: Type[BaseModel] = AppendValuesSchema
 
     def _run(
@@ -377,6 +387,7 @@ class ClearValuesSchema(BaseModel):
     """Input schema for `SheetsClearValuesTool`."""
 
     spreadsheet_id: str = Field(description="The ID of the Google Spreadsheet.")
+
     range: str = Field(
         description=(
             "The A1 notation of the range to clear (e.g., 'Sheet1!A1:Z100'). "
@@ -390,6 +401,7 @@ class SheetsClearValuesTool(SheetsBaseTool):
 
     Inherits from
     [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+
     Clears cell values from a specified range while preserving formatting and
     structure.
 
@@ -431,10 +443,12 @@ class SheetsClearValuesTool(SheetsBaseTool):
     """
 
     name: str = "sheets_clear_values"
+
     description: str = (
         "Clear values from a range in a Google Spreadsheet. "
         "Only values are cleared; formatting and structure remain."
     )
+
     args_schema: Type[BaseModel] = ClearValuesSchema
 
     def _run(
@@ -501,6 +515,7 @@ class BatchUpdateDataSchema(BaseModel):
     """Schema for a single range update in batch operation."""
 
     range: str = Field(description="The A1 notation range to update.")
+
     values: List[List[Any]] = Field(
         description=(
             "2D array of values for this range. "
@@ -522,6 +537,7 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
 
     Inherits from
     [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+
     Updates multiple ranges in a single API call, dramatically improving
     efficiency.
 
@@ -585,10 +601,12 @@ class SheetsBatchUpdateValuesTool(SheetsBaseTool):
     """
 
     name: str = "sheets_batch_update_values"
+
     description: str = (
         "Batch update multiple ranges in a Google Spreadsheet efficiently. "
         "Updates multiple ranges in a single API call."
     )
+
     args_schema: Type[BaseModel] = BatchUpdateValuesSchema
 
     def _run(

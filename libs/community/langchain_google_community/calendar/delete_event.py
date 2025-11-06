@@ -12,9 +12,11 @@ class DeleteEventSchema(BaseModel):
     """Input schema for `CalendarDeleteEvent`."""
 
     event_id: str = Field(..., description="The event ID to delete.")
+
     calendar_id: Optional[str] = Field(
         default="primary", description="The origin calendar ID."
     )
+
     send_updates: Optional[str] = Field(
         default=None,
         description=(
@@ -28,7 +30,9 @@ class CalendarDeleteEvent(CalendarBaseTool):  # type: ignore[override, override]
     """Tool that delete an event in Google Calendar."""
 
     name: str = "delete_calendar_event"
+
     description: str = "Use this tool to delete an event."
+
     args_schema: Type[DeleteEventSchema] = DeleteEventSchema
 
     def _run(

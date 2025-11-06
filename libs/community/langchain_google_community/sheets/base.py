@@ -22,16 +22,19 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
     """Base class for Google Sheets tools.
 
     Authentication:
-    - api_resource: OAuth2 credentials for full access (read/write private sheets)
-    - api_key: API key for read-only access (public sheets only)
+    - `api_resource`: OAuth2 credentials for full access (read/write private sheets)
+    - `api_key`: API key for read-only access (public sheets only)
 
-    Note: Write operations require OAuth2 credentials.
+    !!! note
+
+        Write operations require OAuth2 credentials.
     """
 
     api_resource: Optional[Resource] = Field(
         default=None,
         description="Google Sheets API resource, OAuth2 credentials for full access",
     )
+
     api_key: Optional[str] = Field(
         default=None,
         description="Google API key for read-only access to public spreadsheets",
@@ -44,7 +47,7 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             Resource: Google Sheets API service
 
         Raises:
-            ValueError: If neither api_resource nor api_key is provided
+            ValueError: If neither `api_resource` nor `api_key` is provided
         """
         if self.api_resource:
             return self.api_resource  # OAuth2 - full access

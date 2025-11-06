@@ -20,19 +20,21 @@ class GoogleSearchAPIWrapper(BaseModel):
         2. Create API key in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
         3. Create custom search engine at [Programmable Search Engine](https://programmablesearchengine.google.com)
         4. Set `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` environment variables
-
-    Attributes:
-        google_api_key: Google API key for authentication.
-        google_cse_id: Custom Search Engine ID.
-        k: Number of results to return. Default: 10.
-        siterestrict: Whether to restrict search to specific sites.
     """
 
-    search_engine: Any = None  #: :meta private:
+    search_engine: Any = None
+
     google_api_key: Optional[str] = None
+    """Google API key for authentication."""
+
     google_cse_id: Optional[str] = None
+    """Custom Search Engine ID."""
+
     k: int = 10
+    """Number of results to return."""
+
     siterestrict: bool = False
+    """Whether to restrict search to specific sites."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -72,7 +74,7 @@ class GoogleSearchAPIWrapper(BaseModel):
         return values
 
     def run(self, query: str) -> str:
-        """Run query through GoogleSearch and parse result."""
+        """Run query through Google Search and parse result."""
         snippets = []
         results = self._google_search_results(query, num=self.k)
         if len(results) == 0:
@@ -121,6 +123,7 @@ class GoogleSearchRun(BaseTool):
     """Tool that queries the Google Custom Search API.
 
     Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+
     Returns concatenated snippets from search results.
     """
 
@@ -153,6 +156,7 @@ class GoogleSearchResults(BaseTool):
     """Tool that queries the Google Custom Search API and returns JSON.
 
     Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+
     Returns structured search results with metadata.
     """
 
