@@ -1596,6 +1596,26 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         llm_tree = llm.with_structured_output(TreeNode, method="json_schema_v2")
         ```
 
+        For streaming structured output, merge dictionaries instead of using `+=`:
+
+        ```python
+        from pydantic import BaseModel
+        from typing import Literal
+
+        class Feedback(BaseModel):
+            sentiment: Literal["positive", "neutral", "negative"]
+            summary: str
+
+        structured_llm = llm.with_structured_output(Feedback, method="json_schema_v2")
+        
+        # Streaming returns dictionaries that need to be merged
+        stream = structured_llm.stream("The new UI is intuitive and beautiful!")
+        full = next(stream)
+        for chunk in stream:
+            full.update(chunk)  # Use .update() to merge dictionaries
+        print(full)  # Complete structured response
+        ```
+
         You can also use the `response_json_schema` parameter directly:
 
         ```python

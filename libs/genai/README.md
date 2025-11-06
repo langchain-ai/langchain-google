@@ -19,6 +19,7 @@ This package enables seamless access to Google Gemini's chat, vision, embeddings
     - [Audio Output](#audio-output)
     - [Multimodal Outputs in Chains](#multimodal-outputs-in-chains)
     - [Thinking Support](#thinking-support)
+    - [Structured Output](#structured-output)
   - [Embeddings](#embeddings)
   - [Semantic Retrieval (RAG)](#semantic-retrieval-rag)
   - [Resources](#resources)
@@ -193,6 +194,39 @@ reasoning_score = response.usage_metadata["output_token_details"]["reasoning"]
 
 print("Response:", response.content)
 print("Reasoning tokens used:", reasoning_score)
+```
+
+### Structured Output
+
+```python
+from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel
+from typing import Literal
+
+
+class Feedback(BaseModel):
+    sentiment: Literal["positive", "neutral", "negative"]
+    summary: str
+
+
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
+structured_llm = llm.with_structured_output(
+    schema=Feedback.model_json_schema(), method="json_schema_v2"
+)
+
+response = structured_llm.invoke("The new UI is great!")
+response["sentiment"]  # "positive"
+response["summary"]  # "The user expresses positive..."
+```
+
+For streaming structured output, merge dictionaries instead of using `+=`:
+
+```python
+stream = structured_llm.stream("The interface is intuitive and beautiful!")
+full = next(stream)
+for chunk in stream:
+    full.update(chunk)  # Merge dictionaries
+print(full)  # Complete structured response
 ```
 
 ---
