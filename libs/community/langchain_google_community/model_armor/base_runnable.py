@@ -59,7 +59,7 @@ class ModelArmorParams(BaseModel):
 
     client_options: Optional["ClientOptions"] = Field(
         default=None, exclude=True, description="Client options for the API client."
-    )  #: :meta private:
+    )
 
     client_info: Optional[Any] = Field(
         default=None, exclude=True, description="Client info for the API client."
@@ -123,7 +123,7 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
         client: A Model Armor client instance for making sanitization requests.
     """
 
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
+    client: Any = Field(default=None, exclude=True)
 
     def __init__(
         self,

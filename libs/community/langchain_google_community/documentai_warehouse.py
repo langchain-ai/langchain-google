@@ -56,7 +56,7 @@ class DocumentAIWarehouseRetriever(BaseRetriever):
     qa_size_limit: int = 5
     """The limit on the number of documents returned."""
 
-    client: "DocumentServiceClient" = None  # type:ignore[assignment] #: :meta private:
+    client: "DocumentServiceClient" = None  # type:ignore[assignment]
 
     @model_validator(mode="before")
     @classmethod
