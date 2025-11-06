@@ -13,20 +13,23 @@ if TYPE_CHECKING:
 
 
 class SpeechToTextLoader(BaseLoader):
-    """
-    Loader for Google Cloud Speech-to-Text audio transcripts.
+    """Loader for Google Cloud Speech-to-Text audio transcripts.
 
-    It uses the Google Cloud Speech-to-Text API to transcribe audio files
-    and loads the transcribed text into one or more Documents,
-    depending on the specified format.
+    Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
 
-    To use, you should have the ``google-cloud-speech`` python package installed.
+    Transcribes audio files using Google Cloud Speech-to-Text API and loads
+    transcribed text into documents. Supports both GCS URIs and local file paths.
 
-    Audio files can be specified via a Google Cloud Storage uri or a local file path.
+    See [Speech-to-Text documentation](https://cloud.google.com/speech-to-text)
+    for detailed information.
 
-    For a detailed explanation of Google Cloud Speech-to-Text, refer to the product
-    documentation.
-    https://cloud.google.com/speech-to-text
+    !!! note "Installation"
+
+        Requires additional dependencies:
+
+        ```bash
+        pip install langchain-google-community[speech]
+        ```
     """
 
     def __init__(
@@ -39,25 +42,19 @@ class SpeechToTextLoader(BaseLoader):
         config_mask: Optional[FieldMask] = None,
         is_long: bool = False,
     ):
-        """
-        Initializes the GoogleSpeechToTextLoader.
+        """Initialize the Speech-to-Text loader.
 
         Args:
             project_id: Google Cloud Project ID.
-            file_path: A Google Cloud Storage URI or a local file path.
+            file_path: Google Cloud Storage URI or local file path.
             location: Speech-to-Text recognizer location.
-            recognizer_id: Speech-to-Text recognizer id.
-            config: Recognition options and features.
-                For more information:
-                https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognitionConfig
-            config_mask: The list of fields in config that override the values in the
-                ``default_recognition_config`` of the recognizer during this
-                recognition request.
-                For more information:
-                https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognizeRequest
-            is_long: use async Cloud Speech recognition, mainly for long documents
-                For more information:
-                https://cloud.google.com/speech-to-text/v2/docs/batch-recognize
+            recognizer_id: Speech-to-Text recognizer ID.
+            config: Recognition options and features. See
+                [`RecognitionConfig`](https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognitionConfig).
+            config_mask: Fields in config that override `default_recognition_config`
+                of the recognizer. See [`RecognizeRequest`](https://cloud.google.com/python/docs/reference/speech/latest/google.cloud.speech_v2.types.RecognizeRequest).
+            is_long: Use async Cloud Speech recognition for long audio files. See
+                [batch recognize](https://cloud.google.com/speech-to-text/v2/docs/batch-recognize).
         """
         try:
             from google.api_core.client_options import ClientOptions

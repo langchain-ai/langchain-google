@@ -9,49 +9,32 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class GoogleSearchAPIWrapper(BaseModel):
-    """Wrapper for Google Search API.
+    """Wrapper for Google Custom Search API.
 
-    Adapted from: Instructions adapted from https://stackoverflow.com/questions/
-    37083058/
-    programmatically-searching-google-in-python-using-custom-search
+    Performs web searches using Google Custom Search API and returns results
+    with snippets, titles, and links.
 
-    TODO: DOCS for using it
-    1. Install google-api-python-client
-    - If you don't already have a Google account, sign up.
-    - If you have never created a Google APIs Console project,
-    read the Managing Projects page and create a project in the Google API Console.
-    - Install the library using pip install google-api-python-client
+    !!! note "Setup Required"
 
-    2. Enable the Custom Search API
-    - Navigate to the APIs & Services→Dashboard panel in Cloud Console.
-    - Click Enable APIs and Services.
-    - Search for Custom Search API and click on it.
-    - Click Enable.
-    URL for it: https://console.cloud.google.com/apis/library/customsearch.googleapis
-    .com
-
-    3. To create an API key:
-    - Navigate to the APIs & Services → Credentials panel in Cloud Console.
-    - Select Create credentials, then select API key from the drop-down menu.
-    - The API key created dialog box displays your newly created key.
-    - You now have an API_KEY
-
-    Alternatively, you can just generate an API key here:
-    https://developers.google.com/custom-search/docs/paid_element#api_key
-
-    4. Setup Custom Search Engine so you can search the entire web
-    - Create a custom search engine here: https://programmablesearchengine.google.com/.
-    - In `What to search` to search, pick the `Search the entire Web` option.
-    After search engine is created, you can click on it and find `Search engine ID`
-      on the Overview page.
-
+        1. Enable [Custom Search API](https://console.cloud.google.com/apis/library/customsearch.googleapis.com)
+        2. Create API key in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+        3. Create custom search engine at [Programmable Search Engine](https://programmablesearchengine.google.com)
+        4. Set `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` environment variables
     """
 
-    search_engine: Any = None  #: :meta private:
+    search_engine: Any = None
+
     google_api_key: Optional[str] = None
+    """Google API key for authentication."""
+
     google_cse_id: Optional[str] = None
+    """Custom Search Engine ID."""
+
     k: int = 10
+    """Number of results to return."""
+
     siterestrict: bool = False
+    """Whether to restrict search to specific sites."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -91,7 +74,7 @@ class GoogleSearchAPIWrapper(BaseModel):
         return values
 
     def run(self, query: str) -> str:
-        """Run query through GoogleSearch and parse result."""
+        """Run query through Google Search and parse result."""
         snippets = []
         results = self._google_search_results(query, num=self.k)
         if len(results) == 0:
@@ -108,18 +91,15 @@ class GoogleSearchAPIWrapper(BaseModel):
         num_results: int,
         search_params: Optional[Dict[str, str]] = None,
     ) -> List[Dict]:
-        """Run query through GoogleSearch and return metadata.
+        """Run query through Google Search and return metadata.
 
         Args:
             query: The query to search for.
-            num_results: The number of results to return.
-            search_params: Parameters to be passed on search
+            num_results: Number of results to return.
+            search_params: Additional search parameters.
 
         Returns:
-            A list of dictionaries with the following keys:
-                snippet - The description of the result.
-                title - The title of the result.
-                link - The link to the result.
+            Search results with snippet, title, and link for each result.
         """
         metadata_results = []
         results = self._google_search_results(
@@ -140,7 +120,12 @@ class GoogleSearchAPIWrapper(BaseModel):
 
 
 class GoogleSearchRun(BaseTool):
-    """Tool that queries the Google search API."""
+    """Tool that queries the Google Custom Search API.
+
+    Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+
+    Returns concatenated snippets from search results.
+    """
 
     name: str = "google_search"
     description: str = (
@@ -155,12 +140,25 @@ class GoogleSearchRun(BaseTool):
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
-        """Use the tool."""
+        """Execute the Google search.
+
+        Args:
+            query: Search query string.
+            run_manager: Optional callback manager.
+
+        Returns:
+            Concatenated snippets from search results.
+        """
         return self.api_wrapper.run(query)
 
 
 class GoogleSearchResults(BaseTool):
-    """Tool that queries the Google Search API and gets back json."""
+    """Tool that queries the Google Custom Search API and returns JSON.
+
+    Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
+
+    Returns structured search results with metadata.
+    """
 
     name: str = "google_search_results_json"
     description: str = (
@@ -176,5 +174,13 @@ class GoogleSearchResults(BaseTool):
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
-        """Use the tool."""
+        """Execute the Google search and return structured results.
+
+        Args:
+            query: Search query string.
+            run_manager: Optional callback manager.
+
+        Returns:
+            JSON string of search results with title, link, and snippet.
+        """
         return str(self.api_wrapper.results(query, self.num_results))

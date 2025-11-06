@@ -22,24 +22,40 @@ if TYPE_CHECKING:
 
 
 class DocumentAIWarehouseRetriever(BaseRetriever):
-    """A retriever based on Document AI Warehouse.
+    """Retriever for Google Cloud Document AI Warehouse.
 
-    Documents should be created and documents should be uploaded
-        in a separate flow, and this retriever uses only Document AI
-        schema_id provided to search for relevant documents.
+    Inherits from [`BaseRetriever`][langchain_core.retrievers.BaseRetriever].
 
-    More info: https://cloud.google.com/document-ai-warehouse.
+    Searches documents using Document AI Warehouse schema. Documents must be
+    created and uploaded separately before retrieval.
+
+    See [Document AI Warehouse documentation](https://cloud.google.com/document-ai-warehouse)
+    for more information.
+
+    !!! note "Installation"
+
+        Requires additional dependencies:
+
+        ```bash
+        pip install langchain-google-community[docai]
+        ```
     """
 
     location: str = "us"
     """Google Cloud location where Document AI Warehouse is placed."""
+
     project_number: str
     """Google Cloud project number, should contain digits only."""
+
     schema_id: Optional[str] = None
     """Document AI Warehouse schema to query against.
-    If nothing is provided, all documents in the project will be searched."""
+    
+    If nothing is provided, all documents in the project will be searched.
+    """
+
     qa_size_limit: int = 5
     """The limit on the number of documents returned."""
+
     client: "DocumentServiceClient" = None  # type:ignore[assignment] #: :meta private:
 
     @model_validator(mode="before")

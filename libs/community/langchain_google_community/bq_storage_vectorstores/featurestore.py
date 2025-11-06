@@ -32,13 +32,13 @@ USER_AGENT_PREFIX = "FeatureStore"
 
 
 class VertexFSVectorStore(BaseBigQueryVectorStore):
-    """
-    A vector store implementation that utilizes BigQuery Storage and Vertex AI Feature
+    """Vector store implementation that utilizes BigQuery Storage and Vertex AI Feature
     Store.
 
     This class provides efficient storage, using BigQuery as the underlining source of
     truth and retrieval of documents with vector embeddings within Vertex AI Feature
     Store. It is particularly indicated for low latency serving.
+    
     It supports similarity search, filtering and getting nearest neighbor by id.
     Optionally, this class can leverage a BigQuery Vector Search for batch serving
     through the `to_bq_vector_store` method.

@@ -10,7 +10,7 @@ from langchain_google_community.gmail.utils import clean_email_body
 
 
 class SearchArgsSchema(BaseModel):
-    """Input for GetMessageTool."""
+    """Input schema for `GetMessageTool`."""
 
     message_id: str = Field(
         ...,
@@ -22,10 +22,12 @@ class GmailGetMessage(GmailBaseTool):
     """Tool that gets a message by ID from Gmail."""
 
     name: str = "get_gmail_message"
+
     description: str = (
         "Use this tool to fetch an email by message ID."
         " Returns the thread ID, snippet, body, subject, and sender."
     )
+
     args_schema: Type[SearchArgsSchema] = SearchArgsSchema
 
     def _run(

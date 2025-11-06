@@ -1,10 +1,4 @@
-"""Create spreadsheet tool for Google Sheets.
-
-This module contains the tool for creating new Google Spreadsheets with
-configurable properties and initial data.
-
-Note: Requires OAuth2 authentication (api_resource).
-"""
+"""Tool for creating new Google Spreadsheets."""
 
 from typing import Any, Dict, List, Optional, Type
 
@@ -20,7 +14,7 @@ from .utils import validate_range_name
 
 
 class CreateSpreadsheetSchema(BaseModel):
-    """Schema for creating a new Google Spreadsheet."""
+    """Input schema for `SheetsCreateSpreadsheetTool`."""
 
     title: str = Field(description="The title of the new spreadsheet.")
     locale: Optional[str] = Field(
@@ -66,85 +60,80 @@ class CreateSpreadsheetSchema(BaseModel):
 
 
 class SheetsCreateSpreadsheetTool(SheetsBaseTool):
-    """Tool for creating a new Google Spreadsheet.
+    """Tool for creating new Google Spreadsheets.
 
-    This tool creates a new spreadsheet with configurable properties and
-    optional initial data. Perfect for dynamically generating reports,
-    creating data collection forms, or initializing new project workspaces
-    with pre-populated templates.
+    Inherits from
+    [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
 
-    Instantiate:
+    Creates spreadsheets with configurable properties and optional initial data.
+
+    !!! note "Authentication Required"
+        Requires OAuth2 authentication. Use `api_resource` parameter with
+        authenticated Google Sheets service.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): Unique ID of the created spreadsheet.
+        spreadsheet_url (str): Direct URL to open the spreadsheet.
+        title (str): The spreadsheet title.
+        locale (str): The locale setting.
+        time_zone (str): The timezone setting.
+        auto_recalc (str): The recalculation setting.
+        created (bool): Whether creation succeeded.
+        initial_data_added (bool): Whether initial data was added (if provided).
+        initial_data_cells_updated (int): Number of cells updated (if data added).
+        initial_data_range (str): Range where data was placed (if data added).
+
+    ???+ example "Basic Usage"
+
+        Create a simple spreadsheet:
+
         ```python
         from langchain_google_community.sheets import SheetsCreateSpreadsheetTool
 
         tool = SheetsCreateSpreadsheetTool(api_resource=service)
+        result = tool.run({"title": "My New Spreadsheet"})
+        print(f"Created: {result['spreadsheet_url']}")
         ```
 
-    Invoke directly:
+
+    ??? example "With Initial Data"
+
+        Create spreadsheet with pre-populated data:
+
         ```python
         result = tool.run(
             {
-                "title": "Test Spreadsheet - Full Options",
-                "locale": "en_US",
-                "time_zone": "America/Los_Angeles",
-                "auto_recalc": "ON_CHANGE",
+                "title": "Sales Report",
                 "initial_data": [
-                    ["Name", "Age", "City", "Score"],
-                    ["Alice", "25", "New York", "95"],
-                    ["Bob", "30", "San Francisco", "87"],
-                    ["Charlie", "28", "Chicago", "92"],
+                    ["Name", "Region", "Sales"],
+                    ["Alice", "East", "95000"],
+                    ["Bob", "West", "87000"],
                 ],
                 "initial_range": "A1",
             }
         )
         ```
 
-    Invoke with agent:
+
+    ??? example "Custom Configuration"
+
+        Create with locale and timezone settings:
+
         ```python
-        agent.invoke({"input": "Create a new employee tracking spreadsheet"})
+        result = tool.run(
+            {
+                "title": "European Report",
+                "locale": "fr_FR",
+                "time_zone": "Europe/Paris",
+                "auto_recalc": "HOUR",
+            }
+        )
         ```
 
-    Returns:
-        Dictionary containing:
-            - success: Always True for successful operations
-            - spreadsheet_id: The unique ID of the created spreadsheet
-            - spreadsheet_url: Direct URL to open the spreadsheet
-            - title: The spreadsheet title
-            - locale: The locale setting
-            - time_zone: The timezone setting
-            - auto_recalc: The recalculation setting
-            - created: Whether creation succeeded
-            - initial_data_added: Whether initial data was added
-                (if initial_data provided)
-            - initial_data_cells_updated: Number of cells populated
-                (if data added)
-            - initial_data_range: Where data was placed (if data added)
-
-    Configuration Options:
-        - title: Required - The spreadsheet name
-        - locale: ISO 639-1 language code (e.g., 'en_US', 'fr_FR')
-        - time_zone: IANA timezone (e.g., 'America/New_York', 'Europe/London')
-        - auto_recalc: 'ON_CHANGE', 'MINUTE', or 'HOUR'
-        - initial_data: 2D array for pre-populating cells
-        - initial_range: Where to place initial data (default: 'A1')
-
-    Example Response:
-        {
-            "success": True,
-            "spreadsheet_id": "1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg",
-            "spreadsheet_url": "https://docs.google.com/spreadsheets/d/1TI6vO9eGsAeXcfgEjoEYcu4RgSZCUF4vdWGLBpg9-fg/edit",
-            "title": "Test Spreadsheet - Full Options",
-            "locale": "en_US",
-            "time_zone": "America/Los_Angeles",
-            "auto_recalc": "ON_CHANGE",
-            "created": True,
-            "initial_data_added": True,
-            "initial_data_cells_updated": 16,
-            "initial_data_range": "A1"
-        }
-
     Raises:
-        Exception: If authentication fails, quota is exceeded, or API errors occur
+        ValueError: If write permissions unavailable or validation fails.
+        Exception: If API call fails.
     """
 
     name: str = "sheets_create_spreadsheet"
@@ -167,20 +156,30 @@ class SheetsCreateSpreadsheetTool(SheetsBaseTool):
         """Create a new Google Spreadsheet.
 
         Args:
-            title: The title of the new spreadsheet.
-            locale: The locale of the spreadsheet (e.g. 'en_US', 'fr_FR').
-            time_zone: The time zone of the spreadsheet (e.g. 'America/New_York').
-            auto_recalc: The recalculation setting ('ON_CHANGE', 'MINUTE', 'HOUR').
+            title: Title of the new spreadsheet.
+            locale: Locale of the spreadsheet.
+            time_zone: Timezone of the spreadsheet.
+            auto_recalc: Recalculation setting.
             initial_data: Optional 2D array of initial data to populate.
-            initial_range: The range where initial data should be placed.
+            initial_range: Range where initial data should be placed.
             run_manager: Optional callback manager.
 
         Returns:
-            Dict containing the spreadsheet ID, URL, and creation details.
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): Unique ID of created spreadsheet.
+            spreadsheet_url (str): Direct URL to spreadsheet.
+            title (str): Spreadsheet title.
+            locale (str): Locale setting.
+            time_zone (str): Timezone setting.
+            auto_recalc (str): Recalculation setting.
+            created (bool): Whether creation succeeded.
+            initial_data_added (bool): Whether initial data was added.
+            initial_data_cells_updated (int): Number of cells updated.
+            initial_data_range (str): Range where data was placed.
 
         Raises:
-            ValueError: If write permissions are not available or validation fails.
-            Exception: If the API call fails.
+            ValueError: If write permissions unavailable or validation fails.
+            Exception: If API call fails.
         """
         # Check write permissions (requires OAuth2)
         self._check_write_permissions()

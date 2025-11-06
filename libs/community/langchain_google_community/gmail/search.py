@@ -18,7 +18,7 @@ class Resource(str, Enum):
 
 
 class SearchArgsSchema(BaseModel):
-    """Input for SearchGmailTool."""
+    """Input schema for `SearchGmailTool`."""
 
     # From https://support.google.com/mail/answer/7190?hl=en
     query: str = Field(
@@ -33,10 +33,12 @@ class SearchArgsSchema(BaseModel):
         " Attachments with extension example: filename:pdf. Multiple term"
         " matching example: from:amy OR from:david.",
     )
+
     resource: Resource = Field(
         default=Resource.MESSAGES,
         description="Whether to search for threads or messages.",
     )
+
     max_results: int = Field(
         default=10,
         description="The maximum number of results to return.",
@@ -47,11 +49,13 @@ class GmailSearch(GmailBaseTool):
     """Tool that searches for messages or threads in Gmail."""
 
     name: str = "search_gmail"
+
     description: str = (
         "Use this tool to search for email messages or threads."
         " The input must be a valid Gmail query."
         " The output is a JSON list of the requested resource."
     )
+
     args_schema: Type[SearchArgsSchema] = SearchArgsSchema
 
     def _parse_threads(self, threads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
