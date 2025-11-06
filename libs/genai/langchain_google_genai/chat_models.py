@@ -2568,6 +2568,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if method in ("json_mode", "json_schema", "json_schema_v2"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
+                    # Use legacy schema generation for pydantic v1 models
                     schema_json = schema.schema()
                 else:
                     schema_json = schema.model_json_schema()
@@ -2586,7 +2587,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 # Don't resolve refs to preserve $ref support for recursive schemas
                 llm = self.bind(
                     response_mime_type="application/json",
-                    response_json_schema=schema_json,
+                    response_json_schema=schema_json,  # Uses `response_json_schema`
                     ls_structured_output_format={
                         "kwargs": {"method": method},
                         "schema": schema_json,
@@ -2599,7 +2600,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
                 llm = self.bind(
                     response_mime_type="application/json",
-                    response_schema=schema_json,
+                    response_schema=schema_json,  # Uses `response_schema`
                     ls_structured_output_format={
                         "kwargs": {"method": method},
                         "schema": schema_json,
