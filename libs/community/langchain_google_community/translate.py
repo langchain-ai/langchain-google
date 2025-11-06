@@ -6,7 +6,25 @@ from langchain_google_community._utils import get_client_info
 
 
 class GoogleTranslateTransformer(BaseDocumentTransformer):
-    """Translate text documents using Google Cloud Translation."""
+    """Translate text documents using Google Cloud Translation.
+
+    Inherits from
+    [`BaseDocumentTransformer`][langchain_core.documents.BaseDocumentTransformer].
+
+    Transforms documents by translating their content using Google Cloud Translation API
+    with support for custom models and glossaries.
+
+    !!! note "Installation"
+
+        Requires additional dependencies:
+
+        ```bash
+        pip install langchain-google-community[translate]
+        ```
+
+    See [Translation API documentation](https://cloud.google.com/translate/docs) for
+    detailed information.
+    """
 
     def __init__(
         self,
@@ -17,13 +35,17 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
         glossary_id: Optional[str] = None,
         api_endpoint: Optional[str] = None,
     ) -> None:
-        """
-        Arguments:
+        """Initialize Google Cloud Translation transformer.
+
+        Args:
             project_id: Google Cloud Project ID.
-            location: (Optional) Translate model location.
-            model_id: (Optional) Translate model ID to use.
-            glossary_id: (Optional) Translate glossary ID to use.
-            api_endpoint: (Optional) Regional endpoint to use.
+            location: Translation service location.
+            model_id: Custom translation model ID.
+            glossary_id: Glossary ID for specialized translations.
+            api_endpoint: Regional API endpoint.
+
+        Raises:
+            ImportError: If `google-cloud-translate` package is not installed.
         """
         try:
             from google.api_core.client_options import ClientOptions
@@ -69,20 +91,24 @@ class GoogleTranslateTransformer(BaseDocumentTransformer):
         """Translate text documents using Google Translate.
 
         Args:
-            documents: Sequence of documents to translate.
+            documents: Sequence of [`Document`][langchain_core.documents.Document]
+                objects to translate.
             source_language_code: ISO 639 language code of the input document.
                 If not provided, language will be auto-detected.
             target_language_code: ISO 639 language code of the output document.
-                Required for translation. For supported languages, refer to:
-                https://cloud.google.com/translate/docs/languages
-            mime_type: Media Type of input text.
-                Options: ``'text/plain'``, ``'text/html'``.
+                Required for translation. For supported languages, see
+                [Language Support](https://cloud.google.com/translate/docs/languages).
+            mime_type: Media type of input text. Options: `'text/plain'`,
+                `'text/html'`. Default: `'text/plain'`.
+            **kwargs: Additional keyword arguments.
 
         Returns:
-            Sequence of translated documents with updated metadata.
+            Translated documents with updated metadata including `model`,
+            `detected_language_code`, and original metadata fields.
 
         Raises:
-            ValueError: If ``target_language_code`` is not provided.
+            ValueError: If `target_language_code` is not provided.
+            ImportError: If `google-cloud-translate` package is not installed.
         """
         if target_language_code is None:
             msg = (
