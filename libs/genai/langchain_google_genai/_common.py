@@ -122,7 +122,10 @@ class _BaseGoogleGenerativeAI(BaseModel):
     )
     """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`.
 
-    Defaults to `'grpc'` if not specified.
+    The Google client library defaults to `'grpc'` for sync clients.
+
+    For async clients, `'rest'` is converted to `'grpc_asyncio'` unless
+    a custom endpoint is specified.
     """
 
     additional_headers: dict[str, str] | None = Field(

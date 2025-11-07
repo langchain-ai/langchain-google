@@ -1936,12 +1936,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if not self.async_client_running and _is_event_loop_running():
             # async clients don't support "rest" transport
             # https://github.com/googleapis/gapic-generator-python/issues/1962
+
+            # However, when using custom endpoints, we can try to keep REST transport
             transport = self.transport
-            if transport == "rest":
+            client_options = self.client_options or {}
+
+            # Check for custom endpoint
+            has_custom_endpoint = self.base_url or (
+                self.client_options
+                and "api_endpoint" in self.client_options
+                and self.client_options["api_endpoint"]
+                != "https://generativelanguage.googleapis.com"
+            )
+
+            # Only change to grpc_asyncio if no custom endpoint is specified
+            if transport == "rest" and not has_custom_endpoint:
                 transport = "grpc_asyncio"
 
             # Merge base_url into client_options if provided
-            client_options = self.client_options or {}
             if self.base_url and "api_endpoint" not in client_options:
                 client_options = {**client_options, "api_endpoint": self.base_url}
 

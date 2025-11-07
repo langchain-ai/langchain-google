@@ -87,7 +87,7 @@ class _VertexAIBase(BaseModel):
     api_endpoint: str | None = Field(default=None, alias="base_url")
     """Desired API endpoint, e.g., `us-central1-aiplatform.googleapis.com`."""
 
-    api_transport: str | None = None
+    api_transport: str | None = Field(default=None, alias="transport")
     """The desired API transport method, can be either `'grpc'` or `'rest'`.
 
     Defaults to `'grpc'` if not specified. Uses the default parameter in `vertexai.init`
@@ -180,6 +180,7 @@ class _VertexAIBase(BaseModel):
                 endpoint_version=self.endpoint_version,
                 credentials=self.credentials,
                 client_options=cast("ClientOptions", self.client_options),
+                transport=self.api_transport or "grpc",
                 user_agent=self._user_agent,
             )
         return self.async_client

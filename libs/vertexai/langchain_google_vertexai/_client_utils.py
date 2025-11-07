@@ -64,16 +64,27 @@ def _create_async_prediction_client(
     endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
+    transport: str,
     user_agent: str,
 ) -> v1PredictionServiceAsyncClient | v1beta1PredictionServiceAsyncClient:
     """Create a new `PredictionServiceAsyncClient`."""
+    # async clients don't support "rest" transport with standard Google APIs
+    # https://github.com/googleapis/gapic-generator-python/issues/1962
+    # However, when using custom endpoints, we can try to keep REST transport
+    has_custom_endpoint = bool(
+        client_options.api_endpoint
+        and client_options.api_endpoint != "https://aiplatform.googleapis.com"
+    )
+
+    # Only change to grpc_asyncio if no custom endpoint is specified
+    if transport == "rest" and not has_custom_endpoint:
+        transport = "grpc_asyncio"
+
     async_client_kwargs: dict[str, Any] = {
         "client_options": client_options,
         "client_info": get_client_info(module=user_agent),
         "credentials": credentials,
-        # async clients don't support "rest" transport
-        # https://github.com/googleapis/gapic-generator-python/issues/1962
-        "transport": "grpc_asyncio",
+        "transport": transport,
     }
 
     if endpoint_version == "v1":
@@ -86,6 +97,7 @@ def _get_async_prediction_client(
     endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
+    transport: str,
     user_agent: str,
 ):
     """Return a shared PredictionServiceAsyncClient per event loop."""
@@ -97,6 +109,7 @@ def _get_async_prediction_client(
             endpoint_version=endpoint_version,
             credentials=credentials,
             client_options=client_options,
+            transport=transport,
             user_agent=user_agent,
         )
 
@@ -104,13 +117,20 @@ def _get_async_prediction_client(
     if loop not in _client_caches:
         _client_caches[loop] = {}
 
-    cache_key = (endpoint_version, id(credentials), id(client_options), user_agent)
+    cache_key = (
+        endpoint_version,
+        id(credentials),
+        id(client_options),
+        transport,
+        user_agent,
+    )
 
     if cache_key not in _client_caches[loop]:
         _client_caches[loop][cache_key] = _create_async_prediction_client(
             endpoint_version=endpoint_version,
             credentials=credentials,
             client_options=client_options,
+            transport=transport,
             user_agent=user_agent,
         )
 
