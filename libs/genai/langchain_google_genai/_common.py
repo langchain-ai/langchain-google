@@ -17,6 +17,12 @@ _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
 
+try:
+    LC_GOOGLE_GENAI_VERSION = metadata.version("langchain-google-genai")
+except metadata.PackageNotFoundError:
+    LC_GOOGLE_GENAI_VERSION = "0.0.0"
+
+
 class GoogleGenerativeAIError(Exception):
     """Custom exception class for errors associated with the `Google GenAI` API."""
 
@@ -171,12 +177,8 @@ def get_user_agent(module: str | None = None) -> tuple[str, str]:
     Args:
         module: The module for a custom user agent header.
     """
-    try:
-        langchain_version = metadata.version("langchain-google-genai")
-    except metadata.PackageNotFoundError:
-        langchain_version = "0.0.0"
     client_library_version = (
-        f"{langchain_version}-{module}" if module else langchain_version
+        f"{LC_GOOGLE_GENAI_VERSION}-{module}" if module else LC_GOOGLE_GENAI_VERSION
     )
     if os.environ.get(_TELEMETRY_ENV_VARIABLE_NAME):
         client_library_version += f"+{_TELEMETRY_TAG}"
