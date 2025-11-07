@@ -183,7 +183,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
 
 
 def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
-    """Test that custom base URL and transport are set correctly."""
+    """Test that `base_url` alias is preserved and used in API calls."""
     config = {
         "model": "gemini-2.5-pro",
         "base_url": "https://example.com",
@@ -192,6 +192,9 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
+
+    assert llm.api_endpoint == "https://example.com"
+
     with patch(
         "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
@@ -204,6 +207,31 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
         transport = mock_prediction_service.call_args.kwargs["transport"]
         assert client_options.api_endpoint == "https://example.com"
         assert transport == "rest"
+
+
+def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
+    """Test that `api_endpoint` field is preserved and used in API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://direct-endpoint.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://direct-endpoint.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        assert client_options.api_endpoint == "https://direct-endpoint.com"
 
 
 def test_init_client_with_custom_model_kwargs() -> None:

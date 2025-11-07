@@ -90,7 +90,8 @@ class _VertexAIBase(BaseModel):
     api_transport: str | None = None
     """The desired API transport method, can be either `'grpc'` or `'rest'`.
 
-    Uses the default parameter in `vertexai.init` if defined.
+    Defaults to `'grpc'` if not specified. Uses the default parameter in `vertexai.init`
+    if defined.
     """
 
     default_metadata: Sequence[tuple[str, str]] = Field(default_factory=list)

@@ -474,6 +474,89 @@ def test_base_url_support() -> None:
     assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
 
 
+def test_api_endpoint_via_client_options() -> None:
+    """Test that `api_endpoint` via `client_options` is used in API calls."""
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    api_endpoint = "https://custom-endpoint.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+    param_transport = "rest"
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            client_options={"api_endpoint": api_endpoint},
+            transport=param_transport,
+        )
+
+    response = chat.invoke("test")
+    assert response.content == "test response"
+
+    mock_client.assert_called_once_with(
+        transport=param_transport,
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_key == param_api_key
+    assert call_client_options.api_endpoint == api_endpoint
+    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
+    assert "langchain-google-genai" in call_client_info.user_agent
+    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+
+
+def test_base_url_preserves_existing_client_options() -> None:
+    """Test that `base_url` doesn't override existing `api_endpoint` in `client_options`."""  # noqa: E501
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    base_url = "https://base-url.com"
+    api_endpoint = "https://client-options-endpoint.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+    param_transport = "rest"
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            client_options={"api_endpoint": api_endpoint},
+            transport=param_transport,
+        )
+
+    response = chat.invoke("test")
+    assert response.content == "test response"
+
+    mock_client.assert_called_once_with(
+        transport=param_transport,
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_key == param_api_key
+    # client_options.api_endpoint should take precedence over base_url
+    assert call_client_options.api_endpoint == api_endpoint
+    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
+    assert "langchain-google-genai" in call_client_info.user_agent
+    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+
+
 def test_default_metadata_field_alias() -> None:
     """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
     # Test with default_metadata_input field name (alias) - should accept None without
