@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -18,6 +18,6 @@ chat_models.acompletion_with_retry = acompletion_with_retry  # type: ignore[unus
 
 class VertexModelGardenMistral(_BaseVertexMaasModelGarden, chat_models.ChatMistralAI):  # type: ignore[unused-ignore, misc]
     def completion_with_retry(
-        self, run_manager: Optional[CallbackManagerForLLMRun] = None, **kwargs: Any
+        self, run_manager: CallbackManagerForLLMRun | None = None, **kwargs: Any
     ) -> Any:
         return completion_with_retry(self, **kwargs)

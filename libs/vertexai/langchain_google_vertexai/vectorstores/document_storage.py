@@ -6,11 +6,6 @@ from collections.abc import Iterator, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
 
 from google.api_core.exceptions import NotFound
@@ -34,14 +29,15 @@ class DocumentStorage(BaseStore[str, Document]):
 
 class GCSDocumentStorage(DocumentStorage):
     """Stores documents in Google Cloud Storage.
-    For each pair id, document_text the name of the blob will be {prefix}/{id} stored
-    in plain text format.
+
+    For each pair id, `document_text` the name of the blob will be `{prefix}/{id}`
+    stored in plain text format.
     """
 
     def __init__(
         self,
         bucket: storage.Bucket,
-        prefix: Optional[str] = "documents",
+        prefix: str | None = "documents",
         threaded=True,
         n_threads=8,
     ) -> None:
@@ -65,7 +61,7 @@ class GCSDocumentStorage(DocumentStorage):
 
     def _prepare_doc_for_bulk_upload(
         self, key: str, value: Document
-    ) -> Tuple[io.IOBase, Blob]:
+    ) -> tuple[io.IOBase, Blob]:
         document_json = value.model_dump()
         document_text = json.dumps(document_json).encode("utf-8")
         doc_contents = io.BytesIO(document_text)
@@ -73,7 +69,7 @@ class GCSDocumentStorage(DocumentStorage):
         blob = self._bucket.blob(blob_name)
         return doc_contents, blob
 
-    def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
+    def mset(self, key_value_pairs: Sequence[tuple[str, Document]]) -> None:
         """Stores a series of documents using each keys.
 
         Args:
@@ -102,9 +98,7 @@ class GCSDocumentStorage(DocumentStorage):
             for key, value in key_value_pairs:
                 self._set_one(key, value)
 
-    def _convert_bytes_to_doc(
-        self, doc: io.BytesIO, result: Any
-    ) -> Union[Document, None]:
+    def _convert_bytes_to_doc(self, doc: io.BytesIO, result: Any) -> Document | None:
         if isinstance(result, NotFound):
             return None
         if result is None:
@@ -116,18 +110,18 @@ class GCSDocumentStorage(DocumentStorage):
         msg = "Unexpected result type when batch getting multiple files from GCS"
         raise Exception(msg)
 
-    def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
+    def mget(self, keys: Sequence[str]) -> list[Document | None]:
         """Gets a batch of documents by id.
         The default implementation only loops `get_by_id`.
         Subclasses that have faster ways to retrieve data by batch should implement
         this method.
 
         Args:
-            keys: List of ids for the text.
+            keys: List of IDs for the text.
 
         Returns:
-            List of documents. If the key id is not found for any id record returns a
-                None instead.
+            List of `Document` objects. If the key id is not found for any id record
+                returns `None` instead.
         """
         if self._threaded:
             download_docs = [
@@ -148,7 +142,7 @@ class GCSDocumentStorage(DocumentStorage):
                     raise result
             return [
                 self._convert_bytes_to_doc(doc[1], result)
-                for doc, result in zip(download_docs, download_results)
+                for doc, result in zip(download_docs, download_results, strict=False)
             ]
         return [self._get_one(key) for key in keys]
 
@@ -156,7 +150,7 @@ class GCSDocumentStorage(DocumentStorage):
         """Deletes a batch of documents by id.
 
         Args:
-            keys: List of ids for the text.
+            keys: List of IDs for the text.
         """
         for i in range(0, len(keys), GCS_MAX_BATCH_SIZE):
             batch = keys[i : i + GCS_MAX_BATCH_SIZE]
@@ -189,7 +183,7 @@ class GCSDocumentStorage(DocumentStorage):
             return None
 
         document_str = existing_blob.download_as_text()
-        document_json: Dict[str, Any] = json.loads(document_str)
+        document_json: dict[str, Any] = json.loads(document_str)
         return Document(**document_json)
 
     def _set_one(self, key: str, value: Document) -> None:
@@ -210,7 +204,7 @@ class GCSDocumentStorage(DocumentStorage):
         """Deletes one document by its key.
 
         Args:
-            key (str): Id of the document to delete.
+            key: Id of the document to delete.
         """
         blob_name = self._get_blob_name(key)
         blob = self._bucket.blob(blob_name)
@@ -237,7 +231,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         kind: str = "document_id",
         text_property_name: str = "text",
         metadata_property_name: str = "metadata",
-        exclude_from_indexes: Optional[List[str]] = None,
+        exclude_from_indexes: list[str] | None = None,
     ) -> None:
         """Constructor.
 
@@ -255,14 +249,14 @@ class DataStoreDocumentStorage(DocumentStorage):
         self.exclude_from_indexes = exclude_from_indexes
         self._kind = kind
 
-    def mget(self, keys: Sequence[str]) -> List[Optional[Document]]:
+    def mget(self, keys: Sequence[str]) -> list[Document | None]:
         """Gets a batch of documents by id.
 
         Args:
-            keys: List of ids for the text.
+            keys: List of IDs for the text.
 
         Returns:
-            List of texts. If the key id is not found for any id record returns a None
+            List of texts. If the key id is not found for any id record returns a `None`
                 instead.
         """
         ds_keys = [self._client.key(self._kind, id_) for id_ in keys]
@@ -286,7 +280,7 @@ class DataStoreDocumentStorage(DocumentStorage):
             for entity in entities
         ]
 
-    def mset(self, key_value_pairs: Sequence[Tuple[str, Document]]) -> None:
+    def mset(self, key_value_pairs: Sequence[tuple[str, Document]]) -> None:
         """Stores a series of documents using each keys.
 
         Args:
@@ -299,7 +293,7 @@ class DataStoreDocumentStorage(DocumentStorage):
             keys = [self._client.key(self._kind, id_) for id_ in ids]
 
             entities = []
-            for key, document in zip(keys, documents):
+            for key, document in zip(keys, documents, strict=False):
                 entity = self._client.entity(
                     key=key,
                     exclude_from_indexes=self.exclude_from_indexes
@@ -339,7 +333,7 @@ class DataStoreDocumentStorage(DocumentStorage):
         for entity in query.fetch():
             yield str(entity.key.id_or_name)
 
-    def _convert_entity_to_dict(self, entity: datastore.Entity) -> Dict[str, Any]:
+    def _convert_entity_to_dict(self, entity: datastore.Entity) -> dict[str, Any]:
         """Recursively transform an entity into a plain dictionary."""
         from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
 

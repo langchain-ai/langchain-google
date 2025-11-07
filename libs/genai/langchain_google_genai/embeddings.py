@@ -1,7 +1,7 @@
 import asyncio
 import re
 import string
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # TODO: remove ignore once the google package is published with types
 from google.ai.generativelanguage_v1beta.types import (
@@ -40,68 +40,90 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
     To use, you must have either:
 
-        1. The ``GOOGLE_API_KEY`` environment variable set with your API key, or
-        2. Pass your API key using the google_api_key kwarg to the
-        GoogleGenerativeAIEmbeddings constructor.
+    1. The `GOOGLE_API_KEY` environment variable set with your API key, or
+    2. Pass your API key using the `google_api_key` kwarg to the
+        `GoogleGenerativeAIEmbeddings` constructor.
 
     Example:
-        .. code-block:: python
+        ```python
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-            embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
-            embeddings.embed_query("What's our Q1 revenue?")
+        embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+        embeddings.embed_query("What's our Q1 revenue?")
+        ```
     """
 
-    client: Any = None  #: :meta private:
-    async_client: Any = None  #: :meta private:
-    model: str = Field(
-        ...,
-        description="The name of the embedding model to use. "
-        "Example: ``'models/gemini-embedding-001'``",
-    )
-    task_type: Optional[str] = Field(
+    client: Any = None
+
+    async_client: Any = None
+
+    model: str = Field(...)
+    """The name of the embedding model to use.
+
+    Example: `'models/gemini-embedding-001'`
+    """
+
+    task_type: str | None = Field(
         default=None,
-        description="The task type. Valid options include: "
-        "``'task_type_unspecified'``, ``'retrieval_query'``, ``'retrieval_document'``, "
-        "``'semantic_similarity'``, ``'classification'``, and ``'clustering'``",
     )
-    google_api_key: Optional[SecretStr] = Field(
-        default_factory=secret_from_env("GOOGLE_API_KEY", default=None),
-        description=(
-            "The Google API key to use. If not provided, "
-            "the GOOGLE_API_KEY environment variable will be used."
-        ),
+    """The task type.
+
+    Valid options include:
+
+    * `'task_type_unspecified'`
+    * `'retrieval_query'`
+    * `'retrieval_document'`
+    * `'semantic_similarity'`
+    * `'classification'`
+    * `'clustering'`
+    """
+
+    google_api_key: SecretStr | None = Field(
+        default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
     )
-    credentials: Any = Field(
+    """The Google API key to use.
+
+    If not provided, the `GOOGLE_API_KEY` environment variable will be used.
+    """
+
+    credentials: Any = Field(default=None, exclude=True)
+    """The default custom credentials to use when making API calls.
+
+    (`google.auth.credentials.Credentials`)
+
+    If not provided, credentials will be ascertained from the `GOOGLE_API_KEY` env var.
+    """
+
+    client_options: dict | None = Field(default=None)
+    """A dictionary of client options to pass to the Google API client.
+
+    Example: `api_endpoint`
+    """
+
+    base_url: str | None = Field(
         default=None,
-        exclude=True,
-        description="The default custom credentials "
-        "(google.auth.credentials.Credentials) to use when making API calls. If not "
-        "provided, credentials will be ascertained from the GOOGLE_API_KEY envvar",
     )
-    client_options: Optional[Dict] = Field(
+    """The base URL to use for the API client.
+
+    Alias of `client_options['api_endpoint']`.
+    """
+
+    transport: str | None = Field(default=None)
+    """A string, one of: [`'rest'`, `'grpc'`, `'grpc_asyncio'`]."""
+
+    request_options: dict | None = Field(
         default=None,
-        description=(
-            "A dictionary of client options to pass to the Google API client, "
-            "such as `api_endpoint`."
-        ),
     )
-    transport: Optional[str] = Field(
-        default=None,
-        description="A string, one of: [``'rest'``, ``'grpc'``, ``'grpc_asyncio'``].",
-    )
-    request_options: Optional[Dict] = Field(
-        default=None,
-        description="A dictionary of request options to pass to the Google API client."
-        "Example: `{'timeout': 10}`",
-    )
+    """A dictionary of request options to pass to the Google API client.
+
+    Example: `{'timeout': 10}`
+    """
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        """Validates params and passes them to google-generativeai package."""
+        """Validates params and passes them to `google-generativeai` package."""
         if isinstance(self.google_api_key, SecretStr):
-            google_api_key: Optional[str] = self.google_api_key.get_secret_value()
+            google_api_key: str | None = self.google_api_key.get_secret_value()
         else:
             google_api_key = self.google_api_key
         client_info = get_client_info("GoogleGenerativeAIEmbeddings")
@@ -109,11 +131,16 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
 
+        # Merge base_url into client_options if provided
+        client_options = self.client_options or {}
+        if self.base_url and "api_endpoint" not in client_options:
+            client_options = {**client_options, "api_endpoint": self.base_url}
+
         self.client = build_generative_service(
             credentials=self.credentials,
             api_key=google_api_key,
             client_info=client_info,
-            client_options=self.client_options,
+            client_options=client_options,
             transport=self.transport,
         )
         # Always defer async client initialization to first async call.
@@ -127,7 +154,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         """Get or create the async client when needed."""
         if self.async_client is None:
             if isinstance(self.google_api_key, SecretStr):
-                google_api_key: Optional[str] = self.google_api_key.get_secret_value()
+                google_api_key: str | None = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
 
@@ -137,17 +164,22 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             if transport == "rest":
                 transport = "grpc_asyncio"
 
+            # Merge base_url into client_options if provided
+            client_options = self.client_options or {}
+            if self.base_url and "api_endpoint" not in client_options:
+                client_options = {**client_options, "api_endpoint": self.base_url}
+
             self.async_client = build_generative_async_service(
                 credentials=self.credentials,
                 api_key=google_api_key,
                 client_info=client_info,
-                client_options=self.client_options,
+                client_options=client_options,
                 transport=transport,
             )
         return self.async_client
 
     @staticmethod
-    def _split_by_punctuation(text: str) -> List[str]:
+    def _split_by_punctuation(text: str) -> list[str]:
         """Splits a string by punctuation and whitespace characters."""
         split_by = string.punctuation + "\t\n "
         pattern = f"([{split_by}])"
@@ -155,15 +187,15 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         return [segment for segment in re.split(pattern, text) if segment]
 
     @staticmethod
-    def _prepare_batches(texts: List[str], batch_size: int) -> List[List[str]]:
-        """Splits texts in batches based on current maximum batch size
-        and maximum tokens per request.
+    def _prepare_batches(texts: list[str], batch_size: int) -> list[list[str]]:
+        """Splits texts in batches based on current maximum batch size and maximum
+        tokens per request.
         """
         text_index = 0
         texts_len = len(texts)
         batch_token_len = 0
-        batches: List[List[str]] = []
-        current_batch: List[str] = []
+        batches: list[list[str]] = []
+        current_batch: list[str] = []
         if texts_len == 0:
             return []
         while text_index < texts_len:
@@ -211,9 +243,9 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         self,
         text: str,
         *,
-        task_type: Optional[str] = None,
-        title: Optional[str] = None,
-        output_dimensionality: Optional[int] = None,
+        task_type: str | None = None,
+        title: str | None = None,
+        output_dimensionality: int | None = None,
     ) -> EmbedContentRequest:
         task_type = self.task_type or task_type or "RETRIEVAL_DOCUMENT"
         return EmbedContentRequest(
@@ -226,29 +258,30 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
     def embed_documents(
         self,
-        texts: List[str],
+        texts: list[str],
         *,
         batch_size: int = _DEFAULT_BATCH_SIZE,
-        task_type: Optional[str] = None,
-        titles: Optional[List[str]] = None,
-        output_dimensionality: Optional[int] = None,
-    ) -> List[List[float]]:
-        """Embed a list of strings using the `batch endpoint <https://ai.google.dev/api/embeddings#method:-models.batchembedcontents>`__.
+        task_type: str | None = None,
+        titles: list[str] | None = None,
+        output_dimensionality: int | None = None,
+    ) -> list[list[float]]:
+        """Embed a list of strings using the [batch endpoint](https://ai.google.dev/api/embeddings#method:-models.batchembedcontents)
 
         Google Generative AI currently sets a max batch size of 100 strings.
 
         Args:
-            texts: List[str] The list of strings to embed.
-            batch_size: [int] The batch size of embeddings to send to the model
-            task_type: `task_type <https://ai.google.dev/api/embeddings#tasktype>`__
-            titles: An optional list of titles for texts provided.
-                Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
-            output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
+            texts: The list of strings to embed.
+            batch_size: Batch size of embeddings to send to the model
+            task_type: [`task_type`](https://ai.google.dev/api/embeddings#tasktype)
+            titles: Optional list of titles for texts provided.
+
+                Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
+            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
 
         Returns:
             List of embeddings, one for each text.
         """
-        embeddings: List[List[float]] = []
+        embeddings: list[list[float]] = []
         batch_start_index = 0
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
             if titles:
@@ -266,7 +299,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                     title=title,
                     output_dimensionality=output_dimensionality,
                 )
-                for text, title in zip(batch, titles_batch)
+                for text, title in zip(batch, titles_batch, strict=False)
             ]
 
             try:
@@ -283,18 +316,19 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         self,
         text: str,
         *,
-        task_type: Optional[str] = None,
-        title: Optional[str] = None,
-        output_dimensionality: Optional[int] = None,
-    ) -> List[float]:
-        """Embed a text, using the `non-batch endpoint <https://ai.google.dev/api/embeddings#method:-models.embedcontent>`__.
+        task_type: str | None = None,
+        title: str | None = None,
+        output_dimensionality: int | None = None,
+    ) -> list[float]:
+        """Embed a text, using the [non-batch endpoint](https://ai.google.dev/api/embeddings#method:-models.embedcontent)
 
         Args:
             text: The text to embed.
-            task_type: `task_type <https://ai.google.dev/api/embeddings#tasktype>`__
-            title: An optional title for the text.
-                Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
-            output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
+            task_type: [`task_type`](https://ai.google.dev/api/embeddings#tasktype)
+            title: Optional title for the text.
+
+                Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
+            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
 
         Returns:
             Embedding for the text.
@@ -317,29 +351,30 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
     async def aembed_documents(
         self,
-        texts: List[str],
+        texts: list[str],
         *,
         batch_size: int = _DEFAULT_BATCH_SIZE,
-        task_type: Optional[str] = None,
-        titles: Optional[List[str]] = None,
-        output_dimensionality: Optional[int] = None,
-    ) -> List[List[float]]:
-        """Embed a list of strings using the `batch endpoint <https://ai.google.dev/api/embeddings#method:-models.batchembedcontents>`__.
+        task_type: str | None = None,
+        titles: list[str] | None = None,
+        output_dimensionality: int | None = None,
+    ) -> list[list[float]]:
+        """Embed a list of strings using the [batch endpoint](https://ai.google.dev/api/embeddings#method:-models.batchembedcontents)
 
         Google Generative AI currently sets a max batch size of 100 strings.
 
         Args:
-            texts: List[str] The list of strings to embed.
-            batch_size: [int] The batch size of embeddings to send to the model
-            task_type: `task_type <https://ai.google.dev/api/embeddings#tasktype>`__
-            titles: An optional list of titles for texts provided.
-                Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
-            output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
+            texts: The list of strings to embed.
+            batch_size: The batch size of embeddings to send to the model
+            task_type: [`task_type`](https://ai.google.dev/api/embeddings#tasktype)
+            titles: Optional list of titles for texts provided.
+
+                Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
+            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
 
         Returns:
             List of embeddings, one for each text.
         """
-        embeddings: List[List[float]] = []
+        embeddings: list[list[float]] = []
         batch_start_index = 0
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
             if titles:
@@ -357,7 +392,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                     title=title,
                     output_dimensionality=output_dimensionality,
                 )
-                for text, title in zip(batch, titles_batch)
+                for text, title in zip(batch, titles_batch, strict=False)
             ]
 
             try:
@@ -374,18 +409,19 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         self,
         text: str,
         *,
-        task_type: Optional[str] = None,
-        title: Optional[str] = None,
-        output_dimensionality: Optional[int] = None,
-    ) -> List[float]:
-        """Embed a text, using the `non-batch endpoint <https://ai.google.dev/api/embeddings#method:-models.embedcontent>`__.
+        task_type: str | None = None,
+        title: str | None = None,
+        output_dimensionality: int | None = None,
+    ) -> list[float]:
+        """Embed a text, using the [non-batch endpoint](https://ai.google.dev/api/embeddings#method:-models.embedcontent).
 
         Args:
             text: The text to embed.
-            task_type: `task_type <https://ai.google.dev/api/embeddings#tasktype>`__
-            title: An optional title for the text.
-                Only applicable when TaskType is ``'RETRIEVAL_DOCUMENT'``.
-            output_dimensionality: Optional `reduced dimension for the output embedding <https://ai.google.dev/api/embeddings#EmbedContentRequest>`__.
+            task_type: [`task_type`](https://ai.google.dev/api/embeddings#tasktype)
+            title: Optional title for the text.
+
+                Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
+            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
 
         Returns:
             Embedding for the text.

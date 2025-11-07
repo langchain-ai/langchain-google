@@ -7,7 +7,7 @@ from langchain_google_genai._common import (
 
 
 @patch("langchain_google_genai._common.os.environ.get")
-@patch("langchain_google_genai._common._LANGCHAIN_GENAI_VERSION", "1.2.3")
+@patch("langchain_google_genai._common.LC_GOOGLE_GENAI_VERSION", "1.2.3")
 def test_get_user_agent_with_telemetry_env_variable(
     mock_environ_get: MagicMock,
 ) -> None:
@@ -20,7 +20,7 @@ def test_get_user_agent_with_telemetry_env_variable(
 
 
 @patch("langchain_google_genai._common.os.environ.get")
-@patch("langchain_google_genai._common._LANGCHAIN_GENAI_VERSION", "1.2.3")
+@patch("langchain_google_genai._common.LC_GOOGLE_GENAI_VERSION", "1.2.3")
 def test_get_user_agent_without_telemetry_env_variable(
     mock_environ_get: MagicMock,
 ) -> None:

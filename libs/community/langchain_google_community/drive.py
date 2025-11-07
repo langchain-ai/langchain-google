@@ -17,7 +17,20 @@ from pydantic import BaseModel, field_validator, model_validator
 
 
 class GoogleDriveLoader(BaseLoader, BaseModel):
-    """Load Google Docs from `Google Drive`."""
+    """Load documents from Google Drive.
+
+    Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+
+    Supports loading from folders, specific documents, or file IDs with authentication.
+
+    !!! note "Installation"
+
+        Requires additional dependencies:
+
+        ```bash
+        pip install langchain-google-community[drive]
+        ```
+    """
 
     # Generated from https://developers.google.com/drive/api/guides/api-specific-auth
     # limiting to the scopes that are required to read the files
@@ -31,37 +44,51 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
 
     service_account_key: Path = Path.home() / ".credentials" / "keys.json"
     """Path to the service account key file."""
+
     credentials_path: Path = Path.home() / ".credentials" / "credentials.json"
     """Path to the credentials file."""
+
     token_path: Path = Path.home() / ".credentials" / "token.json"
     """Path to the token file."""
+
     credentials: Any = None
     """Your own google credentials created via your own mechanism"""
+
     folder_id: Optional[str] = None
-    """The folder id to load from."""
+    """The folder ID to load from."""
+
     document_ids: Optional[List[str]] = None
-    """The document ids to load from."""
+    """The document IDs to load from."""
+
     file_ids: Optional[List[str]] = None
-    """The file ids to load from."""
+    """The file IDs to load from."""
+
     recursive: bool = False
-    """Whether to load recursively. Only applies when folder_id is given."""
+    """Whether to load recursively. Only applies when `folder_id` is given."""
+
     file_types: Optional[Sequence[str]] = None
-    """The file types to load. Only applies when folder_id is given."""
+    """The file types to load. Only applies when `folder_id` is given."""
+
     load_trashed_files: bool = False
-    """Whether to load trashed files. Only applies when folder_id is given."""
+    """Whether to load trashed files. Only applies when `folder_id` is given."""
     # NOTE(MthwRobinson) - changing the file_loader_cls to type here currently
     # results in pydantic validation errors
+
     file_loader_cls: Any = None
     """The file loader class to use."""
+
     file_loader_kwargs: Dict["str", Any] = {}
     """The file loader kwargs to use."""
+
     load_auth: bool = False
     """Whether to load authorization identities."""
+
     load_extended_metadata: bool = False
     """Whether to load extended metadata."""
+
     scopes: List[str] = ["https://www.googleapis.com/auth/drive.file"]
-    """The credential scopes to use for Google Drive API access. Default is 
-    drive.file scope."""
+    """The credential scopes to use for Google Drive API access. Default is
+    `drive.file` scope."""
 
     def _get_file_size_from_id(self, id: str) -> str:
         """Fetch the size of the file."""

@@ -36,28 +36,23 @@ else:
 class SheetsToolkit(BaseToolkit):
     """Toolkit for interacting with Google Sheets.
 
-    This toolkit provides comprehensive Google Sheets integration with both
-    read and write capabilities.
+    Inherits from [`BaseToolkit`][langchain_core.tools.base.BaseToolkit].
 
-    *Security Note*: This toolkit contains tools that can read and write data
-        to Google Sheets.
+    Provides comprehensive Google Sheets integration with read and write capabilities.
 
-        Read operations: Can use either API key (public sheets) or OAuth2
-        Write operations: Require OAuth2 credentials (api_resource)
+    !!! warning "Security Note"
 
-        For example, this toolkit can be used to:
-        - Read spreadsheet data and metadata
-        - Create new spreadsheets
-        - Update, append, and clear cell values
-        - Perform batch operations for efficiency
+        This toolkit contains tools that can read and write data to Google Sheets.
+        Ensure proper authentication and access controls.
 
-    Authentication:
-        - api_resource: OAuth2 credentials for full read/write access
-        - api_key: API key for read-only access to public spreadsheets
+    !!! info "Authentication Requirements"
 
+        - **Read operations**: Require only API key (for public spreadsheets)
+        - **Write operations**: Require OAuth2 credentials (`api_resource`)
     """
 
     api_resource: Resource = Field(default=None)  # type: ignore[assignment]
+
     api_key: Optional[str] = Field(default=None)
 
     model_config = ConfigDict(
@@ -68,9 +63,8 @@ class SheetsToolkit(BaseToolkit):
         """Get the tools in the toolkit.
 
         Returns:
-            List[BaseTool]: List of tools available based on authentication method.
-                - API key: Read-only tools (public spreadsheets)
-                - OAuth2: Full read/write tools (private spreadsheets)
+            List of tools based on authentication method. API key provides read-only
+            tools. OAuth2 provides full read/write tools.
         """
         # If api_key is provided, return read-only tools
         if self.api_key:

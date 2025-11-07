@@ -14,13 +14,16 @@ from langchain_google_community.calendar.utils import is_all_day_event
 
 
 class UpdateEventSchema(BaseModel):
-    """Input for CalendarUpdateEvent."""
+    """Input schema for `CalendarUpdateEvent`."""
 
     event_id: str = Field(..., description="The event ID to update.")
+
     calendar_id: str = Field(
         default="primary", description="The calendar ID to create the event in."
     )
+
     summary: Optional[str] = Field(default=None, description="The title of the event.")
+
     start_datetime: Optional[str] = Field(
         default=None,
         description=(
@@ -28,6 +31,7 @@ class UpdateEventSchema(BaseModel):
             "If the event is an all-day event, set the time to 'YYYY-MM-DD' format."
         ),
     )
+
     end_datetime: Optional[str] = Field(
         default=None,
         description=(
@@ -35,9 +39,11 @@ class UpdateEventSchema(BaseModel):
             "If the event is an all-day event, set the time to 'YYYY-MM-DD' format."
         ),
     )
+
     timezone: Optional[str] = Field(
         default=None, description="The timezone of the event."
     )
+
     recurrence: Optional[Dict[str, Any]] = Field(
         default=None,
         description=(
@@ -48,15 +54,19 @@ class UpdateEventSchema(BaseModel):
             "Use either COUNT or UNTIL, but not both; set the other to None."
         ),
     )
+
     location: Optional[str] = Field(
         default=None, description="The location of the event."
     )
+
     description: Optional[str] = Field(
         default=None, description="The description of the event."
     )
+
     attendees: Optional[List[str]] = Field(
         default=None, description="A list of attendees' email addresses for the event."
     )
+
     reminders: Union[None, bool, List[Dict[str, Any]]] = Field(
         default=None,
         description=(
@@ -66,9 +76,11 @@ class UpdateEventSchema(BaseModel):
             "Valid methods are 'email' and 'popup'."
         ),
     )
+
     conference_data: Optional[bool] = Field(
         default=None, description="Whether to include conference data."
     )
+
     color_id: Optional[str] = Field(
         default=None,
         description=(
@@ -78,6 +90,7 @@ class UpdateEventSchema(BaseModel):
             "'10': Basil, '11': Tomato."
         ),
     )
+
     transparency: Optional[str] = Field(
         default=None,
         description=(
@@ -85,6 +98,7 @@ class UpdateEventSchema(BaseModel):
             "transparent for available and opaque for busy."
         ),
     )
+
     send_updates: Optional[str] = Field(
         default=None,
         description=(
@@ -98,7 +112,9 @@ class CalendarUpdateEvent(CalendarBaseTool):  # type: ignore[override, override]
     """Tool that updates an event in Google Calendar."""
 
     name: str = "update_calendar_event"
+
     description: str = "Use this tool to update an event. "
+
     args_schema: Type[UpdateEventSchema] = UpdateEventSchema
 
     def _get_event(self, event_id: str, calendar_id: str = "primary") -> Dict[str, Any]:

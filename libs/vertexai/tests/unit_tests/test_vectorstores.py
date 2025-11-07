@@ -1,4 +1,3 @@
-from typing import Union
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,7 +10,7 @@ from langchain_google_vertexai.vectorstores.vectorstores import _BaseVertexAIVec
 def test_to_data_points() -> None:
     ids = ["Id1"]
     embeddings = [[0.0, 0.0]]
-    sparse_embeddings: list[dict[str, Union[list[int], list[float]]]] = [
+    sparse_embeddings: list[dict[str, list[int] | list[float]]] = [
         {"values": [0.9, 0.3], "dimensions": [3, 20]}
     ]
     metadatas = [
@@ -190,7 +189,7 @@ def test_add_texts_with_embeddings() -> None:
 
 def test_similarity_search_by_vector_with_score_output_shape() -> None:
     embedding = [0.0, 0.5, 0.8]
-    sparse_embedding: dict[str, Union[list[int], list[float]]] = {
+    sparse_embedding: dict[str, list[int] | list[float]] = {
         "values": [0.9, 0.3],
         "dimensions": [3, 20],
     }

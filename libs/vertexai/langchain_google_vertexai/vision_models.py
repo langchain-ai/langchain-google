@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from google.cloud.aiplatform import telemetry
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -29,17 +29,21 @@ from langchain_google_vertexai._utils import get_user_agent
 
 
 class _BaseImageTextModel(BaseModel):
-    """Base class for all integrations that use ImageTextModel."""
+    """Base class for all integrations that use `ImageTextModel`."""
 
     cached_client: Any = Field(default=None, exclude=True)
+
     model_name: str = Field(default="imagetext@001")
-    """ Name of the model to use"""
+    """Name of the model to use"""
+
     number_of_results: int = Field(default=1)
     """Number of results to return from one query"""
+
     language: str = Field(default="en")
     """Language of the query"""
-    project: Union[str, None] = Field(default=None)
-    """Google cloud project"""
+
+    project: str | None = Field(default=None)
+    """Google Cloud Platform project"""
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -55,14 +59,14 @@ class _BaseImageTextModel(BaseModel):
     def _image_bytes_loader_client(self):
         return ImageBytesLoader(project=self.project)
 
-    def _get_image_from_message_part(self, message_part: str | Dict) -> Image | None:
+    def _get_image_from_message_part(self, message_part: str | dict) -> Image | None:
         """Given a message part obtain a image if the part represents it.
 
         Args:
             message_part: Item of a message content.
 
         Returns:
-            Image is successful otherwise None.
+            `Image` is successful otherwise `None`.
         """
         image_str = get_image_str_from_content_part(message_part)
 
@@ -72,14 +76,14 @@ class _BaseImageTextModel(BaseModel):
             return Image(image_bytes=image_bytes)
         return None
 
-    def _get_text_from_message_part(self, message_part: str | Dict) -> str | None:
+    def _get_text_from_message_part(self, message_part: str | dict) -> str | None:
         """Given a message part obtain a text if the part represents it.
 
         Args:
             message_part: Item of a message content.
 
         Returns:
-            str is successful otherwise None.
+            `str` is successful otherwise `None`.
         """
         return get_text_str_from_content_part(message_part)
 
@@ -95,10 +99,10 @@ class _BaseImageTextModel(BaseModel):
         return user_agent
 
     @property
-    def _default_params(self) -> Dict[str, Any]:
+    def _default_params(self) -> dict[str, Any]:
         return {"number_of_results": self.number_of_results, "language": self.language}
 
-    def _prepare_params(self, **kwargs: Any) -> Dict[str, Any]:
+    def _prepare_params(self, **kwargs: Any) -> dict[str, Any]:
         params = self._default_params
         for key, value in kwargs.items():
             if value is not None:
@@ -112,10 +116,10 @@ class _BaseVertexAIImageCaptioning(_BaseImageTextModel):
     def _get_captions(
         self,
         image: Image,
-        number_of_results: Optional[int] = None,
-        language: Optional[str] = None,
+        number_of_results: int | None = None,
+        language: str | None = None,
         **kwargs,
-    ) -> List[str]:
+    ) -> list[str]:
         """Uses the sdk methods to generate a list of captions.
 
         Args:
@@ -138,8 +142,8 @@ class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
 
     def _generate(
         self,
-        prompts: List[str],
-        stop: List[str] | None = None,
+        prompts: list[str],
+        stop: list[str] | None = None,
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> LLMResult:
@@ -147,11 +151,13 @@ class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
 
         Args:
             prompts: List of prompts to use. Each prompt must be a string
-                that represents an image. Currently supported are:
+                that represents an image.
+
+                Currently supported are:
                 - Google Cloud Storage URI
                 - B64 encoded string
                 - Local file path
-                - Remote url
+                - Remote URL
 
         Returns:
             Captions generated from every prompt.
@@ -162,14 +168,14 @@ class VertexAIImageCaptioning(_BaseVertexAIImageCaptioning, BaseLLM):
 
         return LLMResult(generations=generations)
 
-    def _generate_one(self, prompt: str, **kwargs) -> List[Generation]:
+    def _generate_one(self, prompt: str, **kwargs) -> list[Generation]:
         """Generates the captions for a single prompt.
 
         Args:
-            prompt: Image url for the generation.
+            prompt: Image URL for the generation.
 
         Returns:
-            List of generations
+            List of `Generation` objects
         """
         image_loader = self._image_bytes_loader_client
         image_bytes = image_loader.load_bytes(prompt)
@@ -183,8 +189,8 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: List[str] | None = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
@@ -192,25 +198,31 @@ class VertexAIImageCaptioningChat(_BaseVertexAIImageCaptioning, BaseChatModel):
 
         Args:
             messages: List of messages. Currently only one message is supported.
+
                 The message content must be a list with only one element with
                 a dict with format:
+
+                ```json
                 {
                     'type': 'image_url',
                     'image_url': {
                         'url' <image_string>
                     }
                 }
+                ```
+
                 Currently supported image strings are:
+
                 - Google Cloud Storage URI
                 - B64 encoded string
                 - Local file path
-                - Remote url
+                - Remote URL
         """
         image = None
 
         is_valid = (
             len(messages) == 1
-            and isinstance(messages[0].content, List)
+            and isinstance(messages[0].content, list)
             and len(messages[0].content) == 1
         )
 
@@ -240,26 +252,29 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
     """Chat implementation of a visual QnA model."""
 
     @property
-    def _default_params(self) -> Dict[str, Any]:
+    def _default_params(self) -> dict[str, Any]:
         return {"number_of_results": self.number_of_results}
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: List[str] | None = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Generates the results.
 
         Args:
-            messages: List of messages. The first message should contain a
-            string representation of the image.
+            messages: List of messages.
+
+                The first message should contain a string representation of the image.
+
                 Currently supported are:
                     - Google Cloud Storage URI
                     - B64 encoded string
                     - Local file path
-                    - Remote url
+                    - Remote URL
+
                 There has to be at least other message with the first question.
         """
         image = None
@@ -267,7 +282,7 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
 
         is_valid = (
             len(messages) == 1
-            and isinstance(messages[0].content, List)
+            and isinstance(messages[0].content, list)
             and len(messages[0].content) == 2
         )
 
@@ -300,9 +315,9 @@ class VertexAIVisualQnAChat(_BaseImageTextModel, BaseChatModel):
         return ChatResult(generations=generations)
 
     def _ask_questions(
-        self, image: Image, query: str, number_of_results: Optional[int] = None
-    ) -> List[str]:
-        """Interfaces with the sdk to get the question.
+        self, image: Image, query: str, number_of_results: int | None = None
+    ) -> list[str]:
+        """Interfaces with the SDK to get the question.
 
         Args:
             image: Image to question about.
@@ -320,23 +335,31 @@ class _BaseVertexAIImageGenerator(BaseModel):
     """Base class form generation and edition of images."""
 
     cached_client: Any = Field(default=None, exclude=True)
+
     model_name: str = Field(default="imagen-3.0-generate-002")
     """Name of the base model"""
-    negative_prompt: Union[str, None] = Field(default=None)
+
+    negative_prompt: str | None = Field(default=None)
     """A description of what you want to omit in
         the generated images"""
+
     number_of_results: int = Field(default=1)
     """Number of images to generate"""
-    guidance_scale: Union[float, None] = Field(default=None)
+
+    guidance_scale: float | None = Field(default=None)
     """Controls the strength of the prompt"""
-    language: Union[str, None] = Field(default=None)
-    """Language of the text prompt for the image Supported values are "en" for English,
-    "hi" for Hindi, "ja" for Japanese, "ko" for Korean, and "auto" for automatic
-    language detection"""
-    seed: Union[int, None] = Field(default=None)
+
+    language: str | None = Field(default=None)
+    """Language of the text prompt for the image Supported values are `'en'` for
+    English, `'hi'` for Hindi, `'ja'` for Japanese, `'ko'` for Korean, and `'auto'`
+    for automatic language detection
+    """
+
+    seed: int | None = Field(default=None)
     """Random seed for the image generation"""
-    project: Union[str, None] = Field(default=None)
-    """Google cloud project id"""
+
+    project: str | None = Field(default=None)
+    """Google Cloud Platform project ID"""
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -349,7 +372,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
         return self.cached_client
 
     @property
-    def _default_params(self) -> Dict[str, Any]:
+    def _default_params(self) -> dict[str, Any]:
         return {
             "number_of_images": self.number_of_results,
             "language": self.language,
@@ -362,7 +385,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
     def _image_bytes_loader_client(self):
         return ImageBytesLoader(project=self.project)
 
-    def _prepare_params(self, **kwargs: Any) -> Dict[str, Any]:
+    def _prepare_params(self, **kwargs: Any) -> dict[str, Any]:
         params = self._default_params
         mapping = {"number_of_results": "number_of_images"}
         for key, value in kwargs.items():
@@ -371,14 +394,14 @@ class _BaseVertexAIImageGenerator(BaseModel):
                 params[key] = value
         return {k: v for k, v in params.items() if v is not None}
 
-    def _generate_images(self, prompt: str, **kwargs: Any) -> List[str]:
+    def _generate_images(self, prompt: str, **kwargs: Any) -> list[str]:
         """Generates images given a prompt.
 
         Args:
             prompt: Description of what the image should look like.
 
         Returns:
-            List of b64 encoded strings.
+            b64 encoded strings.
         """
         with telemetry.tool_context_manager(self._user_agent):
             generation_result = self.client.generate_images(
@@ -387,7 +410,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
 
         return [self._to_b64_string(image) for image in generation_result.images]
 
-    def _edit_images(self, image_str: str, prompt: str, **kwargs: Any) -> List[str]:
+    def _edit_images(self, image_str: str, prompt: str, **kwargs: Any) -> list[str]:
         """Edit an image given a image and a prompt.
 
         Args:
@@ -395,7 +418,7 @@ class _BaseVertexAIImageGenerator(BaseModel):
             prompt: Description of what the image should look like.
 
         Returns:
-            List of b64 encoded strings.
+            b64 encoded strings.
         """
         with telemetry.tool_context_manager(self._user_agent):
             image_loader = self._image_bytes_loader_client
@@ -447,8 +470,8 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: List[str] | None = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
@@ -490,13 +513,14 @@ class VertexAIImageGeneratorChat(_BaseVertexAIImageGenerator, BaseChatModel):
 
 class VertexAIImageEditorChat(_BaseVertexAIImageGenerator, BaseChatModel):
     """Given an image and a prompt, edits the image.
+
     Currently only supports mask free editing.
     """
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: List[str] | None = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:

@@ -4,7 +4,7 @@ import base64
 import json
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -794,7 +794,7 @@ def test_parse_history_gemini_multi(
         history=source_history, imageBytesLoader=image_bytes_loader
     )
 
-    for result, expected in zip(result_history, expected_history):
+    for result, expected in zip(result_history, expected_history, strict=False):
         assert result == expected
     assert sm == expected_sys_message
 
@@ -1391,8 +1391,8 @@ def test_anthropic_format_output() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:
@@ -1455,8 +1455,8 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:
@@ -1619,3 +1619,69 @@ def test_v1_function_parts() -> None:
     ]
 
     assert llm._prepare_request_gemini(messages)
+
+
+def test_thinking_budget_in_params() -> None:
+    """Test that `thinking_budget` and `include_thoughts` are configured correctly."""
+    # Init params
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        thinking_budget=1000,
+        include_thoughts=True,
+    )
+
+    params = llm._prepare_params()
+    # thinking_budget and include_thoughts should NOT be in top-level params
+    # (to avoid conflicts with GenerationConfig)
+    assert "thinking_budget" not in params
+    assert "include_thoughts" not in params
+
+    # But thinking_config should be set for the API
+    assert "thinking_config" in params
+    assert params["thinking_config"]["thinking_budget"] == 1000
+    assert params["thinking_config"]["include_thoughts"] is True
+
+    # Invocation params
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    params = llm._prepare_params(thinking_budget=500, include_thoughts=False)
+    assert "thinking_budget" not in params
+    assert "include_thoughts" not in params
+
+    # Also check that thinking_config is set for the API
+    assert "thinking_config" in params
+    assert params["thinking_config"]["thinking_budget"] == 500
+    assert params["thinking_config"]["include_thoughts"] is False
+
+
+def test_thinking_budget_in_invocation_params() -> None:
+    """Test that thinking parameters are available for LangSmith tracing."""
+    # Init params
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        thinking_budget=1000,
+        include_thoughts=True,
+    )
+
+    invocation_params = llm._get_invocation_params()
+
+    # Verify thinking parameters are included for tracing
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 1000
+    assert invocation_params["include_thoughts"] is True
+
+    # Invocation params
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    invocation_params = llm._get_invocation_params(
+        thinking_budget=500, include_thoughts=False
+    )
+
+    # Verify thinking parameters are included for tracing
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 500
+    assert invocation_params["include_thoughts"] is False

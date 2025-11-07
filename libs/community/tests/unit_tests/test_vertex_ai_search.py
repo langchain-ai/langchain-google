@@ -310,12 +310,12 @@ def test_get_content_spec_kwargs(
     2. The content specification is correctly generated based on input parameters.
 
     Args:
-        beta_flag (bool): Whether to use beta version.
-        expected_module (str): Expected module path for import.
-        engine_data_type (int): The type of engine data (0 for unstructured data).
-        get_extractive_answers (bool): Whether to get extractive answers.
-        config (dict): Configuration for extractive segments.
-        expected_spec (dict): The expected specification for the given input.
+        beta_flag: Whether to use beta version.
+        expected_module: Expected module path for import.
+        engine_data_type: The type of engine data (0 for unstructured data).
+        get_extractive_answers: Whether to get extractive answers.
+        config: Configuration for extractive segments.
+        expected_spec: The expected specification for the given input.
     """
     with patch(f"{expected_module}.SearchServiceClient", autospec=True) as mock_client:
         mock_client.return_value = MagicMock()
