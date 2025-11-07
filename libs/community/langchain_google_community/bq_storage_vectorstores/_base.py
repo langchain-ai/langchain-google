@@ -32,27 +32,10 @@ USER_AGENT_PREFIX = "FeatureStore"
 
 
 class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
-    """
-    Abstract base class for BigQuery-based vector stores.
+    """Abstract base class for BigQuery-based vector stores.
 
     This class provides a foundation for storing, retrieving, and searching documents
     and their corresponding embeddings in BigQuery.
-
-    Attributes:
-        embedding: Embedding model for generating and comparing embeddings.
-        project_id: Google Cloud Project ID where BigQuery resources are located.
-        dataset_name: BigQuery dataset name.
-        table_name: BigQuery table name.
-        location: BigQuery region/location.
-        content_field: Name of the column storing document content (default: "content").
-        embedding_field: Name of the column storing text embeddings (default:
-            "embedding").
-        temp_dataset_name: Name of the BigQuery dataset to be used to upload temporary
-            BQ tables. If None, will default to "{dataset_name}_temp".
-        doc_id_field: Name of the column storing document IDs (default: "doc_id").
-        credentials: Optional Google Cloud credentials object.
-        embedding_dimension: Dimension of the embedding vectors (inferred if not
-            provided).
 
     Abstract Methods:
         sync_data: Synchronizes data between the vector store and BigQuery.
@@ -62,21 +45,51 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
     embedding: Embeddings
+    """Embedding model for generating and comparing embeddings."""
+
     project_id: str
+    """Google Cloud Project ID where BigQuery resources are located."""
+
     dataset_name: str
+    """BigQuery dataset name."""
+
     table_name: str
+    """BigQuery table name."""
+
     location: str
+    """BigQuery region/location."""
+
     content_field: str = "content"
+    """Name of the column storing document content."""
+
     embedding_field: str = "embedding"
+    """Name of the column storing text embeddings."""
+
     doc_id_field: str = "doc_id"
+    """Name of the column storing document IDs."""
+
     temp_dataset_name: Optional[str] = None
+    """Name of the BigQuery dataset to be used to upload temporary BQ tables.
+    
+    If `None`, will default to `'{dataset_name}_temp'`.
+    """
+
     credentials: Optional[Any] = None
+    """Optional Google Cloud credentials object."""
+
     embedding_dimension: Optional[int] = None
+    """Dimension of the embedding vectors (inferred if not provided)."""
+
     extra_fields: Union[Dict[str, str], None] = None
+
     table_schema: Any = None
+
     _bq_client: Any = None
+
     _logger: Any = None
+
     _full_table_id: Optional[str] = None
 
     @abstractmethod
@@ -89,17 +102,19 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         filter: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> List[Document]:
-        """Search documents by their ids or metadata values.
+        """Search documents by their IDs or metadata values.
 
         Args:
-            ids: List of ids of documents to retrieve from the vectorstore.
+            ids: List of IDs of documents to retrieve from the `VectorStore`.
             filter: Filter on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
+                ```json
+                {
+                    "str_property": "foo",
+                    "int_property": 123
+                }
+                ```
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         ...
 
@@ -242,16 +257,17 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         metadatas: Optional[List[dict]] = None,
         **kwargs: Any,
     ) -> List[str]:
-        """Run more texts through the embeddings and add to the vectorstore.
+        """Run more texts through the embeddings and add to the `VectorStore`.
 
         Args:
-            texts: List of strings to add to the vectorstore.
+            texts: List of strings to add to the `VectorStore`.
             metadatas: Optional list of metadata records associated with the texts.
-                (ie [{"url": "www.myurl1.com", "title": "title1"},
-                {"url": "www.myurl2.com", "title": "title2"}])
+
+                (i.e. `[{"url": "www.myurl1.com", "title": "title1"},
+                {"url": "www.myurl2.com", "title": "title2"}]`)
 
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         embs = self.embedding.embed_documents(texts)
         return self.add_texts_with_embeddings(
@@ -264,17 +280,18 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         embs: List[List[float]],
         metadatas: Optional[List[dict]] = None,
     ) -> List[str]:
-        """Add precomputed embeddings and relative texts / metadatas to the vectorstore.
+        """Add precomputed embeddings & relative texts / metadatas to the `VectorStore`.
 
         Args:
-            ids: List of unique ids in string format
-            texts: List of strings to add to the vectorstore.
+            ids: List of unique IDs in string format
+            texts: List of strings to add to the `VectorStore`.
             embs: List of lists of floats with text embeddings for texts.
             metadatas: Optional list of metadata records associated with the texts.
-                (ie [{"url": "www.myurl1.com", "title": "title1"},
-                {"url": "www.myurl2.com", "title": "title2"}])
+
+                (i.e. `[{"url": "www.myurl1.com", "title": "title1"},
+                {"url": "www.myurl2.com", "title": "title2"}]`)
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         import pandas as pd
 
@@ -307,12 +324,12 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         """Delete documents by record IDs
 
         Args:
-            ids: List of ids to delete.
+            ids: List of IDs to delete.
             **kwargs: Other keyword arguments that subclasses might use.
 
         Returns:
-            Optional[bool]: True if deletion is successful,
-            False otherwise, None if not implemented.
+            `True` if deletion is successful, `False` otherwise, `None` if not
+                implemented.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
@@ -338,12 +355,12 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         """Delete by vector ID or other criteria.
 
         Args:
-            ids: List of ids to delete.
+            ids: List of IDs to delete.
             **kwargs: Other keyword arguments that subclasses might use.
 
         Returns:
-            Optional[bool]: True if deletion is successful,
-            False otherwise, None if not implemented.
+            `True` if deletion is successful, `False` otherwise, `None` if not
+                implemented.
         """
         return await asyncio.get_running_loop().run_in_executor(
             None, partial(self.delete, **kwargs), ids
@@ -358,21 +375,21 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         with_embeddings: bool = False,
         **kwargs: Any,
     ) -> Any:
-        """Core similarity search function. Handles a list of embedding vectors,
-        optionally returning scores and embeddings.
+        """Core similarity search function.
+
+        Handles a list of embedding vectors, optionally returning scores and embeddings.
 
         Args:
-            embeddings: A list of embedding vectors, where each vector is a list of
+            embeddings: List of embedding vectors, where each vector is a list of
                 floats.
-            filter: (Optional) A dictionary specifying filtering criteria for the
-                documents.
-                Ie. {"title": "mytitle"}
-            k: (Optional) The number of top-ranking similar documents to return per
-                embedding. Defaults to 5.
-            with_scores: (Optional) If True, include similarity scores in the result
-                for each matched document. Defaults to False.
-            with_embeddings: (Optional) If True, include the matched document's
-                embedding vector in the result. Defaults to False.
+            filter: Dictionary specifying filtering criteria for the documents.
+
+                i.e. `{"title": "mytitle"}`
+            k: Number of top-ranking similar documents to return per embedding.
+            with_scores: If `True`, include similarity scores in the result for each
+                matched document.
+            with_embeddings: If `True`, include the matched document's embedding vector
+                in the result.
         Returns:
             A list of `k` documents for each embedding in `embeddings`
         """
@@ -404,10 +421,11 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
         Args:
             embedding: Embedding to look up documents similar to.
-            filter: (Optional) A dictionary specifying filtering criteria for the
-                documents. Ie. {"title": "mytitle"}
-            k: (Optional) The number of top-ranking similar documents to return per
-                embedding. Defaults to 5.
+            filter: Dictionary specifying filtering criteria for the documents.
+
+                i.e. `{"title": "mytitle"}`
+            k: Number of top-ranking similar documents to return per embedding.
+
         Returns:
             Return docs most similar to embedding vector.
         """
@@ -425,10 +443,11 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
         Args:
             embedding: Embedding to look up documents similar to.
-            filter: (Optional) A dictionary specifying filtering criteria for the
-                documents. Ie. {"title": "mytitle"}
-            k: (Optional) The number of top-ranking similar documents to return per
-                embedding. Defaults to 5.
+            filter: Dictionary specifying filtering criteria for the documents.
+
+                i.e. `{"title": "mytitle"}`
+            k: The number of top-ranking similar documents to return per embedding.
+
         Returns:
             Return docs most similar to embedding vector.
         """
@@ -442,11 +461,12 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         """Search for top `k` docs most similar to input query.
 
         Args:
-            query: search query to search documents with.
-            filter: (Optional) A dictionary specifying filtering criteria for the
-                documents. Ie. {"title": "mytitle"}
-            k: (Optional) The number of top-ranking similar documents to return per
-                embedding. Defaults to 5.
+            query: Search query to search documents with.
+            filter: Dictionary specifying filtering criteria for the documents.
+
+                i.e. `{"title": "mytitle"}`
+            k: The number of top-ranking similar documents to return per embedding.
+
         Returns:
             Return docs most similar to input query.
         """
@@ -466,11 +486,12 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         scores.
 
         Args:
-            query: search query to search documents with.
-            filter: (Optional) A dictionary specifying filtering criteria for the
-                documents. Ie. {"title": "mytitle"}
-            k: (Optional) The number of top-ranking similar documents to return per
-                embedding. Defaults to 5.
+            query: Search query to search documents with.
+            filter: Dictionary specifying filtering criteria for the documents.
+
+                i.e. `{"title": "mytitle"}`
+            k: The number of top-ranking similar documents to return per embedding.
+
         Returns:
             Return docs most similar to input query along with scores.
         """
@@ -504,20 +525,23 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
 
         Args:
             **kwargs:
-            query: search query text.
+            query: Search query text.
             filter: Filter on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
-            k: Number of Documents to return. Defaults to 5.
-            fetch_k: Number of Documents to fetch to pass to MMR algorithm.
-            lambda_mult: Number between 0 and 1 that determines the degree
-                        of diversity among the results with 0 corresponding
-                        to maximum diversity and 1 to minimum diversity.
-                        Defaults to 0.5.
+
+                ```json
+                {
+                    "str_property": "foo",
+                    "int_property": 123
+                }
+                ```
+            k: Number of documents to return.
+            fetch_k: Number of `Document` objects to fetch to pass to MMR algorithm.
+            lambda_mult: Number between `0` and `1` that determines the degree of
+                diversity among the results with 0 corresponding to maximum diversity
+                and `1` to minimum diversity.
+
         Returns:
-            List of Documents selected by maximal marginal relevance.
+            List of documents selected by maximal marginal relevance.
         """
         embedding = self.embedding.embed_query(query)
         return self.max_marginal_relevance_search_by_vector(
@@ -540,16 +564,19 @@ class BaseBigQueryVectorStore(VectorStore, BaseModel, ABC):
         Args:
             embedding: Embedding to look up documents similar to.
             filter: Filter on metadata properties, e.g.
-                            {
-                                "str_property": "foo",
-                                "int_property": 123
-                            }
-            k: Number of Documents to return. Defaults to 5.
-            fetch_k: Number of Documents to fetch to pass to MMR algorithm.
-            lambda_mult: Number between 0 and 1 that determines the degree
-                        of diversity among the results with 0 corresponding
-                        to maximum diversity and 1 to minimum diversity.
-                        Defaults to 0.5.
+
+                ```json
+                {
+                    "str_property": "foo",
+                    "int_property": 123
+                }
+                ```
+            k: Number of documents to return.
+            fetch_k: Number of `Document` objects to fetch to pass to MMR algorithm.
+            lambda_mult: Number between `0` and `1` that determines the degree
+                of diversity among the results with 0 corresponding
+                to maximum diversity and `1` to minimum diversity.
+
         Returns:
             List of Documents selected by maximal marginal relevance.
         """

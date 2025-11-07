@@ -2,15 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Type,
     TypedDict,
     Union,
     cast,
@@ -38,26 +33,26 @@ logger = logging.getLogger(__name__)
 
 _FunctionDeclarationLike = Union[
     BaseTool,
-    Type[BaseModel],
+    type[BaseModel],
     FunctionDescription,
     Callable,
     vertexai.FunctionDeclaration,
-    Dict[str, Any],
+    dict[str, Any],
 ]
 _GoogleSearchRetrievalLike = Union[
     gapic.GoogleSearchRetrieval,
-    Dict[str, Any],
+    dict[str, Any],
 ]
-_GoogleSearchLike = Union[gapic.Tool.GoogleSearch, Dict[str, Any]]
-_RetrievalLike = Union[gapic.Retrieval, Dict[str, Any]]
-_CodeExecutionLike = Union[gapic.Tool.CodeExecution, Dict[str, Any]]
+_GoogleSearchLike = Union[gapic.Tool.GoogleSearch, dict[str, Any]]
+_RetrievalLike = Union[gapic.Retrieval, dict[str, Any]]
+_CodeExecutionLike = Union[gapic.Tool.CodeExecution, dict[str, Any]]
 
 
 class _ToolDictLike(TypedDict):
-    function_declarations: Optional[List[_FunctionDeclarationLike]]
-    google_search_retrieval: Optional[_GoogleSearchRetrievalLike]
-    google_search: Optional[_GoogleSearchLike]
-    retrieval: Optional[_RetrievalLike]
+    function_declarations: list[_FunctionDeclarationLike] | None
+    google_search_retrieval: _GoogleSearchRetrievalLike | None
+    google_search: _GoogleSearchLike | None
+    retrieval: _RetrievalLike | None
     code_execution: NotRequired[_CodeExecutionLike]
 
 
@@ -72,9 +67,9 @@ _ALLOWED_SCHEMA_FIELDS.extend(
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
 
-def _format_json_schema_to_gapic_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
-    """Format a JSON schema from a Pydantic V1 BaseModel to gapic."""
-    converted_schema: Dict[str, Any] = {}
+def _format_json_schema_to_gapic_v1(schema: dict[str, Any]) -> dict[str, Any]:
+    """Format a JSON schema from a Pydantic V1 `BaseModel` to gapic."""
+    converted_schema: dict[str, Any] = {}
     for key, value in schema.items():
         if key == "definitions":
             continue
@@ -109,12 +104,12 @@ def _format_json_schema_to_gapic_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _format_json_schema_to_gapic(
-    schema: Dict[str, Any],
-    parent_key: Optional[str] = None,
-    required_fields: Optional[list] = None,
-) -> Dict[str, Any]:
-    """Format a JSON schema from a Pydantic V2 BaseModel to gapic."""
-    converted_schema: Dict[str, Any] = {}
+    schema: dict[str, Any],
+    parent_key: str | None = None,
+    required_fields: list | None = None,
+) -> dict[str, Any]:
+    """Format a JSON schema from a Pydantic V2 `BaseModel` to gapic."""
+    converted_schema: dict[str, Any] = {}
     for key, value in schema.items():
         if key == "$defs":
             continue
@@ -165,7 +160,7 @@ def _format_json_schema_to_gapic(
 
 
 def _dict_to_gapic_schema(
-    schema: Dict[str, Any], pydantic_version: str = "v1"
+    schema: dict[str, Any], pydantic_version: str = "v1"
 ) -> gapic.Schema:
     # Resolve refs in schema because $refs and $defs are not supported
     # by the Gemini API.
@@ -213,7 +208,7 @@ def _format_base_tool_to_function_declaration(
 
 
 def _format_pydantic_to_function_declaration(
-    pydantic_model: Type[BaseModel],
+    pydantic_model: type[BaseModel],
 ) -> gapic.FunctionDeclaration:
     if hasattr(pydantic_model, "model_json_schema"):
         schema = pydantic_model.model_json_schema()
@@ -230,7 +225,7 @@ def _format_pydantic_to_function_declaration(
 
 
 def _format_dict_to_function_declaration(
-    tool: Union[FunctionDescription, Dict[str, Any]],
+    tool: FunctionDescription | dict[str, Any],
 ) -> gapic.FunctionDeclaration:
     pydantic_version_v2 = False
 
@@ -376,47 +371,49 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
 class PydanticFunctionsOutputParser(BaseOutputParser):
     """Parse an output as a pydantic object.
 
-    This parser is used to parse the output of a ChatModel that uses
-    Google Vertex function format to invoke functions.
+    This parser is used to parse the output of a chat model that uses Google Vertex
+    function format to invoke functions.
 
-    The parser extracts the function call invocation and matches
-    them to the pydantic schema provided.
+    The parser extracts the function call invocation and matches them to the pydantic
+    schema provided.
 
-    An exception will be raised if the function call does not match
-    the provided schema.
+    An exception will be raised if the function call does not match the provided schema.
 
     Example:
-        ... code-block:: python
+        ```python
+        message = AIMessage(
+            content="This is a test message",
+            additional_kwargs={
+                "function_call": {
+                    "name": "cookie",
+                    "arguments": json.dumps({"name": "value", "age": 10}),
+                }
+            },
+        )
+        chat_generation = ChatGeneration(message=message)
 
-            message = AIMessage(
-                content="This is a test message",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "cookie",
-                        "arguments": json.dumps({"name": "value", "age": 10}),
-                    }
-                },
-            )
-            chat_generation = ChatGeneration(message=message)
 
-            class Cookie(BaseModel):
-                name: str
-                age: int
+        class Cookie(BaseModel):
+            name: str
+            age: int
 
-            class Dog(BaseModel):
-                species: str
 
-            # Full output
-            parser = PydanticOutputFunctionsParser(
-                pydantic_schema={"cookie": Cookie, "dog": Dog}
-            )
-            result = parser.parse_result([chat_generation])
+        class Dog(BaseModel):
+            species: str
+
+
+        # Full output
+        parser = PydanticOutputFunctionsParser(
+            pydantic_schema={"cookie": Cookie, "dog": Dog}
+        )
+        result = parser.parse_result([chat_generation])
+        ```
     """
 
-    pydantic_schema: Union[Type[BaseModel], Dict[str, Type[BaseModel]]]
+    pydantic_schema: type[BaseModel] | dict[str, type[BaseModel]]
 
     def parse_result(
-        self, result: List[Generation], *, partial: bool = False
+        self, result: list[Generation], *, partial: bool = False
     ) -> BaseModel:
         if not isinstance(result[0], ChatGeneration):
             msg = "This output parser only works on ChatGeneration output"
@@ -440,18 +437,18 @@ class PydanticFunctionsOutputParser(BaseOutputParser):
 
 
 class _FunctionCallingConfigDict(TypedDict):
-    mode: Union[gapic.FunctionCallingConfig.Mode, int]
-    allowed_function_names: Optional[List[str]]
+    mode: gapic.FunctionCallingConfig.Mode | int
+    allowed_function_names: list[str] | None
 
 
 class _ToolConfigDict(TypedDict):
     function_calling_config: _FunctionCallingConfigDict
 
 
-_ToolChoiceType = Union[Literal["auto", "none", "any", True], dict, List[str], str]
+_ToolChoiceType = Union[Literal["auto", "none", "any", True], dict, list[str], str]
 
 
-def _format_tool_config(tool_config: _ToolConfigDict) -> Union[gapic.ToolConfig, None]:
+def _format_tool_config(tool_config: _ToolConfigDict) -> gapic.ToolConfig | None:
     if "function_calling_config" not in tool_config:
         msg = (  # type: ignore[unreachable, unused-ignore]
             "Invalid ToolConfig, missing 'function_calling_config' key. Received:\n\n"
@@ -467,9 +464,9 @@ def _format_tool_config(tool_config: _ToolConfigDict) -> Union[gapic.ToolConfig,
 
 def _tool_choice_to_tool_config(
     tool_choice: _ToolChoiceType,
-    all_names: List[str],
-) -> Optional[GapicToolConfig]:
-    allowed_function_names: Optional[List[str]] = None
+    all_names: list[str],
+) -> GapicToolConfig | None:
+    allowed_function_names: list[str] | None = None
     if tool_choice is True or tool_choice == "any":
         mode = gapic.FunctionCallingConfig.Mode.ANY
         allowed_function_names = all_names
