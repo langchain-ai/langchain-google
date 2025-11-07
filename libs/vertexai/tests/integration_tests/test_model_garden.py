@@ -1,6 +1,5 @@
 import json
 import os
-from typing import Optional
 
 import pytest
 from langchain_core.messages import (
@@ -29,9 +28,7 @@ _ANTHROPIC_CLAUDE_MODEL_NAME = "claude-sonnet-4-5@20250929"
     ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
-def test_model_garden(
-    endpoint_os_variable_name: str, result_arg: Optional[str]
-) -> None:
+def test_model_garden(endpoint_os_variable_name: str, result_arg: str | None) -> None:
     """In order to run this test, you should provide endpoint names.
 
     Example:
@@ -59,7 +56,7 @@ def test_model_garden(
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 def test_model_garden_generate(
-    endpoint_os_variable_name: str, result_arg: Optional[str]
+    endpoint_os_variable_name: str, result_arg: str | None
 ) -> None:
     """In order to run this test, you should provide endpoint names.
 
@@ -90,7 +87,7 @@ def test_model_garden_generate(
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 async def test_model_garden_agenerate(
-    endpoint_os_variable_name: str, result_arg: Optional[str]
+    endpoint_os_variable_name: str, result_arg: str | None
 ) -> None:
     endpoint_id = os.environ[endpoint_os_variable_name]
     project = os.environ["PROJECT_ID"]

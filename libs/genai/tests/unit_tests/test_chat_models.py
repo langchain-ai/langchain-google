@@ -6,7 +6,6 @@ import json
 import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Union
 from unittest.mock import ANY, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -377,7 +376,7 @@ def test_parse_history() -> None:
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
-def test_parse_function_history(content: Union[str, list[Union[str, dict]]]) -> None:
+def test_parse_function_history(content: str | list[str | dict]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
     _parse_chat_history([function_message])
 
@@ -385,7 +384,7 @@ def test_parse_function_history(content: Union[str, list[Union[str, dict]]]) -> 
 @pytest.mark.parametrize(
     "headers", [None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"}]
 )
-def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
+def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -1065,7 +1064,6 @@ def test_response_to_result_grounding_metadata(
 
 def test_grounding_metadata_to_citations_conversion() -> None:
     """Test grounding metadata is properly converted to citations in content blocks."""
-
     raw_response = {
         "candidates": [
             {
@@ -1347,9 +1345,9 @@ async def test_timeout_parameter_handling(
     is_async: bool,
     mock_target: str,
     method_name: str,
-    instance_timeout: Optional[float],
-    call_timeout: Optional[float],
-    expected_timeout: Optional[float],
+    instance_timeout: float | None,
+    call_timeout: float | None,
+    expected_timeout: float | None,
     should_have_timeout: bool,
 ) -> None:
     """Test timeout parameter handling for sync and async methods."""
@@ -1408,8 +1406,8 @@ async def test_timeout_parameter_handling(
 @patch("langchain_google_genai.chat_models._chat_with_retry")
 def test_timeout_streaming_parameter_handling(
     mock_retry: Mock,
-    instance_timeout: Optional[float],
-    expected_timeout: Optional[float],
+    instance_timeout: float | None,
+    expected_timeout: float | None,
     should_have_timeout: bool,
 ) -> None:
     """Test timeout parameter handling for streaming methods."""
@@ -1474,7 +1472,7 @@ async def test_max_retries_parameter_handling(
     mock_target: str,
     method_name: str,
     instance_max_retries: int,
-    call_max_retries: Optional[int],
+    call_max_retries: int | None,
     expected_max_retries: int,
     should_have_max_retries: bool,
 ) -> None:

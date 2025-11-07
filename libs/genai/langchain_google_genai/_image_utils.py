@@ -5,7 +5,7 @@ import mimetypes
 import os
 import re
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
@@ -90,7 +90,7 @@ class ImageBytesLoader:
             )
             raise ValueError(msg)
 
-        inline_data: Dict[str, Any] = {"data": bytes_}
+        inline_data: dict[str, Any] = {"data": bytes_}
 
         mime_type, _ = mimetypes.guess_type(image_string)
         if not mime_type:

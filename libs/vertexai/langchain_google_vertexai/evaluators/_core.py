@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Union
+from typing import Any
 from warnings import warn
 
 from langchain_core.runnables.config import run_in_executor
@@ -42,8 +42,8 @@ class _EvalArgsMixin:
 
     def _check_evaluation_args(
         self,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
     ) -> None:
         """Check if the evaluation arguments are valid.
 
@@ -86,9 +86,9 @@ class StringEvaluator(_EvalArgsMixin, ABC):
     def _evaluate_strings(
         self,
         *,
-        prediction: Union[str, Any],
-        reference: Optional[Union[str, Any]] = None,
-        input: Optional[Union[str, Any]] = None,
+        prediction: str | Any,
+        reference: str | Any | None = None,
+        input: str | Any | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate Chain or LLM output, based on optional input and label.
@@ -110,9 +110,9 @@ class StringEvaluator(_EvalArgsMixin, ABC):
     async def _aevaluate_strings(
         self,
         *,
-        prediction: Union[str, Any],
-        reference: Optional[Union[str, Any]] = None,
-        input: Optional[Union[str, Any]] = None,
+        prediction: str | Any,
+        reference: str | Any | None = None,
+        input: str | Any | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate Chain or LLM output, based on optional input and label.
@@ -143,8 +143,8 @@ class StringEvaluator(_EvalArgsMixin, ABC):
         self,
         *,
         prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate Chain or LLM output, based on optional input and label.
@@ -167,8 +167,8 @@ class StringEvaluator(_EvalArgsMixin, ABC):
         self,
         *,
         prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate Chain or LLM output, based on optional input and label.
@@ -197,8 +197,8 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate the output string pairs.
@@ -219,8 +219,8 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate the output string pairs.
@@ -250,8 +250,8 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate the output string pairs.
@@ -280,8 +280,8 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate the output string pairs.

@@ -8,15 +8,10 @@ For more information visit: https://ai.google.dev/gemini-api/docs
 """
 
 import asyncio
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import partial
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
 )
 
 import google.ai.generativelanguage as genai
@@ -37,15 +32,15 @@ from .genai_aqa import (
 class ServerSideEmbedding(Embeddings):
     """Do nothing embedding model where the embedding is done by the server."""
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [[] for _ in texts]
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         return []
 
 
 class DoesNotExistsException(Exception):
-    def __init__(self, *, corpus_id: str, document_id: Optional[str] = None) -> None:
+    def __init__(self, *, corpus_id: str, document_id: str | None = None) -> None:
         if document_id is None:
             message = f"No such corpus {corpus_id}"
         else:
@@ -64,9 +59,7 @@ class _SemanticRetriever(BaseModel):
         self._client = client
 
     @classmethod
-    def from_ids(
-        cls, corpus_id: str, document_id: Optional[str]
-    ) -> "_SemanticRetriever":
+    def from_ids(cls, corpus_id: str, document_id: str | None) -> "_SemanticRetriever":
         name = genaix.EntityName(corpus_id=corpus_id, document_id=document_id)
         client = genaix.build_semantic_retriever()
 
@@ -91,9 +84,9 @@ class _SemanticRetriever(BaseModel):
     def add_texts(
         self,
         texts: Iterable[str],
-        metadatas: Optional[List[Dict[str, Any]]] = None,
-        document_id: Optional[str] = None,
-    ) -> List[str]:
+        metadatas: list[dict[str, Any]] | None = None,
+        document_id: str | None = None,
+    ) -> list[str]:
         if self.name.document_id is None and document_id is None:
             msg = (
                 "Adding texts to a corpus directly is not supported. "
@@ -138,8 +131,8 @@ class _SemanticRetriever(BaseModel):
         self,
         query: str,
         k: int = 4,
-        filter: Optional[Dict[str, Any]] = None,
-    ) -> List[Tuple[str, float]]:
+        filter: dict[str, Any] | None = None,
+    ) -> list[tuple[str, float]]:
         if self.name.is_corpus():
             relevant_chunks = genaix.query_corpus(
                 corpus_id=self.name.corpus_id,
@@ -165,7 +158,7 @@ class _SemanticRetriever(BaseModel):
             for chunk in relevant_chunks
         ]
 
-    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
+    def delete(self, ids: list[str] | None = None, **kwargs: Any) -> bool | None:
         for id in ids or []:
             name = genaix.EntityName.from_str(id)
             _delete_chunk(
@@ -180,8 +173,8 @@ class _SemanticRetriever(BaseModel):
 def _delete_chunk(
     *,
     corpus_id: str,
-    document_id: Optional[str],
-    chunk_id: Optional[str],
+    document_id: str | None,
+    chunk_id: str | None,
     client: genai.RetrieverServiceClient,
 ) -> None:
     if chunk_id is not None:
@@ -268,7 +261,7 @@ class GoogleVectorStore(VectorStore):
     _retriever: _SemanticRetriever
 
     def __init__(
-        self, *, corpus_id: str, document_id: Optional[str] = None, **kwargs: Any
+        self, *, corpus_id: str, document_id: str | None = None, **kwargs: Any
     ) -> None:
         """Returns an existing Google Semantic Retriever corpus or document.
 
@@ -289,8 +282,8 @@ class GoogleVectorStore(VectorStore):
     @classmethod
     def create_corpus(
         cls,
-        corpus_id: Optional[str] = None,
-        display_name: Optional[str] = None,
+        corpus_id: str | None = None,
+        display_name: str | None = None,
     ) -> "GoogleVectorStore":
         """Create a Google Semantic Retriever corpus.
 
@@ -315,9 +308,9 @@ class GoogleVectorStore(VectorStore):
     def create_document(
         cls,
         corpus_id: str,
-        document_id: Optional[str] = None,
-        display_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        document_id: str | None = None,
+        display_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> "GoogleVectorStore":
         """Create a Google Semantic Retriever document.
 
@@ -349,12 +342,12 @@ class GoogleVectorStore(VectorStore):
     @classmethod
     def from_texts(
         cls,
-        texts: List[str],
-        embedding: Optional[Embeddings] = None,
-        metadatas: Optional[List[dict[str, Any]]] = None,
+        texts: list[str],
+        embedding: Embeddings | None = None,
+        metadatas: list[dict[str, Any]] | None = None,
         *,
-        corpus_id: Optional[str] = None,  # str required
-        document_id: Optional[str] = None,  # str required
+        corpus_id: str | None = None,
+        document_id: str | None = None,
         **kwargs: Any,
     ) -> "GoogleVectorStore":
         """Returns a vector store of an existing document with the specified text.
@@ -396,18 +389,18 @@ class GoogleVectorStore(VectorStore):
         return self._retriever.name.corpus_id
 
     @property
-    def document_id(self) -> Optional[str]:
+    def document_id(self) -> str | None:
         """Returns the document ID managed by this vector store."""
         return self._retriever.name.document_id
 
     def add_texts(
         self,
         texts: Iterable[str],
-        metadatas: Optional[List[Dict[str, Any]]] = None,
+        metadatas: list[dict[str, Any]] | None = None,
         *,
-        document_id: Optional[str] = None,
+        document_id: str | None = None,
         **kwargs: Any,
-    ) -> List[str]:
+    ) -> list[str]:
         """Add texts to the vector store.
 
         If the vector store points to a corpus (instead of a document), you must
@@ -422,9 +415,9 @@ class GoogleVectorStore(VectorStore):
         self,
         query: str,
         k: int = 4,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Search the vector store for relevant texts."""
         return [
             document
@@ -437,16 +430,16 @@ class GoogleVectorStore(VectorStore):
         self,
         query: str,
         k: int = 4,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> List[Tuple[Document, float]]:
+    ) -> list[tuple[Document, float]]:
         """Run similarity search with distance."""
         return [
             (Document(page_content=text), score)
             for text, score in self._retriever.similarity_search(query, k, filter)
         ]
 
-    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
+    def delete(self, ids: list[str] | None = None, **kwargs: Any) -> bool | None:
         """Delete chunks.
 
         Note that the "ids" are not corpus ID or document ID. Rather, these
@@ -457,9 +450,7 @@ class GoogleVectorStore(VectorStore):
         """
         return self._retriever.delete(ids)
 
-    async def adelete(
-        self, ids: Optional[List[str]] = None, **kwargs: Any
-    ) -> Optional[bool]:
+    async def adelete(self, ids: list[str] | None = None, **kwargs: Any) -> bool | None:
         """Delete chunks asynchronously.
 
         Note that the "ids" are not corpus ID or document ID. Rather, these
@@ -485,8 +476,8 @@ class GoogleVectorStore(VectorStore):
         self,
         *,
         answer_style: int = 1,
-        safety_settings: Optional[List[Any]] = None,
-        temperature: Optional[float] = None,
+        safety_settings: list[Any] | None = None,
+        temperature: float | None = None,
     ) -> Runnable[str, AqaOutput]:
         """Construct a Google Generative AI AQA engine.
 
@@ -494,8 +485,8 @@ class GoogleVectorStore(VectorStore):
 
         Args:
             answer_style: See
-                ``google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle``.
-            safety_settings: See ``google.ai.generativelanguage.SafetySetting``.
+                `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
+            safety_settings: See `google.ai.generativelanguage.SafetySetting`.
             temperature: Value between `0.0` and `1.0` controlling randomness.
         """
         return (
@@ -513,14 +504,14 @@ class GoogleVectorStore(VectorStore):
         )
 
 
-def _toAqaInput(input: Dict[str, Any]) -> AqaInput:
+def _toAqaInput(input: dict[str, Any]) -> AqaInput:
     prompt = input["prompt"]
     assert isinstance(prompt, str)
 
     passages = input["passages"]
     assert isinstance(passages, list)
 
-    source_passages: List[str] = []
+    source_passages: list[str] = []
     for passage in passages:
         assert isinstance(passage, Document)
         source_passages.append(passage.page_content)

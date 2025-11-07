@@ -1,4 +1,4 @@
-"""LangChain Google Generative AI Integration.
+"""LangChain Google Generative AI Integration (GenAI).
 
 This module integrates Google's Generative AI models, specifically the Gemini series,
 with the LangChain framework. It provides classes for interacting with chat models and
@@ -55,7 +55,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 embeddings.embed_query("hello, world!")
 ```
-"""  # noqa: E501
+"""
 
 from langchain_google_genai._enums import (
     HarmBlockThreshold,
@@ -88,6 +88,6 @@ __all__ = [
     "GoogleVectorStore",
     "HarmBlockThreshold",
     "HarmCategory",
-    "Modality",
     "MediaResolution",
+    "Modality",
 ]

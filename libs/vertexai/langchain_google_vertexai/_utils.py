@@ -3,8 +3,9 @@
 import math
 import os
 import re
+from collections.abc import Callable
 from importlib import metadata
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import google.api_core
 import proto  # type: ignore[import-untyped]
@@ -31,21 +32,20 @@ _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 def create_retry_decorator(
     *,
     max_retries: int = 1,
-    run_manager: Optional[
-        Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
-    ] = None,
-    wait_exponential_kwargs: Optional[dict[str, float]] = None,
+    run_manager: AsyncCallbackManagerForLLMRun | CallbackManagerForLLMRun | None = None,
+    wait_exponential_kwargs: dict[str, float] | None = None,
 ) -> Callable[[Any], Any]:
     """Creates a retry decorator for Vertex / Palm LLMs.
 
     Args:
-        max_retries: Number of retries. Default is 1.
-        run_manager: Callback manager for the run. Default is None.
+        max_retries: Number of retries.
+        run_manager: Callback manager for the run.
         wait_exponential_kwargs: Optional dictionary with parameters:
-            - multiplier: Initial wait time multiplier (default: 1.0)
-            - min: Minimum wait time in seconds (default: 4.0)
-            - max: Maximum wait time in seconds (default: 10.0)
-            - exp_base: Exponent base to use (default: 2.0)
+
+            - multiplier: Initial wait time multiplier (Default: `1.0`)
+            - min: Minimum wait time in seconds (Default: `4.0`)
+            - max: Maximum wait time in seconds (Default: `10.0`)
+            - exp_base: Exponent base to use (Default: `2.0`)
 
     Returns:
         A retry decorator.
@@ -66,13 +66,13 @@ def create_retry_decorator(
 
 
 def raise_vertex_import_error(minimum_expected_version: str = "1.44.0") -> None:
-    """Raise ImportError related to Vertex SDK being not available.
+    """Raise `ImportError` related to Vertex SDK being not available.
 
     Args:
         minimum_expected_version: The lowest expected version of the SDK.
 
     Raises:
-        ImportError: an ImportError that mentions a required version of the SDK.
+        ImportError: An `ImportError` that mentions a required version of the SDK.
     """
     msg = (
         "Please, install or upgrade the google-cloud-aiplatform library: "
@@ -81,15 +81,11 @@ def raise_vertex_import_error(minimum_expected_version: str = "1.44.0") -> None:
     raise ImportError(msg)
 
 
-def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
+def get_user_agent(module: str | None = None) -> tuple[str, str]:
     r"""Returns a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
-
-    Returns:
-        Tuple[str, str]
+        module: The module for a custom user agent header.
     """
     try:
         langchain_version = metadata.version("langchain-google-vertexai")
@@ -103,15 +99,14 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     return client_library_version, f"langchain-google-vertexai/{client_library_version}"
 
 
-def get_client_info(module: Optional[str] = None) -> "ClientInfo":
-    r"""Returns a client info object with a custom user agent header.
+def get_client_info(module: str | None = None) -> "ClientInfo":
+    r"""Returns a `ClientInfo` object with a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
+        module: The module for a custom user agent header.
 
     Returns:
-        google.api_core.gapic_v1.client_info.ClientInfo
+        `google.api_core.gapic_v1.client_info.ClientInfo`
     """
     client_library_version, user_agent = get_user_agent(module)
     return ClientInfo(
@@ -130,8 +125,8 @@ def _format_model_name(model: str, project: str, location: str) -> str:
     return model
 
 
-def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
-    """Loads an Image from GCS."""
+def load_image_from_gcs(path: str, project: str | None = None) -> Image:
+    """Loads an `Image` from GCS."""
     gcs_client = storage.Client(project=project)
     pieces = path.split("/")
     blobs = list(gcs_client.list_blobs(pieces[2], prefix="/".join(pieces[3:])))
@@ -141,14 +136,14 @@ def load_image_from_gcs(path: str, project: Optional[str] = None) -> Image:
     return Image.from_bytes(blobs[0].download_as_bytes())
 
 
-def _get_finish_reason_string(finish_reason: Any) -> Optional[str]:
-    """Convert finish_reason to string, handling both enum and raw integer values.
+def _get_finish_reason_string(finish_reason: Any) -> str | None:
+    """Convert finish_reason to string, handling both `enum` and raw `int` values.
 
     Args:
         finish_reason: The finish reason value from the candidate.
 
     Returns:
-        String representation of the finish reason, or None if not present.
+        String representation of the finish reason, or `None` if not present.
     """
     if finish_reason is None:
         return None
@@ -160,12 +155,12 @@ def _get_finish_reason_string(finish_reason: Any) -> Optional[str]:
 
 
 def get_generation_info(
-    candidate: Union[TextGenerationResponse, Candidate],
+    candidate: TextGenerationResponse | Candidate,
     *,
     stream: bool = False,
-    usage_metadata: Optional[Dict] = None,
-    logprobs: Union[bool, int] = False,
-) -> Dict[str, Any]:
+    usage_metadata: dict | None = None,
+    logprobs: bool | int = False,
+) -> dict[str, Any]:
     # https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#response_body
 
     # Handle TextGenerationResponse vs Candidate differences
@@ -209,6 +204,7 @@ def get_generation_info(
                 candidate.finish_message if candidate.finish_message else None
             ),
         }
+
     # Check for avg_logprobs attribute - only available on Candidate
     if (
         not isinstance(candidate, TextGenerationResponse)
@@ -280,13 +276,13 @@ def get_generation_info(
     return info
 
 
-def enforce_stop_tokens(text: str, stop: List[str]) -> str:
+def enforce_stop_tokens(text: str, stop: list[str]) -> str:
     """Cut off the text as soon as any stop words occur."""
     return re.split("|".join(stop), text, maxsplit=1)[0]
 
 
-def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -> dict:
-    """Given an OpenAPI schema with a property '$defs' replaces all occurrences of
+def replace_defs_in_schema(original_schema: dict, defs: dict | None = None) -> dict:
+    """Given an OpenAPI schema with a property `$defs` replaces all occurrences of
     referenced items in the dictionary.
 
     Args:
@@ -341,8 +337,9 @@ def _get_def_key_from_schema_path(schema_path: str) -> str:
 
 
 def _strip_nullable_anyof(schema: dict[str, Any]) -> dict[str, Any]:
-    """Collapse ``anyOf([{...}, {"type": "null"}])``` into the non-null schema,
+    """Collapse `anyOf([{...}, {"type": "null"}])` into the non-null schema,
     leave the rest of the keywords alone, and make the property optional.
+
     Works in place.
     """
 

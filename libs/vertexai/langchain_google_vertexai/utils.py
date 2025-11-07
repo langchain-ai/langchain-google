@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, List, Optional, cast
+from typing import Any, cast
 
 from langchain_core.messages import BaseMessage
 from vertexai.preview import caching
@@ -19,28 +19,32 @@ from langchain_google_vertexai.functions_utils import (
 
 def create_context_cache(
     model: ChatVertexAI,
-    messages: List[BaseMessage],
-    expire_time: Optional[datetime] = None,
-    time_to_live: Optional[timedelta] = None,
-    tools: Optional[_ToolsType] = None,
-    tool_config: Optional[_ToolConfigDict] = None,
+    messages: list[BaseMessage],
+    expire_time: datetime | None = None,
+    time_to_live: timedelta | None = None,
+    tools: _ToolsType | None = None,
+    tool_config: _ToolConfigDict | None = None,
 ) -> str:
     """Creates a cache for content in some model.
 
     Args:
-        model: ChatVertexAI model. Must be at least gemini-2.5-pro or gemini-2.0-flash.
+        model: `ChatVertexAI` model. Must be at least `gemini-2.5-pro` or
+            `gemini-2.0-flash`.
         messages: List of messages to cache.
         expire_time: Timestamp of when this resource is considered expired.
-            At most one of expire_time and time_to_live can be set. If neither is set,
-            default TTL on the API side will be used (currently 1 hour).
+
+            At most one of `expire_time` and `time_to_live` can be set. If neither is
+            set, default TTL on the API side will be used (currently 1 hour).
         time_to_live: The TTL for this resource. If provided, the expiration time is
-            computed as created_time + TTL. At most one of expire_time and time_to_live
-            can be set. If neither is set, default TTL on the API side will be used
-            (currently 1 hour).
+            computed as `created_time` + TTL.
+
+            At most one of `expire_time` and `time_to_live` can be set. If neither is
+            set, default TTL on the API side will be used (currently 1 hour).
         tools: A list of tool definitions to bind to this chat model.
-            Can be a pydantic model, callable, or BaseTool. Pydantic
-            models, callables, and BaseTools will be automatically converted to
-            their schema dictionary representation.
+
+            Can be a Pydantic model, `Callable`, or `BaseTool`. Pydantic models,
+            `Callable`, and `BaseTool` will be automatically converted to their schema
+            dictionary representation.
         tool_config: Optional. Immutable. Tool config. This config is shared for all
             tools.
 

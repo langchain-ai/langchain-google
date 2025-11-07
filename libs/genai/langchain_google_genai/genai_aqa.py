@@ -6,7 +6,7 @@ create responses grounded on specified passages based on a user query.
 For more information visit: https://ai.google.dev/gemini-api/docs
 """
 
-from typing import Any, List, Optional
+from typing import Any
 
 import google.ai.generativelanguage as genai
 from langchain_core.runnables import RunnableSerializable
@@ -26,7 +26,7 @@ class AqaInput(BaseModel):
     """
 
     prompt: str
-    source_passages: List[str]
+    source_passages: list[str]
 
 
 class AqaOutput(BaseModel):
@@ -41,7 +41,7 @@ class AqaOutput(BaseModel):
     """
 
     answer: str
-    attributed_passages: List[str]
+    attributed_passages: list[str]
     answerable_probability: float
 
 
@@ -50,14 +50,14 @@ class _AqaModel(BaseModel):
 
     _client: genai.GenerativeServiceClient = PrivateAttr()
     _answer_style: int = PrivateAttr()
-    _safety_settings: List[genai.SafetySetting] = PrivateAttr()
-    _temperature: Optional[float] = PrivateAttr()
+    _safety_settings: list[genai.SafetySetting] = PrivateAttr()
+    _temperature: float | None = PrivateAttr()
 
     def __init__(
         self,
         answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-        safety_settings: Optional[List[genai.SafetySetting]] = None,
-        temperature: Optional[float] = None,
+        safety_settings: list[genai.SafetySetting] | None = None,
+        temperature: float | None = None,
         **kwargs: Any,
     ) -> None:
         if safety_settings is None:
@@ -71,7 +71,7 @@ class _AqaModel(BaseModel):
     def generate_answer(
         self,
         prompt: str,
-        passages: List[str],
+        passages: list[str],
     ) -> genaix.GroundedAnswer:
         return genaix.generate_answer(
             prompt=prompt,
@@ -91,7 +91,7 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
     parametric memory.
 
     Attributes:
-        answer_style: keyword-only argument. See
+        answer_style: Keyword-only argument. See
             `google.ai.generativelanguage.AnswerStyle` for details.
     """
 
@@ -108,8 +108,8 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
         self,
         *,
         answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-        safety_settings: Optional[List[genai.SafetySetting]] = None,
-        temperature: Optional[float] = None,
+        safety_settings: list[genai.SafetySetting] | None = None,
+        temperature: float | None = None,
         **kwargs: Any,
     ) -> None:
         """Construct a Google Generative AI AQA model.
@@ -130,7 +130,7 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
         )
 
     def invoke(
-        self, input: AqaInput, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, input: AqaInput, config: RunnableConfig | None = None, **kwargs: Any
     ) -> AqaOutput:
         """Generates a grounded response using the provided passages."""
         response = self._client.generate_answer(

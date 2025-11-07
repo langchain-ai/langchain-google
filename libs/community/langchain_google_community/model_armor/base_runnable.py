@@ -261,7 +261,7 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
             findings: `SanitizationResult` object from Model Armor sanitization request.
             config: Config to use when invoking the `Runnable`.
 
-                Please refer to the `RunnableConfig` for more details.
+                Please refer to `RunnableConfig` for more details.
 
         Returns:
             bool: `True` if all findings are safe, `False` if any are unsafe

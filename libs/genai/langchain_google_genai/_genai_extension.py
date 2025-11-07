@@ -9,7 +9,7 @@ import logging
 import re
 from collections.abc import Iterator, MutableSequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import google.ai.generativelanguage as genai
 import langchain_core
@@ -37,8 +37,8 @@ _NAME_REGEX = re.compile(r"^corpora/([^/]+?)(/documents/([^/]+?)(/chunks/([^/]+?
 @dataclass
 class EntityName:
     corpus_id: str
-    document_id: Optional[str] = None
-    chunk_id: Optional[str] = None
+    document_id: str | None = None
+    chunk_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.chunk_id is not None and self.document_id is None:
@@ -84,9 +84,9 @@ class EntityName:
 @dataclass
 class Corpus:
     name: str
-    display_name: Optional[str]
-    create_time: Optional[timestamp_pb2.Timestamp]
-    update_time: Optional[timestamp_pb2.Timestamp]
+    display_name: str | None
+    create_time: timestamp_pb2.Timestamp | None
+    update_time: timestamp_pb2.Timestamp | None
 
     @property
     def corpus_id(self) -> str:
@@ -106,10 +106,10 @@ class Corpus:
 @dataclass
 class Document:
     name: str
-    display_name: Optional[str]
-    create_time: Optional[timestamp_pb2.Timestamp]
-    update_time: Optional[timestamp_pb2.Timestamp]
-    custom_metadata: Optional[MutableSequence[genai.CustomMetadata]]
+    display_name: str | None
+    create_time: timestamp_pb2.Timestamp | None
+    update_time: timestamp_pb2.Timestamp | None
+    custom_metadata: MutableSequence[genai.CustomMetadata] | None
 
     @property
     def corpus_id(self) -> str:
@@ -154,7 +154,7 @@ class Config:
     user_agent: str = _USER_AGENT
     page_size: int = _DEFAULT_PAGE_SIZE
     testing: bool = False
-    auth_credentials: Optional[credentials.Credentials] = None
+    auth_credentials: credentials.Credentials | None = None
 
 
 def set_config(config: Config) -> None:
@@ -209,7 +209,7 @@ class TestCredentials(credentials.Credentials):
         """Test credentials do nothing to the request."""
 
 
-def _get_credentials() -> Optional[credentials.Credentials]:
+def _get_credentials() -> credentials.Credentials | None:
     """Returns credential from config if set or fake credentials for unit testing.
 
     If `_config.testing` is `True`, a fake credential is returned.
@@ -241,12 +241,12 @@ def build_semantic_retriever() -> genai.RetrieverServiceClient:
 
 
 def _prepare_config(
-    credentials: Optional[credentials.Credentials] = None,
-    api_key: Optional[str] = None,
-    client_options: Optional[Dict[str, Any]] = None,
-    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
-    transport: Optional[str] = None,
-) -> Dict[str, Any]:
+    credentials: credentials.Credentials | None = None,
+    api_key: str | None = None,
+    client_options: dict[str, Any] | None = None,
+    client_info: gapic_v1.client_info.ClientInfo | None = None,
+    transport: str | None = None,
+) -> dict[str, Any]:
     formatted_client_options: dict = {"api_endpoint": _config.api_endpoint}
     if client_options:
         formatted_client_options.update(**client_options)
@@ -270,11 +270,11 @@ def _prepare_config(
 
 
 def build_generative_service(
-    credentials: Optional[credentials.Credentials] = None,
-    api_key: Optional[str] = None,
-    client_options: Optional[Dict[str, Any]] = None,
-    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
-    transport: Optional[str] = None,
+    credentials: credentials.Credentials | None = None,
+    api_key: str | None = None,
+    client_options: dict[str, Any] | None = None,
+    client_info: gapic_v1.client_info.ClientInfo | None = None,
+    transport: str | None = None,
 ) -> v1betaGenerativeServiceClient:
     config = _prepare_config(
         credentials=credentials,
@@ -287,11 +287,11 @@ def build_generative_service(
 
 
 def build_generative_async_service(
-    credentials: Optional[credentials.Credentials],
-    api_key: Optional[str] = None,
-    client_options: Optional[Dict[str, Any]] = None,
-    client_info: Optional[gapic_v1.client_info.ClientInfo] = None,
-    transport: Optional[str] = None,
+    credentials: credentials.Credentials | None,
+    api_key: str | None = None,
+    client_options: dict[str, Any] | None = None,
+    client_info: gapic_v1.client_info.ClientInfo | None = None,
+    transport: str | None = None,
 ) -> v1betaGenerativeServiceAsyncClient:
     config = _prepare_config(
         credentials=credentials,
@@ -317,7 +317,7 @@ def get_corpus(
     *,
     corpus_id: str,
     client: genai.RetrieverServiceClient,
-) -> Optional[Corpus]:
+) -> Corpus | None:
     try:
         corpus = client.get_corpus(
             genai.GetCorpusRequest(name=str(EntityName(corpus_id=corpus_id)))
@@ -333,11 +333,11 @@ def get_corpus(
 
 def create_corpus(
     *,
-    corpus_id: Optional[str] = None,
-    display_name: Optional[str] = None,
+    corpus_id: str | None = None,
+    display_name: str | None = None,
     client: genai.RetrieverServiceClient,
 ) -> Corpus:
-    name: Optional[str]
+    name: str | None
     name = str(EntityName(corpus_id=corpus_id)) if corpus_id is not None else None
 
     new_display_name = display_name or f"Untitled {datetime.datetime.now()}"
@@ -379,7 +379,7 @@ def get_document(
     corpus_id: str,
     document_id: str,
     client: genai.RetrieverServiceClient,
-) -> Optional[Document]:
+) -> Document | None:
     try:
         document = client.get_document(
             genai.GetDocumentRequest(
@@ -397,12 +397,12 @@ def get_document(
 def create_document(
     *,
     corpus_id: str,
-    document_id: Optional[str] = None,
-    display_name: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    document_id: str | None = None,
+    display_name: str | None = None,
+    metadata: dict[str, Any] | None = None,
     client: genai.RetrieverServiceClient,
 ) -> Document:
-    name: Optional[str]
+    name: str | None
     if document_id is not None:
         name = str(EntityName(corpus_id=corpus_id, document_id=document_id))
     else:
@@ -441,10 +441,10 @@ def batch_create_chunk(
     *,
     corpus_id: str,
     document_id: str,
-    texts: List[str],
-    metadatas: Optional[List[Dict[str, Any]]] = None,
+    texts: list[str],
+    metadatas: list[dict[str, Any]] | None = None,
     client: genai.RetrieverServiceClient,
-) -> List[genai.Chunk]:
+) -> list[genai.Chunk]:
     if metadatas is None:
         metadatas = [{} for _ in texts]
     if len(texts) != len(metadatas):
@@ -456,13 +456,13 @@ def batch_create_chunk(
 
     doc_name = str(EntityName(corpus_id=corpus_id, document_id=document_id))
 
-    created_chunks: List[genai.Chunk] = []
+    created_chunks: list[genai.Chunk] = []
 
     batch_request = genai.BatchCreateChunksRequest(
         parent=doc_name,
         requests=[],
     )
-    for text, metadata in zip(texts, metadatas):
+    for text, metadata in zip(texts, metadatas, strict=False):
         batch_request.requests.append(
             genai.CreateChunkRequest(
                 parent=doc_name,
@@ -513,9 +513,9 @@ def query_corpus(
     corpus_id: str,
     query: str,
     k: int = 4,
-    filter: Optional[Dict[str, Any]] = None,
+    filter: dict[str, Any] | None = None,
     client: genai.RetrieverServiceClient,
-) -> List[genai.RelevantChunk]:
+) -> list[genai.RelevantChunk]:
     response = client.query_corpus(
         genai.QueryCorpusRequest(
             name=str(EntityName(corpus_id=corpus_id)),
@@ -533,9 +533,9 @@ def query_document(
     document_id: str,
     query: str,
     k: int = 4,
-    filter: Optional[Dict[str, Any]] = None,
+    filter: dict[str, Any] | None = None,
     client: genai.RetrieverServiceClient,
-) -> List[genai.RelevantChunk]:
+) -> list[genai.RelevantChunk]:
     response = client.query_document(
         genai.QueryDocumentRequest(
             name=str(EntityName(corpus_id=corpus_id, document_id=document_id)),
@@ -556,8 +556,8 @@ class Passage:
 @dataclass
 class GroundedAnswer:
     answer: str
-    attributed_passages: List[Passage]
-    answerable_probability: Optional[float]
+    attributed_passages: list[Passage]
+    answerable_probability: float | None
 
 
 @dataclass
@@ -577,10 +577,10 @@ class GenerateAnswerError(Exception):
 def generate_answer(
     *,
     prompt: str,
-    passages: List[str],
+    passages: list[str],
     answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-    safety_settings: Optional[List[genai.SafetySetting]] = None,
-    temperature: Optional[float] = None,
+    safety_settings: list[genai.SafetySetting] | None = None,
+    temperature: float | None = None,
     client: genai.GenerativeServiceClient,
 ) -> GroundedAnswer:
     # TODO: Consider passing in the corpus ID instead of the actual
@@ -643,7 +643,7 @@ def _get_finish_message(candidate: genai.Candidate) -> str:
         return candidate.finish_message
 
     # Fallback to manual mapping for all known finish reasons
-    finish_messages: Dict[int, str] = {
+    finish_messages: dict[int, str] = {
         genai.Candidate.FinishReason.STOP: "Generation completed successfully",
         genai.Candidate.FinishReason.MAX_TOKENS: (
             "Maximum token in context window reached"
@@ -669,8 +669,8 @@ def _get_finish_message(candidate: genai.Candidate) -> str:
     return finish_messages.get(finish_reason, "Unexpected generation error")
 
 
-def _convert_to_metadata(metadata: Dict[str, Any]) -> List[genai.CustomMetadata]:
-    cs: List[genai.CustomMetadata] = []
+def _convert_to_metadata(metadata: dict[str, Any]) -> list[genai.CustomMetadata]:
+    cs: list[genai.CustomMetadata] = []
     for key, value in metadata.items():
         if isinstance(value, str):
             c = genai.CustomMetadata(key=key, string_value=value)
@@ -684,12 +684,12 @@ def _convert_to_metadata(metadata: Dict[str, Any]) -> List[genai.CustomMetadata]
     return cs
 
 
-def _convert_filter(fs: Optional[Dict[str, Any]]) -> List[genai.MetadataFilter]:
+def _convert_filter(fs: dict[str, Any] | None) -> list[genai.MetadataFilter]:
     if fs is None:
         return []
     assert isinstance(fs, dict)
 
-    filters: List[genai.MetadataFilter] = []
+    filters: list[genai.MetadataFilter] = []
     for key, value in fs.items():
         if isinstance(value, str):
             condition = genai.Condition(

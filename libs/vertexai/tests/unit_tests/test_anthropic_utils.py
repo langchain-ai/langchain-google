@@ -847,7 +847,7 @@ def test_format_messages_anthropic(
         source_history, project="test-project"
     )
 
-    for result, expected in zip(result_history, expected_history):
+    for result, expected in zip(result_history, expected_history, strict=False):
         assert result == expected
     assert sm == expected_sm
 

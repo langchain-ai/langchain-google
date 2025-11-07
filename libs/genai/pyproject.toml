@@ -1,17 +1,16 @@
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "langchain-google-genai"
-version = "3.0.1"
 description = "An integration package connecting Google's genai package and LangChain"
-authors = []
 license = {text = "MIT"}
-requires-python = ">=3.10.0,<4.0.0"
 readme = "README.md"
-repository = "https://github.com/langchain-ai/langchain-google"
+authors = []
 
+version = "3.0.1"
+requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
     "langchain-core>=1.0.0,<2.0.0",
     "google-ai-generativelanguage>=0.7.0,<1.0.0",
@@ -62,12 +61,7 @@ fix = true
 docstring-code-format = true
 
 [tool.ruff.lint]
-# TODO select = [ "ALL",]
-select = [
-    "E", # pycodestyle
-    "F", # pyflakes
-    "I", # isort
-]
+select = [ "ALL",]
 ignore = [
     "C90",     # McCabe complexity
     "COM812",  # Messes with the formatter
@@ -83,18 +77,32 @@ ignore = [
     "TD002",   # Missing author in TODO
     "TD003",   # Missing issue link in TODO
 
-    # 3.9 needs
-    "UP007",
-    "UP006",
-    "UP045",
-    "FA100",
-
     # TODO rules
     "ANN401",  # No Any types
     "BLE",     # Blind exceptions
     "DOC",     # Docstrings (preview)
     "ERA",     # No commented-out code
     "PLR2004", # Comparison to magic number
+    "PLC0415", # Import top level
+    "SIM117",  # Single with statement 
+    "FBT",     # Bool stuff
+    "PT",
+    "ARG",     # Argument related
+    "SLF",     # Self
+    "D",       # Docstring related
+    "G",
+    "S",
+    "A",
+    "N",
+    "TRY",
+    "B",
+    "PGH",
+    "SIM",
+    "ASYNC",
+    "PTH",
+    "DTZ",
+    "PYI",
+    "PLW",
 ]
 unfixable = [
     "B028",    # People should intentionally tune the stacklevel

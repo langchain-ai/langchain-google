@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import ANY, MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -121,7 +121,7 @@ def test_parse_history_llama_tools(mock_auth: Any) -> None:
 
 
 def test_parse_response() -> None:
-    candidate: Dict[str, Any] = {
+    candidate: dict[str, Any] = {
         "content": "London is the capital of Great Britain",
         "role": "assistant",
     }

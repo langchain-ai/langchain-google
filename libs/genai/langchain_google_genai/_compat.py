@@ -1,13 +1,13 @@
 """Go from v1 content blocks to generativelanguage_v1beta format."""
 
 import json
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from langchain_core.messages import content as types
 
 
 def translate_citations_to_grounding_metadata(
-    citations: list[types.Citation], web_search_queries: Optional[list[str]] = None
+    citations: list[types.Citation], web_search_queries: list[str] | None = None
 ) -> dict[str, Any]:
     """Translate LangChain Citations to Google AI grounding metadata format.
 
@@ -40,7 +40,7 @@ def translate_citations_to_grounding_metadata(
 
     # Group citations by text segment (start_index, end_index, cited_text)
     segment_to_citations: dict[
-        tuple[Optional[int], Optional[int], Optional[str]], list[types.Citation]
+        tuple[int | None, int | None, str | None], list[types.Citation]
     ] = {}
 
     for citation in citations:
@@ -247,7 +247,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         elif block_dict["type"] == "server_tool_call":
             if block_dict.get("name") == "code_interpreter":
                 # LangChain v0 format
-                args = cast(dict, block_dict.get("args", {}))
+                args = cast("dict", block_dict.get("args", {}))
                 executable_code = {
                     "type": "executable_code",
                     "executable_code": args.get("code", ""),
@@ -265,7 +265,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 )
 
         elif block_dict["type"] == "server_tool_result":
-            extras = cast(dict, block_dict.get("extras", {}))
+            extras = cast("dict", block_dict.get("extras", {}))
             if extras.get("block_type") == "code_execution_result":
                 # LangChain v0 format
                 code_execution_result = {

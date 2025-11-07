@@ -10,19 +10,12 @@ import time
 import uuid
 import warnings
 import wave
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Tuple,
-    Type,
-    Union,
     cast,
 )
 
@@ -141,11 +134,7 @@ logger = logging.getLogger(__name__)
 
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
-_FunctionDeclarationType = Union[
-    FunctionDeclaration,
-    dict[str, Any],
-    Callable[..., Any],
-]
+_FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
@@ -231,7 +220,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
-                time.sleep(getattr(e, "retry_after"))
+                time.sleep(e.retry_after)
             raise
         except Exception:
             raise
@@ -280,7 +269,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
-                time.sleep(getattr(e, "retry_after"))
+                time.sleep(e.retry_after)
             raise
         except Exception:
             raise
@@ -296,8 +285,8 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
 
 def _convert_to_parts(
-    raw_content: Union[str, Sequence[Union[str, dict]]],
-) -> List[Part]:
+    raw_content: str | Sequence[str | dict],
+) -> list[Part]:
     """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
     Used when preparing Human, System and AI messages for sending to the API.
@@ -523,7 +512,7 @@ def _convert_to_parts(
 
 
 def _convert_tool_message_to_parts(
-    message: ToolMessage | FunctionMessage, name: Optional[str] = None
+    message: ToolMessage | FunctionMessage, name: str | None = None
 ) -> list[Part]:
     """Converts a tool or function message to a Google `Part`."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
@@ -589,7 +578,7 @@ def _get_ai_message_tool_messages_parts(
 
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
-) -> Tuple[Optional[Content], List[Content]]:
+) -> tuple[Content | None, list[Content]]:
     """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
     Args:
@@ -600,12 +589,11 @@ def _parse_chat_history(
     Returns:
         A tuple containing:
 
-            - An optional `google.ai.generativelanguage_v1beta.types.Content` representing
-                the system instruction (if any).
-            - A list of `google.ai.generativelanguage_v1beta.types.Content` representing the
-                formatted messages.
+            - An optional `google.ai.generativelanguage_v1beta.types.Content`
+                representing the system instruction (if any).
+            - A list of `google.ai.generativelanguage_v1beta.types.Content` representing
+                the formatted messages.
     """
-
     if convert_system_message_to_human:
         warnings.warn(
             "The 'convert_system_message_to_human' parameter is deprecated and will be "
@@ -628,15 +616,15 @@ def _parse_chat_history(
             input_messages[idx] = message.model_copy(
                 update={
                     "content": _convert_from_v1_to_generativelanguage_v1beta(
-                        cast(list[types.ContentBlock], message.content),
+                        cast("list[types.ContentBlock]", message.content),
                         message.response_metadata.get("model_provider"),
                     )
                 }
             )
 
-    formatted_messages: List[Content] = []
+    formatted_messages: list[Content] = []
 
-    system_instruction: Optional[Content] = None
+    system_instruction: Content | None = None
     messages_without_tool_messages = [
         message for message in input_messages if not isinstance(message, ToolMessage)
     ]
@@ -703,13 +691,12 @@ def _parse_chat_history(
                     }
                 )
                 parts = [Part(function_call=function_call)]
+            elif message.response_metadata.get("output_version") == "v1":
+                # Already converted to v1beta format above
+                parts = message.content  # type: ignore[assignment]
             else:
-                if message.response_metadata.get("output_version") == "v1":
-                    # Already converted to v1beta format above
-                    parts = message.content  # type: ignore[assignment]
-                else:
-                    # Prepare request content parts from message.content field
-                    parts = _convert_to_parts(message.content)
+                # Prepare request content parts from message.content field
+                parts = _convert_to_parts(message.content)
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content)
@@ -732,8 +719,8 @@ def _parse_chat_history(
 
 # Helper function to append content consistently
 def _append_to_content(
-    current_content: Union[str, List[Any], None], new_item: Any
-) -> Union[str, List[Any]]:
+    current_content: str | list[Any] | None, new_item: Any
+) -> str | list[Any]:
     """Appends a new item to the content, handling different initial content types."""
     if current_content is None and isinstance(new_item, str):
         return new_item
@@ -753,21 +740,21 @@ def _append_to_content(
 def _parse_response_candidate(
     response_candidate: Candidate,
     streaming: bool = False,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> AIMessage:
-    content: Union[None, str, List[Union[str, dict]]] = None
-    additional_kwargs: Dict[str, Any] = {}
-    response_metadata: Dict[str, Any] = {"model_provider": "google_genai"}
+    content: None | str | list[str | dict] = None
+    additional_kwargs: dict[str, Any] = {}
+    response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
     if model_name:
         response_metadata["model_name"] = model_name
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
     # Track function call signatures separately to handle them conditionally
-    function_call_signatures: List[dict] = []
+    function_call_signatures: list[dict] = []
 
     for part in response_candidate.content.parts:
-        text: Optional[str] = None
+        text: str | None = None
         try:
             if hasattr(part, "text") and part.text is not None:
                 text = part.text
@@ -779,7 +766,7 @@ def _parse_response_candidate(
 
         # Extract thought signature if present (can be on any Part type)
         # Signatures are binary data, encode to base64 string for JSON serialization
-        thought_sig: Optional[str] = None
+        thought_sig: str | None = None
         if hasattr(part, "thought_signature") and part.thought_signature:
             try:
                 # Encode binary signature to base64 string
@@ -968,7 +955,7 @@ def _parse_response_candidate(
     )
 
 
-def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
+def _extract_grounding_metadata(candidate: Any) -> dict[str, Any]:
     """Extract grounding metadata from candidate.
 
     core's block translator converts this metadata into citation annotations.
@@ -1000,13 +987,13 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
         )
     except (AttributeError, TypeError, ImportError):
         # Attempt manual extraction of known fields
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # Grounding chunks
         if hasattr(grounding_metadata, "grounding_chunks"):
             grounding_chunks = []
             for chunk in grounding_metadata.grounding_chunks:
-                chunk_data: Dict[str, Any] = {}
+                chunk_data: dict[str, Any] = {}
                 if hasattr(chunk, "web") and chunk.web:
                     chunk_data["web"] = {
                         "uri": chunk.web.uri if hasattr(chunk.web, "uri") else "",
@@ -1019,7 +1006,7 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
         if hasattr(grounding_metadata, "grounding_supports"):
             grounding_supports = []
             for support in grounding_metadata.grounding_supports:
-                support_data: Dict[str, Any] = {}
+                support_data: dict[str, Any] = {}
                 if hasattr(support, "segment") and support.segment:
                     support_data["segment"] = {
                         "start_index": getattr(support.segment, "start_index", 0),
@@ -1048,7 +1035,7 @@ def _extract_grounding_metadata(candidate: Any) -> Dict[str, Any]:
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
-    prev_usage: Optional[UsageMetadata] = None,
+    prev_usage: UsageMetadata | None = None,
 ) -> ChatResult:
     """Converts a PaLM API response into a LangChain `ChatResult`."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
@@ -1082,7 +1069,7 @@ def _response_to_result(
             if prev_usage and cumulative_usage["input_tokens"] < prev_usage.get(
                 "input_tokens", 0
             ):
-                # Gemini 1.5 and 2.0 return a lower cumulative count of prompt tokens
+                # Gemini 2.0 returns a lower cumulative count of prompt tokens
                 # in the final chunk. We take this count to be ground truth because
                 # it's consistent with the reported total tokens. So we need to
                 # ensure this chunk compensates (the subtract_usage funcction floors
@@ -1095,7 +1082,7 @@ def _response_to_result(
     except AttributeError:
         lc_usage = None
 
-    generations: List[ChatGeneration] = []
+    generations: list[ChatGeneration] = []
 
     for candidate in response.candidates:
         generation_info = {}
@@ -1164,14 +1151,14 @@ def _is_event_loop_running() -> bool:
 
 
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
-    r"""Google AI chat models integration.
+    r"""Google GenAI chat model integration.
 
     Instantiation:
         To use, you must have either:
 
-            1. The ``GOOGLE_API_KEY`` environment variable set with your API key, or
-            2. Pass your API key using the ``google_api_key`` kwarg to the
-            ChatGoogleGenerativeAI constructor.
+        1. The `GOOGLE_API_KEY` environment variable set with your API key, or
+        2. Pass your API key using the `google_api_key` kwarg to the
+            `ChatGoogleGenerativeAI` constructor.
 
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -1330,17 +1317,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         await llm.ainvoke(messages)
 
         # stream:
-        # async for chunk in (await llm.astream(messages))
+        async for chunk in (await llm.astream(messages))
 
         # batch:
-        # await llm.abatch([messages])
+        await llm.abatch([messages])
         ```
 
-    Context Caching:
+    Context caching:
         Context caching allows you to store and reuse content (e.g., PDFs, images) for
         faster processing. The `cached_content` parameter accepts a cache name created
-        via the Google Generative AI API. Below are two examples: caching a single file
-        directly and caching multiple files using `Part`.
+        via the Google Generative AI API.
+
+        Below are two examples: caching a single file directly and caching multiple
+        files using `Part`.
 
         !!! example "Single file example"
 
@@ -1574,11 +1563,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg.content
         ```
 
-        ```python
-        "The weather in this image appears to be sunny and pleasant. The sky is a
-        bright blue with scattered white clouds, suggesting fair weather. The lush
-        green grass and trees indicate a warm and possibly slightly breezy day.
-        There are no signs of rain or storms."
+        ```txt
+        The weather in this image appears to be sunny and pleasant. The sky is a bright
+        blue with scattered white clouds, suggesting fair weather. The lush green grass
+        and trees indicate a warm and possibly slightly breezy day. There are no...
         ```
 
     PDF input:
@@ -1604,12 +1592,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg.content
         ```
 
-        ```python
-        "This research paper describes a system developed for SemEval-2025 Task 9,
-        which aims to automate the detection of food hazards from recall reports,
-        addressing the class imbalance problem by leveraging LLM-based data
-        augmentation techniques and transformer-based models to improve
-        performance."
+        ```txt
+        This research paper describes a system developed for SemEval-2025 Task 9, which
+        aims to automate the detection of food hazards from recall reports, addressing
+        the class imbalance problem by leveraging LLM-based data augmentation...
         ```
 
     Video input:
@@ -1638,10 +1624,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg.content
         ```
 
-        ```python
-        "Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
+        ```txt
+        Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
         adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
-        attempt to prepare a turkey dinner."
+        attempt to prepare a turkey dinner.
         ```
 
         You can also pass YouTube URLs directly:
@@ -1663,11 +1649,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg.content
         ```
 
-        ```python
-        "The video is a demo of multimodal live streaming in Gemini 2.0. The
-        narrator is sharing his screen in AI Studio and asks if the AI can see it.
-        The AI then reads text that is highlighted on the screen, defines the word
-        “multimodal,” and summarizes everything that was seen and heard."
+        ```txt
+        The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is
+        sharing his screen in AI Studio and asks if the AI can see it. The AI then reads
+        text that is highlighted on the screen, defines the word...
         ```
 
     Audio input:
@@ -1693,16 +1678,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg.content
         ```
 
-        ```python
-        "In this episode of the Made by Google podcast, Stephen Johnson and Simon
-        Tokumine discuss NotebookLM, a tool designed to help users understand
-        complex material in various modalities, with a focus on its unexpected uses,
-        the development of audio overviews, and the implementation of new features
-        like mind maps and source discovery."
+        ```txt
+        In this episode of the Made by Google podcast, Stephen Johnson and Simon
+        Tokumine discuss NotebookLM, a tool designed to help users understand complex
+        material in various modalities, with a focus on its unexpected uses, the...
         ```
 
-    File upload (URI-based):
+    File upload:
         You can also upload files to Google's servers and reference them by URI.
+
         This works for PDFs, images, videos, and audio files.
 
         ```python
@@ -1731,11 +1715,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg.content
         ```
 
-        ```python
-        "This research paper assesses and mitigates multi-turn jailbreak
-        vulnerabilities in large language models using the Crescendo attack study,
-        evaluating attack success rates and mitigation strategies like prompt
-        hardening and LLM-as-guardrail."
+        ```txt
+        This research paper assesses and mitigates multi-turn jailbreak vulnerabilities
+        in large language models using the Crescendo attack study, evaluating attack
+        success rates and mitigation strategies like prompt...
         ```
 
     Token usage:
@@ -1748,7 +1731,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
         ```
 
-    Response metadata
+    Response metadata:
         ```python
         ai_msg = llm.invoke(messages)
         ai_msg.response_metadata
@@ -1782,13 +1765,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ],
         }
         ```
-    """  # noqa: E501
+    """
 
     client: Any = Field(default=None, exclude=True)
 
     async_client_running: Any = Field(default=None, exclude=True)
 
-    default_metadata: Optional[Sequence[Tuple[str, str]]] = Field(
+    default_metadata: Sequence[tuple[str, str]] | None = Field(
         default=None, alias="default_metadata_input"
     )
 
@@ -1799,11 +1782,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     error.
     """
 
-    response_mime_type: Optional[str] = None
-    """Optional. Output response mimetype of the generated candidate text. Only
-    supported in Gemini 1.5 and later models.
+    response_mime_type: str | None = None
+    """Output response MIME type of the generated candidate text.
 
-    Supported mimetype:
+    Supported MIME types:
         * `'text/plain'`: (default) Text output.
         * `'application/json'`: JSON response in the candidates.
         * `'text/x.enum'`: Enum in plain text.
@@ -1812,25 +1794,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     type, otherwise the behavior is undefined. (This is a preview feature.)
     """
 
-    response_schema: Optional[Dict[str, Any]] = None
-    """ Optional. Enforce an schema to the output. The format of the dictionary should
-    follow Open API schema.
+    response_schema: dict[str, Any] | None = None
+    """Enforce a schema to the output. The format of the dictionary should follow Open
+    API schema.
     """
 
-    cached_content: Optional[str] = None
+    cached_content: str | None = None
     """The name of the cached content used as context to serve the prediction.
 
     !!! note
-    
+
         Only used in explicit caching, where users can have control over caching (e.g.
         what content to cache) and enjoy guaranteed cost savings. Format:
         `cachedContents/{cachedContent}`.
     """
 
-    stop: Optional[List[str]] = None
+    stop: list[str] | None = None
     """Stop sequences for the model."""
 
-    streaming: Optional[bool] = None
+    streaming: bool | None = None
     """Whether to stream responses from the model."""
 
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
@@ -1863,7 +1845,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     )
 
     @property
-    def lc_secrets(self) -> Dict[str, str]:
+    def lc_secrets(self) -> dict[str, str]:
         return {"google_api_key": "GOOGLE_API_KEY"}
 
     @property
@@ -1921,7 +1903,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 google_api_key = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
-        transport: Optional[str] = self.transport
+        transport: str | None = self.transport
 
         # Merge base_url into client_options if provided
         client_options = self.client_options or {}
@@ -1973,7 +1955,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return self.async_client_running
 
     @property
-    def _identifying_params(self) -> Dict[str, Any]:
+    def _identifying_params(self) -> dict[str, Any]:
         """Get the identifying parameters."""
         return {
             "model": self.model,
@@ -1990,10 +1972,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def invoke(
         self,
         input: LanguageModelInput,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        code_execution: Optional[bool] = None,
-        stop: Optional[list[str]] = None,
+        code_execution: bool | None = None,
+        stop: list[str] | None = None,
         **kwargs: Any,
     ) -> AIMessage:
         """Override invoke to add `code_execution` parameter.
@@ -2003,7 +1985,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         When enabled, the model can execute code to solve problems.
         """
-
         if code_execution is not None:
             if not self._supports_code_execution:
                 msg = (
@@ -2022,7 +2003,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return super().invoke(input, config, stop=stop, **kwargs)
 
     def _get_ls_params(
-        self, stop: Optional[List[str]] = None, **kwargs: Any
+        self, stop: list[str] | None = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
@@ -2046,8 +2027,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _prepare_params(
         self,
-        stop: Optional[List[str]],
-        generation_config: Optional[Dict[str, Any]] = None,
+        stop: list[str] | None,
+        generation_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerationConfig:
         gen_config = {
@@ -2109,17 +2090,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         request = self._prepare_request(
@@ -2148,17 +2129,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     async def _agenerate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         if not self.async_client:
@@ -2200,17 +2181,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _stream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         request = self._prepare_request(
@@ -2256,17 +2237,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     async def _astream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self.async_client:
@@ -2324,16 +2305,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _prepare_request(
         self,
-        messages: List[BaseMessage],
+        messages: list[BaseMessage],
         *,
-        stop: Optional[List[str]] = None,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
+        stop: list[str] | None = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
         **kwargs: Any,
     ) -> GenerateContentRequest:
         if tool_choice and tool_config:
@@ -2376,7 +2357,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     f"be specified if 'tools' is specified."
                 )
                 raise ValueError(msg)
-            all_names: List[str] = []
+            all_names: list[str] = []
             for t in formatted_tools:
                 if hasattr(t, "function_declarations"):
                     t_with_declarations = cast("Any", t)
@@ -2438,14 +2419,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def with_structured_output(
         self,
-        schema: Union[Dict, Type[BaseModel]],
-        method: Optional[
-            Literal["function_calling", "json_mode", "json_schema"]
-        ] = "function_calling",
+        schema: dict | type[BaseModel],
+        method: Literal["function_calling", "json_mode", "json_schema"]
+        | None = "function_calling",
         *,
         include_raw: bool = False,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
+    ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         _ = kwargs.pop("strict", None)
         if kwargs:
             msg = f"Received unsupported arguments {kwargs}"
@@ -2518,9 +2498,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tools: Sequence[
             dict[str, Any] | type | Callable[..., Any] | BaseTool | GoogleTool
         ],
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        tool_config: dict | _ToolConfigDict | None = None,
         *,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
@@ -2573,12 +2553,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
 
 def _get_tool_name(
-    tool: Union[_ToolDict, GoogleTool, Dict],
+    tool: _ToolDict | GoogleTool | dict,
 ) -> str:
     try:
         genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
         return next(f["name"] for f in genai_tool["function_declarations"])  # type: ignore[index]
     except ValueError:  # other TypedDict
         if is_typeddict(tool):
-            return convert_to_openai_tool(cast("Dict", tool))["function"]["name"]
+            return convert_to_openai_tool(cast("dict", tool))["function"]["name"]
         raise

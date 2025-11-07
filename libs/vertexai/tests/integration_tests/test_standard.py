@@ -1,7 +1,6 @@
 """Standard LangChain interface tests."""
 
 import os
-from typing import Type
 
 import pytest
 from langchain_core.language_models import BaseChatModel
@@ -24,7 +23,7 @@ def _has_multimodal_secrets() -> bool:
 @pytest.mark.first
 class TestGemini2AIStandard(ChatModelIntegrationTests):
     @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
+    def chat_model_class(self) -> type[BaseChatModel]:
         return ChatVertexAI
 
     @property
@@ -76,7 +75,7 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
 
 class TestGemini_15_AIStandard(ChatModelIntegrationTests):
     @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
+    def chat_model_class(self) -> type[BaseChatModel]:
         return ChatVertexAI
 
     @property

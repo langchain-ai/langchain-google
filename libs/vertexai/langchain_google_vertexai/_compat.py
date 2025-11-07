@@ -53,7 +53,7 @@ def _convert_from_v1_to_vertex(
         elif block_dict["type"] == "server_tool_call":
             if block_dict.get("name") == "code_interpreter":
                 # LangChain v0 format
-                args = cast(dict, block_dict.get("args", {}))
+                args = cast("dict", block_dict.get("args", {}))
                 executable_code = {
                     "type": "executable_code",
                     "executable_code": args.get("code", ""),
@@ -64,7 +64,7 @@ def _convert_from_v1_to_vertex(
                 new_content.append(executable_code)
 
         elif block_dict["type"] == "server_tool_result":
-            extras = cast(dict, block_dict.get("extras", {}))
+            extras = cast("dict", block_dict.get("extras", {}))
             if extras.get("block_type") == "code_execution_result":
                 # LangChain v0 format
                 code_execution_result = {

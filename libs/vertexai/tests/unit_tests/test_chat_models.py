@@ -4,7 +4,7 @@ import base64
 import json
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -794,7 +794,7 @@ def test_parse_history_gemini_multi(
         history=source_history, imageBytesLoader=image_bytes_loader
     )
 
-    for result, expected in zip(result_history, expected_history):
+    for result, expected in zip(result_history, expected_history, strict=False):
         assert result == expected
     assert sm == expected_sys_message
 
@@ -1391,8 +1391,8 @@ def test_anthropic_format_output() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:
@@ -1455,8 +1455,8 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:

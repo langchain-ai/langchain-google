@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from difflib import get_close_matches
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
-    """Google GenerativeAI models.
+    """Google GenerativeAI text completion large language models (legacy LLMs).
 
     !!! example "Basic Usage"
 
@@ -88,7 +88,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         return self
 
     def _get_ls_params(
-        self, stop: Optional[list[str]] = None, **kwargs: Any
+        self, stop: list[str] | None = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         ls_params = super()._get_ls_params(stop=stop, **kwargs)
@@ -109,8 +109,8 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     def _generate(
         self,
         prompts: list[str],
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> LLMResult:
         generations = []
@@ -138,8 +138,8 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     def _stream(
         self,
         prompt: str,
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[GenerationChunk]:
         for stream_chunk in self.client._stream(

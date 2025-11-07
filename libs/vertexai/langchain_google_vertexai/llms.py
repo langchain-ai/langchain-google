@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Iterator
 from difflib import get_close_matches
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -22,30 +22,41 @@ logger = logging.getLogger(__name__)
 
 
 class VertexAI(_VertexAICommon, BaseLLM):
-    """Google Vertex AI large language models."""
+    """Google Vertex AI text completion large language models (legacy LLM)."""
 
-    model_name: str = Field(default="gemini-2.0-flash-001", alias="model")
-    "The name of the Vertex AI large language model."
-    tuned_model_name: Optional[str] = None
-    """The name of a tuned model. If tuned_model_name is passed
-    model_name will be used to determine the model family
-    """
-    response_mime_type: Optional[str] = None
-    """Optional. Output response mimetype of the generated candidate text. Only
-        supported in Gemini 1.5 and later models. Supported mimetype:
-            * "text/plain": (default) Text output.
-            * "application/json": JSON response in the candidates.
-            * "text/x.enum": Enum in plain text.
-       The model also needs to be prompted to output the appropriate response
-       type, otherwise the behavior is undefined. This is a preview feature.
-    """
-    response_schema: Optional[Dict[str, Any]] = None
-    """ Optional. Enforce an schema to the output.
-        The format of the dictionary should follow Open API schema.
+    model_name: str = Field(default="gemini-2.5-flash", alias="model")
+    "The name of the Vertex AI text completion model."
+
+    tuned_model_name: str | None = None
+    """The name of a tuned model.
+
+    If `tuned_model_name` is passed `model_name` will be used to determine the model
+    family
     """
 
-    def __init__(self, *, model_name: Optional[str] = None, **kwargs: Any) -> None:
-        """Needed for mypy typing to recognize model_name as a valid arg
+    response_mime_type: str | None = None
+    """Output response MIME type of the generated candidate text.
+
+    Supported MIME type:
+
+    * `'text/plain'`: (default) Text output.
+    * `'application/json'`: JSON response in the candidates.
+    * `'text/x.enum'`: Enum in plain text.
+
+    The model also needs to be prompted to output the appropriate response type,
+    otherwise the behavior is undefined.
+
+    This is a preview feature.
+    """
+
+    response_schema: dict[str, Any] | None = None
+    """Enforce a schema to the output.
+
+    The format of the dictionary should follow Open API schema.
+    """
+
+    def __init__(self, *, model_name: str | None = None, **kwargs: Any) -> None:
+        """Needed for mypy typing to recognize `model_name` as a valid arg
         and for arg validation.
         """
         if model_name:
@@ -79,7 +90,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
         return True
 
     @classmethod
-    def get_lc_namespace(cls) -> List[str]:
+    def get_lc_namespace(cls) -> list[str]:
         """Get the namespace of the langchain object.
 
         Returns:
@@ -112,7 +123,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
         return self
 
     def _get_ls_params(
-        self, stop: Optional[List[str]] = None, **kwargs: Any
+        self, stop: list[str] | None = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         params = self._prepare_params(stop=stop, **kwargs)
@@ -126,13 +137,13 @@ class VertexAI(_VertexAICommon, BaseLLM):
 
     def _generate(
         self,
-        prompts: List[str],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        stream: Optional[bool] = None,
+        prompts: list[str],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        stream: bool | None = None,
         **kwargs: Any,
     ) -> LLMResult:
-        generations: List[List[Generation]] = []
+        generations: list[list[Generation]] = []
         for prompt in prompts:
             chat_result = self.client._generate(
                 [HumanMessage(content=prompt)],
@@ -155,12 +166,12 @@ class VertexAI(_VertexAICommon, BaseLLM):
 
     async def _agenerate(
         self,
-        prompts: List[str],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        prompts: list[str],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> LLMResult:
-        generations: List[List[Generation]] = []
+        generations: list[list[Generation]] = []
         for prompt in prompts:
             chat_result = await self.client._agenerate(
                 [HumanMessage(content=prompt)],
@@ -182,7 +193,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
         return LLMResult(generations=generations)
 
     @staticmethod
-    def _lc_usage_to_metadata(lc_usage: Dict[str, Any]) -> Dict[str, Any]:
+    def _lc_usage_to_metadata(lc_usage: dict[str, Any]) -> dict[str, Any]:
         mapping = {
             "input_tokens": "prompt_token_count",
             "output_tokens": "candidates_token_count",
@@ -193,8 +204,8 @@ class VertexAI(_VertexAICommon, BaseLLM):
     def _stream(
         self,
         prompt: str,
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[GenerationChunk]:
         for stream_chunk in self.client._stream(
@@ -229,8 +240,8 @@ class VertexAI(_VertexAICommon, BaseLLM):
     async def _astream(
         self,
         prompt: str,
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[GenerationChunk]:
         async for stream_chunk in self.client._astream(
