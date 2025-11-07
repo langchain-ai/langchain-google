@@ -35,9 +35,9 @@ def test_version_is_cached_at_module_level() -> None:
     from langchain_google_genai import _common
 
     # The cached version should be a string
-    assert isinstance(_common._LANGCHAIN_GENAI_VERSION, str)
+    assert isinstance(_common.LC_GOOGLE_GENAI_VERSION, str)
     # Should be either a valid version or "0.0.0" (fallback)
-    assert _common._LANGCHAIN_GENAI_VERSION != ""
+    assert _common.LC_GOOGLE_GENAI_VERSION != ""
 
 
 async def test_get_user_agent_no_blocking_in_async_context() -> None:
