@@ -28,6 +28,12 @@ from langchain_google_vertexai._retry import create_base_retry_decorator
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
+# Cache package version at module import time to avoid blocking I/O in async contexts
+try:
+    _LANGCHAIN_VERTEXAI_VERSION = metadata.version("langchain-google-vertexai")
+except metadata.PackageNotFoundError:
+    _LANGCHAIN_VERTEXAI_VERSION = "0.0.0"
+
 
 def create_retry_decorator(
     *,
@@ -87,12 +93,11 @@ def get_user_agent(module: str | None = None) -> tuple[str, str]:
     Args:
         module: The module for a custom user agent header.
     """
-    try:
-        langchain_version = metadata.version("langchain-google-vertexai")
-    except metadata.PackageNotFoundError:
-        langchain_version = "0.0.0"
+    # Use cached version to avoid blocking I/O in async contexts
     client_library_version = (
-        f"{langchain_version}-{module}" if module else langchain_version
+        f"{_LANGCHAIN_VERTEXAI_VERSION}-{module}"
+        if module
+        else _LANGCHAIN_VERTEXAI_VERSION
     )
     if os.environ.get(_TELEMETRY_ENV_VARIABLE_NAME):
         client_library_version += f"+{_TELEMETRY_TAG}"
