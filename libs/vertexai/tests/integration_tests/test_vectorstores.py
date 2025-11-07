@@ -11,7 +11,6 @@ variables:
 """
 
 import os
-from typing import Dict, List, Union
 from uuid import uuid4
 
 import pytest
@@ -208,10 +207,12 @@ def test_document_storage(
     ids = [str(uuid4()) for i in range(N * len(weirdly_encoded_texts))]
 
     # Test batch storage and retrieval
-    document_storage.mset(list(zip(ids, documents)))
+    document_storage.mset(list(zip(ids, documents, strict=False)))
     retrieved_documents = document_storage.mget(ids)
 
-    for og_document, retrieved_document in zip(documents, retrieved_documents):
+    for og_document, retrieved_document in zip(
+        documents, retrieved_documents, strict=False
+    ):
         assert og_document == retrieved_document
 
     # Test key yielding
@@ -277,7 +278,7 @@ def test_vector_store_hybrid_search(
 
     query = "What are your favourite animals?"
     embedding = embeddings.embed_query(query)
-    sparse_embedding: Dict[str, Union[List[int], List[float]]] = {
+    sparse_embedding: dict[str, list[int] | list[float]] = {
         "values": [0.5, 0.7],
         "dimensions": [2, 4],
     }
@@ -312,7 +313,7 @@ def test_add_texts_with_embeddings(
     )
     assert len(ids1) == 2
 
-    sparse_embeddings: List[Dict[str, Union[List[int], List[float]]]] = [
+    sparse_embeddings: list[dict[str, list[int] | list[float]]] = [
         {"values": [0.5, 0.7], "dimensions": [2, 4]}
     ] * 2
     ids2 = vector_store.add_texts_with_embeddings(
@@ -351,7 +352,7 @@ def test_vector_store_filtering(
 
 @pytest.mark.long
 def test_vector_store_update_index(
-    vector_store: VectorSearchVectorStore, sample_documents: List[Document]
+    vector_store: VectorSearchVectorStore, sample_documents: list[Document]
 ) -> None:
     vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
 
@@ -359,7 +360,7 @@ def test_vector_store_update_index(
 @pytest.mark.extended
 def test_vector_store_stream_update_index(
     datastore_vector_store: VectorSearchVectorStoreDatastore,
-    sample_documents: List[Document],
+    sample_documents: list[Document],
 ) -> None:
     datastore_vector_store.add_documents(
         documents=sample_documents, is_complete_overwrite=True
@@ -367,7 +368,7 @@ def test_vector_store_stream_update_index(
 
 
 @pytest.fixture
-def sample_documents() -> List[Document]:
+def sample_documents() -> list[Document]:
     record_data = [
         {
             "description": "A versatile pair of dark-wash denim jeans."

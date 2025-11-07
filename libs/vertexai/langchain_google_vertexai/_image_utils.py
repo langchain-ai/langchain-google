@@ -5,7 +5,6 @@ import os
 import re
 from enum import Enum
 from functools import cached_property
-from typing import Dict, Optional, Union
 from urllib.parse import urlparse
 
 import requests
@@ -29,20 +28,21 @@ class ImageBytesLoader:
     """Loads image bytes from multiple sources given a string.
 
     Currently supported:
-        - Google cloud storage URI
-        - B64 Encoded image string
-        - Local file path
-        - URL
+
+    - Google cloud storage URI
+    - B64 Encoded image string
+    - Local file path
+    - URL
     """
 
     def __init__(
         self,
-        project: Union[str, None] = None,
+        project: str | None = None,
     ) -> None:
         """Constructor.
 
         Args:
-            project: Google Cloud project id. Defaults to none.
+            project: Google Cloud project id.
         """
         self._project = project
 
@@ -51,13 +51,14 @@ class ImageBytesLoader:
         return storage.Client(project=self._project)
 
     def load_bytes(self, image_string: str) -> bytes:
-        """Routes to the correct loader based on the image_string.
+        """Routes to the correct loader based on the `image_string`.
 
         Args:
             image_string: Can be either:
-                    - Google cloud storage URI
-                    - B64 Encoded image string
-                    - URL
+
+                - Google cloud storage URI
+                - B64 Encoded image string
+                - URL
 
         Returns:
             Image bytes.
@@ -91,17 +92,15 @@ class ImageBytesLoader:
         raise ValueError(msg)
 
     def load_part(self, image_string: str) -> Part:
-        """Gets Part for loading from Gemini.
+        """Gets `Part` for loading from Gemini.
 
         Args:
             image_string: Can be either:
-                    - Google cloud storage URI
-                    - B64 Encoded image string
-                    - Local file path
-                    - URL
 
-        Returns:
-            generative_models.Part
+                - Google cloud storage URI
+                - B64 Encoded image string
+                - Local file path
+                - URL
         """
         route = self._route(image_string)
 
@@ -161,7 +160,7 @@ class ImageBytesLoader:
             base64_image: Encoded image in b64 format.
 
         Returns:
-            Image bytes
+            Image `bytes`
         """
         pattern = r"data:\w+/\w{2,4};base64,(.*)"
         match = re.search(pattern, base64_image)
@@ -174,10 +173,10 @@ class ImageBytesLoader:
         raise ValueError(msg)
 
     def _bytes_from_url(self, url: str) -> bytes:
-        """Gets image bytes from a public url.
+        """Gets image `bytes` from a public URL.
 
         Args:
-            url: Valid url.
+            url: Valid URL.
 
         Raises:
             HTTP Error if there is one.
@@ -193,16 +192,13 @@ class ImageBytesLoader:
         return response.content
 
     def _blob_from_gcs(self, gcs_uri: str) -> storage.Blob:
-        """Gets image Blob from a Google Cloud Storage uri.
+        """Gets image `Blob` from a Google Cloud Storage URI.
 
         Args:
-            gcs_uri: Valid gcs uri.
+            gcs_uri: Valid GCS URI.
 
         Raises:
-            ValueError if there are more than one blob matching the uri.
-
-        Returns:
-            storage.Blob
+            ValueError: If there are more than one `Blob` matching the URI.
         """
         gcs_client = self._storage_client
         blob = storage.Blob.from_string(gcs_uri, gcs_client)
@@ -210,13 +206,13 @@ class ImageBytesLoader:
         return blob
 
     def _is_url(self, url_string: str) -> bool:
-        """Checks if a url is valid.
+        """Checks if a URL is valid.
 
         Args:
-            url_string: Url to check.
+            url_string: URL to check.
 
         Returns:
-            Whether the url is valid.
+            Whether the URL is valid.
         """
         try:
             result = urlparse(url_string)
@@ -224,9 +220,11 @@ class ImageBytesLoader:
         except Exception:
             return False
 
-    def _has_known_mimetype(self, image_url: str) -> Optional[str]:
-        """Checks weather the image needs other mimetype. Currently only identifies
-        pdfs, otherwise it will return None and it will be treated as an image.
+    def _has_known_mimetype(self, image_url: str) -> str | None:
+        """Checks weather the image needs other MIME type.
+
+        Currently only identifies PDFs, otherwise it will return `None` and it will be
+        treated as an image.
         """
         # For local files or urls
         if image_url.endswith(".pdf"):
@@ -242,12 +240,12 @@ class ImageBytesLoader:
 def image_bytes_to_b64_string(
     image_bytes: bytes, encoding: str = "ascii", image_format: str = "png"
 ) -> str:
-    """Encodes image bytes into a b64 encoded string.
+    """Encodes image `bytes` into a b64 encoded string.
 
     Args:
-        image_bytes: Bytes of the image.
-        encoding: Type of encoding in the string. 'ascii' by default.
-        image_format: Format of the image. 'png' by default.
+        image_bytes: `bytes` of the image.
+        encoding: Type of encoding in the string.
+        image_format: Format of the image.
 
     Returns:
         B64 image encoded string.
@@ -257,7 +255,7 @@ def image_bytes_to_b64_string(
     return f"data:{image_type}/{image_format};base64,{encoded_bytes}"
 
 
-def create_text_content_part(message_str: str) -> Dict:
+def create_text_content_part(message_str: str) -> dict:
     """Create a dictionary that can be part of a message content list.
 
     Args:
@@ -269,11 +267,12 @@ def create_text_content_part(message_str: str) -> Dict:
     return {"type": "text", "text": message_str}
 
 
-def create_image_content_part(image_str: str) -> Dict:
+def create_image_content_part(image_str: str) -> dict:
     """Create a dictionary that can be part of a message content list.
 
     Args:
         image_str: Can be either:
+
             - b64 encoded image data
             - GCS uri
             - Url
@@ -285,14 +284,14 @@ def create_image_content_part(image_str: str) -> Dict:
     return {"type": "image_url", "image_url": {"url": image_str}}
 
 
-def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
+def get_image_str_from_content_part(content_part: str | dict) -> str | None:
     """Parses an image string from a dictionary with the correct format.
 
     Args:
         content_part: String or dictionary.
 
     Returns:
-        Image string if the dictionary has the correct format otherwise None.
+        Image string if the dictionary has the correct format otherwise `None`.
     """
     if isinstance(content_part, str):
         return None
@@ -307,7 +306,7 @@ def get_image_str_from_content_part(content_part: str | Dict) -> str | None:
     return None
 
 
-def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
+def get_text_str_from_content_part(content_part: str | dict) -> str | None:
     """Parses an string from a dictionary or string with the correct format.
 
     Args:
@@ -315,7 +314,7 @@ def get_text_str_from_content_part(content_part: str | Dict) -> str | None:
 
     Returns:
         String if the dictionary has the correct format or the input is an string,
-        otherwise None.
+            otherwise `None`.
     """
     if isinstance(content_part, str):
         return content_part

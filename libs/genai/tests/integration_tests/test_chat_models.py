@@ -3,7 +3,7 @@
 import asyncio
 import json
 from collections.abc import Generator, Sequence
-from typing import Literal, Optional, Union, cast
+from typing import Literal, cast
 
 import pytest
 from langchain_core.messages import (
@@ -108,12 +108,12 @@ async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
         "This is a test. Say 'foo'",
         "This is a test, say 'bar'",
     ]
-    config: Union[RunnableConfig, None] = {"tags": ["foo"]} if with_tags else None
+    config: RunnableConfig | None = {"tags": ["foo"]} if with_tags else None
 
     if is_async:
-        result = await llm.abatch(cast(list, messages), config=config)
+        result = await llm.abatch(cast("list", messages), config=config)
     else:
-        result = llm.batch(cast(list, messages), config=config)
+        result = llm.batch(cast("list", messages), config=config)
 
     for token in result:
         assert isinstance(token.content, str)
@@ -316,7 +316,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
     model_provider = response_metadata.get("model_provider", "google_genai")
     assert model_provider == "google_genai"
 
-    _check_thinking_output(cast(list, full.content), output_version)
+    _check_thinking_output(cast("list", full.content), output_version)
     _check_usage_metadata(full)
     assert full.usage_metadata is not None
     if (
@@ -329,7 +329,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
     next_message = {"role": "user", "content": "Thanks!"}
     result = llm.invoke([input_message, full, next_message])
     assert isinstance(result, AIMessage)
-    _check_thinking_output(cast(list, result.content), output_version)
+    _check_thinking_output(cast("list", result.content), output_version)
 
 
 @pytest.mark.flaky(retries=5, delay=1)
@@ -808,7 +808,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
 )
 def test_chat_google_genai_with_structured_output(
     model_name: str,
-    method: Optional[Literal["function_calling", "json_mode", "json_schema"]],
+    method: Literal["function_calling", "json_mode", "json_schema"] | None,
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -964,7 +964,7 @@ def test_search_builtin(output_version: str) -> None:
         "content": "What is today's news?",
     }
 
-    full: Optional[BaseMessageChunk] = None
+    full: BaseMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
@@ -992,7 +992,7 @@ def test_search_builtin_with_citations(use_streaming: bool) -> None:
     }
 
     if use_streaming:
-        full: Optional[BaseMessageChunk] = None
+        full: BaseMessageChunk | None = None
         for chunk in llm.stream([input_message]):
             assert isinstance(chunk, AIMessageChunk)
             full = chunk if full is None else full + chunk
@@ -1128,7 +1128,7 @@ def test_code_execution_builtin(output_version: str) -> None:
         "content": "What is 3^3?",
     }
 
-    full: Optional[BaseMessageChunk] = None
+    full: BaseMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk

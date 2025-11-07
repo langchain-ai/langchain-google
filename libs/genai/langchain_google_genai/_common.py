@@ -1,6 +1,6 @@
 import os
 from importlib import metadata
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, TypedDict
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
@@ -27,116 +27,116 @@ class _BaseGoogleGenerativeAI(BaseModel):
     model: str = Field(...)
     """Model name to use."""
 
-    google_api_key: Optional[SecretStr] = Field(
+    google_api_key: SecretStr | None = Field(
         alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
     )
     """Google AI API key.
-    
-    If not specified will be read from env var å`GOOGLE_API_KEY`.
+
+    If not specified will be read from env var `GOOGLE_API_KEY`.
     """
 
     credentials: Any = None
-    """The default custom credentials (`google.auth.credentials.Credentials`) to use 
-    when making API calls.
-    
+    """The default custom credentials to use when making API calls.
+
     If not provided, credentials will be ascertained from the `GOOGLE_API_KEY` env var.
     """
 
     temperature: float = 0.7
-    """Run inference with this temperature. Must be within `[0.0, 2.0]`.
-    
-    If unset, will default to `0.7`.
+    """Run inference with this temperature.
+
+    Must be within `[0.0, 2.0]`.
     """
 
-    top_p: Optional[float] = None
-    """Decode using nucleus sampling: consider the smallest set of tokens whose
-    probability sum is at least `top_p`.
-    
+    top_p: float | None = None
+    """Decode using nucleus sampling.
+
+    Consider the smallest set of tokens whose probability sum is at least `top_p`.
+
     Must be within `[0.0, 1.0]`.
     """
 
-    top_k: Optional[int] = None
+    top_k: int | None = None
     """Decode using top-k sampling: consider the set of `top_k` most probable tokens.
-    
+
     Must be positive.
     """
 
-    max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
-    """Maximum number of tokens to include in a candidate. Must be greater than zero.
-    
+    max_output_tokens: int | None = Field(default=None, alias="max_tokens")
+    """Maximum number of tokens to include in a candidate.
+
+    Must be greater than zero.
+
     If unset, will use the model's default value, which varies by model.
-    
-    See https://ai.google.dev/gemini-api/docs/models for model-specific limits.
+
+    See [docs](https://ai.google.dev/gemini-api/docs/models) for model-specific limits.
     """
 
     n: int = 1
     """Number of chat completions to generate for each prompt.
-    
+
     Note that the API may not return the full `n` completions if duplicates are
     generated.
     """
 
     max_retries: int = Field(default=6, alias="retries")
-    """The maximum number of retries to make when generating.
-    
-    If unset, will default to `6`.
-    """
+    """The maximum number of retries to make when generating."""
 
-    timeout: Optional[float] = Field(default=None, alias="request_timeout")
+    timeout: float | None = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
 
-    client_options: Optional[Dict] = Field(
+    client_options: dict | None = Field(
         default=None,
     )
-    """"A dictionary of client options to pass to the Google API client, such as
-    `api_endpoint`.
+    """A dictionary of client options to pass to the Google API client.
+
+    Example: `api_endpoint`
     """
 
-    base_url: Optional[str] = Field(
+    base_url: str | None = Field(
         default=None,
     )
-    """The base URL to use for the API client.
-    
+    """Base URL to use for the API client.
+
     Alias of `client_options['api_endpoint']`.
     """
 
-    transport: Optional[str] = Field(
+    transport: str | None = Field(
         default=None,
         alias="api_transport",
     )
-    """A string, one of: `[rest, grpc, grpc_asyncio]`."""
+    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`."""
 
-    additional_headers: Optional[Dict[str, str]] = Field(
+    additional_headers: dict[str, str] | None = Field(
         default=None,
     )
-    """"Key-value dictionary representing additional headers for the model call"""
+    """Key-value dictionary representing additional headers for the model call"""
 
-    response_modalities: Optional[List[Modality]] = Field(
+    response_modalities: list[Modality] | None = Field(
         default=None,
     )
     """A list of modalities of the response"""
 
-    thinking_budget: Optional[int] = Field(
+    thinking_budget: int | None = Field(
         default=None,
     )
     """Indicates the thinking budget in tokens."""
 
-    media_resolution: Optional[MediaResolution] = Field(
+    media_resolution: MediaResolution | None = Field(
         default=None,
     )
     """Media resolution for the input media."""
 
-    include_thoughts: Optional[bool] = Field(
+    include_thoughts: bool | None = Field(
         default=None,
     )
     """Indicates whether to include thoughts in the response."""
 
-    safety_settings: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None
-    """The default safety settings to use for all generations.
+    safety_settings: dict[HarmCategory, HarmBlockThreshold] | None = None
+    """Default safety settings to use for all generations.
 
-        For example:
+        !!! example
 
-        .. code-block:: python
+            ```python
             from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
@@ -145,14 +145,15 @@ class _BaseGoogleGenerativeAI(BaseModel):
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             }
+            ```
     """  # noqa: E501
 
     @property
-    def lc_secrets(self) -> Dict[str, str]:
+    def lc_secrets(self) -> dict[str, str]:
         return {"google_api_key": "GOOGLE_API_KEY"}
 
     @property
-    def _identifying_params(self) -> Dict[str, Any]:
+    def _identifying_params(self) -> dict[str, Any]:
         """Get the identifying parameters."""
         return {
             "model": self.model,
@@ -164,15 +165,11 @@ class _BaseGoogleGenerativeAI(BaseModel):
         }
 
 
-def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
+def get_user_agent(module: str | None = None) -> tuple[str, str]:
     r"""Returns a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
-
-    Returns:
-        Tuple[str, str]
+        module: The module for a custom user agent header.
     """
     try:
         langchain_version = metadata.version("langchain-google-genai")
@@ -186,15 +183,11 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     return client_library_version, f"langchain-google-genai/{client_library_version}"
 
 
-def get_client_info(module: Optional[str] = None) -> "ClientInfo":
+def get_client_info(module: str | None = None) -> "ClientInfo":
     r"""Returns a client info object with a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
-
-    Returns:
-        ``google.api_core.gapic_v1.client_info.ClientInfo``
+        module: The module for a custom user agent header.
     """
     client_library_version, user_agent = get_user_agent(module)
     # TODO: remove ignore once google-auth has types.
@@ -206,4 +199,5 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
 
 class SafetySettingDict(TypedDict):
     category: HarmCategory
+
     threshold: HarmBlockThreshold

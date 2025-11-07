@@ -1,17 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from operator import itemgetter
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Type,
-    Union,
 )
 
 import httpx
@@ -69,10 +63,8 @@ from langchain_google_vertexai._retry import create_base_retry_decorator
 def _create_retry_decorator(
     *,
     max_retries: int = 3,
-    run_manager: Optional[
-        Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
-    ] = None,
-    wait_exponential_kwargs: Optional[dict[str, float]] = None,
+    run_manager: AsyncCallbackManagerForLLMRun | CallbackManagerForLLMRun | None = None,
+    wait_exponential_kwargs: dict[str, float] | None = None,
 ) -> Callable[[Any], Any]:
     """Creates a retry decorator for Anthropic Vertex LLMs with proper tracing."""
     from anthropic import (  # type: ignore[unused-ignore, import-not-found]
@@ -109,9 +101,9 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
     def _generate(
         self,
-        prompts: List[str],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        prompts: list[str],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> LLMResult:
         """Run the LLM on the given prompt and input."""
@@ -133,9 +125,9 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
     async def _agenerate(
         self,
-        prompts: List[str],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        prompts: list[str],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> LLMResult:
         """Run the LLM on the given prompt and input."""
@@ -164,34 +156,46 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
 
 
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
-    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
+    async_client: Any = Field(default=None, exclude=True)
+
     max_output_tokens: int = Field(default=1024, alias="max_tokens")
-    access_token: Optional[str] = None
-    stream_usage: bool = True  # Whether to include usage metadata in streaming output
-    credentials: Optional[Credentials] = None
+
+    access_token: str | None = None
+
+    stream_usage: bool = True
+    """Whether to include usage metadata in streaming output."""
+
+    credentials: Credentials | None = None
+
     max_retries: int = Field(
         default=3, description="Number of retries for error handling."
     )
-    wait_exponential_kwargs: Optional[dict[str, float]] = Field(
-        default=None,
-        description="Optional dictionary with parameters for wait_exponential: "
-        "- multiplier: Initial wait time multiplier (default: 1.0) "
-        "- min: Minimum wait time in seconds (default: 4.0) "
-        "- max: Maximum wait time in seconds (default: 10.0) "
-        "- exp_base: Exponent base to use (default: 2.0) ",
-    )
-    timeout: Optional[Union[float, httpx.Timeout]] = Field(
+
+    wait_exponential_kwargs: dict[str, float] | None = Field(default=None)
+    """Optional dictionary with parameters for `wait_exponential`:
+
+    - `multiplier`: Initial wait time multiplier (Default: `1.0`)
+    - `min`: Minimum wait time in seconds (Default: `4.0`)
+    - `max`: Maximum wait time in seconds (Default: `10.0`)
+    - `exp_base`: Exponent base to use (Default: `2.0`)
+    """
+
+    timeout: float | httpx.Timeout | None = Field(
         default=None,
         description="Timeout for API requests.",
     )
+
     http_client: Any = Field(default=None, exclude=True)
+
     async_http_client: Any = Field(default=None, exclude=True)
-    additional_headers: Optional[Dict[str, str]] = Field(default=None)
+
+    additional_headers: dict[str, str] | None = Field(default=None)
     "A key-value dictionary representing additional headers for the model call"
 
     model_config = ConfigDict(
         populate_by_name=True,
     )
+
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     # Needed so that mypy doesn't flag missing aliased init args.
@@ -262,10 +266,10 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def _format_params(
         self,
         *,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         system_message, formatted_messages = _format_messages_anthropic(
             messages, self.project
         )
@@ -312,9 +316,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Run the LLM on the given prompt and input."""
@@ -342,9 +346,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     async def _agenerate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Run the LLM on the given prompt and input."""
@@ -374,11 +378,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def _stream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         *,
-        stream_usage: Optional[bool] = None,
+        stream_usage: bool | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         if stream_usage is None:
@@ -418,11 +422,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     async def _astream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         *,
-        stream_usage: Optional[bool] = None,
+        stream_usage: bool | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         if stream_usage is None:
@@ -459,11 +463,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
+        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool],
         *,
-        tool_choice: Optional[
-            Union[Dict[str, str], Literal["any", "auto"], str]
-        ] = None,
+        tool_choice: dict[str, str] | Literal["any", "auto"] | str | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model."""
@@ -486,11 +488,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def with_structured_output(
         self,
-        schema: Union[Dict, Type[BaseModel]],
+        schema: dict | type[BaseModel],
         *,
         include_raw: bool = False,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
+    ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         """Model wrapper that returns outputs formatted to match the given schema."""
         tool_name = convert_to_anthropic_tool(schema)["name"]
         llm = self.bind_tools([schema], tool_choice=tool_name)

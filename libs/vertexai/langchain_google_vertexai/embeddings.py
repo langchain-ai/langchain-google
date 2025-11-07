@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, List, Literal, Optional
+from collections.abc import Callable
+from typing import Any, Literal
 
 from google import genai
 from google.genai.types import EmbedContentConfig
@@ -27,23 +28,26 @@ EmbeddingTaskTypes = Literal[
 class VertexAIEmbeddings(BaseModel, Embeddings):
     """Google Cloud VertexAI embedding models."""
 
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
+    client: Any = Field(default=None, exclude=True)
+
     model_config = ConfigDict(
         extra="forbid",
         protected_namespaces=(),
     )
-    project: Optional[str] = None
+
+    project: str | None = None
     """The default GCP project to use when making Vertex API calls."""
 
     location: str = Field(default="us-central1")
     """The default location to use when making API calls."""
 
-    model_name: Optional[str] = Field(default=None, alias="model")
+    model_name: str | None = Field(default=None, alias="model")
     """Underlying model name."""
 
     credentials: Any = Field(default=None, exclude=True)
-    """The default custom credentials (`google.auth.credentials.Credentials`) to use
-    when making API calls.
+    """The default custom credentials to use when making API calls.
+
+    (`google.auth.credentials.Credentials`)
 
     If not provided, credentials will be ascertained from the environment.
     """
@@ -74,11 +78,11 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
 
     def _get_embeddings_with_retry(
         self,
-        texts: List[str],
-        embeddings_type: Optional[str] = None,
-        dimensions: Optional[int] = None,
-        title: Optional[str] = None,
-    ) -> List[List[float]]:
+        texts: list[str],
+        embeddings_type: str | None = None,
+        dimensions: int | None = None,
+        title: str | None = None,
+    ) -> list[list[float]]:
         """Makes a Vertex AI model request with retry logic."""
         retry_decorator = create_retry_decorator(max_retries=self.max_retries)
 
@@ -103,29 +107,35 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
 
     def embed(
         self,
-        texts: List[str],
-        embeddings_task_type: Optional[EmbeddingTaskTypes] = None,
-        dimensions: Optional[int] = None,
-        title: Optional[str] = None,
-    ) -> List[List[float]]:
+        texts: list[str],
+        embeddings_task_type: EmbeddingTaskTypes | None = None,
+        dimensions: int | None = None,
+        title: str | None = None,
+    ) -> list[list[float]]:
         """Embed a list of strings.
 
         Args:
             texts: The list of strings to embed.
-            embeddings_task_type: Optional embeddings task type, one of the
-                following: ``RETRIEVAL_QUERY`` - Text is a query in a search/retrieval
-                setting. ``RETRIEVAL_DOCUMENT`` - Text is a document in a
-                search/retrieval setting. ``SEMANTIC_SIMILARITY`` - Embeddings will be
-                used for Semantic Textual Similarity (STS). ``CLASSIFICATION`` -
-                Embeddings will be used for classification. ``CLUSTERING`` - Embeddings
-                will be used for clustering. ``CODE_RETRIEVAL_QUERY`` - Embeddings will
-                be used for code retrieval for Java and Python. The following are only
-                supported on preview models: ``QUESTION_ANSWERING``,
-                ``FACT_VERIFICATION``.
-            dimensions: Optional output embeddings dimensions. Only supported on
-                preview models.
-            title: Optional title for the text. Only applicable when TaskType is
-                ``RETRIEVAL_DOCUMENT``.
+            embeddings_task_type: Optional embeddings task type, one of the following:
+
+                - `RETRIEVAL_QUERY` - Text is a query in a search/retrieval setting
+                - `RETRIEVAL_DOCUMENT` - Text is a document in a search/retrieval
+                    setting
+                - `SEMANTIC_SIMILARITY` - Embeddings will be used for Semantic Textual
+                    Similarity (STS).
+                - `CLASSIFICATION` - Embeddings will be used for classification.
+                - `CLUSTERING` - Embeddings will be used for clustering.
+                - `CODE_RETRIEVAL_QUERY` - Embeddings will be used for code retrieval
+                    for Java and Python.
+
+                The following are only supported on preview models:
+                    `QUESTION_ANSWERING`, `FACT_VERIFICATION`.
+            dimensions: Optional output embeddings dimensions.
+
+                Only supported on preview models.
+            title: Optional title for the text.
+
+                Only applicable when `TaskType` is `RETRIEVAL_DOCUMENT`.
 
         Returns:
             List of embeddings, one for each text.
@@ -142,10 +152,10 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
 
     def embed_documents(
         self,
-        texts: List[str],
+        texts: list[str],
         *,
         embeddings_task_type: EmbeddingTaskTypes = "RETRIEVAL_DOCUMENT",
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         """Embed a list of documents.
 
         Args:
@@ -162,7 +172,7 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
         text: str,
         *,
         embeddings_task_type: EmbeddingTaskTypes = "RETRIEVAL_QUERY",
-    ) -> List[float]:
+    ) -> list[float]:
         """Embed a text.
 
         Args:

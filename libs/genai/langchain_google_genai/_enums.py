@@ -5,4 +5,4 @@ HarmCategory = genai.HarmCategory
 Modality = genai.GenerationConfig.Modality
 MediaResolution = genai.GenerationConfig.MediaResolution
 
-__all__ = ["HarmBlockThreshold", "HarmCategory", "Modality", "MediaResolution"]
+__all__ = ["HarmBlockThreshold", "HarmCategory", "MediaResolution", "Modality"]

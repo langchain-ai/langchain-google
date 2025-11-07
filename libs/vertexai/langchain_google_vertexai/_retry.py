@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 from google.api_core.exceptions import (
     GoogleAPICallError,
@@ -25,22 +26,21 @@ from tenacity import (
 def create_base_retry_decorator(
     error_types: list[type[BaseException]],
     max_retries: int = 1,
-    run_manager: Optional[
-        Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
-    ] = None,
-    wait_exponential_kwargs: Optional[dict[str, float]] = None,
+    run_manager: AsyncCallbackManagerForLLMRun | CallbackManagerForLLMRun | None = None,
+    wait_exponential_kwargs: dict[str, float] | None = None,
 ) -> Callable[[Any], Any]:
     """Create a retry decorator for a given LLM and provided a list of error types.
 
     Args:
         error_types: List of error types to retry on.
-        max_retries: Number of retries. Default is 1.
-        run_manager: Callback manager for the run. Default is None.
+        max_retries: Number of retries.
+        run_manager: Callback manager for the run.
         wait_exponential_kwargs: Optional dictionary with parameters:
-            - multiplier: Initial wait time multiplier (default: 1.0)
-            - min: Minimum wait time in seconds (default: 4.0)
-            - max: Maximum wait time in seconds (default: 10.0)
-            - exp_base: Exponent base to use (default: 2.0)
+
+            - `multiplier`: Initial wait time multiplier (Default: `1.0`)
+            - `min`: Minimum wait time in seconds (Default: `4.0`)
+            - `max`: Maximum wait time in seconds (Default: `10.0`)
+            - `exp_base`: Exponent base to use (Default: `2.0`)
 
     Returns:
         A retry decorator.

@@ -1,7 +1,7 @@
 import json
 import uuid
 import warnings
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from google.cloud.aiplatform import MatchingEngineIndex
 from google.cloud.aiplatform.compat.types import (  # type: ignore[attr-defined, unused-ignore]
@@ -11,23 +11,23 @@ from google.cloud.storage import Bucket  # type: ignore[import-untyped, unused-i
 
 
 def stream_update_index(
-    index: MatchingEngineIndex, data_points: List["meidx_types.IndexDataPoint"]
+    index: MatchingEngineIndex, data_points: list["meidx_types.IndexDataPoint"]
 ) -> None:
     """Updates an index using stream updating.
 
     Args:
         index: Vector search index.
-        data_points: List of IndexDataPoint.
+        data_points: List of `IndexDataPoint`.
     """
     index.upsert_datapoints(data_points)
 
 
 def batch_update_index(
     index: MatchingEngineIndex,
-    data_points: List["meidx_types.IndexDataPoint"],
+    data_points: list["meidx_types.IndexDataPoint"],
     *,
     staging_bucket: Bucket,
-    prefix: Union[str, None] = None,
+    prefix: str | None = None,
     file_name: str = "documents.json",
     is_complete_overwrite: bool = False,
 ) -> None:
@@ -35,12 +35,12 @@ def batch_update_index(
 
     Args:
         index: Vector search index.
-        data_points: List of IndexDataPoint.
+        data_points: List of `IndexDataPoint`.
         staging_bucket: Bucket where the staging data is stored. Must be in the same
             region as the index.
         prefix: Prefix for the blob name. If not provided an unique iid will be
             generated.
-        file_name: File name of the staging embeddings. By default 'documents.json'.
+        file_name: File name of the staging embeddings. By default `'documents.json'`.
         is_complete_overwrite: Whether is an append or overwrite operation.
     """
     if prefix is None:
@@ -62,18 +62,18 @@ def batch_update_index(
 
 
 def to_data_points(
-    ids: List[str],
-    embeddings: List[List[float]],
-    sparse_embeddings: Optional[List[Dict[str, Union[List[int], List[float]]]]] = None,
-    metadatas: Union[List[Dict[str, Any]], None] = None,
-) -> List["meidx_types.IndexDataPoint"]:
-    """Converts triplets id, embedding, metadata into IndexDataPoints instances.
+    ids: list[str],
+    embeddings: list[list[float]],
+    sparse_embeddings: list[dict[str, list[int] | list[float]]] | None = None,
+    metadatas: list[dict[str, Any]] | None = None,
+) -> list["meidx_types.IndexDataPoint"]:
+    """Converts triplets id, embedding, metadata into `IndexDataPoints` instances.
 
     Only metadata with values of type string, numeric or list of string will be
     considered for the filtering.
 
     Args:
-        ids: List of unique ids.
+        ids: List of unique IDs.
         embeddings: List of feature representatitons.
         metadatas: List of metadatas.
     """
@@ -87,7 +87,7 @@ def to_data_points(
     ignored_fields = set()
 
     for id_, embedding, sparse_embedding, metadata in zip(
-        ids, embeddings, sparse_embeddings, metadatas
+        ids, embeddings, sparse_embeddings, metadatas, strict=False
     ):
         restricts = []
         numeric_restricts = []
@@ -143,13 +143,13 @@ def to_data_points(
 
 
 def data_points_to_batch_update_records(
-    data_points: List["meidx_types.IndexDataPoint"],
-) -> List[Dict[str, Any]]:
+    data_points: list["meidx_types.IndexDataPoint"],
+) -> list[dict[str, Any]]:
     """Given a list of datapoints, generates a list of records in the input format
     required to do a bactch update.
 
     Args:
-        data_points: List of IndexDataPoints.
+        data_points: List of `IndexDataPoints`.
 
     Returns:
         List of records with the format needed to do a batch update.
