@@ -40,7 +40,7 @@ def _get_prediction_client(
     endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
-    transport: str,
+    transport: str | None,
     user_agent: str,
 ) -> v1PredictionServiceClient | v1beta1PredictionServiceClient:
     """Return a shared `PredictionServiceClient`."""
@@ -64,7 +64,7 @@ def _create_async_prediction_client(
     endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
-    transport: str,
+    transport: str | None,
     user_agent: str,
 ) -> v1PredictionServiceAsyncClient | v1beta1PredictionServiceAsyncClient:
     """Create a new `PredictionServiceAsyncClient`."""
@@ -76,8 +76,8 @@ def _create_async_prediction_client(
         and client_options.api_endpoint != "https://aiplatform.googleapis.com"
     )
 
-    # Only change to grpc_asyncio if no custom endpoint is specified
-    if transport == "rest" and not has_custom_endpoint:
+    # Use grpc_asyncio for better async performance, except with custom endpoints
+    if not has_custom_endpoint and transport in (None, "grpc", "rest"):
         transport = "grpc_asyncio"
 
     async_client_kwargs: dict[str, Any] = {
@@ -97,7 +97,7 @@ def _get_async_prediction_client(
     endpoint_version: Literal["v1", "v1beta1"],
     credentials: Any,
     client_options: ClientOptions,
-    transport: str,
+    transport: str | None,
     user_agent: str,
 ):
     """Return a shared PredictionServiceAsyncClient per event loop."""
