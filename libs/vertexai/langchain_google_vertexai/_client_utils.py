@@ -73,7 +73,7 @@ def _create_async_prediction_client(
     # However, when using custom endpoints, we can try to keep REST transport
     has_custom_endpoint = bool(
         client_options.api_endpoint
-        and client_options.api_endpoint != "https://aiplatform.googleapis.com"
+        and not client_options.api_endpoint.endswith("aiplatform.googleapis.com")
     )
 
     # Use grpc_asyncio for better async performance, except with custom endpoints
