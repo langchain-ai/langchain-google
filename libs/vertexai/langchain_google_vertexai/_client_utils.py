@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Callable
 from functools import lru_cache
 from typing import Any, Literal
+from urllib.parse import urlparse
 from weakref import WeakKeyDictionary
 
 from google.api_core.client_options import ClientOptions
@@ -71,10 +72,24 @@ def _create_async_prediction_client(
     # async clients don't support "rest" transport with standard Google APIs
     # https://github.com/googleapis/gapic-generator-python/issues/1962
     # However, when using custom endpoints, we can try to keep REST transport
-    has_custom_endpoint = bool(
-        client_options.api_endpoint
-        and not client_options.api_endpoint.endswith("aiplatform.googleapis.com")
-    )
+    has_custom_endpoint = False
+    if client_options.api_endpoint:
+        try:
+            endpoint = client_options.api_endpoint
+            # Add scheme if missing for proper URL parsing
+            if not endpoint.startswith(("http://", "https://")):
+                endpoint = f"https://{endpoint}"
+
+            parsed_url = urlparse(endpoint)
+            hostname = parsed_url.hostname or ""
+            # Check if hostname matches aiplatform.googleapis.com (exact or regional)
+            has_custom_endpoint = not (
+                hostname == "aiplatform.googleapis.com"
+                or hostname.endswith("-aiplatform.googleapis.com")
+            )
+        except Exception:
+            # If URL parsing fails, treat as custom endpoint for safety
+            has_custom_endpoint = True
 
     # Use grpc_asyncio for better async performance, except with custom endpoints
     if not has_custom_endpoint and transport in (None, "grpc", "rest"):
