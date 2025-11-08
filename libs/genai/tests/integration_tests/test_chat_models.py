@@ -265,26 +265,30 @@ def test_chat_google_genai_invoke_thinking() -> None:
 
 
 def _check_thinking_output(content: list, output_version: str) -> None:
+    """Check thinking output format, handling both structured and simple responses."""
     if output_version == "v0":
         thinking_key = "thinking"
-        assert isinstance(content[-1], str)
+        if content:
+            assert isinstance(content[-1], str)
 
-    else:
-        # v1
+    else:  # v1
         thinking_key = "reasoning"
-        assert isinstance(content[-1], dict)
-        assert content[-1].get("type") == "text"
-        assert isinstance(content[-1].get("text"), str)
+        if content:
+            assert isinstance(content[-1], dict)
+            assert content[-1].get("type") == "text"
+            assert isinstance(content[-1].get("text"), str)
 
-    assert isinstance(content, list)
+    assert isinstance(content, list), f"Expected list content, got {type(content)}"
     thinking_blocks = [
         item
         for item in content
         if isinstance(item, dict) and item.get("type") == thinking_key
     ]
-    assert thinking_blocks
+    assert thinking_blocks, f"No {thinking_key} blocks found in content: {content}"
     for block in thinking_blocks:
-        assert isinstance(block[thinking_key], str)
+        assert isinstance(block[thinking_key], str), (
+            f"Expected string {thinking_key}, got {type(block[thinking_key])}"
+        )
 
 
 @pytest.mark.flaky(retries=3, delay=1)
@@ -316,7 +320,14 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
     model_provider = response_metadata.get("model_provider", "google_genai")
     assert model_provider == "google_genai"
 
-    _check_thinking_output(cast("list", full.content), output_version)
+    # With include_thoughts=True, content should always be structured list format
+    assert isinstance(full.content, list), (
+        f"Expected list content with thinking blocks when include_thoughts=True, "
+        f"got {type(full.content)}: {full.content!r}. This suggests thinking "
+        f"functionality failed to activate properly."
+    )
+    _check_thinking_output(full.content, output_version)
+
     _check_usage_metadata(full)
     assert full.usage_metadata is not None
     if (
@@ -329,7 +340,12 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
     next_message = {"role": "user", "content": "Thanks!"}
     result = llm.invoke([input_message, full, next_message])
     assert isinstance(result, AIMessage)
-    _check_thinking_output(cast("list", result.content), output_version)
+    # Follow-up response should also maintain structured format
+    assert isinstance(result.content, list), (
+        f"Expected list content with thinking blocks in follow-up response, "
+        f"got {type(result.content)}: {result.content!r}"
+    )
+    _check_thinking_output(result.content, output_version)
 
 
 @pytest.mark.flaky(retries=5, delay=1)
@@ -797,6 +813,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert content_blocks[0].get("type") == "tool_call"
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize(
     ("model_name", "method"),
     [
@@ -822,8 +839,12 @@ def test_chat_google_genai_with_structured_output(
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
     response = model.invoke([message])
-    assert isinstance(response, MyModel)
-    assert response == MyModel(name="Erick", age=27)
+    assert response is not None, f"Structured output returned None for method={method}."
+    assert isinstance(response, MyModel), (
+        f"Expected MyModel instance, got {type(response)}: {response}"
+    )
+    expected = MyModel(name="Erick", age=27)
+    assert response == expected, f"Expected {expected}, got {response}"
 
     model = llm.with_structured_output(
         {
@@ -833,8 +854,9 @@ def test_chat_google_genai_with_structured_output(
         }
     )
     response = model.invoke([message])
+    assert response is not None, "Structured output with schema dict returned None"
     expected = {"name": "Erick", "age": 27}
-    assert response == expected
+    assert response == expected, f"Expected {expected}, got {response}"
 
     # This won't work with json_schema/json_mode as it expects an OpenAPI dict
     if method is None:
@@ -847,10 +869,14 @@ def test_chat_google_genai_with_structured_output(
             method=method,
         )
         response = model.invoke([message])
-        assert response == {
+        assert response is not None, (
+            f"Structured output with method={method} returned None"
+        )
+        expected = {
             "name": "Erick",
             "age": 27,
         }
+        assert response == expected, f"Expected {expected}, got {response}"
 
     model = llm.with_structured_output(
         {
@@ -866,10 +892,14 @@ def test_chat_google_genai_with_structured_output(
         method=method,
     )
     response = model.invoke([message])
-    assert response == {
+    assert response is not None, (
+        f"Structured output with JSON schema and method={method} returned None"
+    )
+    expected = {
         "name": "Erick",
         "age": 27,
     }
+    assert response == expected, f"Expected {expected}, got {response}"
 
 
 def test_chat_google_genai_with_structured_output_nested_model() -> None:
