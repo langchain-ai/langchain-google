@@ -855,7 +855,7 @@ def test_chat_google_genai_with_structured_output(
     )
     response = model.invoke([message])
     assert response is not None, "Structured output with schema dict returned None"
-    expected = {"name": "Erick", "age": 27}
+    expected = {"name": "Erick", "age": 27}  # type: ignore[assignment]
     assert response == expected, f"Expected {expected}, got {response}"
 
     # This won't work with json_schema/json_mode as it expects an OpenAPI dict
@@ -873,7 +873,7 @@ def test_chat_google_genai_with_structured_output(
             f"Structured output with method={method} returned None"
         )
         expected = {
-            "name": "Erick",
+            "name": "Erick",  # type: ignore[assignment]
             "age": 27,
         }
         assert response == expected, f"Expected {expected}, got {response}"
@@ -896,7 +896,7 @@ def test_chat_google_genai_with_structured_output(
         f"Structured output with JSON schema and method={method} returned None"
     )
     expected = {
-        "name": "Erick",
+        "name": "Erick",  # type: ignore[assignment]
         "age": 27,
     }
     assert response == expected, f"Expected {expected}, got {response}"
