@@ -1978,12 +1978,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> AIMessage:
-        """Override invoke to add `code_execution` parameter.
+        """Override `invoke` on `ChatGoogleGenerativeAI` to add `code_execution`.
 
         See the [models page](https://ai.google.dev/gemini-api/docs/models) to see if
-        your chosen model supports code execution.
-
-        When enabled, the model can execute code to solve problems.
+        your chosen model supports code execution. When enabled, the model can execute
+        code to solve problems.
         """
         if code_execution is not None:
             if not self._supports_code_execution:
