@@ -1913,3 +1913,52 @@ def test_compat() -> None:
     result = _convert_from_v1_to_generativelanguage_v1beta([block], "google_genai")
     expected = [{"text": "foo", "thought_signature": "bar"}]
     assert result == expected
+
+
+def test_system_message_only_raises_error() -> None:
+    """Test that invoking with only a SystemMessage raises a helpful error."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("test-key"),
+    )
+
+    # Should raise ValueError when only SystemMessage is provided
+    with pytest.raises(
+        ValueError,
+        match="No content messages found. The Gemini API requires at least one",
+    ):
+        llm.invoke([SystemMessage(content="You are a helpful assistant")])
+
+
+def test_system_message_with_additional_message_works() -> None:
+    """Test that SystemMessage works when combined with other messages."""
+    mock_response = GenerateContentResponse(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Hello! I'm ready to help."}]},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 10,
+                "candidates_token_count": 5,
+                "total_token_count": 15,
+            },
+        }
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("test-key"),
+    )
+
+    with patch.object(llm.client, "generate_content", return_value=mock_response):
+        # SystemMessage + HumanMessage should work fine
+        result = llm.invoke([
+            SystemMessage(content="You are a helpful assistant"),
+            HumanMessage(content="Hello")
+        ])
+
+    assert isinstance(result, AIMessage)
+    assert result.content == "Hello! I'm ready to help."

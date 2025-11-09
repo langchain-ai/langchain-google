@@ -2349,6 +2349,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         else:
             system_instruction, history = _parse_chat_history(messages)
+
+        # Validate that we have at least one content message for the API
+        if not history:
+            msg = (
+                "No content messages found. The Gemini API requires at least one "
+                "non-system message (HumanMessage, AIMessage, etc.) in addition to "
+                "any SystemMessage. Please include additional messages in your input."
+            )
+            raise ValueError(msg)
+
         if tool_choice:
             if not formatted_tools:
                 msg = (
