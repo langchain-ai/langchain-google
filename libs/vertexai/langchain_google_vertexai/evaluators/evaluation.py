@@ -1,6 +1,6 @@
 from abc import ABC
 from collections.abc import Sequence
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from google.api_core.client_options import ClientOptions
 from google.cloud.aiplatform.constants import base as constants
@@ -94,7 +94,7 @@ def _format_metric(metric: str) -> str:
     return metric
 
 
-def _format_instance(instance: Dict[str, str], metric: str) -> Dict[str, str]:
+def _format_instance(instance: dict[str, str], metric: str) -> dict[str, str]:
     attrs = _METRICS_ATTRS.get(metric, ["prediction", "reference"])
     result = {a: instance[a] for a in attrs}
     for attr in _METRICS_OPTIONAL_ATTRS.get(metric, []):
@@ -104,10 +104,10 @@ def _format_instance(instance: Dict[str, str], metric: str) -> Dict[str, str]:
 
 
 def _prepare_request(
-    instances: Sequence[Dict[str, str]], metric: str, location: str
+    instances: Sequence[dict[str, str]], metric: str, location: str
 ) -> EvaluateInstancesRequest:
     request = EvaluateInstancesRequest()
-    metric_input: Dict[str, Any] = {"metric_spec": _METRICS_INPUTS.get(metric, {})}
+    metric_input: dict[str, Any] = {"metric_spec": _METRICS_INPUTS.get(metric, {})}
     if _format_metric(metric) not in _METRICS_MULTIPLE_INSTANCES:
         if len(instances) > 1:
             msg = (
@@ -127,7 +127,7 @@ def _prepare_request(
 
 def _parse_response(
     response: EvaluateInstancesResponse, metric: str
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     metric = _format_metric(metric)
     result = MessageToDict(response._pb, preserving_proto_field_name=True)
     if metric in _METRICS_MULTIPLE_INSTANCES:
@@ -162,8 +162,8 @@ class _EvaluatorBase(ABC):
     def _prepare_request(
         self,
         prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> EvaluateInstancesRequest:
         instance = {"prediction": prediction}
@@ -190,8 +190,8 @@ class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
         self,
         *,
         prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         request = self._prepare_request(prediction, reference, input, **kwargs)
@@ -200,17 +200,17 @@ class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
 
     def evaluate(
         self,
-        examples: Sequence[Dict[str, str]],
-        predictions: Sequence[Dict[str, str]],
+        examples: Sequence[dict[str, str]],
+        predictions: Sequence[dict[str, str]],
         *,
         question_key: str = "context",
         answer_key: str = "reference",
         prediction_key: str = "prediction",
         instruction_key: str = "instruction",
         **kwargs: Any,
-    ) -> List[dict]:
-        instances: List[dict] = []
-        for example, prediction in zip(examples, predictions):
+    ) -> list[dict]:
+        instances: list[dict] = []
+        for example, prediction in zip(examples, predictions, strict=False):
             row = {"prediction": prediction[prediction_key]}
             if answer_key in example:
                 row["reference"] = example[answer_key]
@@ -232,8 +232,8 @@ class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
         self,
         *,
         prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         request = self._prepare_request(prediction, reference, input, **kwargs)
@@ -260,8 +260,8 @@ class VertexPairWiseStringEvaluator(_EvaluatorBase, PairwiseStringEvaluator):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         request = self._prepare_request(
@@ -275,8 +275,8 @@ class VertexPairWiseStringEvaluator(_EvaluatorBase, PairwiseStringEvaluator):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         request = self._prepare_request(

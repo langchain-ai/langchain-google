@@ -9,13 +9,16 @@ from langchain_google_community.calendar.base import CalendarBaseTool
 
 
 class MoveEventSchema(BaseModel):
-    """Input for CalendarMoveEvent."""
+    """Input schema for `CalendarMoveEvent`."""
 
     event_id: str = Field(..., description="The event ID to move.")
+
     origin_calendar_id: str = Field(..., description="The origin calendar ID.")
+
     destination_calendar_id: str = Field(
         ..., description="The destination calendar ID."
     )
+
     send_updates: Optional[str] = Field(
         default=None,
         description=(
@@ -29,7 +32,9 @@ class CalendarMoveEvent(CalendarBaseTool):  # type: ignore[override, override]
     """Tool that move an event between calendars in Google Calendar."""
 
     name: str = "move_calendar_event"
+
     description: str = "Use this tool to move an event between calendars."
+
     args_schema: Type[MoveEventSchema] = MoveEventSchema
 
     def _run(

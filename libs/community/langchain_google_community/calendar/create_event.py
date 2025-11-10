@@ -14,9 +14,10 @@ from langchain_google_community.calendar.utils import is_all_day_event
 
 
 class CreateEventSchema(BaseModel):
-    """Input for CalendarCreateEvent."""
+    """Input schema for `CalendarCreateEvent`."""
 
     summary: str = Field(..., description="The title of the event.")
+
     start_datetime: str = Field(
         ...,
         description=(
@@ -25,6 +26,7 @@ class CreateEventSchema(BaseModel):
             "If you do not know the current datetime, use the tool to get it."
         ),
     )
+
     end_datetime: str = Field(
         ...,
         description=(
@@ -32,10 +34,13 @@ class CreateEventSchema(BaseModel):
             "If the event is an all-day event, set the time to 'YYYY-MM-DD' format."
         ),
     )
+
     timezone: str = Field(..., description="The timezone of the event.")
+
     calendar_id: str = Field(
         default="primary", description="The calendar ID to create the event in."
     )
+
     recurrence: Optional[Dict[str, Any]] = Field(
         default=None,
         description=(
@@ -46,15 +51,19 @@ class CreateEventSchema(BaseModel):
             "Use either COUNT or UNTIL, but not both; set the other to None."
         ),
     )
+
     location: Optional[str] = Field(
         default=None, description="The location of the event."
     )
+
     description: Optional[str] = Field(
         default=None, description="The description of the event."
     )
+
     attendees: Optional[List[str]] = Field(
         default=None, description="A list of attendees' email addresses for the event."
     )
+
     reminders: Union[None, bool, List[Dict[str, Any]]] = Field(
         default=None,
         description=(
@@ -64,9 +73,11 @@ class CreateEventSchema(BaseModel):
             "Valid methods are 'email' and 'popup'."
         ),
     )
+
     conference_data: Optional[bool] = Field(
         default=None, description="Whether to include conference data."
     )
+
     color_id: Optional[str] = Field(
         default=None,
         description=(
@@ -76,6 +87,7 @@ class CreateEventSchema(BaseModel):
             "'10': Basil, '11': Tomato."
         ),
     )
+
     transparency: Optional[str] = Field(
         default=None,
         description=(
@@ -89,10 +101,12 @@ class CalendarCreateEvent(CalendarBaseTool):  # type: ignore[override, override]
     """Tool that creates an event in Google Calendar."""
 
     name: str = "create_calendar_event"
+
     description: str = (
         "Use this tool to create an event. "
         "The input must include the summary, start, and end datetime for the event."
     )
+
     args_schema: Type[CreateEventSchema] = CreateEventSchema
 
     def _prepare_event(

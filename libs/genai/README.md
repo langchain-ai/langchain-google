@@ -1,27 +1,23 @@
 # langchain-google-genai
 
-**LangChain integration for Google Gemini models using the `generative-ai` SDK**
+[![PyPI - Version](https://img.shields.io/pypi/v/langchain-google-genai?label=%20)](https://pypi.org/project/langchain-google-genai/#history)
+[![PyPI - License](https://img.shields.io/pypi/l/langchain-google-genai)](https://opensource.org/licenses/MIT)
+[![PyPI - Downloads](https://img.shields.io/pepy/dt/langchain-google-genai)](https://pypistats.org/packages/langchain-google-genai)
+[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/langchainai.svg?style=social&label=Follow%20%40LangChainAI)](https://twitter.com/langchainai)
 
-This package enables seamless access to Google Gemini's chat, vision, embeddings, and retrieval-augmented generation (RAG) features within the LangChain ecosystem.
+Looking for the JS/TS version? Check out [LangChain.js](https://github.com/langchain-ai/langchainjs).
 
----
+## Quick Install
 
-## Table of Contents
+```bash
+pip install langchain-google-genai
+```
 
-- [langchain-google-genai](#langchain-google-genai)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Installation](#installation)
-  - [Quickstart](#quickstart)
-  - [Chat Models](#chat-models)
-    - [Multimodal Inputs](#multimodal-inputs)
-    - [Multimodal Outputs](#multimodal-outputs)
-    - [Audio Output](#audio-output)
-    - [Multimodal Outputs in Chains](#multimodal-outputs-in-chains)
-    - [Thinking Support](#thinking-support)
-  - [Embeddings](#embeddings)
-  - [Semantic Retrieval (RAG)](#semantic-retrieval-rag)
-  - [Resources](#resources)
+## 📖 Documentation
+
+View the [documentation](https://docs.langchain.com/oss/python/integrations/providers/google) for more details.
+
+This package provides access to Google Gemini's chat, vision, embeddings, and other capabilities within the LangChain ecosystem.
 
 ---
 
@@ -34,19 +30,7 @@ This package provides LangChain support for Google Gemini models (via the offici
 - Multimodal inputs and outputs
 - Retrieval-Augmented Generation (RAG)
 - Thought tracing with reasoning tokens
-
----
-
-## Installation
-
-```bash
-pip install -U langchain-google-genai
-
-# or, with uv:
-uv add langchain-google-genai
-````
-
----
+- and more!
 
 ## Quickstart
 
@@ -63,7 +47,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 llm = ChatGoogleGenerativeAI(model="gemini-flash-latest")
 response = llm.invoke("Sing a ballad of LangChain.")
-print(response.content)
+print(response.content_blocks)
 ```
 
 ---
@@ -114,24 +98,37 @@ print(response.content)
 Some Gemini models supports both text and inline image outputs.
 
 ```python
-from langchain_google_genai import ChatGoogleGenerativeAI
+# Running inside a Jupyter notebook:
+import base64
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-image-preview")
+from IPython.display import Image, display
+from langchain_core.messages import AIMessage
+from langchain_google_genai import ChatGoogleGenerativeAI, Modality
+
+llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash-image")
+
+message = {
+    "role": "user",
+    "content": "Generate a photorealistic image of a cuddly cat wearing a hat.",
+}
 
 response = llm.invoke(
-    "Generate an image of a cat and say meow",
-    generation_config=dict(response_modalities=["TEXT", "IMAGE"]),
+    [message],
+    response_modalities=[Modality.TEXT, Modality.IMAGE],
 )
 
-image_base64 = response.content[1].get("image_url").get("url").split(",")[-1]
-meow_text = response.content[0]
-print(meow_text)
-# In Jupyter, display the image:
-from base64 import b64decode
-from IPython.display import Image, display
 
-img_bytes = b64decode(image_base64)
-display(Image(data=img_bytes))
+def _get_image_base64(response: AIMessage) -> None:
+    image_block = next(
+        block
+        for block in response.content
+        if isinstance(block, dict) and block.get("image_url")
+    )
+    return image_block["image_url"].get("url").split(",")[-1]
+
+
+image_base64 = _get_image_base64(response)
+display(Image(data=base64.b64decode(image_base64), width=300))
 ```
 
 ---
@@ -164,7 +161,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI, Modality
 
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-image-preview",
+    model="gemini-2.5-flash-image",
     response_modalities=[Modality.TEXT, Modality.IMAGE],
 )
 
@@ -245,6 +242,5 @@ print("Answerable probability:", response.answerable_probability)
 
 ## Resources
 
-- [LangChain Documentation](https://docs.langchain.com/)
+- [Gemini Model Documentation](https://ai.google.dev/gemini-api/docs/models)
 - [Google Generative AI SDK](https://googleapis.github.io/python-genai/)
-- [Gemini Model Documentation](https://ai.google.dev/gemini-api/docs)

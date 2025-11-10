@@ -17,7 +17,11 @@ GOOGLE_MAPS_API_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 
 class GoogleGeocodingAPIWrapper(BaseModel):
-    """Wrapper for Google Maps Geocoding API."""
+    """Wrapper for Google Maps Geocoding API.
+
+    Provides methods for geocoding locations with configurable options for
+    address components, geometry, metadata, and navigation points.
+    """
 
     # Required
     google_api_key: SecretStr
@@ -121,81 +125,23 @@ class GoogleGeocodingAPIWrapper(BaseModel):
         region: Optional[str] = None,
         max_results: int = 10,
     ) -> Dict[str, Any]:
-        """Process geocoding request and return comprehensive results.
+        """Process geocoding request and return results.
 
-        This method handles both single and batch geocoding requests, returning
-        detailed location information with optional components.
+        Handles both single and batch geocoding requests with detailed location data.
 
         Args:
-            query: Location(s) to geocode.
-                Examples:
-                    - "Eiffel Tower"
-                    - "Times Square, Central Park"
-            language: Optional language code for results (e.g., "en", "fr", "ja")
-            region: Optional region bias (e.g., "us", "fr", "jp")
-            max_results: Maximum number of results to return (default: 10)
+            query: Location(s) to geocode (e.g., `'Eiffel Tower'` or
+                `'Times Square, Central Park'`).
+            language: Language code for results (e.g., `'en'`, `'fr'`, `'ja'`).
+            region: Region bias (e.g., `'us'`, `'fr'`, `'jp'`).
+            max_results: Maximum number of results to return.
 
         Returns:
-            Dict containing:
-                status: Status of the request ("OK" or error status)
-                total_results: Number of locations found
-                results: List of dictionaries containing location data:
-                    address: {
-                        full: Complete formatted address
-                        street_number: Building number (if available)
-                        route: Street name
-                        locality: City/Town
-                        state: State/Province
-                        country: Country
-                        postal_code: Postal/ZIP code
-                    }
-                    geometry: {
-                        location: {lat, lng} coordinates
-                        viewport: Recommended viewport
-                        bounds: Geographic bounds (if available)
-                    }
-                    metadata: {
-                        place_id: Unique Google place identifier
-                        types: Categories (e.g., ["establishment", "point_of_interest"])
-                        location_type:(e.g., "ROOFTOP", "GEOMETRIC_CENTER")
-                    }
-                    navigation: List of navigation points with:
-                        location: {latitude, longitude}
-                        restrictions: Travel mode restrictions
-                query_info: {
-                    original_query: Input query
-                    language: Language used
-                    region: Region bias used
-                }
-
-        Example Response:
-            {
-                "status": "OK",
-                "total_results": 2,
-                "results": [
-                    {
-                        "address": {
-                            "full": "Street, Country..",
-                            "route": "Avenue Gustave Eiffel",
-                            "locality": "Paris",
-                            "country": "France"
-                        },
-                        "geometry": {
-                            "location": {"lat": 48.8584, "lng": 2.2945}
-                        }
-                    },
-                    ...
-                ],
-                "query_info": {
-                    "original_query": "Eiffel Tower, Big Ben",
-                    "language": "en",
-                    "region": "us"
-                }
-            }
-
-        Raises:
-            ValueError: If query is empty or invalid
-            Exception: For API errors or connection issues
+            status (str): Request status (`'OK'` or error status).
+            total_results (int): Number of locations found.
+            results (list): Location data with address, geometry, metadata, and
+                navigation.
+            query_info (dict): Query metadata (original query, language, region).
         """
         try:
             if not query.strip():
@@ -251,41 +197,20 @@ class GoogleGeocodingAPIWrapper(BaseModel):
         region: Optional[str] = None,
         components: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        """Process multiple locations in a single structured request.
-
-        Efficiently handles multiple location queries, processing them as a batch
-        while maintaining individual result integrity.
+        """Process multiple locations in batch.
 
         Args:
-            locations: List of location strings to geocode
-                Examples: ["Eiffel Tower", "Times Square", "東京スカイツリー"]
-            language: Optional language code for results
-            region: Optional region bias
-            components: Optional filters (e.g., {"country": "US"})
+            locations: List of locations (e.g., `["Eiffel Tower", "Times Square"]`).
+            language: Language code for results.
+            region: Region bias.
+            components: Component filters (e.g., `{"country": "US"}`).
 
         Returns:
-            Dict containing:
-                status: Overall batch status
-                total_results: Number of successful geocoding results
-                results: List of location data (same structure as single results)
-                errors: List of any errors encountered:
-                    query: The location query that failed
-                    status: Error status code
-                    message: Detailed error message
-                query_info: {
-                    total_queries: Total locations processed
-                    successful: Number of successful queries
-                    failed: Number of failed queries
-                    language: Language used
-                    region: Region bias used
-                }
-
-        Example:
-            batch_geocode(
-                locations=["Eiffel Tower", "Big Ben"],
-                language="en",
-                components={"country": "FR"}
-            )
+            status (str): Overall batch status.
+            total_results (int): Number of successful results.
+            results (list): Location data for successful queries.
+            errors (list): Errors encountered with query, status, and message.
+            query_info (dict): Batch metadata (total, successful, failed counts).
         """
         if not locations:
             return {
@@ -435,18 +360,17 @@ class GoogleGeocodingAPIWrapper(BaseModel):
         language: Optional[str] = None,
         region: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Run query through Google Maps Geocoding API asynchronously.
+        """Geocode query asynchronously.
 
         Args:
-            query: The location(s) to geocode
-            language: Optional language code for results
-            region: Optional region bias
+            query: Location(s) to geocode.
+            language: Language code for results.
+            region: Region bias.
 
         Returns:
-            Dict containing:
-                status: Status of the request
-                results: List of geocoding results
-                query_info: Metadata about the request
+            status (str): Request status.
+            results (list): Geocoding results.
+            query_info (dict): Request metadata.
         """
         try:
             params: Dict[str, str] = {
@@ -478,49 +402,28 @@ class GoogleGeocodingAPIWrapper(BaseModel):
 
 
 class GoogleGeocodeInput(BaseModel):
-    """Input for the Geocoding tool."""
+    """Input schema for `GoogleGeocodingTool`."""
 
     query: str = Field(description="Locations for query.")
 
 
 class GoogleGeocodingTool(BaseTool):
-    """Tool that queries the Google Maps Geocoding API for batch location lookups.
+    """Tool for geocoding locations using Google Maps Geocoding API.
 
-    Instantiate:
-        .. code-block:: python
+    Inherits from [`BaseTool`][langchain_core.tools.BaseTool].
 
-            from tools.geocoding_wrapper import GoogleGeocodingTool
+    Supports batch location lookups with detailed address and coordinate information.
 
-            tool = GoogleGeocodingTool(
-                max_results=5,
-                include_bounds=True,
-                include_navigation=True,
-                include_metadata=True,
-                language="en",
-            )
-
-    Invoke directly:
-        .. code-block:: python
-
-            result = tool.invoke({"query": "Eiffel Tower, Empire State Building"})
-
-    Invoke with agent:
-        .. code-block:: python
-
-            agent.invoke({"input": "Find coordinates of Times Square and Central Park"})
-
-    Returns:
-        Tuple containing:
-            - List of location data with coordinates and addresses
-            - Raw response data with query information
     """
 
     name: str = "google_geocode"
+
     description: str = (
         "A geocoding tool for multiple locations. "
         "Input: comma-separated locations. "
         "Returns: location data."
     )
+
     args_schema: Type[BaseModel] = GoogleGeocodeInput
 
     # Configuration
@@ -543,7 +446,16 @@ class GoogleGeocodingTool(BaseTool):
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """Use the tool."""
+        """Geocode locations.
+
+        Args:
+            query: Comma-separated locations to geocode.
+            run_manager: Callback manager.
+
+        Returns:
+            results: Location data with coordinates and addresses.
+            response: Raw response with status and query info.
+        """
         try:
             locations = [loc.strip() for loc in query.split(",") if loc.strip()]
             if len(locations) > self.max_results:
@@ -583,7 +495,16 @@ class GoogleGeocodingTool(BaseTool):
         query: str,
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """Use the tool asynchronously."""
+        """Geocode locations asynchronously.
+
+        Args:
+            query: Comma-separated locations to geocode.
+            run_manager: Async callback manager.
+
+        Returns:
+            results: Location data with coordinates and addresses.
+            response: Raw response with status and query info.
+        """
         try:
             result = await self.api_wrapper.geocode_async(
                 query=query, language=self.language, region=self.region

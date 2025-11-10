@@ -23,22 +23,21 @@ class VertexAICheckGroundingWrapper(
     chunks. Output is of the type CheckGroundingResponse.
 
     Attributes:
-        project_id (str): Google Cloud project ID
-        location_id (str): Location ID for the ranking service.
-        grounding_config (str):
-            Required. The resource name of the grounding config, such as
-            ``default_grounding_config``.
-            It is set to ``default_grounding_config`` by default if unspecified
-        citation_threshold (float):
-            The threshold (in [0,1]) used for determining whether a fact
-            must be cited for a claim in the answer candidate. Choosing
-            a higher threshold will lead to fewer but very strong
-            citations, while choosing a lower threshold may lead to more
-            but somewhat weaker citations. If unset, the threshold will
-            default to 0.6.
+        project_id: Google Cloud project ID
+        location_id: Location ID for the ranking service.
+        grounding_config: The resource name of the grounding config, such as
+            `default_grounding_config`.
+
+            It is set to `default_grounding_config` by default if unspecified
+        citation_threshold: The threshold (in `[0, 1]`) used for determining whether a
+            fact must be cited for a claim in the answer candidate.
+
+            Choosing a higher threshold will lead to fewer but very strong citations,
+            while choosing a lower threshold may lead to more but somewhat weaker
+            citations. If unset, the threshold will default to `0.6`.
         credentials (Optional[Credentials]): Google Cloud credentials object.
         credentials_path (Optional[str]): Path to the Google Cloud service
-        account credentials file.
+            account credentials file.
     """
 
     project_id: str = Field(default=None)  # type: ignore
@@ -101,17 +100,17 @@ class VertexAICheckGroundingWrapper(
     ) -> CheckGroundingResponse:
         """
         Calls the Vertex Check Grounding API for a given answer candidate and a list
-        of documents (claims) to validate whether the set of claims support the 
+        of documents (claims) to validate whether the set of claims support the
         answer candidate.
 
         Args:
-            answer_candidate (str): The candidate answer to be evaluated for grounding.
-            documents (List[Document]): The documents against which grounding is
-            checked. This will be converted to facts:
-                facts (MutableSequence[google.cloud.discoveryengine_v1alpha.types.\
-                    GroundingFact]):
-                List of facts for the grounding check.
-                We support up to 200 facts.
+            input: The candidate answer to be evaluated for grounding.
+            config: Runnable configuration containing documents in
+                `config["configurable"]["documents"]`. The documents are used as
+                grounding facts and will be converted to
+                `google.cloud.discoveryengine_v1alpha.types.GroundingFact` objects.
+                Supports up to `200` facts.
+
         Returns:
             Response of the type CheckGroundingResponse
 
@@ -133,7 +132,7 @@ class VertexAICheckGroundingWrapper(
                 CheckGroundingResponse.Claim]):
                 Claim texts and citation info across all
                 claims in the answer candidate.
-            
+
             answer_with_citations (str):
                 Complete formed answer formatted with inline citations
         """

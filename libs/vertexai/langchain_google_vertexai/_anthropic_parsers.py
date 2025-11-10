@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Type, Union
+from typing import Any
 
 from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.messages.tool import tool_call
@@ -10,18 +10,20 @@ from pydantic import BaseModel, ConfigDict
 class ToolsOutputParser(BaseGenerationOutputParser):
     first_tool_only: bool = False
     args_only: bool = False
-    pydantic_schemas: Optional[List[Type[BaseModel]]] = None
+    pydantic_schemas: list[type[BaseModel]] | None = None
 
     model_config = ConfigDict(
         extra="forbid",
     )
 
-    def parse_result(self, result: List[Generation], *, partial: bool = False) -> Any:
-        """Parse a list of candidate model Generations into a specific format.
+    def parse_result(self, result: list[Generation], *, partial: bool = False) -> Any:
+        """Parse a list of candidate model `Generation` objects into a specific format.
 
         Args:
-            result: A list of Generations to be parsed. The Generations are assumed
-                to be different candidate outputs for a single model input.
+            result: A list of `Generation` objects to be parsed.
+
+                The generations are assumed to be different candidate outputs for a
+                single model input.
 
         Returns:
             Structured output.
@@ -30,7 +32,7 @@ class ToolsOutputParser(BaseGenerationOutputParser):
             return None if self.first_tool_only else []
 
         message = result[0].message
-        tool_calls: List[Any] = []
+        tool_calls: list[Any] = []
 
         if isinstance(message, AIMessage) and message.tool_calls:
             tool_calls = message.tool_calls
@@ -54,7 +56,7 @@ class ToolsOutputParser(BaseGenerationOutputParser):
         return cls_(**tool_call["args"])
 
 
-def _extract_tool_calls(content: Union[str, List[Union[str, dict]]]) -> List[ToolCall]:
+def _extract_tool_calls(content: str | list[str | dict]) -> list[ToolCall]:
     """Extract tool calls from a list of content blocks."""
     if isinstance(content, list):
         tool_calls = []

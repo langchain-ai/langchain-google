@@ -1,7 +1,6 @@
 """Integration tests for Anthropic cache control functionality."""
 
 import os
-from typing import Dict, List, Union
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -27,9 +26,7 @@ def test_anthropic_system_cache() -> None:
     )
     message = HumanMessage(content="Hello! What can you do for me?")
 
-    response = model.invoke(
-        [context, message], model_name="claude-3-5-sonnet-v2@20241022"
-    )
+    response = model.invoke([context, message], model_name="claude-sonnet-4-5@20250929")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert "usage_metadata" in response.additional_kwargs
@@ -66,9 +63,7 @@ def test_anthropic_mixed_cache() -> None:
         ]
     )
 
-    response = model.invoke(
-        [context, message], model_name="claude-3-5-sonnet-v2@20241022"
-    )
+    response = model.invoke([context, message], model_name="claude-sonnet-4-5@20250929")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert "usage_metadata" in response.additional_kwargs
@@ -112,7 +107,7 @@ def test_anthropic_conversation_cache() -> None:
         ),
     ]
 
-    response = model.invoke(messages, model_name="claude-3-5-sonnet-v2@20241022")
+    response = model.invoke(messages, model_name="claude-sonnet-4-5@20250929")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert "peter" in response.content.lower()  # Should remember the name
@@ -129,7 +124,7 @@ def test_anthropic_chat_template_cache() -> None:
         location=location,
     )
 
-    content: List[Union[Dict[str, Union[str, Dict[str, str]]], str]] = [
+    content: list[dict[str, str | dict[str, str]] | str] = [
         {
             "text": "You are a helpful assistant. Be concise and clear.",
             "type": "text",

@@ -1,36 +1,41 @@
-"""**LangChain Google Generative AI Integration**.
+"""LangChain Google Generative AI integration (VertexAI).
 
-This module contains the LangChain integrations for Vertex AI service - Google foundational models, third-party foundational modela available on Vertex Model Garden and.
+This module contains the LangChain integrations for
+[Vertex AI service](https://cloud.google.com/vertex-ai) - Google foundational models
+and third-party models available on Vertex Model Garden.
 
 **Supported integrations**
 
-1. Google's foundational models: ``Gemini`` family, ``Codey``, embeddings - ``ChatVertexAI``, ``VertexAI``, ``VertexAIEmbeddings``.
-2. Other Google's foundational models: Imagen - ``VertexAIImageCaptioning``, ``VertexAIImageCaptioningChat``, ``VertexAIImageEditorChat``, ``VertexAIImageGeneratorChat``, ``VertexAIVisualQnAChat``.
-3. Third-party foundational models available as a an API (mdel-as-a-service) on Vertex Model Garden (Mistral, Llama, Anthropic) - ``model_garden.ChatAnthropicVertex``, ``model_garden_maas.VertexModelGardenLlama``, ``model_garden_maas.VertexModelGardenMistral``.
-4. Third-party foundational models deployed on Vertex AI endpoints from Vertex Model Garden or Huggingface - ``VertexAIModelGarden``.
-5. Gemma deployed on Vertex AI endpoints or locally - ``GemmaChatLocalHF``, ``GemmaChatLocalKaggle``, ``GemmaChatVertexAIModelGarden``, ``GemmaLocalHF``, ``GemmaLocalKaggle``, ``GemmaVertexAIModelGarden``.
-6. Vector Search on Vertex AI - ``VectorSearchVectorStore``, ``VectorSearchVectorStoreDatastore``, ``VectorSearchVectorStoreGCS``.
-7. Vertex AI evaluators for generative AI - ``VertexPairWiseStringEvaluator``, ``VertexStringEvaluator``.
+1. Google's foundational models: `Gemini` family - `ChatVertexAI`, `VertexAI` (LLM),
+    `VertexAIEmbeddings`.
+2. Other Google's foundational models: Imagen - `VertexAIImageCaptioning`,
+    `VertexAIImageCaptioningChat`, `VertexAIImageEditorChat`,
+    `VertexAIImageGeneratorChat`, `VertexAIVisualQnAChat`.
+3. Third-party foundational models available as a an API (mdel-as-a-service) on Vertex
+    Model Garden (Mistral, Llama, Anthropic) - `model_garden.ChatAnthropicVertex`,
+    `model_garden_maas.VertexModelGardenLlama`,
+    `model_garden_maas.VertexModelGardenMistral`.
+4. Third-party foundational models deployed on Vertex AI endpoints from Vertex Model
+    Garden or Huggingface - `VertexAIModelGarden`.
+5. Gemma deployed on Vertex AI endpoints or locally - `GemmaChatLocalHF`,
+    `GemmaChatLocalKaggle`, `GemmaChatVertexAIModelGarden`, `GemmaLocalHF`,
+    `GemmaLocalKaggle`, `GemmaVertexAIModelGarden`.
+6. Vector Search on Vertex AI - `VectorSearchVectorStore`,
+    `VectorSearchVectorStoreDatastore`, `VectorSearchVectorStoreGCS`.
+7. Vertex AI evaluators for generative AI - `VertexPairWiseStringEvaluator`,
+    `VertexStringEvaluator`.
 
-Take a look at detailed documentation for each class for further details.
+You need to enable required Google Cloud APIs (depending on the integration you're
+using) and set up credentials by either:
 
-**Installation**
+- Having credentials configured for your environment (gcloud, workload identity,
+    etc...)
+- Storing the path to a service account JSON file as the
+    `GOOGLE_APPLICATION_CREDENTIALS` environment variable
 
-.. code-block:: bash
-    pip install langchain-google-vertexai
-
-You need to enable required Google Cloud APIs (depending on the integration you're using) and set up credentials by either:
-    - Having credentials configured for your environment (gcloud, workload identity, etc...)
-    - Storing the path to a service account JSON file as the ``GOOGLE_APPLICATION_CREDENTIALS`` environment variable
-
-This codebase uses the ``google.auth`` library which first looks for the application
+This codebase uses the `google.auth` library which first looks for the application
 credentials variable mentioned above, and then looks for system-level auth.
-
-**More information:**
-
-- `Credential types <https://cloud.google.com/docs/authentication/application-default-credentials#GAC>`__
-- ``google.auth`` `API reference <https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth>`__
-"""  # noqa: E501
+"""
 
 from google.cloud.aiplatform_v1beta1.types import (
     FunctionCallingConfig,
@@ -55,14 +60,6 @@ from langchain_google_vertexai.evaluators.evaluation import (
 )
 from langchain_google_vertexai.functions_utils import (
     PydanticFunctionsOutputParser,
-)
-from langchain_google_vertexai.gemma import (
-    GemmaChatLocalHF,
-    GemmaChatLocalKaggle,
-    GemmaChatVertexAIModelGarden,
-    GemmaLocalHF,
-    GemmaLocalKaggle,
-    GemmaVertexAIModelGarden,
 )
 from langchain_google_vertexai.llms import VertexAI
 from langchain_google_vertexai.model_garden import VertexAIModelGarden
@@ -89,12 +86,6 @@ __all__ = [
     "FunctionCallingConfig",
     "FunctionDeclaration",
     "GCSDocumentStorage",
-    "GemmaChatLocalHF",
-    "GemmaChatLocalKaggle",
-    "GemmaChatVertexAIModelGarden",
-    "GemmaLocalHF",
-    "GemmaLocalKaggle",
-    "GemmaVertexAIModelGarden",
     "HarmBlockThreshold",
     "HarmCategory",
     "Modality",

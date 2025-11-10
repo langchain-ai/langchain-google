@@ -22,16 +22,19 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
     """Base class for Google Sheets tools.
 
     Authentication:
-    - api_resource: OAuth2 credentials for full access (read/write private sheets)
-    - api_key: API key for read-only access (public sheets only)
+    - `api_resource`: OAuth2 credentials for full access (read/write private sheets)
+    - `api_key`: API key for read-only access (public sheets only)
 
-    Note: Write operations require OAuth2 credentials.
+    !!! note
+
+        Write operations require OAuth2 credentials.
     """
 
     api_resource: Optional[Resource] = Field(
         default=None,
         description="Google Sheets API resource, OAuth2 credentials for full access",
     )
+
     api_key: Optional[str] = Field(
         default=None,
         description="Google API key for read-only access to public spreadsheets",
@@ -44,7 +47,7 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             Resource: Google Sheets API service
 
         Raises:
-            ValueError: If neither api_resource nor api_key is provided
+            ValueError: If neither `api_resource` nor `api_key` is provided
         """
         if self.api_resource:
             return self.api_resource  # OAuth2 - full access
@@ -105,7 +108,7 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             cell_data: Cell data dictionary from Google Sheets API
 
         Returns:
-            str: The cell value as a string
+            The cell value as a string.
         """
         if cell_data.get("formattedValue"):
             return cell_data["formattedValue"]
@@ -113,9 +116,36 @@ class SheetsBaseTool(BaseTool):  # type: ignore[override]
             return str(cell_data["effectiveValue"]["stringValue"])
         elif cell_data.get("effectiveValue", {}).get("numberValue") is not None:
             return str(cell_data["effectiveValue"]["numberValue"])
+        elif cell_data.get("effectiveValue", {}).get("boolValue") is not None:
+            return str(cell_data["effectiveValue"]["boolValue"])
         elif cell_data.get("userEnteredValue", {}).get("stringValue"):
             return str(cell_data["userEnteredValue"]["stringValue"])
         elif cell_data.get("userEnteredValue", {}).get("numberValue") is not None:
             return str(cell_data["userEnteredValue"]["numberValue"])
+        elif cell_data.get("userEnteredValue", {}).get("boolValue") is not None:
+            return str(cell_data["userEnteredValue"]["boolValue"])
         else:
             return ""
+
+    def _convert_to_dict_list(self, items: list) -> list:
+        """Convert a list of items to dictionaries.
+
+        Handles both Pydantic models and dicts. Useful for converting
+        user-provided schemas (which may be Pydantic models or plain dicts)
+        into the dict format required by Google Sheets API.
+
+        Args:
+            items: List of items that may be Pydantic models or dictionaries
+
+        Returns:
+            List of dictionaries with all Pydantic models converted.
+        """
+        result = []
+        for item in items:
+            if hasattr(item, "model_dump"):
+                # It's a Pydantic model, convert to dict
+                result.append(item.model_dump())
+            else:
+                # It's already a dict
+                result.append(item)
+        return result

@@ -1,11 +1,12 @@
 """Google GenerativeAI Attributed Question and Answering (AQA) service.
 
 The GenAI Semantic AQA API is a managed end to end service that allows developers to
-create responses grounded on specified passages based on a user query. For more
-information visit: https://developers.generativeai.google/guide
+create responses grounded on specified passages based on a user query.
+
+For more information visit: https://ai.google.dev/gemini-api/docs
 """
 
-from typing import Any, List, Optional
+from typing import Any
 
 import google.ai.generativelanguage as genai
 from langchain_core.runnables import RunnableSerializable
@@ -20,12 +21,12 @@ class AqaInput(BaseModel):
 
     Attributes:
         prompt: The user's inquiry.
-        source_passages: A list of passage that the LLM should use only to answer the
+        source_passages: A list of passages that the LLM should use only to answer the
             user's inquiry.
     """
 
     prompt: str
-    source_passages: List[str]
+    source_passages: list[str]
 
 
 class AqaOutput(BaseModel):
@@ -40,7 +41,7 @@ class AqaOutput(BaseModel):
     """
 
     answer: str
-    attributed_passages: List[str]
+    attributed_passages: list[str]
     answerable_probability: float
 
 
@@ -49,14 +50,14 @@ class _AqaModel(BaseModel):
 
     _client: genai.GenerativeServiceClient = PrivateAttr()
     _answer_style: int = PrivateAttr()
-    _safety_settings: List[genai.SafetySetting] = PrivateAttr()
-    _temperature: Optional[float] = PrivateAttr()
+    _safety_settings: list[genai.SafetySetting] = PrivateAttr()
+    _temperature: float | None = PrivateAttr()
 
     def __init__(
         self,
         answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-        safety_settings: Optional[List[genai.SafetySetting]] = None,
-        temperature: Optional[float] = None,
+        safety_settings: list[genai.SafetySetting] | None = None,
+        temperature: float | None = None,
         **kwargs: Any,
     ) -> None:
         if safety_settings is None:
@@ -70,7 +71,7 @@ class _AqaModel(BaseModel):
     def generate_answer(
         self,
         prompt: str,
-        passages: List[str],
+        passages: list[str],
     ) -> genaix.GroundedAnswer:
         return genaix.generate_answer(
             prompt=prompt,
@@ -90,7 +91,7 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
     parametric memory.
 
     Attributes:
-        answer_style: keyword-only argument. See
+        answer_style: Keyword-only argument. See
             `google.ai.generativelanguage.AnswerStyle` for details.
     """
 
@@ -103,22 +104,33 @@ class GenAIAqa(RunnableSerializable[AqaInput, AqaOutput]):
     # google.generativeai installed.
     answer_style: int = 1
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
+        safety_settings: list[genai.SafetySetting] | None = None,
+        temperature: float | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Construct a Google Generative AI AQA model.
 
         All arguments are optional.
 
         Args:
             answer_style: See
-              `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
+                `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
             safety_settings: See `google.ai.generativelanguage.SafetySetting`.
-            temperature: 0.0 to 1.0.
+            temperature: `0.0` to `1.0`.
         """
         super().__init__(**kwargs)
-        self._client = _AqaModel(**kwargs)
+        self._client = _AqaModel(
+            answer_style=answer_style,
+            safety_settings=safety_settings,
+            temperature=temperature,
+        )
 
     def invoke(
-        self, input: AqaInput, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, input: AqaInput, config: RunnableConfig | None = None, **kwargs: Any
     ) -> AqaOutput:
         """Generates a grounded response using the provided passages."""
         response = self._client.generate_answer(

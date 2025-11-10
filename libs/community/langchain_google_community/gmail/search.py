@@ -18,7 +18,7 @@ class Resource(str, Enum):
 
 
 class SearchArgsSchema(BaseModel):
-    """Input for SearchGmailTool."""
+    """Input schema for `SearchGmailTool`."""
 
     # From https://support.google.com/mail/answer/7190?hl=en
     query: str = Field(
@@ -33,10 +33,12 @@ class SearchArgsSchema(BaseModel):
         " Attachments with extension example: filename:pdf. Multiple term"
         " matching example: from:amy OR from:david.",
     )
+
     resource: Resource = Field(
         default=Resource.MESSAGES,
         description="Whether to search for threads or messages.",
     )
+
     max_results: int = Field(
         default=10,
         description="The maximum number of results to return.",
@@ -47,11 +49,13 @@ class GmailSearch(GmailBaseTool):
     """Tool that searches for messages or threads in Gmail."""
 
     name: str = "search_gmail"
+
     description: str = (
         "Use this tool to search for email messages or threads."
         " The input must be a valid Gmail query."
         " The output is a JSON list of the requested resource."
     )
+
     args_schema: Type[SearchArgsSchema] = SearchArgsSchema
 
     def _parse_threads(self, threads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -89,8 +93,8 @@ class GmailSearch(GmailBaseTool):
 
             email_msg = email.message_from_bytes(raw_message)
 
-            subject = email_msg["Subject"]
-            sender = email_msg["From"]
+            subject = email_msg.get("Subject", "")
+            sender = email_msg.get("From", "")
 
             message_body = ""
             if email_msg.is_multipart():
@@ -99,18 +103,22 @@ class GmailSearch(GmailBaseTool):
                     cdispo = str(part.get("Content-Disposition"))
                     if ctype == "text/plain" and "attachment" not in cdispo:
                         try:
-                            message_body = part.get_payload(decode=True).decode("utf-8")  # type: ignore[union-attr]
+                            message_body = part.get_payload(decode=True).decode(  # type: ignore[union-attr]
+                                "utf-8", errors="replace"
+                            )
                         except UnicodeDecodeError:
                             message_body = part.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                                "latin-1"
+                                "latin-1", errors="replace"
                             )
                         break
             else:
                 try:
-                    message_body = email_msg.get_payload(decode=True).decode("utf-8")  # type: ignore[union-attr]
+                    message_body = email_msg.get_payload(decode=True).decode(  # type: ignore[union-attr]
+                        "utf-8", errors="replace"
+                    )
                 except UnicodeDecodeError:
                     message_body = email_msg.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                        "latin-1"
+                        "latin-1", errors="replace"
                     )
 
             body = clean_email_body(message_body)

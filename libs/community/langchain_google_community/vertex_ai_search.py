@@ -1,8 +1,11 @@
 """Retriever wrapper for Google Vertex AI Search.
 
 Set the following environment variables before the tests:
-export PROJECT_ID=... - set to your Google Cloud project ID
-export DATA_STORE_ID=... - the ID of the search engine to use for the test
+
+```
+export PROJECT_ID=... # Set to your Google Cloud project ID
+export DATA_STORE_ID=... # The ID of the search engine to use for the test
+```
 """
 
 from __future__ import annotations
@@ -61,22 +64,31 @@ def _load(dump: Dict[str, Any]) -> Any:
 class _BaseVertexAISearchRetriever(Serializable):
     project_id: str
     """Google Cloud Project ID."""
+
     data_store_id: str
     """Vertex AI Search data store ID."""
+
     location_id: str = "global"
     """Vertex AI Search data store location."""
+
     serving_config_id: str = "default_config"
     """Vertex AI Search serving config ID."""
+
     credentials: Any = None
-    """The default custom credentials (google.auth.credentials.Credentials) to use
-    when making API calls. If not provided, credentials will be ascertained from
-    the environment."""
+    """The default custom credentials (`google.auth.credentials.Credentials`) to use
+    when making API calls.
+    
+    If not provided, credentials will be ascertained from the environment.
+    """
+
     engine_data_type: int = Field(default=0, ge=0, le=2)
     """ Defines the Vertex AI Search data type
-    0 - Unstructured data 
-    1 - Structured data
-    2 - Website data
+    
+    `0` - Unstructured data 
+    `1` - Structured data
+    `2` - Website data
     """
+
     _beta: bool = PrivateAttr(default=False)
     """Whether to use beta version of Vertex AI Search."""
 
@@ -265,80 +277,116 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     """`Google Vertex AI Search` retriever.
 
     This retriever supports both stable (v1) and beta versions of the Discovery Engine.
-    Beta features are only available when beta=True.
 
-    For a detailed explanation of the Vertex AI Search concepts
-    and configuration parameters, refer to the product documentation.
-    https://cloud.google.com/generative-ai-app-builder/docs/enterprise-search-introduction
+    Beta features are only available when `beta=True`.
+
+    For a detailed explanation of Vertex AI Search concepts and configuration parameters
+    see the [Vertex AI Search documentation](https://cloud.google.com/generative-ai-app-builder/docs/enterprise-search-introduction).
     """
 
     filter: Optional[str] = None
     """Filter expression."""
+
     order_by: Optional[str] = None
     """Comma-separated list of fields to order by."""
+
     canonical_filter: Optional[str] = None
     """Canonical filter expression."""
+
     get_extractive_answers: bool = False
-    """If True return Extractive Answers, otherwise return Extractive Segments or Snippets."""  # noqa: E501
+    """If `True` return Extractive Answers, otherwise return Extractive Segments or Snippets."""  # noqa: E501
+
     max_documents: int = Field(default=5, ge=1, le=100)
     """The maximum number of documents to return."""
+
     max_extractive_answer_count: int = Field(default=1, ge=1, le=5)
-    """The maximum number of extractive answers to return per search result.
-    """
+    """The maximum number of extractive answers to return per search result."""
+
     max_extractive_segment_count: int = Field(default=1, ge=1, le=10)
-    """The maximum number of extractive segments to return per search result.
-    """
+    """The maximum number of extractive segments to return per search result."""
+
     return_extractive_segment_score: bool = False
-    """If set to True, the relevance score for each extractive segment will be included
-    in the search results. This can be useful for ranking or filtering segments.
+    """If `True`, the relevance score for each extractive segment will be included in
+    the search results.
+    
+    This can be useful for ranking or filtering segments.
     """
+
     num_previous_segments: int = Field(default=1, ge=1, le=3)
     """Specifies the number of text segments preceding the matched segment to return.
-    This provides context before the relevant text. Value must be between 1 and 3."""
+    
+    This provides context before the relevant text.
+    
+    Value must be between `1` and `3`.
+    """
+
     num_next_segments: int = Field(default=1, ge=1, le=3)
     """Specifies the number of text segments following the matched segment to return.
-    This provides context after the relevant text. Value must be between 1 and 3."""
+    
+    This provides context after the relevant text.
+    
+    Value must be between `1` and `3`.
+    """
+
     query_expansion_condition: int = Field(default=1, ge=0, le=2)
     """Specification to determine under which conditions query expansion should occur.
-    0 - Unspecified query expansion condition. In this case, server behavior defaults 
+    
+    `0` - Unspecified query expansion condition. In this case, server behavior defaults 
         to disabled.
-    1 - Disabled query expansion. Only the exact search query is used, even if 
-        SearchResponse.total_size is zero.
-    2 - Automatic query expansion built by the Search API."""
+    `1` - Disabled query expansion. Only the exact search query is used, even if 
+        `SearchResponse.total_size` is zero.
+    `2` - Automatic query expansion built by the Search API.
+    """
+
     spell_correction_mode: int = Field(default=2, ge=0, le=2)
     """Specification to determine under which conditions query expansion should occur.
-    0 - Unspecified spell correction mode. In this case, server behavior defaults 
+    
+    `0` - Unspecified spell correction mode. In this case, server behavior defaults 
         to auto.
-    1 - Suggestion only. Search API will try to find a spell suggestion if there is 
+    `1` - Suggestion only. Search API will try to find a spell suggestion if there is 
         any and put in the `SearchResponse.corrected_query`.
         The spell suggestion will not be used as the search query.
-    2 - Automatic spell correction built by the Search API.
-        Search will be based on the corrected query if found."""
+    `2` - Automatic spell correction built by the Search API.
+        Search will be based on the corrected query if found.
+    """
+
     boost_spec: Optional[Dict[Any, Any]] = None
     """BoostSpec for boosting search results. A protobuf should be provided.
     
     https://cloud.google.com/generative-ai-app-builder/docs/boost-search-results
     https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/BoostSpec
     """
+
     custom_embedding: Optional[Any] = None
     """Custom embedding model for the retriever. (Bring your own embedding)
+    
     It needs to match the embedding model that was used to embed docs in the datastore.
-    It needs to be a langchain embedding VertexAIEmbeddings(project="{PROJECT}")
+    
+    It needs to be a langchain embedding `VertexAIEmbeddings(project="{PROJECT}")`
+    
     If you provide an embedding model, you also need to provide a ranking_expression 
-    and a custom_embedding_field_path.
+        and a `custom_embedding_field_path`.
+    
     https://cloud.google.com/generative-ai-app-builder/docs/bring-embeddings
     """
+
     custom_embedding_field_path: Optional[str] = None
     """The field path for the custom embedding used in the Vertex AI datastore schema.
     """
+
     custom_embedding_ratio: Optional[float] = Field(default=0.0, ge=0.0, le=1.0)
-    """Controls the ranking of results. Value should be between 0 and 1.
-    It will generate the ranking_expression in the following manner:
-    "{custom_embedding_ratio} * dotProduct({custom_embedding_field_path}) +
-    {1 - custom_embedding_ratio} * relevance_score"
+    """Controls the ranking of results.
+    
+    Value should be between `0` and `1`.
+    
+    Will generate the ranking_expression in the following manner:
+    
+    `"{custom_embedding_ratio} * dotProduct({custom_embedding_field_path}) +
+    {1 - custom_embedding_ratio} * relevance_score"`
     """
 
     _client: DiscoveryEngineClient = PrivateAttr()
+
     _serving_config: str = PrivateAttr()
 
     def __init__(self, **kwargs: Any) -> None:
@@ -353,7 +401,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         """Validate version compatibility of all components.
 
         Raises:
-            Warning: If beta features are configured but beta=False
+            Warning: If beta features are configured but `beta=False`
         """
         beta_features = {
             "custom_embedding": self.custom_embedding,
@@ -368,7 +416,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             )
 
     def _initialize_client(self) -> None:
-        """Initialize the appropriate version of the SearchServiceClient."""
+        """Initialize the appropriate version of the `SearchServiceClient`."""
 
         try:
             if self.beta:
@@ -449,10 +497,11 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         return params
 
     def _get_content_spec_kwargs(self) -> Optional[Dict[str, Any]]:
-        """Prepares a ContentSpec object.
+        """Prepares a `ContentSpec` object.
 
-        Note:
-            The ContentSearchSpec is identical between beta and stable versions,
+        !!! note
+
+            The `ContentSearchSpec` is identical between beta and stable versions,
             but we import from the appropriate version for consistency.
         """
         if self.beta:
@@ -501,7 +550,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         return content_search_spec
 
     def _create_search_request(self, query: str) -> "DiscoveryEngineSearchRequest":
-        """Prepares a SearchRequest object."""
+        """Prepares a `SearchRequest` object."""
         if self.beta:
             from google.cloud.discoveryengine_v1beta import SearchRequest
         else:
@@ -587,6 +636,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
 class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     """Google Vertex AI Search retriever for multi-turn conversations.
+
     Supports both stable (v1) and beta versions of the Discovery Engine API.
     """
 
@@ -594,6 +644,7 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
     """Vertex AI Search Conversation ID."""
 
     _client: DiscoveryEngineConversationalClient = PrivateAttr()
+
     _serving_config: str = PrivateAttr()
 
     model_config = ConfigDict(
@@ -673,7 +724,9 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
 
 class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
     """Class that exposes a tool to interface with an App in Vertex Search and
+
     Conversation and get the summary of the documents retrieved.
+
     Supports both stable (v1) and beta versions of the Discovery Engine API.
     """
 
@@ -722,8 +775,10 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
 
     def _run(self, user_query: str) -> str:
         """Runs the tool.
+
         Args:
             search_query: The query to run by the agent.
+
         Returns:
             The response from the agent.
         """
