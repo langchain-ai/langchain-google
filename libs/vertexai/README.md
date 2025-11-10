@@ -7,6 +7,8 @@
 
 Looking for the JS/TS version? Check out [LangChain.js](https://github.com/langchain-ai/langchainjs).
 
+This package contains the LangChain integrations for Google Cloud generative models via the [Vertex AI Platform](https://cloud.google.com/vertex-ai).
+
 ## Quick Install
 
 ```bash
@@ -15,9 +17,7 @@ pip install langchain-google-vertexai
 
 ## 📖 Documentation
 
-View the [documentation](https://docs.langchain.com/oss/python/integrations/providers/google#google-cloud) for more details.
-
-This package contains the LangChain integrations for Google Cloud generative models via the [Vertex AI Platform](https://cloud.google.com/vertex-ai).
+For full documentation, see the [API reference](https://reference.langchain.com/python/langchain_google_vertexai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-cloud).
 
 ## 📕 Releases & Versioning
 
