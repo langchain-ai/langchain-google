@@ -230,10 +230,10 @@ def test_chat_google_genai_invoke_with_audio() -> None:
     ],
 )
 def test_chat_google_genai_invoke_thinking(
-    thinking_budget: Optional[int], test_description: str
+    thinking_budget: int | None, test_description: str
 ) -> None:
     """Test invoke thinking model with different thinking budget configurations."""
-    llm_kwargs: dict[str, Union[str, int]] = {"model": _THINKING_MODEL}
+    llm_kwargs: dict[str, str | int] = {"model": _THINKING_MODEL}
     if thinking_budget is not None:
         llm_kwargs["thinking_budget"] = thinking_budget
 
