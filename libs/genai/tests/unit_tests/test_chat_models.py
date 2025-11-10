@@ -2135,7 +2135,7 @@ def test_system_message_only_raises_error() -> None:
     # Should raise ValueError when only SystemMessage is provided
     with pytest.raises(
         ValueError,
-        match="No content messages found. The Gemini API requires at least one",
+        match=r"No content messages found. The Gemini API requires at least one",
     ):
         llm.invoke([SystemMessage(content="You are a helpful assistant")])
 
@@ -2165,10 +2165,12 @@ def test_system_message_with_additional_message_works() -> None:
 
     with patch.object(llm.client, "generate_content", return_value=mock_response):
         # SystemMessage + HumanMessage should work fine
-        result = llm.invoke([
-            SystemMessage(content="You are a helpful assistant"),
-            HumanMessage(content="Hello"),
-        ])
+        result = llm.invoke(
+            [
+                SystemMessage(content="You are a helpful assistant"),
+                HumanMessage(content="Hello"),
+            ]
+        )
 
     assert isinstance(result, AIMessage)
     assert result.content == "Hello! I'm ready to help."
