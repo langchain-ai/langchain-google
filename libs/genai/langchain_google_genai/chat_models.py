@@ -1459,11 +1459,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         * `method='function_calling'` (default): Uses tool calling to extract
             structured data. Compatible with all models.
-        * `method='json_schema'`: Uses Gemini's native structured output with
-            `response_json_schema`.
+        * `method='json_schema'`: Uses Gemini's native structured output.
 
             Supports unions (`anyOf`), recursive schemas (`$ref`), property ordering
             preservation, and streaming of partial JSON chunks.
+
+            Uses Gemini's `response_json_schema` API param. Refer to the Gemini API
+            [docs](https://ai.google.dev/gemini-api/docs/structured-output) for more
+            details.
 
         The `json_schema` method is recommended for better reliability as it
         constrains the model's generation process directly rather than relying on
@@ -1715,14 +1718,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Supported MIME types:
         * `'text/plain'`: (default) Text output.
         * `'application/json'`: JSON response in the candidates.
-        * `'text/x.enum'`: Enum in plain text.
+        * `'text/x.enum'`: Enum in plain text. (legacy; use JSON schema output instead)
 
-    The model also needs to be prompted to output the appropriate response
-    type, otherwise the behavior is undefined. (This is a preview feature.)
+    !!! note
+
+        The model also needs to be prompted to output the appropriate response type,
+        otherwise the behavior is undefined.
+
+        (In other words, simply setting this param doesn't force the model to comply;
+        it only tells the model the kind of output expected. You still need to prompt it
+        correctly.)
     """
 
     response_schema: dict[str, Any] | None = None
-    """Enforce an schema to the output.
+    """Enforce a schema to the output.
 
     The format of the dictionary should follow Open API schema.
 
@@ -1734,6 +1743,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     - Minimum/maximum constraints
     - Streaming of partial JSON chunks
 
+    Refer to the Gemini API [docs](https://ai.google.dev/gemini-api/docs/structured-output)
+    for more details.
     """
 
     cached_content: str | None = None
@@ -2017,10 +2028,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen_config["response_mime_type"] = response_mime_type
 
         response_schema = kwargs.get("response_schema", self.response_schema)
+
+        # In case passed in as a direct kwarg
         response_json_schema = kwargs.get("response_json_schema")
 
-        # Handle both response_schema and response_json_schema parameters
-        # Regardless, we use `response_json_schema` in the GenerationConfig API request
+        # Handle both response_schema and response_json_schema
+        # (Regardless, we use `response_json_schema` in the request)
         schema_to_use = (
             response_json_schema
             if response_json_schema is not None
@@ -2028,17 +2041,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         if schema_to_use is not None:
-            allowed_mime_types = ("application/json", "text/x.enum")
-            if response_mime_type not in allowed_mime_types:
+            if response_mime_type not in "application/json":
                 param_name = (
                     "response_json_schema"
                     if response_json_schema is not None
                     else "response_schema"
                 )
                 error_message = (
-                    f"`{param_name}` is only supported when "
-                    f"`response_mime_type` is set to one of {allowed_mime_types}"
+                    f"'{param_name}' is only supported when "
+                    f"response_mime_type is set to 'application/json'"
                 )
+                if response_mime_type == "text/x.enum":
+                    error_message += (
+                        ". Instead of 'text/x.enum', define enums using JSON schema."
+                    )
                 raise ValueError(error_message)
 
             gen_config["response_json_schema"] = schema_to_use
@@ -2404,7 +2420,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        # `json_mode` kept for backwards compatibility
+        # `json_mode` kept for backwards compatibility; shouldn't be used in new code
         if method in ("json_mode", "json_schema"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 # Handle Pydantic models
@@ -2433,6 +2449,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             )
         else:
+            # LangChain tool calling structured output method (discouraged)
             tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
             if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
                 parser = PydanticToolsParser(tools=[schema], first_tool_only=True)
