@@ -112,14 +112,12 @@ from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai._function_utils import (
-    _dict_to_gapic_schema,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _ToolConfigDict,
     _ToolDict,
     convert_to_genai_function_declarations,
     is_basemodel_subclass_safe,
-    replace_defs_in_schema,
     tool_to_dict,
 )
 from langchain_google_genai._image_utils import (
@@ -1459,122 +1457,44 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Two methods are supported for structured output:
 
-        * ``method="function_calling"`` (default): Uses tool calling to extract
-        structured data. Compatible with all models.
-        * ``method="json_schema"``: Uses Gemini's native structured output with
-        responseSchema. More reliable but requires Gemini 1.5+ models.
-        ``method="json_mode"`` also works for backwards compatibility but is a misnomer.
-        * `method='json_schema_v2'`: Uses Gemini's enhanced structured output with
-        `response_json_schema`. Supports unions (`anyOf`), recursive schemas (`$ref`),
-        property ordering preservation, and streaming of partial JSON chunks.
+        * `method='function_calling'` (default): Uses tool calling to extract
+            structured data. Compatible with all models.
+        * `method='json_schema'`: Uses Gemini's native structured output with
+            `response_json_schema`.
 
-        The ``json_schema`` method is recommended for better reliability as it
+            Supports unions (`anyOf`), recursive schemas (`$ref`), property ordering
+            preservation, and streaming of partial JSON chunks.
+
+        The `json_schema` method is recommended for better reliability as it
         constrains the model's generation process directly rather than relying on
-        post-processing tool calls. Use `json_schema_v2` when you need advanced
-        features like unions, recursive schemas, or guaranteed property ordering.
-
-    Enhanced structured output (`json_schema_v2`):
-        The `json_schema_v2` method provides advanced features through the new Gemini
-        API structured output capabilities:
-
-        ```python
-        from typing import Union, List, Optional
-        from pydantic import BaseModel
-
-
-        class TextContent(BaseModel):
-            type: str = "text"
-            content: str
-
-
-        class NumberContent(BaseModel):
-            type: str = "number"
-            value: float
-
-
-        # Union types with anyOf support
-        ContentUnion = Union[TextContent, NumberContent]
-
-
-        # Recursive schemas with $ref support
-        class TreeNode(BaseModel):
-            value: str
-            children: Optional[List["TreeNode"]] = None
-
-
-        # Rebuild model to resolve forward references
-        TreeNode.model_rebuild()
-
-        # Use json_schema_v2 for enhanced features
-        llm_union = llm.with_structured_output(ContentUnion, method="json_schema_v2")
-        llm_tree = llm.with_structured_output(TreeNode, method="json_schema_v2")
-        ```
-
-        For streaming structured output, merge dictionaries instead of using `+=`:
-
-        ```python
-        from pydantic import BaseModel
-        from typing import Literal
-
-
-        class Feedback(BaseModel):
-            sentiment: Literal["positive", "neutral", "negative"]
-            summary: str
-
-
-        structured_llm = llm.with_structured_output(Feedback, method="json_schema_v2")
-
-        # Streaming returns dictionaries that need to be merged
-        stream = structured_llm.stream("The new UI is intuitive and beautiful!")
-        full = next(stream)
-        for chunk in stream:
-            full.update(chunk)  # Use .update() to merge dictionaries
-        print(full)  # Complete structured response
-        ```
-
-        You can also use the `response_json_schema` parameter directly:
-
-        ```python
-        schema_with_unions = {
-            "anyOf": [
-                {"type": "object", "properties": {"type": {"const": "text"}}},
-                {"type": "object", "properties": {"type": {"const": "number"}}},
-            ]
-        }
-
-        llm_enhanced = llm.bind(
-            response_mime_type="application/json",
-            response_json_schema=schema_with_unions,
-        )
-        ```
+        post-processing tool calls.
 
     Image input:
-        .. code-block:: python
+        ```python
+        import base64
+        import httpx
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            import httpx
-            from langchain_core.messages import HumanMessage
+        image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+        image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the weather in this image"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-            image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "describe the weather in this image"},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "The weather in this image appears to be sunny and pleasant. The sky is a
-            bright blue with scattered white clouds, suggesting fair weather. The lush
-            green grass and trees indicate a warm and possibly slightly breezy day.
-            There are no signs of rain or storms."
+        ```txt
+        The weather in this image appears to be sunny and pleasant. The sky is a bright
+        blue with scattered white clouds, suggesting fair weather. The lush green grass
+        and trees indicate a warm and possibly slightly breezy day. There are no...
+        ```
 
     PDF input:
         ```python
@@ -1802,26 +1722,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     """
 
     response_schema: dict[str, Any] | None = None
-    """Enforce an schema to the output. The format of the dictionary should follow Open
-    API schema.
-    """
+    """Enforce an schema to the output.
 
-    response_json_schema: dict[str, Any] | None = None
-    """Enhanced structured output schema supporting unions (`anyOf`) and recursive
-    schemas (`$ref`).
+    The format of the dictionary should follow Open API schema.
 
-    !!! warning
-
-        When both `response_schema` and `response_json_schema` are provided,
-        `response_json_schema` takes precedence.
-
-    Replaces `response_schema` for expanded JSON Schema support including:
+    Has JSON Schema support including:
 
     - `anyOf` for unions
     - `$ref` for recursive schemas
     - Output property ordering
     - Minimum/maximum constraints
     - Streaming of partial JSON chunks
+
     """
 
     cached_content: str | None = None
@@ -2104,37 +2016,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if response_mime_type is not None:
             gen_config["response_mime_type"] = response_mime_type
 
-        response_json_schema = kwargs.get(
-            "response_json_schema", self.response_json_schema
-        )
         response_schema = kwargs.get("response_schema", self.response_schema)
-        active_schema = (  # Use response_json_schema if provided
-            response_json_schema
-            if response_json_schema is not None
-            else response_schema
-        )
-        schema_param_name = (
-            "response_json_schema"
-            if response_json_schema is not None
-            else "response_schema"
-        )
 
-        if active_schema is not None:
+        if response_schema is not None:
             allowed_mime_types = ("application/json", "text/x.enum")
             if response_mime_type not in allowed_mime_types:
                 error_message = (
-                    f"`{schema_param_name}` is only supported when "
+                    f"`response_schema` is only supported when "
                     f"`response_mime_type` is set to one of {allowed_mime_types}"
                 )
                 raise ValueError(error_message)
 
-            if response_json_schema is not None:
-                # response_json_schema expects raw JSON Schema dict
-                gen_config["response_json_schema"] = active_schema
-            else:  # response_schema used
-                gapic_response_schema = _dict_to_gapic_schema(active_schema)
-                if gapic_response_schema is not None:
-                    gen_config["response_schema"] = gapic_response_schema
+            gen_config["response_json_schema"] = response_schema
 
         media_resolution = kwargs.get("media_resolution", self.media_resolution)
         if media_resolution is not None:
@@ -2484,9 +2377,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def with_structured_output(
         self,
         schema: dict | type[BaseModel],
-        method: Literal[
-            "function_calling", "json_mode", "json_schema", "json_schema_v2"
-        ]
+        method: Literal["function_calling", "json_mode", "json_schema"]
         | None = "function_calling",
         *,
         include_raw: bool = False,
@@ -2499,10 +2390,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        # `json_schema` preferred, but `json_mode` kept for backwards compatibility
-        # `json_schema_v2` uses the new response_json_schema parameter
-        if method in ("json_mode", "json_schema", "json_schema_v2"):
+        # `json_mode` kept for backwards compatibility
+        if method in ("json_mode", "json_schema"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
+                # Handle Pydantic models
                 if issubclass(schema, BaseModelV1):
                     # Use legacy schema generation for pydantic v1 models
                     schema_json = schema.schema()
@@ -2519,29 +2410,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     raise ValueError(msg)
                 parser = JsonOutputParser()
 
-            if method == "json_schema_v2":
-                # Don't resolve refs to preserve $ref support for recursive schemas
-                llm = self.bind(
-                    response_mime_type="application/json",
-                    response_json_schema=schema_json,  # Uses `response_json_schema`
-                    ls_structured_output_format={
-                        "kwargs": {"method": method},
-                        "schema": schema_json,
-                    },
-                )
-            else:
-                # Legacy behavior: resolve refs in schema because they are not supported
-                # by the older Gemini API endpoint (response_schema)
-                schema_json = replace_defs_in_schema(schema_json)
-
-                llm = self.bind(
-                    response_mime_type="application/json",
-                    response_schema=schema_json,  # Uses `response_schema`
-                    ls_structured_output_format={
-                        "kwargs": {"method": method},
-                        "schema": schema_json,
-                    },
-                )
+            llm = self.bind(
+                response_mime_type="application/json",
+                response_json_schema=schema_json,
+                ls_structured_output_format={
+                    "kwargs": {"method": method},
+                    "schema": schema_json,
+                },
+            )
         else:
             tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
             if isinstance(schema, type) and is_basemodel_subclass_safe(schema):

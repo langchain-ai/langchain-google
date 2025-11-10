@@ -207,7 +207,7 @@ class Feedback(BaseModel):
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
 structured_llm = llm.with_structured_output(
-    schema=Feedback.model_json_schema(), method="json_schema_v2"
+    schema=Feedback.model_json_schema(), method="json_schema"
 )
 
 response = structured_llm.invoke("The new UI is great!")

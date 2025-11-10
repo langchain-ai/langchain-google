@@ -2200,57 +2200,7 @@ def test_response_json_schema_parameter() -> None:
     assert bound_kwargs["response_json_schema"] == schema_dict
 
 
-def test_response_json_schema_precedence_over_response_schema() -> None:
-    """Test that `response_json_schema` takes precedence over `response_schema`."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
-
-    legacy_schema = {"type": "object", "properties": {"old_field": {"type": "string"}}}
-
-    new_schema = {
-        "type": "object",
-        "properties": {"new_field": {"type": "string"}},
-        "anyOf": [
-            {"properties": {"type": {"const": "A"}}},
-            {"properties": {"type": {"const": "B"}}},
-        ],
-    }
-
-    llm_with_both = llm.bind(
-        response_mime_type="application/json",
-        response_schema=legacy_schema,
-        response_json_schema=new_schema,
-    )
-
-    bound_kwargs = cast("Any", llm_with_both).kwargs
-    assert bound_kwargs["response_json_schema"] == new_schema
-    # (Still there but not used)
-    # TODO this isn't intuitive to me why it needs to be there
-    assert bound_kwargs["response_schema"] == legacy_schema
-
-
-def test_with_structured_output_json_schema_v2() -> None:
-    """Test `with_structured_output` using `json_schema_v2`."""
-
-    # Pydantic model schema
-    class Person(BaseModel):
-        name: str
-        age: int
-        skills: list[str]
-
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
-    structured_llm = llm.with_structured_output(Person, method="json_schema_v2")
-    assert structured_llm is not None
-
-
-def test_ref_preservation_between_methods() -> None:
-    """Test difference in `$ref` handling between `json_schema` and `json_schema_v2`.
-
-    The legacy `json_schema` method loses `$defs` definitions, making recursive schemas
-    unusable.
-
-    The `json_schema_v2` method preserves the complete schema including `$defs`.
-    """
-
+def test_ref_preservation() -> None:
     class RecursiveModel(BaseModel):
         name: str
         children: list["RecursiveModel"] | None = None
@@ -2262,26 +2212,16 @@ def test_ref_preservation_between_methods() -> None:
 
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
-    # Test legacy json_schema method
-    structured_legacy = llm.with_structured_output(RecursiveModel, method="json_schema")
-    legacy_llm = cast("Any", structured_legacy).first
-    legacy_schema = legacy_llm.kwargs["response_schema"]
+    structured = llm.with_structured_output(RecursiveModel, method="json_schema")
+    llm = cast("Any", structured).first
+    schema = llm.kwargs["response_json_schema"]
 
-    # Test new json_schema_v2 method
-    structured_v2 = llm.with_structured_output(RecursiveModel, method="json_schema_v2")
-    v2_llm = cast("Any", structured_v2).first
-    v2_schema = v2_llm.kwargs["response_json_schema"]
-
-    assert "$defs" not in legacy_schema, "Legacy method should lose $defs definitions"
-    assert "$defs" in v2_schema, "json_schema_v2 should preserve $defs definitions"
-    assert v2_schema == raw_schema, "json_schema_v2 should preserve raw schema exactly"
-    assert legacy_schema == {"$ref": "#/$defs/RecursiveModel"}, (
-        "Legacy method should only preserve top-level $ref without definitions"
-    )
+    assert "$defs" in schema, "json_schema should preserve $defs definitions"
+    assert schema == raw_schema, "json_schema should preserve raw schema exactly"
 
 
-def test_json_schema_v2_dict_support() -> None:
-    """Test `json_schema_v2` with dictionary schemas."""
+def test_json_schema_dict_support() -> None:
+    """Test `json_schema` with dictionary schemas."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
     dict_schema = {
@@ -2290,9 +2230,7 @@ def test_json_schema_v2_dict_support() -> None:
         "required": ["name"],
     }
 
-    structured_llm_dict = llm.with_structured_output(
-        dict_schema, method="json_schema_v2"
-    )
+    structured_llm_dict = llm.with_structured_output(dict_schema, method="json_schema")
     assert structured_llm_dict is not None
 
 
@@ -2328,29 +2266,15 @@ def test_union_schema_support() -> None:
 
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
-    structured_v1 = llm.with_structured_output(ModerationResult, method="json_schema")
-    structured_v2 = llm.with_structured_output(
-        ModerationResult, method="json_schema_v2"
-    )
+    structured = llm.with_structured_output(ModerationResult, method="json_schema")
 
-    v1_llm = cast("Any", structured_v1).first
-    v2_llm = cast("Any", structured_v2).first
+    llm = cast("Any", structured).first
 
-    # v1 should have response_schema (processed schema without $refs)
-    assert "response_schema" in v1_llm.kwargs
-    assert "response_json_schema" not in v1_llm.kwargs
-
-    # v2 should have response_json_schema (raw schema with $refs preserved)
-    assert "response_json_schema" in v2_llm.kwargs
-    assert "response_schema" not in v2_llm.kwargs
+    assert "response_json_schema" in llm.kwargs
 
 
 def test_recursive_schema_support() -> None:
-    """Test support for recursive schemas using `$ref`.
-
-    The `json_schema_v2` method preserves $ref for recursive schemas, while the legacy
-    `json_schema` method resolves them.
-    """
+    """Test support for recursive schemas using `$ref`."""
 
     class TreeNode(BaseModel):
         value: str
@@ -2360,10 +2284,9 @@ def test_recursive_schema_support() -> None:
 
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
-    # Test json_schema_v2 works with recursive schemas - should not raise an error
     # Preserves $ref for better recursive schema support
-    structured_llm_v2 = llm.with_structured_output(TreeNode, method="json_schema_v2")
-    assert structured_llm_v2 is not None
+    structured_llm = llm.with_structured_output(TreeNode, method="json_schema")
+    assert structured_llm is not None
 
     # Test with a simple recursive schema dict that uses $ref
     recursive_schema = {
@@ -2377,9 +2300,9 @@ def test_recursive_schema_support() -> None:
         },
     }
 
-    # json_schema_v2 should handle $ref properly
+    # json_schema should handle $ref properly
     structured_llm_dict = llm.with_structured_output(
-        recursive_schema, method="json_schema_v2"
+        recursive_schema, method="json_schema"
     )
     assert structured_llm_dict is not None
 
@@ -2409,7 +2332,7 @@ def test_union_schema_with_anyof() -> None:
             },
         ]
     }
-    structured_llm = llm.with_structured_output(union_schema, method="json_schema_v2")
+    structured_llm = llm.with_structured_output(union_schema, method="json_schema")
     assert structured_llm is not None
 
     # Verify anyOf schemas work with previous (json_schema) method too
@@ -2420,24 +2343,15 @@ def test_union_schema_with_anyof() -> None:
 
 
 def test_response_schema_mime_type_validation() -> None:
-    """Test that both `response_schema` and `response_json_schema` require correct
-    MIME type."""
+    """Test that `response_schema` requires correct MIME type."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
     schema = {"type": "object", "properties": {"field": {"type": "string"}}}
 
     # Test response_schema validation - error happens during _prepare_params
-    with pytest.raises(ValueError, match="response_schema.*is only supported when"):
+    with pytest.raises(ValueError, match=r"response_schema.*is only supported when"):
         llm._prepare_params(
             stop=None, response_schema=schema, response_mime_type="text/plain"
-        )
-
-    # Test response_json_schema validation
-    with pytest.raises(
-        ValueError, match="response_json_schema.*is only supported when"
-    ):
-        llm._prepare_params(
-            stop=None, response_json_schema=schema, response_mime_type="text/plain"
         )
 
     # Test that binding succeeds (validation happens later during generation)
@@ -2453,7 +2367,7 @@ def test_response_schema_mime_type_validation() -> None:
 
 
 def test_backward_compatibility_response_schema() -> None:
-    """Test that existing `response_schema` parameter continues to work."""
+    """Test that `response_schema` parameter continues to work."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
     legacy_schema = {
@@ -2469,7 +2383,6 @@ def test_backward_compatibility_response_schema() -> None:
     assert legacy_kwargs["response_mime_type"] == "application/json"
     assert legacy_kwargs["response_schema"] == legacy_schema
 
-    # Test with_structured_output legacy methods still work
     structured_llm = llm.with_structured_output(legacy_schema, method="json_schema")
     assert structured_llm is not None
 
