@@ -7,6 +7,8 @@
 
 Looking for the JS/TS version? Check out [LangChain.js](https://github.com/langchain-ai/langchainjs).
 
+This package provides access to Google Gemini's chat, vision, embeddings, and other capabilities within the LangChain ecosystem.
+
 ## Quick Install
 
 ```bash
@@ -15,44 +17,7 @@ pip install langchain-google-genai
 
 ## 📖 Documentation
 
-View the [documentation](https://docs.langchain.com/oss/python/integrations/providers/google#google-generative-ai) for more details.
-
-This package provides access to Google Gemini's chat, vision, embeddings, and other capabilities within the LangChain ecosystem.
-
-### Audio Output
-
-```python
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-preview-tts")
-
-response = llm.invoke(
-    "Please say The quick brown fox jumps over the lazy dog",
-    generation_config=dict(response_modalities=["AUDIO"]),
-)
-
-# Base64 encoded binary data of the audio
-wav_data = response.additional_kwargs.get("audio")
-with open("output.wav", "wb") as f:
-    f.write(wav_data)
-```
-
-### Thinking Support
-
-```python
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-llm = ChatGoogleGenerativeAI(
-    model="models/gemini-2.5-flash",
-    thinking_budget=1024
-)
-
-response = llm.invoke("How many O's are in Google? How did you verify your answer?")
-reasoning_score = response.usage_metadata["output_token_details"]["reasoning"]
-
-print("Response:", response.content)
-print("Reasoning tokens used:", reasoning_score)
-```
+For full documentation, see the [API reference](https://reference.langchain.com/python/langchain_google_genai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-generative-ai).
 
 ## 📕 Releases & Versioning
 
