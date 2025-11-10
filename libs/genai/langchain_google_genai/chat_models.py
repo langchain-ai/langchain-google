@@ -2017,17 +2017,31 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen_config["response_mime_type"] = response_mime_type
 
         response_schema = kwargs.get("response_schema", self.response_schema)
+        response_json_schema = kwargs.get("response_json_schema")
 
-        if response_schema is not None:
+        # Handle both response_schema and response_json_schema parameters
+        # Regardless, we use `response_json_schema` in the GenerationConfig API request
+        schema_to_use = (
+            response_json_schema
+            if response_json_schema is not None
+            else response_schema
+        )
+
+        if schema_to_use is not None:
             allowed_mime_types = ("application/json", "text/x.enum")
             if response_mime_type not in allowed_mime_types:
+                param_name = (
+                    "response_json_schema"
+                    if response_json_schema is not None
+                    else "response_schema"
+                )
                 error_message = (
-                    f"`response_schema` is only supported when "
+                    f"`{param_name}` is only supported when "
                     f"`response_mime_type` is set to one of {allowed_mime_types}"
                 )
                 raise ValueError(error_message)
 
-            gen_config["response_json_schema"] = response_schema
+            gen_config["response_json_schema"] = schema_to_use
 
         media_resolution = kwargs.get("media_resolution", self.media_resolution)
         if media_resolution is not None:

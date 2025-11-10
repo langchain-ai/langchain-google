@@ -73,21 +73,20 @@ def test_basic_response_json_schema() -> None:
 
     result = llm_with_schema.invoke("Respond with a message 'Hello World' and count 5")
 
-    # Parse the JSON response
     assert isinstance(result.content, str)
     response_data = json.loads(result.content)
     assert "message" in response_data
     assert "count" in response_data
     assert isinstance(response_data["message"], str)
     assert isinstance(response_data["count"], int)
+    assert response_data["message"] == "Hello World"
+    assert response_data["count"] == 5
 
 
 def test_response_json_schema_vs_response_schema() -> None:
-    """Test that `response_json_schema` works with unions while `response_schema`
-    works with basic schemas."""
+    """Test that `response_json_schema` works with unions"""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
 
-    # Schema with union - only supported by response_json_schema
     schema_with_union = {
         "anyOf": [
             {
@@ -109,55 +108,30 @@ def test_response_json_schema_vs_response_schema() -> None:
         ]
     }
 
-    # Basic schema - supported by legacy response_schema
-    basic_schema = {
-        "type": "object",
-        "properties": {
-            "message": {"type": "string"},
-            "success": {"type": "boolean"},
-        },
-        "required": ["message", "success"],
-    }
-
-    llm_new = llm.bind(
+    llm_schema = llm.bind(
         response_mime_type="application/json",
         response_json_schema=schema_with_union,
     )
 
-    # Test with response_schema (legacy) - use basic schema
-    llm_legacy = llm.bind(
-        response_mime_type="application/json", response_schema=basic_schema
-    )
-
-    prompt_new = "Respond with type 'greeting' and message 'Hello there'"
-    prompt_legacy = "Respond with message 'Hello' and success true"
+    prompt = "Respond with type 'greeting' and message 'Hello there'"
 
     # Both should work with their respective schemas
-    result_new = llm_new.invoke(prompt_new)
-    result_legacy = llm_legacy.invoke(prompt_legacy)
+    result = llm_schema.invoke(prompt)
 
-    assert isinstance(result_new.content, str)
-    assert isinstance(result_legacy.content, str)
-    response_new = json.loads(result_new.content)
-    response_legacy = json.loads(result_legacy.content)
+    assert isinstance(result.content, str)
+    response = json.loads(result.content)
 
-    # Check that response_json_schema supports union schemas
-    assert isinstance(response_new, dict)
-    # Should have either greeting structure or count structure
-    has_greeting = "type" in response_new and "message" in response_new
-    has_count = "type" in response_new and "number" in response_new
+    assert isinstance(response, dict)
+
+    has_greeting = "type" in response and "message" in response
+    has_count = "type" in response and "number" in response
     assert has_greeting or has_count, (
-        f"Expected union schema structure, got: {response_new}"
+        f"Expected union schema structure, got: {response}"
     )
 
-    # Check that response_schema works with basic schemas
-    assert isinstance(response_legacy, dict)
-    assert "message" in response_legacy
-    assert "success" in response_legacy
 
-
-def test_json_schema_v2_with_pydantic_model() -> None:
-    """Test json_schema_v2 with a Pydantic model."""
+def test_json_schema_with_pydantic_model() -> None:
+    """Test json_schema with a Pydantic model."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
     structured_llm = llm.with_structured_output(SimpleResponse, method="json_schema")
 
@@ -170,8 +144,8 @@ def test_json_schema_v2_with_pydantic_model() -> None:
     assert result.count == 42
 
 
-def test_json_schema_v2_with_dict_schema() -> None:
-    """Test json_schema_v2 with a dictionary schema."""
+def test_json_schema_with_dict_schema() -> None:
+    """Test json_schema with a dictionary schema."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
 
     schema = {
@@ -194,28 +168,6 @@ def test_json_schema_v2_with_dict_schema() -> None:
     assert "priority" in result
     assert result["title"] == "Complete project"
     assert result["priority"] == 3
-
-
-def test_json_schema_v2_vs_json_schema() -> None:
-    """Compare json_schema_v2 with legacy json_schema method."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
-
-    # Test both methods with the same model
-    structured_v2 = llm.with_structured_output(PersonResponse, method="json_schema")
-    structured_legacy = llm.with_structured_output(PersonResponse, method="json_schema")
-
-    prompt = "Create a person named Alice, age 30, with skills in Python and JavaScript"
-
-    # Both should work and return PersonResponse objects
-    result_v2 = structured_v2.invoke(prompt)
-    result_legacy = structured_legacy.invoke(prompt)
-
-    assert isinstance(result_v2, PersonResponse)
-    assert isinstance(result_legacy, PersonResponse)
-    assert result_v2.name == "Alice"
-    assert result_legacy.name == "Alice"
-    assert result_v2.age == 30
-    assert result_legacy.age == 30
 
 
 def test_recursive_schema_integration() -> None:

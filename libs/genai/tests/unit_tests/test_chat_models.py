@@ -2178,7 +2178,7 @@ def test_system_message_with_additional_message_works() -> None:
 
 
 def test_response_json_schema_parameter() -> None:
-    """Test that `response_json_schema` is properly set."""
+    """Test that `response_json_schema` is properly set via `bind`."""
 
     class TestModel(BaseModel):
         name: str
@@ -2198,6 +2198,74 @@ def test_response_json_schema_parameter() -> None:
     bound_kwargs = cast("Any", llm_with_json_schema).kwargs
     assert bound_kwargs["response_mime_type"] == "application/json"
     assert bound_kwargs["response_json_schema"] == schema_dict
+
+
+def test_response_json_schema_param_mapping() -> None:
+    """Test both `response_schema` and `response_json_schema` map correctly to
+    `response_json_schema` in `GenerationConfig`."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    schema_dict = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
+
+    # Test response_schema parameter maps to response_json_schema in gen_config
+    gen_config_1 = llm._prepare_params(
+        stop=None, response_mime_type="application/json", response_schema=schema_dict
+    )
+    assert gen_config_1.response_json_schema == schema_dict
+
+    # Test response_json_schema parameter maps directly to response_json_schema in
+    # gen_config
+    gen_config_2 = llm._prepare_params(
+        stop=None,
+        response_mime_type="application/json",
+        response_json_schema=schema_dict,
+    )
+    assert gen_config_2.response_json_schema == schema_dict
+
+    # Test that response_json_schema takes precedence over response_schema
+    different_schema = {
+        "type": "object",
+        "properties": {"age": {"type": "integer"}},
+        "required": ["age"],
+    }
+
+    gen_config_3 = llm._prepare_params(
+        stop=None,
+        response_mime_type="application/json",
+        response_schema=schema_dict,
+        response_json_schema=different_schema,
+    )
+    assert (
+        gen_config_3.response_json_schema == different_schema
+    )  # response_json_schema takes precedence
+
+
+def test_with_struct_out() -> None:
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    legacy_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    }
+
+    llm_legacy = llm.bind(
+        response_mime_type="application/json",
+        response_schema=legacy_schema,  # Old param `response_schema` backwards compat
+    )
+
+    legacy_kwargs = cast("Any", llm_legacy).kwargs
+    assert legacy_kwargs["response_mime_type"] == "application/json"
+    assert legacy_kwargs["response_schema"] == legacy_schema
+
+    structured_llm = llm.with_structured_output(legacy_schema, method="json_schema")
+    assert structured_llm is not None
+
+    structured_llm_mode = llm.with_structured_output(legacy_schema, method="json_mode")
+    assert structured_llm_mode is not None
 
 
 def test_ref_preservation() -> None:
@@ -2234,45 +2302,6 @@ def test_json_schema_dict_support() -> None:
     assert structured_llm_dict is not None
 
 
-def test_union_schema_support() -> None:
-    """Test that Union types work correctly with both json_schema methods.
-
-    This addresses a bug where json_schema method would fail with KeyError
-    when processing Union types that generate anyOf arrays with $ref entries.
-    """
-
-    class SpamDetails(BaseModel):
-        """Details for content classified as spam."""
-
-        reason: str = Field(
-            description="The reason why the content is considered spam."
-        )
-        spam_type: Literal["phishing", "scam", "unsolicited promotion", "other"] = (
-            Field(description="The type of spam.")
-        )
-
-    class NotSpamDetails(BaseModel):
-        """Details for content classified as not spam."""
-
-        summary: str = Field(description="A brief summary of the content.")
-        is_safe: bool = Field(
-            description="Whether the content is safe for all audiences."
-        )
-
-    class ModerationResult(BaseModel):
-        """The result of content moderation."""
-
-        decision: SpamDetails | NotSpamDetails
-
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
-
-    structured = llm.with_structured_output(ModerationResult, method="json_schema")
-
-    llm = cast("Any", structured).first
-
-    assert "response_json_schema" in llm.kwargs
-
-
 def test_recursive_schema_support() -> None:
     """Test support for recursive schemas using `$ref`."""
 
@@ -2284,11 +2313,9 @@ def test_recursive_schema_support() -> None:
 
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
-    # Preserves $ref for better recursive schema support
     structured_llm = llm.with_structured_output(TreeNode, method="json_schema")
     assert structured_llm is not None
 
-    # Test with a simple recursive schema dict that uses $ref
     recursive_schema = {
         "type": "object",
         "properties": {
@@ -2342,6 +2369,45 @@ def test_union_schema_with_anyof() -> None:
     assert structured_llm_legacy is not None
 
 
+def test_union_schema_support() -> None:
+    """Test that Union types work correctly with both json_schema methods.
+
+    This addresses a bug where json_schema method would fail with KeyError
+    when processing Union types that generate anyOf arrays with $ref entries.
+    """
+
+    class SpamDetails(BaseModel):
+        """Details for content classified as spam."""
+
+        reason: str = Field(
+            description="The reason why the content is considered spam."
+        )
+        spam_type: Literal["phishing", "scam", "unsolicited promotion", "other"] = (
+            Field(description="The type of spam.")
+        )
+
+    class NotSpamDetails(BaseModel):
+        """Details for content classified as not spam."""
+
+        summary: str = Field(description="A brief summary of the content.")
+        is_safe: bool = Field(
+            description="Whether the content is safe for all audiences."
+        )
+
+    class ModerationResult(BaseModel):
+        """The result of content moderation."""
+
+        decision: SpamDetails | NotSpamDetails
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    structured = llm.with_structured_output(ModerationResult, method="json_schema")
+
+    llm = cast("Any", structured).first
+
+    assert "response_json_schema" in llm.kwargs
+
+
 def test_response_schema_mime_type_validation() -> None:
     """Test that `response_schema` requires correct MIME type."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
@@ -2364,27 +2430,3 @@ def test_response_schema_mime_type_validation() -> None:
         response_json_schema=schema, response_mime_type="application/json"
     )
     assert llm_with_json_schema is not None
-
-
-def test_backward_compatibility_response_schema() -> None:
-    """Test that `response_schema` parameter continues to work."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
-
-    legacy_schema = {
-        "type": "object",
-        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
-    }
-
-    llm_legacy = llm.bind(
-        response_mime_type="application/json", response_schema=legacy_schema
-    )
-
-    legacy_kwargs = cast("Any", llm_legacy).kwargs
-    assert legacy_kwargs["response_mime_type"] == "application/json"
-    assert legacy_kwargs["response_schema"] == legacy_schema
-
-    structured_llm = llm.with_structured_output(legacy_schema, method="json_schema")
-    assert structured_llm is not None
-
-    structured_llm_mode = llm.with_structured_output(legacy_schema, method="json_mode")
-    assert structured_llm_mode is not None
