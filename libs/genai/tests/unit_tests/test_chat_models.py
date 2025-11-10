@@ -1805,7 +1805,7 @@ def test_with_structured_output_json_schema_alias() -> None:
         name: str
         age: int
 
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key="fake-key")
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
 
     structured_llm = llm.with_structured_output(TestModel, method="json_schema")
     assert structured_llm is not None
@@ -1816,7 +1816,7 @@ def test_with_structured_output_json_schema_alias() -> None:
 
 
 def test_modalities_override_in_generation_config() -> None:
-    """Test response modalities in invoke generation_config override model-defined."""
+    """Test response modalities in invoke `generation_config` override model-defined."""
     from langchain_google_genai import Modality
 
     # Mock response with both image and text content
@@ -1851,7 +1851,7 @@ def test_modalities_override_in_generation_config() -> None:
     )
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash-exp-image-generation",
+        model=MODEL_NAME,
         google_api_key="fake-key",
         response_modalities=[Modality.TEXT],  # Initially only TEXT
     )
@@ -1963,7 +1963,7 @@ def test_chat_google_genai_image_content_blocks() -> None:
     )
 
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
     )
 
@@ -2071,7 +2071,7 @@ def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     )
 
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-flash-preview-tts",
+        model=MODEL_NAME,
         google_api_key=SecretStr("test-key"),
         response_modalities=[Modality.AUDIO],
     )
