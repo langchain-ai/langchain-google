@@ -397,7 +397,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
     assert isinstance(output["messages"][-1], AIMessage)
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 def test_audio_timestamp() -> None:
     storage_client = storage.Client()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
@@ -788,7 +788,7 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
     assert isinstance(response, Response)
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
@@ -851,7 +851,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
 
 
 # Image Generation is knwown to be flaky.
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_image_output() -> None:
     model = ChatVertexAI(
@@ -879,7 +879,7 @@ def test_chat_vertexai_gemini_image_output() -> None:
 
 
 # Image Generation is knwown to be flaky.
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME)
@@ -903,6 +903,9 @@ def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
         if isinstance(item, str):
             text_element = item
             break
+        elif isinstance(item, dict) and item.get("type") == "text":
+            text_element = item.get("text")
+            break
     assert text_element is not None, "Did not find the expected text content"
 
 
@@ -910,7 +913,7 @@ def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
 # don't always think before they answer even when thinking is turned on.
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
@@ -925,7 +928,7 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     )
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
@@ -964,7 +967,7 @@ def _check_thinking_output(content: list, output_version: str) -> None:
         assert isinstance(block[thinking_key], str)
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
