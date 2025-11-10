@@ -19,39 +19,6 @@ pip install langchain-google-genai
 
 For full documentation, see the [API reference](https://reference.langchain.com/python/langchain_google_genai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-generative-ai).
 
-### Structured Output
-
-```python
-from langchain_google_genai import ChatGoogleGenerativeAI
-from pydantic import BaseModel
-from typing import Literal
-
-
-class Feedback(BaseModel):
-    sentiment: Literal["positive", "neutral", "negative"]
-    summary: str
-
-
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
-structured_llm = llm.with_structured_output(
-    schema=Feedback.model_json_schema(), method="json_schema"
-)
-
-response = structured_llm.invoke("The new UI is great!")
-response["sentiment"]  # "positive"
-response["summary"]  # "The user expresses positive..."
-```
-
-For streaming structured output, merge dictionaries instead of using `+=`:
-
-```python
-stream = structured_llm.stream("The interface is intuitive and beautiful!")
-full = next(stream)
-for chunk in stream:
-    full.update(chunk)  # Merge dictionaries
-print(full)  # Complete structured response
-```
-
 ## 📕 Releases & Versioning
 
 See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.
