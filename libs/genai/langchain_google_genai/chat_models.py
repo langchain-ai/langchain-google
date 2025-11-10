@@ -51,7 +51,6 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
-from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -955,83 +954,6 @@ def _parse_response_candidate(
     )
 
 
-def _extract_grounding_metadata(candidate: Any) -> dict[str, Any]:
-    """Extract grounding metadata from candidate.
-
-    core's block translator converts this metadata into citation annotations.
-
-    Uses `MessageToDict` for complete unfiltered extraction.
-
-    Falls back to custom field extraction in cases of failure for robustness.
-    """
-    if not hasattr(candidate, "grounding_metadata") or not candidate.grounding_metadata:
-        return {}
-
-    grounding_metadata = candidate.grounding_metadata
-
-    try:
-        # proto-plus wraps protobuf messages - access ._pb to get the raw protobuf
-        # message that MessageToDict expects
-        pb_message = (
-            grounding_metadata._pb
-            if hasattr(grounding_metadata, "_pb")
-            else grounding_metadata
-        )
-
-        return MessageToDict(  # type: ignore[call-arg]
-            pb_message,
-            preserving_proto_field_name=True,
-            always_print_fields_with_no_presence=True,
-            # type stub issue - ensures that protobuf fields with default values
-            # (like start_index=0) are included in the output
-        )
-    except (AttributeError, TypeError, ImportError):
-        # Attempt manual extraction of known fields
-        result: dict[str, Any] = {}
-
-        # Grounding chunks
-        if hasattr(grounding_metadata, "grounding_chunks"):
-            grounding_chunks = []
-            for chunk in grounding_metadata.grounding_chunks:
-                chunk_data: dict[str, Any] = {}
-                if hasattr(chunk, "web") and chunk.web:
-                    chunk_data["web"] = {
-                        "uri": chunk.web.uri if hasattr(chunk.web, "uri") else "",
-                        "title": chunk.web.title if hasattr(chunk.web, "title") else "",
-                    }
-                grounding_chunks.append(chunk_data)
-            result["grounding_chunks"] = grounding_chunks
-
-        # Grounding supports
-        if hasattr(grounding_metadata, "grounding_supports"):
-            grounding_supports = []
-            for support in grounding_metadata.grounding_supports:
-                support_data: dict[str, Any] = {}
-                if hasattr(support, "segment") and support.segment:
-                    support_data["segment"] = {
-                        "start_index": getattr(support.segment, "start_index", 0),
-                        "end_index": getattr(support.segment, "end_index", 0),
-                        "text": getattr(support.segment, "text", ""),
-                        "part_index": getattr(support.segment, "part_index", 0),
-                    }
-                if hasattr(support, "grounding_chunk_indices"):
-                    support_data["grounding_chunk_indices"] = list(
-                        support.grounding_chunk_indices
-                    )
-                if hasattr(support, "confidence_scores"):
-                    support_data["confidence_scores"] = [
-                        round(score, 6) for score in support.confidence_scores
-                    ]
-                grounding_supports.append(support_data)
-            result["grounding_supports"] = grounding_supports
-
-        # Web search queries
-        if hasattr(grounding_metadata, "web_search_queries"):
-            result["web_search_queries"] = list(grounding_metadata.web_search_queries)
-
-        return result
-
-
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
@@ -1094,15 +1016,20 @@ def _response_to_result(
             proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
             for safety_rating in candidate.safety_ratings
         ]
-        grounding_metadata = _extract_grounding_metadata(candidate)
-        generation_info["grounding_metadata"] = grounding_metadata
         message = _parse_response_candidate(candidate, streaming=stream)
-
-        message.usage_metadata = lc_usage
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
-        message.response_metadata["grounding_metadata"] = grounding_metadata
+
+        try:
+            if candidate.grounding_metadata:
+                grounding_metadata = proto.Message.to_dict(candidate.grounding_metadata)
+                generation_info["grounding_metadata"] = grounding_metadata
+                message.response_metadata["grounding_metadata"] = grounding_metadata
+        except AttributeError:
+            pass
+
+        message.usage_metadata = lc_usage
 
         if stream:
             generations.append(
