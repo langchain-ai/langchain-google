@@ -1,6 +1,8 @@
 name: "🐛 Bug Report"
 description: Report a bug in a `langchain-google` package
 labels: ["bug"]
+type: bug
+assignees: []
 body:
   - type: markdown
     attributes:

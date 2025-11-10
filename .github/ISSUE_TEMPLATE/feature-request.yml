@@ -1,6 +1,8 @@
 name: "✨ Feature Request"
 description: Request a new feature or enhancement for `langchain-google` packages
-labels: ["feature request"]
+labels: ["enhancement"]
+type: feature
+assignees: []
 body:
   - type: markdown
     attributes:
