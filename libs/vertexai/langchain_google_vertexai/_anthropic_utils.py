@@ -1,19 +1,12 @@
 import base64
 import re
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Tuple,
-    Type,
     TypedDict,
-    Union,
     cast,
 )
 
@@ -51,9 +44,9 @@ _message_type_lookups = {
 
 
 def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
-    """Create UsageMetadata from Anthropic usage with proper cache token handling.
+    """Create `UsageMetadata` from Anthropic usage with proper cache token handling.
 
-    This matches the official langchain_anthropic implementation exactly.
+    This matches the official `langchain_anthropic` implementation exactly.
     """
     input_token_details: dict = {
         "cache_read": getattr(anthropic_usage, "cache_read_input_tokens", None),
@@ -84,8 +77,8 @@ def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
     )
 
 
-def _format_image(image_url: str, project: Optional[str]) -> Dict:
-    """Formats a message image to a dict for anthropic api."""
+def _format_image(image_url: str, project: str | None) -> dict:
+    """Formats a message image to a dict for Anthropic API."""
     regex = r"^data:(?P<media_type>(?:image|application)/.+);base64,(?P<data>.+)$"
     match = re.match(regex, image_url)
     if match:
@@ -132,8 +125,8 @@ def _format_image(image_url: str, project: Optional[str]) -> Dict:
     raise ValueError(msg)
 
 
-def _get_cache_control(message: BaseMessage) -> Optional[Dict[str, Any]]:
-    """Extract cache control from message's additional_kwargs or content block."""
+def _get_cache_control(message: BaseMessage) -> dict[str, Any] | None:
+    """Extract cache control from message's `additional_kwargs` or content block."""
     return (
         message.additional_kwargs.get("cache_control")
         if isinstance(message.additional_kwargs, dict)
@@ -141,24 +134,25 @@ def _get_cache_control(message: BaseMessage) -> Optional[Dict[str, Any]]:
     )
 
 
-def _format_text_content(text: str) -> Dict[str, Union[str, Dict[str, Any]]]:
+def _format_text_content(text: str) -> dict[str, str | dict[str, Any]]:
     """Format text content."""
-    content: Dict[str, Union[str, Dict[str, Any]]] = {"type": "text", "text": text}
+    content: dict[str, str | dict[str, Any]] = {"type": "text", "text": text}
     return content
 
 
 def _format_message_anthropic(
-    message: Union[HumanMessage, AIMessage, SystemMessage], project: Optional[str]
+    message: HumanMessage | AIMessage | SystemMessage, project: str | None
 ):
     """Format a message for Anthropic API.
 
     Args:
-        message: The message to format. Can be HumanMessage, AIMessage, or SystemMessage.
+        message: The message to format. Can be `HumanMessage`, `AIMessage`, or
+            `SystemMessage`.
 
     Returns:
-        A dictionary with the formatted message, or None if the message is empty.
-    """  # noqa: E501
-    content: List[Dict[str, Any]] = []
+        A `dict` with the formatted message, or `None` if the message is empty.
+    """
+    content: list[dict[str, Any]] = []
 
     if isinstance(message.content, str):
         if not message.content.strip():
@@ -286,7 +280,7 @@ def _format_message_anthropic(
 
     if isinstance(message, AIMessage) and message.tool_calls:
         for tc in message.tool_calls:
-            tu = cast("Dict[str, Any]", _lc_tool_call_to_anthropic_tool_use_block(tc))
+            tu = cast("dict[str, Any]", _lc_tool_call_to_anthropic_tool_use_block(tc))
             content.append(tu)
 
     if not content:
@@ -298,12 +292,12 @@ def _format_message_anthropic(
 
 
 def _format_messages_anthropic(
-    messages: List[BaseMessage],
-    project: Optional[str],
-) -> Tuple[Optional[Dict[str, Any]], List[Dict]]:
-    """Formats messages for anthropic."""
-    system_messages: Optional[Dict[str, Any]] = None
-    formatted_messages: List[Dict] = []
+    messages: list[BaseMessage],
+    project: str | None,
+) -> tuple[dict[str, Any] | None, list[dict]]:
+    """Formats messages for Anthropic."""
+    system_messages: dict[str, Any] | None = None
+    formatted_messages: list[dict] = []
 
     merged_messages = _merge_messages(messages)
     for i, message in enumerate(merged_messages):
@@ -327,13 +321,13 @@ def _format_messages_anthropic(
 class AnthropicTool(TypedDict):
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]
 
 
 def convert_to_anthropic_tool(
-    tool: Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool],
+    tool: dict[str, Any] | type[BaseModel] | Callable | BaseTool,
 ) -> AnthropicTool:
-    # already in Anthropic tool format
+    # Already in Anthropic tool format
     if isinstance(tool, dict) and all(
         k in tool for k in ("name", "description", "input_schema")
     ):
@@ -346,33 +340,84 @@ def convert_to_anthropic_tool(
     )
 
 
+def _clean_content_block(block: Any) -> Any:
+    """Remove streaming metadata fields from content blocks.
+
+    Anthropic's streaming API adds `index` and `partial_json` fields to content blocks
+    during streaming. These fields must be removed before sending back to the API.
+
+    Args:
+        block: Content block (`dict`, `str`, or other type)
+
+    Returns:
+        Cleaned content block with streaming metadata removed
+    """
+    if not isinstance(block, dict):
+        return block
+
+    # Remove known streaming metadata fields
+    # 'index' - added during streaming to track block position
+    # 'partial_json' - added during streaming for incremental JSON parsing
+    return {k: v for k, v in block.items() if k not in ("index", "partial_json")}
+
+
+def _clean_content(content: Any) -> Any:
+    """Recursively clean content (`str`, `list`, or `dict`).
+
+    Args:
+        content: Content to clean (can be `str`, `list`, `dict`, or other)
+
+    Returns:
+        Cleaned content with streaming metadata removed
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return [_clean_content_block(block) for block in content]
+    if isinstance(content, dict):
+        return _clean_content_block(content)
+    return content
+
+
 def _merge_messages(
     messages: Sequence[BaseMessage],
-) -> List[Union[SystemMessage, AIMessage, HumanMessage]]:
+) -> list[SystemMessage | AIMessage | HumanMessage]:
     """Merge runs of human/tool messages into single human messages with content blocks."""  # noqa: E501
     merged: list = []
     for curr in messages:
         curr = curr.model_copy(deep=True)
         if isinstance(curr, ToolMessage):
+            # Check if already in tool_result format (backward compatibility)
             if isinstance(curr.content, list) and all(
                 isinstance(block, dict) and block.get("type") == "tool_result"
                 for block in curr.content
             ):
-                curr = HumanMessage(curr.content)
+                # Already formatted - just convert to HumanMessage and clean content
+                cleaned_content = _clean_content(curr.content)
+                curr = HumanMessage(cleaned_content)
             else:
-                curr = HumanMessage(
-                    [
-                        {
-                            "type": "tool_result",
-                            "content": curr.content,
-                            "tool_use_id": curr.tool_call_id,
-                        }
-                    ]
-                )
+                # Convert to tool_result format
+                tool_result_block = {
+                    "type": "tool_result",
+                    "content": _clean_content(curr.content),
+                    "tool_use_id": curr.tool_call_id,
+                }
+                # Add error flag if present
+                if curr.status == "error":
+                    tool_result_block["is_error"] = True
+
+                curr = HumanMessage([tool_result_block])
+        elif isinstance(curr, AIMessage):
+            # Clean streaming metadata from AIMessage content blocks
+            if isinstance(curr.content, list):
+                cleaned_content = _clean_content(curr.content)
+                if cleaned_content != curr.content:
+                    curr = curr.model_copy(deep=True)
+                    curr.content = cleaned_content
         last = merged[-1] if merged else None
         if isinstance(last, HumanMessage) and isinstance(curr, HumanMessage):
             if isinstance(last.content, str):
-                new_content: List = [{"type": "text", "text": last.content}]
+                new_content: list = [{"type": "text", "text": last.content}]
             else:
                 new_content = last.content
             if isinstance(curr.content, str):
@@ -408,12 +453,13 @@ def _make_message_chunk_from_anthropic_event(
     *,
     stream_usage: bool = True,
     coerce_content_to_string: bool,
-) -> Optional[AIMessageChunk]:
-    """Convert Anthropic event to AIMessageChunk.
-    Note that not all events will result in a message chunk. In these cases
-    we return None.
+) -> AIMessageChunk | None:
+    """Convert Anthropic event to `AIMessageChunk`.
+
+    Note that not all events will result in a message chunk. In these cases we return
+    `None`.
     """
-    message_chunk: Optional[AIMessageChunk] = None
+    message_chunk: AIMessageChunk | None = None
     # See https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/lib/streaming/_messages.py  # noqa: E501
     if event.type == "message_start" and stream_usage:
         # Follow official langchain_anthropic pattern exactly

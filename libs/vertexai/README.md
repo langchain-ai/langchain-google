@@ -1,27 +1,23 @@
 # langchain-google-vertexai
 
-This package contains the LangChain integrations for Google Cloud generative models.
+[![PyPI - Version](https://img.shields.io/pypi/v/langchain-google-vertexai?label=%20)](https://pypi.org/project/langchain-google-vertexai/#history)
+[![PyPI - License](https://img.shields.io/pypi/l/langchain-google-vertexai)](https://opensource.org/licenses/MIT)
+[![PyPI - Downloads](https://img.shields.io/pepy/dt/langchain-google-vertexai)](https://pypistats.org/packages/langchain-google-vertexai)
+[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/langchainai.svg?style=social&label=Follow%20%40LangChainAI)](https://twitter.com/langchainai)
 
-## Contents
+Looking for the JS/TS version? Check out [LangChain.js](https://github.com/langchain-ai/langchainjs).
 
-- [langchain-google-vertexai](#langchain-google-vertexai)
-  - [Contents](#contents)
-  - [Installation](#installation)
-  - [Chat Models](#chat-models)
-    - [Multimodal inputs](#multimodal-inputs)
-    - [Multimodal Outputs](#multimodal-outputs)
-  - [Embeddings](#embeddings)
-  - [LLMs](#llms)
-  - [Code Generation](#code-generation)
-    - [Example: Generate a Python function](#example-generate-a-python-function)
-    - [Example: Generate JavaScript code](#example-generate-javascript-code)
-    - [Notes](#notes)
-
-## Installation
+## Quick Install
 
 ```bash
-pip install -U langchain-google-vertexai
+pip install langchain-google-vertexai
 ```
+
+## 📖 Documentation
+
+View the [documentation](https://docs.langchain.com/oss/python/integrations/providers/google) for more details.
+
+This package contains the LangChain integrations for Google Cloud generative models.
 
 ## Chat Models
 

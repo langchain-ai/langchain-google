@@ -10,19 +10,12 @@ import time
 import uuid
 import warnings
 import wave
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Tuple,
-    Type,
-    Union,
     cast,
 )
 
@@ -58,11 +51,16 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LangSmithParams, LanguageModelInput
+from langchain_core.language_models import (
+    LangSmithParams,
+    LanguageModelInput,
+    is_openai_data_block,
+)
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -74,6 +72,7 @@ from langchain_core.messages import (
     ToolMessage,
     is_data_content_block,
 )
+from langchain_core.messages import content as types
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
@@ -110,6 +109,9 @@ from langchain_google_genai._common import (
     _BaseGoogleGenerativeAI,
     get_client_info,
 )
+from langchain_google_genai._compat import (
+    _convert_from_v1_to_generativelanguage_v1beta,
+)
 from langchain_google_genai._function_utils import (
     _dict_to_gapic_schema,
     _tool_choice_to_tool_config,
@@ -132,19 +134,15 @@ logger = logging.getLogger(__name__)
 
 _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"]
 
-_FunctionDeclarationType = Union[
-    FunctionDeclaration,
-    dict[str, Any],
-    Callable[..., Any],
-]
+_FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Custom exception class for errors associated with the `Google GenAI` API.
 
-    This exception is raised when there are specific issues related to the Google genai
-    API usage in the ChatGoogleGenerativeAI class, such as unsupported message types or
-    roles.
+    This exception is raised when there are specific issues related to the Google GenAI
+    API usage in the `ChatGoogleGenerativeAI` class, such as unsupported message types
+    or roles.
     """
 
 
@@ -157,12 +155,11 @@ def _create_retry_decorator(
     """Creates and returns a preconfigured tenacity retry decorator.
 
     The retry decorator is configured to handle specific Google API exceptions such as
-    ResourceExhausted and ServiceUnavailable. It uses an exponential backoff strategy
-    for retries.
+    `ResourceExhausted` and `ServiceUnavailable`. It uses an exponential backoff
+    strategy for retries.
 
     Returns:
-        Callable[[Any], Any]: A retry decorator configured for handling specific
-        Google API exceptions.
+        A retry decorator configured for handling specific Google API exceptions.
     """
     return retry(
         reraise=True,
@@ -189,8 +186,8 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     errors or temporary service unavailability.
 
     Args:
-        generation_method (Callable): The chat generation method to be executed.
-        **kwargs (Any): Additional keyword arguments to pass to the generation method.
+        generation_method: The chat generation method to be executed.
+        **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
         Any: The result from the chat generation method.
@@ -223,7 +220,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
-                time.sleep(getattr(e, "retry_after"))
+                time.sleep(e.retry_after)
             raise
         except Exception:
             raise
@@ -246,8 +243,8 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     errors or temporary service unavailability.
 
     Args:
-        generation_method (Callable): The chat generation method to be executed.
-        **kwargs (Any): Additional keyword arguments to pass to the generation method.
+        generation_method: The chat generation method to be executed.
+        **kwargs: Additional keyword arguments to pass to the generation method.
 
     Returns:
         Any: The result from the chat generation method.
@@ -272,7 +269,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
                 "wait_exponential_max", 60.0
             ):
-                time.sleep(getattr(e, "retry_after"))
+                time.sleep(e.retry_after)
             raise
         except Exception:
             raise
@@ -287,56 +284,79 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
     return await _achat_with_retry(**params)
 
 
-def _is_lc_content_block(part: dict) -> bool:
-    return "type" in part
-
-
-def _is_openai_image_block(block: dict) -> bool:
-    """Check if the block contains image data in OpenAI Chat Completions format."""
-    if block.get("type") == "image_url":
-        if (
-            (set(block.keys()) <= {"type", "image_url", "detail"})
-            and (image_url := block.get("image_url"))
-            and isinstance(image_url, dict)
-        ):
-            url = image_url.get("url")
-            if isinstance(url, str):
-                return True
-    else:
-        return False
-
-    return False
-
-
 def _convert_to_parts(
-    raw_content: Union[str, Sequence[Union[str, dict]]],
-) -> List[Part]:
-    """Converts a list of LangChain messages into a Google parts."""
-    parts = []
+    raw_content: str | Sequence[str | dict],
+) -> list[Part]:
+    """Converts LangChain message content into `generativelanguage_v1beta` parts.
+
+    Used when preparing Human, System and AI messages for sending to the API.
+
+    Handles both legacy (pre-v1) dict-based content blocks and v1 `ContentBlock`
+    objects.
+    """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
+
+    parts = []
+    # Iterate over each item in the content list, constructing a list of Parts
     for part in content:
         if isinstance(part, str):
             parts.append(Part(text=part))
         elif isinstance(part, Mapping):
-            if _is_lc_content_block(part):
+            if "type" in part:
                 if part["type"] == "text":
-                    parts.append(Part(text=part["text"]))
-                elif is_data_content_block(part):
-                    if part["source_type"] == "url":
-                        bytes_ = image_loader._bytes_from_url(part["url"])
-                    elif part["source_type"] == "base64":
-                        bytes_ = base64.b64decode(part["data"])
+                    # Either old dict-style CC text block or new TextContentBlock
+                    # Check if there's a signature attached to this text block
+                    thought_sig = None
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            # Decode base64-encoded signature back to bytes
+                            thought_sig = base64.b64decode(sig)
+                    if thought_sig:
+                        parts.append(
+                            Part(text=part["text"], thought_signature=thought_sig)
+                        )
                     else:
-                        msg = "source_type must be url or base64."
+                        parts.append(Part(text=part["text"]))
+                elif is_data_content_block(part):
+                    # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
+
+                    if "source_type" in part:
+                        # Catch legacy v0 formats
+                        # Safe since v1 content blocks don't have `source_type` key
+                        if part["source_type"] == "url":
+                            bytes_ = image_loader._bytes_from_url(part["url"])
+                        elif part["source_type"] == "base64":
+                            bytes_ = base64.b64decode(part["data"])
+                        else:
+                            # Unable to support IDContentBlock
+                            msg = "source_type must be url or base64."
+                            raise ValueError(msg)
+                    elif "url" in part:
+                        # v1 multimodal block w/ URL
+                        bytes_ = image_loader._bytes_from_url(part["url"])
+                    elif "base64" in part:
+                        # v1 multimodal block w/ base64
+                        bytes_ = base64.b64decode(part["base64"])
+                    else:
+                        msg = (
+                            "Data content block must contain 'url', 'base64', or "
+                            "'data' field."
+                        )
                         raise ValueError(msg)
                     inline_data: dict = {"data": bytes_}
                     if "mime_type" in part:
                         inline_data["mime_type"] = part["mime_type"]
                     else:
-                        source = cast("str", part.get("url") or part.get("data"))
+                        # Guess MIME type based on data field if not provided
+                        source = cast(
+                            "str",
+                            part.get("url") or part.get("base64") or part.get("data"),
+                        )
                         mime_type, _ = mimetypes.guess_type(source)
                         if not mime_type:
+                            # Last resort - try to guess based on file bytes
                             kind = filetype.guess(bytes_)
                             if kind:
                                 mime_type = kind.mime
@@ -344,6 +364,7 @@ def _convert_to_parts(
                             inline_data["mime_type"] = mime_type
                     parts.append(Part(inline_data=inline_data))
                 elif part["type"] == "image_url":
+                    # Chat Completions image format
                     img_url = part["image_url"]
                     if isinstance(img_url, dict):
                         if "url" not in img_url:
@@ -351,9 +372,9 @@ def _convert_to_parts(
                             raise ValueError(msg)
                         img_url = img_url["url"]
                     parts.append(image_loader.load_part(img_url))
-                # Handle media type like LangChain.js
-                # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                 elif part["type"] == "media":
+                    # Handle `media` following pattern established in LangChain.js
+                    # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                     if "mime_type" not in part:
                         msg = f"Missing mime_type in media part: {part}"
                         raise ValueError(msg)
@@ -361,10 +382,12 @@ def _convert_to_parts(
                     media_part = Part()
 
                     if "data" in part:
+                        # Embedded media
                         media_part.inline_data = Blob(
                             data=part["data"], mime_type=mime_type
                         )
                     elif "file_uri" in part:
+                        # Referenced files (e.g. stored in GCS)
                         media_part.file_data = FileData(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
@@ -375,7 +398,59 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
+                elif part["type"] == "function_call_signature":
+                    # Signature for function_call Part - skip it here as it should be
+                    # attached to the actual function_call Part
+                    # This is handled separately in the history parsing logic
+                    pass
+                elif part["type"] == "thinking":
+                    # Pre-existing thinking block format that we continue to store as
+                    thought_sig = None
+                    if "signature" in part:
+                        sig = part["signature"]
+                        if sig and isinstance(sig, str):
+                            # Decode base64-encoded signature back to bytes
+                            thought_sig = base64.b64decode(sig)
+                    parts.append(
+                        Part(
+                            text=part["thinking"],
+                            thought=True,
+                            thought_signature=thought_sig,
+                        )
+                    )
+                elif part["type"] == "reasoning":
+                    # ReasoningContentBlock (when output_version = "v1")
+                    extras = part.get("extras", {}) or {}
+                    sig = extras.get("signature")
+                    thought_sig = None
+                    if sig and isinstance(sig, str):
+                        # Decode base64-encoded signature back to bytes
+                        thought_sig = base64.b64decode(sig)
+                    parts.append(
+                        Part(
+                            text=part["reasoning"],
+                            thought=True,
+                            thought_signature=thought_sig,
+                        )
+                    )
+                elif part["type"] == "server_tool_call":
+                    if part.get("name") == "code_interpreter":
+                        args = part.get("args", {})
+                        code = args.get("code", "")
+                        language = args.get("language", "python")
+                        executable_code_part = Part(
+                            executable_code=ExecutableCode(language=language, code=code)
+                        )
+                        parts.append(executable_code_part)
+                    else:
+                        warnings.warn(
+                            f"Server tool call with name '{part.get('name')}' is not "
+                            "currently supported by Google GenAI. Only "
+                            "'code_interpreter' is supported.",
+                            stacklevel=2,
+                        )
                 elif part["type"] == "executable_code":
+                    # Legacy executable_code format (backward compat)
                     if "executable_code" not in part or "language" not in part:
                         msg = (
                             "Executable code part must have 'code' and 'language' "
@@ -388,7 +463,22 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(executable_code_part)
+                elif part["type"] == "server_tool_result":
+                    output = part.get("output", "")
+                    status = part.get("status", "success")
+                    # Map status to outcome: success → 1 (OUTCOME_OK), error → 2
+                    outcome = 1 if status == "success" else 2
+                    # Check extras for original outcome if available
+                    if "extras" in part and "outcome" in part["extras"]:
+                        outcome = part["extras"]["outcome"]
+                    code_execution_result_part = Part(
+                        code_execution_result=CodeExecutionResult(
+                            output=str(output), outcome=outcome
+                        )
+                    )
+                    parts.append(code_execution_result_part)
                 elif part["type"] == "code_execution_result":
+                    # Legacy code_execution_result format (backward compat)
                     if "code_execution_result" not in part:
                         msg = (
                             "Code execution result part must have "
@@ -406,32 +496,25 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(code_execution_result_part)
-                elif part["type"] == "thinking":
-                    parts.append(Part(text=part["thinking"], thought=True))
                 else:
-                    msg = (
-                        f"Unrecognized message part type: {part['type']}. Only text, "
-                        f"image_url, and media types are supported."
-                    )
+                    msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
             else:
-                # Yolo
+                # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
                     "Unrecognized message part format. Assuming it's a text part."
                 )
                 parts.append(Part(text=str(part)))
         else:
-            # TODO: Maybe some of Google's native stuff
-            # would hit this branch.
-            msg = "Gemini only supports text and inline_data parts."
+            msg = "Unknown error occurred while converting LC message content to parts."
             raise ChatGoogleGenerativeAIError(msg)
     return parts
 
 
 def _convert_tool_message_to_parts(
-    message: ToolMessage | FunctionMessage, name: Optional[str] = None
+    message: ToolMessage | FunctionMessage, name: str | None = None
 ) -> list[Part]:
-    """Converts a tool or function message to a Google part."""
+    """Converts a tool or function message to a Google `Part`."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
     name = message.name or name or message.additional_kwargs.get("name")
     response: Any
@@ -441,7 +524,7 @@ def _convert_tool_message_to_parts(
         other_blocks = []
         for block in message.content:
             if isinstance(block, dict) and (
-                is_data_content_block(block) or _is_openai_image_block(block)
+                is_data_content_block(block) or is_openai_data_block(block)
             ):
                 media_blocks.append(block)
             else:
@@ -474,7 +557,7 @@ def _get_ai_message_tool_messages_parts(
     """Conversion.
 
     Finds relevant tool messages for the AI message and converts them to a single list
-    of Parts.
+    of `Part`s.
     """
     # We are interested only in the tool messages that are part of the AI message
     tool_calls_ids = {tool_call["id"]: tool_call for tool_call in ai_message.tool_calls}
@@ -495,9 +578,22 @@ def _get_ai_message_tool_messages_parts(
 
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
-) -> Tuple[Optional[Content], List[Content]]:
-    messages: List[Content] = []
+) -> tuple[Content | None, list[Content]]:
+    """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
+    Args:
+        input_messages: Sequence of `BaseMessage` objects representing the chat history.
+        convert_system_message_to_human: Whether to convert the first system message
+            into a `HumanMessage`. Deprecated, use system instructions instead.
+
+    Returns:
+        A tuple containing:
+
+            - An optional `google.ai.generativelanguage_v1beta.types.Content`
+                representing the system instruction (if any).
+            - A list of `google.ai.generativelanguage_v1beta.types.Content` representing
+                the formatted messages.
+    """
     if convert_system_message_to_human:
         warnings.warn(
             "The 'convert_system_message_to_human' parameter is deprecated and will be "
@@ -505,8 +601,30 @@ def _parse_chat_history(
             DeprecationWarning,
             stacklevel=2,
         )
+    input_messages = list(input_messages)  # Make a mutable copy
 
-    system_instruction: Optional[Content] = None
+    # Case where content was serialized to v1 format
+    for idx, message in enumerate(input_messages):
+        if (
+            isinstance(message, AIMessage)
+            and message.response_metadata.get("output_version") == "v1"
+        ):
+            # Unpack known v1 content to v1beta format for the request
+            #
+            # Old content types and any previously serialized messages passed back in to
+            # history will skip this, but hit and processed in `_convert_to_parts`
+            input_messages[idx] = message.model_copy(
+                update={
+                    "content": _convert_from_v1_to_generativelanguage_v1beta(
+                        cast("list[types.ContentBlock]", message.content),
+                        message.response_metadata.get("model_provider"),
+                    )
+                }
+            )
+
+    formatted_messages: list[Content] = []
+
+    system_instruction: Content | None = None
     messages_without_tool_messages = [
         message for message in input_messages if not isinstance(message, ToolMessage)
     ]
@@ -527,19 +645,43 @@ def _parse_chat_history(
             role = "model"
             if message.tool_calls:
                 ai_message_parts = []
-                for tool_call in message.tool_calls:
+                # Extract any function_call_signature blocks from content
+                function_call_sigs: dict[int, bytes] = {}
+                if isinstance(message.content, list):
+                    for idx, item in enumerate(message.content):
+                        if (
+                            isinstance(item, dict)
+                            and item.get("type") == "function_call_signature"
+                        ):
+                            sig_str = item.get("signature", "")
+                            if sig_str and isinstance(sig_str, str):
+                                # Decode base64-encoded signature back to bytes
+                                sig_bytes = base64.b64decode(sig_str)
+                                function_call_sigs[idx] = sig_bytes
+
+                for tool_call_idx, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         {
                             "name": tool_call["name"],
                             "args": tool_call["args"],
                         }
                     )
-                    ai_message_parts.append(Part(function_call=function_call))
+                    # Check if there's a signature for this function call
+                    # (We use the index to match signature to function call)
+                    sig = function_call_sigs.get(tool_call_idx)
+                    if sig:
+                        ai_message_parts.append(
+                            Part(function_call=function_call, thought_signature=sig)
+                        )
+                    else:
+                        ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
                     tool_messages=tool_messages, ai_message=message
                 )
-                messages.append(Content(role=role, parts=ai_message_parts))
-                messages.append(Content(role="user", parts=tool_messages_parts))
+                formatted_messages.append(Content(role=role, parts=ai_message_parts))
+                formatted_messages.append(
+                    Content(role="user", parts=tool_messages_parts)
+                )
                 continue
             if raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
@@ -549,7 +691,11 @@ def _parse_chat_history(
                     }
                 )
                 parts = [Part(function_call=function_call)]
+            elif message.response_metadata.get("output_version") == "v1":
+                # Already converted to v1beta format above
+                parts = message.content  # type: ignore[assignment]
             else:
+                # Prepare request content parts from message.content field
                 parts = _convert_to_parts(message.content)
         elif isinstance(message, HumanMessage):
             role = "user"
@@ -564,14 +710,17 @@ def _parse_chat_history(
             msg = f"Unexpected message with type {type(message)} at the position {i}."
             raise ValueError(msg)
 
-        messages.append(Content(role=role, parts=parts))
-    return system_instruction, messages
+        # Final step; assemble the Content object to pass to the API
+        # If version = "v1", the parts are already in v1beta format and will be
+        # automatically converted using protobuf's auto-conversion
+        formatted_messages.append(Content(role=role, parts=parts))
+    return system_instruction, formatted_messages
 
 
 # Helper function to append content consistently
 def _append_to_content(
-    current_content: Union[str, List[Any], None], new_item: Any
-) -> Union[str, List[Any]]:
+    current_content: str | list[Any] | None, new_item: Any
+) -> str | list[Any]:
     """Appends a new item to the content, handling different initial content types."""
     if current_content is None and isinstance(new_item, str):
         return new_item
@@ -589,16 +738,23 @@ def _append_to_content(
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate, streaming: bool = False
+    response_candidate: Candidate,
+    streaming: bool = False,
+    model_name: str | None = None,
 ) -> AIMessage:
-    content: Union[None, str, List[Union[str, dict]]] = None
-    additional_kwargs: Dict[str, Any] = {}
+    content: None | str | list[str | dict] = None
+    additional_kwargs: dict[str, Any] = {}
+    response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
+    if model_name:
+        response_metadata["model_name"] = model_name
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
+    # Track function call signatures separately to handle them conditionally
+    function_call_signatures: list[dict] = []
 
     for part in response_candidate.content.parts:
-        text: Optional[str] = None
+        text: str | None = None
         try:
             if hasattr(part, "text") and part.text is not None:
                 text = part.text
@@ -608,21 +764,49 @@ def _parse_response_candidate(
         except AttributeError:
             pass
 
+        # Extract thought signature if present (can be on any Part type)
+        # Signatures are binary data, encode to base64 string for JSON serialization
+        thought_sig: str | None = None
+        if hasattr(part, "thought_signature") and part.thought_signature:
+            try:
+                # Encode binary signature to base64 string
+                thought_sig = base64.b64encode(part.thought_signature).decode("ascii")
+                if not thought_sig:  # Empty string
+                    thought_sig = None
+            except (AttributeError, TypeError):
+                thought_sig = None
+
         if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
                 "thinking": part.text,
             }
+            # Include signature if present
+            if thought_sig:
+                thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
         elif text is not None and text:
-            content = _append_to_content(content, text)
+            # Check if this text Part has a signature attached
+            if thought_sig:
+                # Text with signature needs structured block to preserve signature
+                # We use a v1 TextContentBlock
+                text_with_sig = {
+                    "type": "text",
+                    "text": text,
+                    "extras": {"signature": thought_sig},
+                }
+                content = _append_to_content(content, text_with_sig)
+            else:
+                content = _append_to_content(content, text)
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
+                code_id = str(uuid.uuid4())  # Generate ID if not present, needed later
                 code_message = {
                     "type": "executable_code",
                     "executable_code": part.executable_code.code,
                     "language": part.executable_code.language,
+                    "id": code_id,
                 }
                 content = _append_to_content(content, code_message)
 
@@ -630,14 +814,21 @@ def _parse_response_candidate(
             hasattr(part, "code_execution_result")
             and part.code_execution_result is not None
         ) and part.code_execution_result.output:
+            # outcome: 1 = OUTCOME_OK (success), else = error
+            outcome = part.code_execution_result.outcome
             execution_result = {
                 "type": "code_execution_result",
                 "code_execution_result": part.code_execution_result.output,
-                "outcome": part.code_execution_result.outcome,
+                "outcome": outcome,
+                "tool_call_id": "",  # Linked via block translator
             }
             content = _append_to_content(content, execution_result)
 
-        if part.inline_data.mime_type.startswith("audio/"):
+        if (
+            hasattr(part, "inline_data")
+            and part.inline_data
+            and part.inline_data.mime_type.startswith("audio/")
+        ):
             buffer = io.BytesIO()
 
             with wave.open(buffer, "wb") as wf:
@@ -647,9 +838,17 @@ def _parse_response_candidate(
                 wf.setframerate(24000)
                 wf.writeframes(part.inline_data.data)
 
-            additional_kwargs["audio"] = buffer.getvalue()
+            audio_data = buffer.getvalue()
+            additional_kwargs["audio"] = audio_data
 
-        if part.inline_data.mime_type.startswith("image/"):
+            # For backwards compatibility, audio stays in additional_kwargs by default
+            # and is accessible via .content_blocks property
+
+        if (
+            hasattr(part, "inline_data")
+            and part.inline_data
+            and part.inline_data.mime_type.startswith("image/")
+        ):
             image_format = part.inline_data.mime_type[6:]
             image_message = {
                 "type": "image_url",
@@ -708,6 +907,23 @@ def _parse_response_candidate(
                             id=tool_call_dict.get("id", str(uuid.uuid4())),
                         )
                     )
+
+            # If this function_call Part has a signature, track it separately
+            # We'll add it to content only if there's other content present
+            if thought_sig:
+                sig_block = {
+                    "type": "function_call_signature",
+                    "signature": thought_sig,
+                }
+                function_call_signatures.append(sig_block)
+
+    # Add function call signatures to content only if there's already other content
+    # This preserves backward compatibility where content is "" for
+    # function-only responses
+    if function_call_signatures and content is not None:
+        for sig_block in function_call_signatures:
+            content = _append_to_content(content, sig_block)
+
     if content is None:
         content = ""
     if isinstance(content, list) and any(
@@ -722,17 +938,18 @@ def _parse_response_candidate(
         Validate before using in production.
 """
         )
-
     if streaming:
         return AIMessageChunk(
             content=content,
             additional_kwargs=additional_kwargs,
+            response_metadata=response_metadata,
             tool_call_chunks=tool_call_chunks,
         )
 
     return AIMessage(
         content=content,
         additional_kwargs=additional_kwargs,
+        response_metadata=response_metadata,
         tool_calls=tool_calls,
         invalid_tool_calls=invalid_tool_calls,
     )
@@ -741,9 +958,9 @@ def _parse_response_candidate(
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
-    prev_usage: Optional[UsageMetadata] = None,
+    prev_usage: UsageMetadata | None = None,
 ) -> ChatResult:
-    """Converts a PaLM API response into a LangChain ChatResult."""
+    """Converts a PaLM API response into a LangChain `ChatResult`."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
 
     # Get usage metadata
@@ -775,7 +992,7 @@ def _response_to_result(
             if prev_usage and cumulative_usage["input_tokens"] < prev_usage.get(
                 "input_tokens", 0
             ):
-                # Gemini 1.5 and 2.0 return a lower cumulative count of prompt tokens
+                # Gemini 2.0 returns a lower cumulative count of prompt tokens
                 # in the final chunk. We take this count to be ground truth because
                 # it's consistent with the reported total tokens. So we need to
                 # ensure this chunk compensates (the subtract_usage funcction floors
@@ -788,7 +1005,7 @@ def _response_to_result(
     except AttributeError:
         lc_usage = None
 
-    generations: List[ChatGeneration] = []
+    generations: list[ChatGeneration] = []
 
     for candidate in response.candidates:
         generation_info = {}
@@ -808,6 +1025,7 @@ def _response_to_result(
         except AttributeError:
             pass
         message = _parse_response_candidate(candidate, streaming=stream)
+
         message.usage_metadata = lc_usage
         if stream:
             generations.append(
@@ -856,189 +1074,191 @@ def _is_event_loop_running() -> bool:
 
 
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
-    r"""`Google AI` chat models integration.
+    r"""Google GenAI chat model integration.
 
     Instantiation:
         To use, you must have either:
 
-            1. The ``GOOGLE_API_KEY`` environment variable set with your API key, or
-            2. Pass your API key using the ``google_api_key`` kwarg to the
-            ChatGoogleGenerativeAI constructor.
+        1. The `GOOGLE_API_KEY` environment variable set with your API key, or
+        2. Pass your API key using the `google_api_key` kwarg to the
+            `ChatGoogleGenerativeAI` constructor.
 
-        .. code-block:: python
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-            from langchain_google_genai import ChatGoogleGenerativeAI
-
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-            llm.invoke("Write me a ballad about LangChain")
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        llm.invoke("Write me a ballad about LangChain")
+        ```
 
     Invoke:
-        .. code-block:: python
+        ```python
+        messages = [
+            ("system", "Translate the user sentence to French."),
+            ("human", "I love programming."),
+        ]
+        llm.invoke(messages)
+        ```
 
-            messages = [
-                ("system", "Translate the user sentence to French."),
-                ("human", "I love programming."),
-            ]
-            llm.invoke(messages)
-
-        .. code-block:: python
-
-            AIMessage(
-                content="J'adore programmer. \\n",
-                response_metadata={
-                    "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
-                    "finish_reason": "STOP",
-                    "safety_ratings": [
-                        {
-                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HATE_SPEECH",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HARASSMENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                    ],
-                },
-                id="run-56cecc34-2e54-4b52-a974-337e47008ad2-0",
-                usage_metadata={
-                    "input_tokens": 18,
-                    "output_tokens": 5,
-                    "total_tokens": 23,
-                },
-            )
+        ```python
+        AIMessage(
+            content="J'adore programmer. \\n",
+            response_metadata={
+                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "finish_reason": "STOP",
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                ],
+            },
+            id="run-56cecc34-2e54-4b52-a974-337e47008ad2-0",
+            usage_metadata={
+                "input_tokens": 18,
+                "output_tokens": 5,
+                "total_tokens": 23,
+            },
+        )
+        ```
 
     Stream:
-        .. code-block:: python
+        ```python
+        for chunk in llm.stream(messages):
+            print(chunk)
+        ```
 
-            for chunk in llm.stream(messages):
-                print(chunk)
+        ```python
+        AIMessageChunk(
+            content="J",
+            response_metadata={"finish_reason": "STOP", "safety_ratings": []},
+            id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
+            usage_metadata={
+                "input_tokens": 18,
+                "output_tokens": 1,
+                "total_tokens": 19,
+            },
+        )
+        AIMessageChunk(
+            content="'adore programmer. \\n",
+            response_metadata={
+                "finish_reason": "STOP",
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                ],
+            },
+            id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
+            usage_metadata={
+                "input_tokens": 18,
+                "output_tokens": 5,
+                "total_tokens": 23,
+            },
+        )
+        ```
 
-        .. code-block:: python
+        ```python
+        stream = llm.stream(messages)
+        full = next(stream)
+        for chunk in stream:
+            full += chunk
+        full
+        ```
 
-            AIMessageChunk(
-                content="J",
-                response_metadata={"finish_reason": "STOP", "safety_ratings": []},
-                id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
-                usage_metadata={
-                    "input_tokens": 18,
-                    "output_tokens": 1,
-                    "total_tokens": 19,
-                },
-            )
-            AIMessageChunk(
-                content="'adore programmer. \\n",
-                response_metadata={
-                    "finish_reason": "STOP",
-                    "safety_ratings": [
-                        {
-                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HATE_SPEECH",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HARASSMENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                    ],
-                },
-                id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
-                usage_metadata={
-                    "input_tokens": 18,
-                    "output_tokens": 5,
-                    "total_tokens": 23,
-                },
-            )
-
-        .. code-block:: python
-
-            stream = llm.stream(messages)
-            full = next(stream)
-            for chunk in stream:
-                full += chunk
-            full
-
-        .. code-block:: python
-
-            AIMessageChunk(
-                content="J'adore programmer. \\n",
-                response_metadata={
-                    "finish_reason": "STOPSTOP",
-                    "safety_ratings": [
-                        {
-                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HATE_SPEECH",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_HARASSMENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                        {
-                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                            "probability": "NEGLIGIBLE",
-                            "blocked": False,
-                        },
-                    ],
-                },
-                id="run-3ce13a42-cd30-4ad7-a684-f1f0b37cdeec",
-                usage_metadata={
-                    "input_tokens": 36,
-                    "output_tokens": 6,
-                    "total_tokens": 42,
-                },
-            )
+        ```python
+        AIMessageChunk(
+            content="J'adore programmer. \\n",
+            response_metadata={
+                "finish_reason": "STOPSTOP",
+                "safety_ratings": [
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "probability": "NEGLIGIBLE",
+                        "blocked": False,
+                    },
+                ],
+            },
+            id="run-3ce13a42-cd30-4ad7-a684-f1f0b37cdeec",
+            usage_metadata={
+                "input_tokens": 36,
+                "output_tokens": 6,
+                "total_tokens": 42,
+            },
+        )
+        ```
 
     Async:
-        .. code-block:: python
+        ```python
+        await llm.ainvoke(messages)
 
-            await llm.ainvoke(messages)
+        # stream:
+        async for chunk in (await llm.astream(messages))
 
-            # stream:
-            # async for chunk in (await llm.astream(messages))
+        # batch:
+        await llm.abatch([messages])
+        ```
 
-            # batch:
-            # await llm.abatch([messages])
-
-    Context Caching:
+    Context caching:
         Context caching allows you to store and reuse content (e.g., PDFs, images) for
-        faster processing. The ``cached_content`` parameter accepts a cache name created
-        via the Google Generative AI API. Below are two examples: caching a single file
-        directly and caching multiple files using ``Part``.
+        faster processing. The `cached_content` parameter accepts a cache name created
+        via the Google Generative AI API.
 
-        Single File Example:
-        This caches a single file and queries it.
+        Below are two examples: caching a single file directly and caching multiple
+        files using `Part`.
 
-        .. code-block:: python
+        !!! example "Single file example"
 
+            This caches a single file and queries it.
+
+            ```python
             from google import genai
             from google.genai import types
             import time
@@ -1075,12 +1295,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
             message = HumanMessage(content="Summarize the main points of the content.")
             llm.invoke([message])
+            ```
 
-        Multiple Files Example:
-        This caches two files using `Part` and queries them together.
+        !!! example "Multiple files example"
 
-        .. code-block:: python
+            This caches two files using `Part` and queries them together.
 
+            ```python
             from google import genai
             from google.genai.types import CreateCachedContentConfig, Content, Part
             import time
@@ -1133,392 +1354,388 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 content="Provide a summary of the key information across both files."
             )
             llm.invoke([message])
+            ```
 
     Tool calling:
-        .. code-block:: python
-
-            from pydantic import BaseModel, Field
-
-
-            class GetWeather(BaseModel):
-                '''Get the current weather in a given location'''
-
-                location: str = Field(
-                    ..., description="The city and state, e.g. San Francisco, CA"
-                )
+        ```python
+        from pydantic import BaseModel, Field
 
 
-            class GetPopulation(BaseModel):
-                '''Get the current population in a given location'''
+        class GetWeather(BaseModel):
+            '''Get the current weather in a given location'''
 
-                location: str = Field(
-                    ..., description="The city and state, e.g. San Francisco, CA"
-                )
-
-
-            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
-            ai_msg = llm_with_tools.invoke(
-                "Which city is hotter today and which is bigger: LA or NY?"
+            location: str = Field(
+                ..., description="The city and state, e.g. San Francisco, CA"
             )
-            ai_msg.tool_calls
 
-        .. code-block:: python
 
-            [
-                {
-                    "name": "GetWeather",
-                    "args": {"location": "Los Angeles, CA"},
-                    "id": "c186c99f-f137-4d52-947f-9e3deabba6f6",
-                },
-                {
-                    "name": "GetWeather",
-                    "args": {"location": "New York City, NY"},
-                    "id": "cebd4a5d-e800-4fa5-babd-4aa286af4f31",
-                },
-                {
-                    "name": "GetPopulation",
-                    "args": {"location": "Los Angeles, CA"},
-                    "id": "4f92d897-f5e4-4d34-a3bc-93062c92591e",
-                },
-                {
-                    "name": "GetPopulation",
-                    "args": {"location": "New York City, NY"},
-                    "id": "634582de-5186-4e4b-968b-f192f0a93678",
-                },
-            ]
+        class GetPopulation(BaseModel):
+            '''Get the current population in a given location'''
 
-    Use Search with Gemini 2:
-        .. code-block:: python
-
-            from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
-
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-            resp = llm.invoke(
-                "When is the next total solar eclipse in US?",
-                tools=[GenAITool(google_search={})],
+            location: str = Field(
+                ..., description="The city and state, e.g. San Francisco, CA"
             )
+
+
+        llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])
+        ai_msg = llm_with_tools.invoke(
+            "Which city is hotter today and which is bigger: LA or NY?"
+        )
+        ai_msg.tool_calls
+        ```
+
+        ```python
+        [
+            {
+                "name": "GetWeather",
+                "args": {"location": "Los Angeles, CA"},
+                "id": "c186c99f-f137-4d52-947f-9e3deabba6f6",
+            },
+            {
+                "name": "GetWeather",
+                "args": {"location": "New York City, NY"},
+                "id": "cebd4a5d-e800-4fa5-babd-4aa286af4f31",
+            },
+            {
+                "name": "GetPopulation",
+                "args": {"location": "Los Angeles, CA"},
+                "id": "4f92d897-f5e4-4d34-a3bc-93062c92591e",
+            },
+            {
+                "name": "GetPopulation",
+                "args": {"location": "New York City, NY"},
+                "id": "634582de-5186-4e4b-968b-f192f0a93678",
+            },
+        ]
+        ```
+
+    Search:
+        ```python
+        from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        resp = llm.invoke(
+            "When is the next total solar eclipse in US?",
+            tools=[GenAITool(google_search={})],
+        )
+        ```
 
     Structured output:
-        .. code-block:: python
+        ```python
+        from typing import Optional
 
-            from typing import Optional
-
-            from pydantic import BaseModel, Field
-
-
-            class Joke(BaseModel):
-                '''Joke to tell user.'''
-
-                setup: str = Field(description="The setup of the joke")
-                punchline: str = Field(description="The punchline to the joke")
-                rating: Optional[int] = Field(
-                    description="How funny the joke is, from 1 to 10"
-                )
+        from pydantic import BaseModel, Field
 
 
-            # Default method uses function calling
-            structured_llm = llm.with_structured_output(Joke)
+        class Joke(BaseModel):
+            '''Joke to tell user.'''
 
-            # For more reliable output, use json_schema with native responseSchema
-            structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
-            structured_llm_json.invoke("Tell me a joke about cats")
-
-        .. code-block:: python
-
-            Joke(
-                setup="Why are cats so good at video games?",
-                punchline="They have nine lives on the internet",
-                rating=None,
+            setup: str = Field(description="The setup of the joke")
+            punchline: str = Field(description="The punchline to the joke")
+            rating: Optional[int] = Field(
+                description="How funny the joke is, from 1 to 10"
             )
+
+
+        # Default method uses function calling
+        structured_llm = llm.with_structured_output(Joke)
+
+        # For more reliable output, use json_schema with native responseSchema
+        structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
+        structured_llm_json.invoke("Tell me a joke about cats")
+        ```
+
+        ```python
+        Joke(
+            setup="Why are cats so good at video games?",
+            punchline="They have nine lives on the internet",
+            rating=None,
+        )
+        ```
 
         Two methods are supported for structured output:
 
-        * ``method="function_calling"`` (default): Uses tool calling to extract
-        structured data. Compatible with all models.
-        * ``method="json_schema"``: Uses Gemini's native structured output with
-        responseSchema. More reliable but requires Gemini 1.5+ models.
-        ``method="json_mode"`` also works for backwards compatibility but is a misnomer.
+        * `method='function_calling'` (default): Uses tool calling to extract
+            structured data. Compatible with all models.
+        * `method='json_schema'`: Uses Gemini's native structured output with
+            `responseSchema`. `method="json_mode"` also works for backwards
+            compatibility but is a misnomer.
 
-        The ``json_schema`` method is recommended for better reliability as it
+        The `json_schema` method is recommended for better reliability as it
         constrains the model's generation process directly rather than relying on
         post-processing tool calls.
 
     Image input:
-        .. code-block:: python
+        ```python
+        import base64
+        import httpx
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            import httpx
-            from langchain_core.messages import HumanMessage
+        image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+        image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the weather in this image"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-            image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "describe the weather in this image"},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "The weather in this image appears to be sunny and pleasant. The sky is a
-            bright blue with scattered white clouds, suggesting fair weather. The lush
-            green grass and trees indicate a warm and possibly slightly breezy day.
-            There are no signs of rain or storms."
+        ```txt
+        The weather in this image appears to be sunny and pleasant. The sky is a bright
+        blue with scattered white clouds, suggesting fair weather. The lush green grass
+        and trees indicate a warm and possibly slightly breezy day. There are no...
+        ```
 
     PDF input:
-        .. code-block:: python
+        ```python
+        import base64
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            from langchain_core.messages import HumanMessage
+        pdf_bytes = open("/path/to/your/test.pdf", "rb").read()
+        pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-            pdf_bytes = open("/path/to/your/test.pdf", "rb").read()
-            pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "describe the document in a sentence"},
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "application/pdf",
+                    "data": pdf_base64,
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "describe the document in a sentence"},
-                    {
-                        "type": "file",
-                        "source_type": "base64",
-                        "mime_type": "application/pdf",
-                        "data": pdf_base64,
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "This research paper describes a system developed for SemEval-2025 Task 9,
-            which aims to automate the detection of food hazards from recall reports,
-            addressing the class imbalance problem by leveraging LLM-based data
-            augmentation techniques and transformer-based models to improve
-            performance."
+        ```txt
+        This research paper describes a system developed for SemEval-2025 Task 9, which
+        aims to automate the detection of food hazards from recall reports, addressing
+        the class imbalance problem by leveraging LLM-based data augmentation...
+        ```
 
     Video input:
-        .. code-block:: python
+        ```python
+        import base64
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            from langchain_core.messages import HumanMessage
+        video_bytes = open("/path/to/your/video.mp4", "rb").read()
+        video_base64 = base64.b64encode(video_bytes).decode("utf-8")
 
-            video_bytes = open("/path/to/your/video.mp4", "rb").read()
-            video_base64 = base64.b64encode(video_bytes).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "describe what's in this video in a sentence",
+                },
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "video/mp4",
+                    "data": video_base64,
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": "describe what's in this video in a sentence",
-                    },
-                    {
-                        "type": "file",
-                        "source_type": "base64",
-                        "mime_type": "video/mp4",
-                        "data": video_base64,
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
-            adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
-            attempt to prepare a turkey dinner."
+        ```txt
+        Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
+        adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
+        attempt to prepare a turkey dinner.
+        ```
 
         You can also pass YouTube URLs directly:
 
-        .. code-block:: python
+        ```python
+        from langchain_core.messages import HumanMessage
 
-            from langchain_core.messages import HumanMessage
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "summarize the video in 3 sentences."},
+                {
+                    "type": "media",
+                    "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                    "mime_type": "video/mp4",
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "summarize the video in 3 sentences."},
-                    {
-                        "type": "media",
-                        "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
-                        "mime_type": "video/mp4",
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "The video is a demo of multimodal live streaming in Gemini 2.0. The
-            narrator is sharing his screen in AI Studio and asks if the AI can see it.
-            The AI then reads text that is highlighted on the screen, defines the word
-            “multimodal,” and summarizes everything that was seen and heard."
+        ```txt
+        The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is
+        sharing his screen in AI Studio and asks if the AI can see it. The AI then reads
+        text that is highlighted on the screen, defines the word...
+        ```
 
     Audio input:
-        .. code-block:: python
+        ```python
+        import base64
+        from langchain_core.messages import HumanMessage
 
-            import base64
-            from langchain_core.messages import HumanMessage
+        audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
-            audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
-            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "summarize this audio in a sentence"},
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "audio/mp3",
+                    "data": audio_base64,
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "summarize this audio in a sentence"},
-                    {
-                        "type": "file",
-                        "source_type": "base64",
-                        "mime_type": "audio/mp3",
-                        "data": audio_base64,
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
+        ```txt
+        In this episode of the Made by Google podcast, Stephen Johnson and Simon
+        Tokumine discuss NotebookLM, a tool designed to help users understand complex
+        material in various modalities, with a focus on its unexpected uses, the...
+        ```
 
-        .. code-block:: python
-
-            "In this episode of the Made by Google podcast, Stephen Johnson and Simon
-            Tokumine discuss NotebookLM, a tool designed to help users understand
-            complex material in various modalities, with a focus on its unexpected uses,
-            the development of audio overviews, and the implementation of new features
-            like mind maps and source discovery."
-
-    File upload (URI-based):
+    File upload:
         You can also upload files to Google's servers and reference them by URI.
+
         This works for PDFs, images, videos, and audio files.
 
-        .. code-block:: python
+        ```python
+        import time
+        from google import genai
+        from langchain_core.messages import HumanMessage
 
-            import time
-            from google import genai
-            from langchain_core.messages import HumanMessage
+        client = genai.Client()
 
-            client = genai.Client()
+        myfile = client.files.upload(file="/path/to/your/sample.pdf")
+        while myfile.state.name == "PROCESSING":
+            time.sleep(2)
+            myfile = client.files.get(name=myfile.name)
 
-            myfile = client.files.upload(file="/path/to/your/sample.pdf")
-            while myfile.state.name == "PROCESSING":
-                time.sleep(2)
-                myfile = client.files.get(name=myfile.name)
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "What is in the document?"},
+                {
+                    "type": "media",
+                    "file_uri": myfile.uri,
+                    "mime_type": "application/pdf",
+                },
+            ]
+        )
+        ai_msg = llm.invoke([message])
+        ai_msg.content
+        ```
 
-            message = HumanMessage(
-                content=[
-                    {"type": "text", "text": "What is in the document?"},
-                    {
-                        "type": "media",
-                        "file_uri": myfile.uri,
-                        "mime_type": "application/pdf",
-                    },
-                ]
-            )
-            ai_msg = llm.invoke([message])
-            ai_msg.content
-
-        .. code-block:: python
-
-            "This research paper assesses and mitigates multi-turn jailbreak
-            vulnerabilities in large language models using the Crescendo attack study,
-            evaluating attack success rates and mitigation strategies like prompt
-            hardening and LLM-as-guardrail."
+        ```txt
+        This research paper assesses and mitigates multi-turn jailbreak vulnerabilities
+        in large language models using the Crescendo attack study, evaluating attack
+        success rates and mitigation strategies like prompt...
+        ```
 
     Token usage:
-        .. code-block:: python
+        ```python
+        ai_msg = llm.invoke(messages)
+        ai_msg.usage_metadata
+        ```
 
-            ai_msg = llm.invoke(messages)
-            ai_msg.usage_metadata
+        ```python
+        {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
+        ```
 
-        .. code-block:: python
+    Response metadata:
+        ```python
+        ai_msg = llm.invoke(messages)
+        ai_msg.response_metadata
+        ```
 
-            {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
+        ```python
+        {
+            "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+            "finish_reason": "STOP",
+            "safety_ratings": [
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "probability": "NEGLIGIBLE",
+                    "blocked": False,
+                },
+            ],
+        }
+        ```
+    """
 
+    client: Any = Field(default=None, exclude=True)
 
-    Response metadata
-        .. code-block:: python
+    async_client_running: Any = Field(default=None, exclude=True)
 
-            ai_msg = llm.invoke(messages)
-            ai_msg.response_metadata
-
-        .. code-block:: python
-
-            {
-                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
-                "finish_reason": "STOP",
-                "safety_ratings": [
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                ],
-            }
-
-    """  # noqa: E501
-
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
-    async_client_running: Any = Field(default=None, exclude=True)  #: :meta private:
-    default_metadata: Optional[Sequence[Tuple[str, str]]] = Field(
+    default_metadata: Sequence[tuple[str, str]] | None = Field(
         default=None, alias="default_metadata_input"
-    )  #: :meta private:
+    )
 
     convert_system_message_to_human: bool = False
-    """Whether to merge any leading SystemMessage into the following HumanMessage.
+    """Whether to merge any leading `SystemMessage` into the following `HumanMessage`.
 
     Gemini does not support system messages; any unsupported messages will raise an
     error.
     """
 
-    response_mime_type: Optional[str] = None
-    """Optional. Output response mimetype of the generated candidate text. Only
-    supported in Gemini 1.5 and later models.
+    response_mime_type: str | None = None
+    """Output response MIME type of the generated candidate text.
 
-    Supported mimetype:
-        * ``'text/plain'``: (default) Text output.
-        * ``'application/json'``: JSON response in the candidates.
-        * ``'text/x.enum'``: Enum in plain text.
+    Supported MIME types:
+        * `'text/plain'`: (default) Text output.
+        * `'application/json'`: JSON response in the candidates.
+        * `'text/x.enum'`: Enum in plain text.
 
     The model also needs to be prompted to output the appropriate response
-    type, otherwise the behavior is undefined. This is a preview feature.
+    type, otherwise the behavior is undefined. (This is a preview feature.)
     """
 
-    response_schema: Optional[Dict[str, Any]] = None
-    """ Optional. Enforce an schema to the output. The format of the dictionary should
-    follow Open API schema.
+    response_schema: dict[str, Any] | None = None
+    """Enforce a schema to the output. The format of the dictionary should follow Open
+    API schema.
     """
 
-    cached_content: Optional[str] = None
+    cached_content: str | None = None
     """The name of the cached content used as context to serve the prediction.
 
-    Note: only used in explicit caching, where users can have control over caching
-    (e.g. what content to cache) and enjoy guaranteed cost savings. Format:
-    ``cachedContents/{cachedContent}``.
+    !!! note
+
+        Only used in explicit caching, where users can have control over caching (e.g.
+        what content to cache) and enjoy guaranteed cost savings. Format:
+        `cachedContents/{cachedContent}`.
     """
 
-    stop: Optional[List[str]] = None
+    stop: list[str] | None = None
     """Stop sequences for the model."""
 
-    streaming: Optional[bool] = None
+    streaming: bool | None = None
     """Whether to stream responses from the model."""
 
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
@@ -1551,7 +1768,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     )
 
     @property
-    def lc_secrets(self) -> Dict[str, str]:
+    def lc_secrets(self) -> dict[str, str]:
         return {"google_api_key": "GOOGLE_API_KEY"}
 
     @property
@@ -1560,6 +1777,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @property
     def _supports_code_execution(self) -> bool:
+        """Whether the model supports code execution.
+
+        See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
+        full list.
+        """
         return (
             "gemini-1.5-pro" in self.model
             or "gemini-1.5-flash" in self.model
@@ -1579,7 +1801,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        """Validates params and passes them to google-generativeai package."""
+        """Validates params and passes them to `google-generativeai` package."""
         if self.temperature is not None and not 0 <= self.temperature <= 2.0:
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)
@@ -1604,12 +1826,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 google_api_key = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
-        transport: Optional[str] = self.transport
+        transport: str | None = self.transport
+
+        # Merge base_url into client_options if provided
+        client_options = self.client_options or {}
+        if self.base_url and "api_endpoint" not in client_options:
+            client_options = {**client_options, "api_endpoint": self.base_url}
+
         self.client = genaix.build_generative_service(
             credentials=self.credentials,
             api_key=google_api_key,
             client_info=client_info,
-            client_options=self.client_options,
+            client_options=client_options,
             transport=transport,
         )
         self.async_client_running = None
@@ -1631,20 +1859,38 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if not self.async_client_running and _is_event_loop_running():
             # async clients don't support "rest" transport
             # https://github.com/googleapis/gapic-generator-python/issues/1962
+
+            # However, when using custom endpoints, we can try to keep REST transport
             transport = self.transport
-            if transport == "rest":
+            client_options = self.client_options or {}
+
+            # Check for custom endpoint
+            has_custom_endpoint = self.base_url or (
+                self.client_options
+                and "api_endpoint" in self.client_options
+                and self.client_options["api_endpoint"]
+                != "https://generativelanguage.googleapis.com"
+            )
+
+            # Only change to grpc_asyncio if no custom endpoint is specified
+            if transport == "rest" and not has_custom_endpoint:
                 transport = "grpc_asyncio"
+
+            # Merge base_url into client_options if provided
+            if self.base_url and "api_endpoint" not in client_options:
+                client_options = {**client_options, "api_endpoint": self.base_url}
+
             self.async_client_running = genaix.build_generative_async_service(
                 credentials=self.credentials,
                 api_key=google_api_key,
                 client_info=get_client_info(f"ChatGoogleGenerativeAI:{self.model}"),
-                client_options=self.client_options,
+                client_options=client_options,
                 transport=transport,
             )
         return self.async_client_running
 
     @property
-    def _identifying_params(self) -> Dict[str, Any]:
+    def _identifying_params(self) -> dict[str, Any]:
         """Get the identifying parameters."""
         return {
             "model": self.model,
@@ -1653,6 +1899,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "n": self.n,
             "safety_settings": self.safety_settings,
             "response_modalities": self.response_modalities,
+            "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
         }
@@ -1660,25 +1907,23 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def invoke(
         self,
         input: LanguageModelInput,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        code_execution: Optional[bool] = None,
-        stop: Optional[list[str]] = None,
+        code_execution: bool | None = None,
+        stop: list[str] | None = None,
         **kwargs: Any,
-    ) -> BaseMessage:
-        """Enable code execution. Supported on: gemini-1.5-pro, gemini-1.5-flash,
-        gemini-2.0-flash, and gemini-2.0-pro. When enabled, the model can execute
+    ) -> AIMessage:
+        """Override `invoke` on `ChatGoogleGenerativeAI` to add `code_execution`.
+
+        See the [models page](https://ai.google.dev/gemini-api/docs/models) to see if
+        your chosen model supports code execution. When enabled, the model can execute
         code to solve problems.
         """
-        """Override invoke to add code_execution parameter."""
-
         if code_execution is not None:
             if not self._supports_code_execution:
                 msg = (
-                    f"Code execution is only supported on Gemini 1.5 Pro, \
-                    Gemini 1.5 Flash, "
-                    f"Gemini 2.0 Flash, and Gemini 2.0 Pro models. \
-                    Current model: {self.model}"
+                    "Code execution is only supported on Gemini 1.5, 2.0, and 2.5 "
+                    f"models. Current model: {self.model}"
                 )
                 raise ValueError(msg)
             if "tools" not in kwargs:
@@ -1692,7 +1937,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return super().invoke(input, config, stop=stop, **kwargs)
 
     def _get_ls_params(
-        self, stop: Optional[List[str]] = None, **kwargs: Any
+        self, stop: list[str] | None = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
@@ -1716,8 +1961,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _prepare_params(
         self,
-        stop: Optional[List[str]],
-        generation_config: Optional[Dict[str, Any]] = None,
+        stop: list[str] | None,
+        generation_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerationConfig:
         gen_config = {
@@ -1770,21 +2015,26 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gapic_response_schema = _dict_to_gapic_schema(response_schema)
             if gapic_response_schema is not None:
                 gen_config["response_schema"] = gapic_response_schema
+
+        media_resolution = kwargs.get("media_resolution", self.media_resolution)
+        if media_resolution is not None:
+            gen_config["media_resolution"] = media_resolution
+
         return GenerationConfig(**gen_config)
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         request = self._prepare_request(
@@ -1813,17 +2063,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     async def _agenerate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         if not self.async_client:
@@ -1865,17 +2115,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _stream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         request = self._prepare_request(
@@ -1921,17 +2171,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     async def _astream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         if not self.async_client:
@@ -1989,16 +2239,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _prepare_request(
         self,
-        messages: List[BaseMessage],
+        messages: list[BaseMessage],
         *,
-        stop: Optional[List[str]] = None,
-        tools: Optional[Sequence[Union[_ToolDict, GoogleTool]]] = None,
-        functions: Optional[Sequence[_FunctionDeclarationType]] = None,
-        safety_settings: Optional[SafetySettingDict] = None,
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
-        generation_config: Optional[Dict[str, Any]] = None,
-        cached_content: Optional[str] = None,
+        stop: list[str] | None = None,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | _ToolConfigDict | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
         **kwargs: Any,
     ) -> GenerateContentRequest:
         if tool_choice and tool_config:
@@ -2034,6 +2284,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         else:
             system_instruction, history = _parse_chat_history(messages)
+
+        # Validate that we have at least one content message for the API
+        if not history:
+            msg = (
+                "No content messages found. The Gemini API requires at least one "
+                "non-system message (HumanMessage, AIMessage, etc.) in addition to "
+                "any SystemMessage. Please include additional messages in your input."
+            )
+            raise ValueError(msg)
+
         if tool_choice:
             if not formatted_tools:
                 msg = (
@@ -2041,7 +2301,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     f"be specified if 'tools' is specified."
                 )
                 raise ValueError(msg)
-            all_names: List[str] = []
+            all_names: list[str] = []
             for t in formatted_tools:
                 if hasattr(t, "function_declarations"):
                     t_with_declarations = cast("Any", t)
@@ -2069,7 +2329,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ]
         request = GenerateContentRequest(
             model=self.model,
-            contents=history,
+            contents=history,  # google.ai.generativelanguage_v1beta.types.Content
             tools=formatted_tools,
             tool_config=formatted_tool_config,
             safety_settings=formatted_safety_settings,
@@ -2086,7 +2346,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return request
 
     def get_num_tokens(self, text: str) -> int:
-        """Get the number of tokens present in the text.
+        """Get the number of tokens present in the text. Uses the model's tokenizer.
 
         Useful for checking if an input will fit in a model's context window.
 
@@ -2103,14 +2363,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def with_structured_output(
         self,
-        schema: Union[Dict, Type[BaseModel]],
-        method: Optional[
-            Literal["function_calling", "json_mode", "json_schema"]
-        ] = "function_calling",
+        schema: dict | type[BaseModel],
+        method: Literal["function_calling", "json_mode", "json_schema"]
+        | None = "function_calling",
         *,
         include_raw: bool = False,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, Union[Dict, BaseModel]]:
+    ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         _ = kwargs.pop("strict", None)
         if kwargs:
             msg = f"Received unsupported arguments {kwargs}"
@@ -2118,7 +2377,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        if method in ("json_mode", "json_schema"):  # `json_schema` preferred
+        # `json_schema` preferred, but `json_mode` kept for backwards compatibility
+        if method in ("json_mode", "json_schema"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
@@ -2182,23 +2442,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tools: Sequence[
             dict[str, Any] | type | Callable[..., Any] | BaseTool | GoogleTool
         ],
-        tool_config: Optional[Union[Dict, _ToolConfigDict]] = None,
+        tool_config: dict | _ToolConfigDict | None = None,
         *,
-        tool_choice: Optional[Union[_ToolChoiceType, bool]] = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
-    ) -> Runnable[LanguageModelInput, BaseMessage]:
+    ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
 
         Assumes model is compatible with google-generativeAI tool-calling API.
 
         Args:
             tools: A list of tool definitions to bind to this chat model.
-                Can be a pydantic model, callable, or BaseTool. Pydantic models,
-                callables, and BaseTools will be automatically converted to their schema
-                dictionary representation. Tools with Union types in their arguments are
-                now supported and converted to `anyOf` schemas.
-            **kwargs: Any additional parameters to pass to the
-                :class:`~langchain.runnable.Runnable` constructor.
+
+                Can be a pydantic model, `Callable`, or `BaseTool`. Pydantic models,
+                `Callable`, and `BaseTool` objects will be automatically converted to
+                their schema dictionary representation.
+
+                Tools with Union types in their arguments are now supported and
+                converted to `anyOf` schemas.
+            **kwargs: Any additional parameters to pass to the `Runnable` constructor.
         """
         if tool_choice and tool_config:
             msg = (
@@ -2222,6 +2484,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @property
     def _supports_tool_choice(self) -> bool:
+        """Whether the model supports the `tool_choice` parameter.
+
+        See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
+        full list. Gemini calls this "function calling".
+        """
         return (
             "gemini-1.5-pro" in self.model
             or "gemini-1.5-flash" in self.model
@@ -2230,12 +2497,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
 
 def _get_tool_name(
-    tool: Union[_ToolDict, GoogleTool, Dict],
+    tool: _ToolDict | GoogleTool | dict,
 ) -> str:
     try:
         genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
         return next(f["name"] for f in genai_tool["function_declarations"])  # type: ignore[index]
     except ValueError:  # other TypedDict
         if is_typeddict(tool):
-            return convert_to_openai_tool(cast("Dict", tool))["function"]["name"]
+            return convert_to_openai_tool(cast("dict", tool))["function"]["name"]
         raise

@@ -1,6 +1,5 @@
 """Integration tests for Google Sheets tools."""
 
-import json
 import os
 
 import pytest
@@ -42,12 +41,14 @@ def test_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) -> None:
             }
         )
 
-        # Parse and verify JSON response
-        data = json.loads(result)
-        assert "range" in data
-        assert "values" in data
-        assert len(data["values"]) > 0
-        assert "A1:C3" in data["range"]
+        # Verify dict response (tools now return dicts, not JSON strings)
+        assert isinstance(result, dict)
+        assert "success" in result
+        assert result["success"] is True
+        assert "range" in result
+        assert "values" in result
+        assert len(result["values"]) > 0
+        assert "A1:C3" in result["range"]
     except Exception as e:
         if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
@@ -68,11 +69,13 @@ def test_batch_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) ->
             }
         )
 
-        # Parse and verify JSON response
-        data = json.loads(result)
-        assert "spreadsheet_id" in data
-        assert "results" in data
-        assert len(data["results"]) == 2
+        # Verify dict response (tools now return dicts, not JSON strings)
+        assert isinstance(result, dict)
+        assert "success" in result
+        assert result["success"] is True
+        assert "spreadsheet_id" in result
+        assert "results" in result
+        assert len(result["results"]) == 2
     except Exception as e:
         if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
@@ -92,12 +95,14 @@ def test_get_spreadsheet_info(sheets_api_key: str, test_spreadsheet_id: str) -> 
             }
         )
 
-        # Parse and verify JSON response
-        data = json.loads(result)
-        assert "spreadsheet_id" in data
-        assert "title" in data
-        assert "sheets" in data
-        assert len(data["sheets"]) > 0
+        # Verify dict response (tools now return dicts, not JSON strings)
+        assert isinstance(result, dict)
+        assert "success" in result
+        assert result["success"] is True
+        assert "spreadsheet_id" in result
+        assert "title" in result
+        assert "sheets" in result
+        assert len(result["sheets"]) > 0
     except Exception as e:
         if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
@@ -106,11 +111,11 @@ def test_get_spreadsheet_info(sheets_api_key: str, test_spreadsheet_id: str) -> 
 
 @pytest.mark.extended
 def test_toolkit_functionality(sheets_api_key: str, test_spreadsheet_id: str) -> None:
-    """Test SheetsToolkit functionality."""
+    """Test SheetsToolkit functionality with API key (read-only)."""
     toolkit = SheetsToolkit(api_key=sheets_api_key)
     tools = toolkit.get_tools()
 
-    # Should have 3 tools (excludes filtered read which requires OAuth2)
+    # Should have 3 read-only tools (no write tools with API key)
     assert len(tools) == 3
 
     try:
@@ -123,11 +128,13 @@ def test_toolkit_functionality(sheets_api_key: str, test_spreadsheet_id: str) ->
             }
         )
 
-        # Verify the result
-        data = json.loads(result)
-        assert "range" in data
-        assert "values" in data
-        assert "A1:B2" in data["range"]
+        # Verify dict response (tools now return dicts, not JSON strings)
+        assert isinstance(result, dict)
+        assert "success" in result
+        assert result["success"] is True
+        assert "range" in result
+        assert "values" in result
+        assert "A1:B2" in result["range"]
     except Exception as e:
         if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
             pytest.skip("Google Sheets API not enabled in CI environment")

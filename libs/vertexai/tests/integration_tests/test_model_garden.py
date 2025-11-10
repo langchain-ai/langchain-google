@@ -1,6 +1,5 @@
 import json
 import os
-from typing import Optional
 
 import pytest
 from langchain_core.messages import (
@@ -9,6 +8,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.outputs import LLMResult
 from langchain_core.tools import tool
@@ -20,7 +20,7 @@ from langchain_google_vertexai.model_garden import (
 )
 
 _ANTHROPIC_LOCATION = "us-east5"
-_ANTHROPIC_CLAUDE35_MODEL_NAME = "claude-3-5-sonnet-v2@20241022"
+_ANTHROPIC_CLAUDE_MODEL_NAME = "claude-sonnet-4-5@20250929"
 
 
 @pytest.mark.extended
@@ -28,9 +28,7 @@ _ANTHROPIC_CLAUDE35_MODEL_NAME = "claude-3-5-sonnet-v2@20241022"
     ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
-def test_model_garden(
-    endpoint_os_variable_name: str, result_arg: Optional[str]
-) -> None:
+def test_model_garden(endpoint_os_variable_name: str, result_arg: str | None) -> None:
     """In order to run this test, you should provide endpoint names.
 
     Example:
@@ -58,7 +56,7 @@ def test_model_garden(
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 def test_model_garden_generate(
-    endpoint_os_variable_name: str, result_arg: Optional[str]
+    endpoint_os_variable_name: str, result_arg: str | None
 ) -> None:
     """In order to run this test, you should provide endpoint names.
 
@@ -89,7 +87,7 @@ def test_model_garden_generate(
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
 async def test_model_garden_agenerate(
-    endpoint_os_variable_name: str, result_arg: Optional[str]
+    endpoint_os_variable_name: str, result_arg: str | None
 ) -> None:
     endpoint_id = os.environ[endpoint_os_variable_name]
     project = os.environ["PROJECT_ID"]
@@ -122,9 +120,7 @@ def test_anthropic() -> None:
     )
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
-    response = model.invoke(
-        [context, message], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
-    )
+    response = model.invoke([context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME)
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -141,7 +137,7 @@ def test_anthropic_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message], model=_ANTHROPIC_CLAUDE35_MODEL_NAME)
+    sync_response = model.stream([message], model=_ANTHROPIC_CLAUDE_MODEL_NAME)
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
@@ -165,7 +161,7 @@ def test_anthropic_thinking_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message], model="claude-3-7-sonnet@20250219")
+    sync_response = model.stream([message], model="claude-sonnet-4-5@20250929")
     for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
@@ -188,7 +184,7 @@ async def test_anthropic_async() -> None:
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
     response = await model.ainvoke(
-        [context, message], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME, temperature=0.2
+        [context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME, temperature=0.2
     )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -222,7 +218,7 @@ def test_anthropic_tool_calling() -> None:
     # Test .bind_tools with BaseModel
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     model_with_tools = model.bind_tools(
-        [MyModel], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+        [MyModel], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "MyModel")
@@ -232,7 +228,7 @@ def test_anthropic_tool_calling() -> None:
         """Invoke this with names and ages."""
 
     model_with_tools = model.bind_tools(
-        [my_model], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+        [my_model], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "my_model")
@@ -243,7 +239,7 @@ def test_anthropic_tool_calling() -> None:
         """Invoke this with names and ages."""
 
     model_with_tools = model.bind_tools(
-        [my_tool], model_name=_ANTHROPIC_CLAUDE35_MODEL_NAME
+        [my_tool], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
     response = model_with_tools.invoke([message])
     _check_tool_calls(response, "my_tool")
@@ -273,7 +269,7 @@ def test_anthropic_with_structured_output() -> None:
     model = ChatAnthropicVertex(
         project=project,
         location=location,
-        model=_ANTHROPIC_CLAUDE35_MODEL_NAME,
+        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
     )
 
     class MyModel(BaseModel):
@@ -287,3 +283,97 @@ def test_anthropic_with_structured_output() -> None:
     assert isinstance(response, MyModel)
     assert response.name == "Erick"
     assert response.age == 27
+
+
+@pytest.mark.extended
+@pytest.mark.flaky(retries=3)
+def test_anthropic_multiturn_tool_calling() -> None:
+    """Test multi-turn conversation with tool calls and responses.
+
+    This test ensures that ToolMessages with streaming metadata are properly
+    cleaned before being sent back to the API (fixes issue #1227).
+    """
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
+    )
+
+    @tool
+    def get_weather(city: str) -> str:
+        """Get current weather for a city."""
+        return f"Sunny, 22°C in {city}"
+
+    # Bind tools to model
+    model_with_tools = model.bind_tools([get_weather])
+
+    # First turn - user asks question, model calls tool
+    user_message = HumanMessage("What's the weather in Paris?")
+    response1 = model_with_tools.invoke([user_message])
+
+    # Verify model made a tool call
+    assert isinstance(response1, AIMessage)
+    assert response1.tool_calls
+    assert len(response1.tool_calls) == 1
+    assert response1.tool_calls[0]["name"] == "get_weather"
+    assert response1.tool_calls[0]["args"]["city"] == "Paris"
+
+    # Second turn - provide tool result (this is where the bug was)
+    # The ToolMessage might contain streaming metadata that needs cleaning
+    tool_result = ToolMessage(
+        content="Sunny, 22°C in Paris", tool_call_id=response1.tool_calls[0]["id"]
+    )
+
+    # This should NOT raise "Extra inputs are not permitted" error
+    response2 = model.invoke([user_message, response1, tool_result])
+
+    # Verify model responded with final answer
+    assert isinstance(response2, AIMessage)
+    assert isinstance(response2.content, str)
+    assert "paris" in response2.content.lower()
+
+
+@pytest.mark.extended
+@pytest.mark.flaky(retries=3)
+def test_anthropic_tool_error_handling() -> None:
+    """Test that tool errors are properly communicated with is_error flag."""
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
+    )
+
+    @tool
+    def failing_tool(x: int) -> str:
+        """A tool that simulates failure."""
+        return "result"
+
+    model_with_tools = model.bind_tools([failing_tool])
+
+    # First turn - model calls tool
+    response1 = model_with_tools.invoke([HumanMessage("Use failing_tool with x=5")])
+
+    # Verify tool call
+    assert isinstance(response1, AIMessage)
+    assert response1.tool_calls
+    assert response1.tool_calls[0]["name"] == "failing_tool"
+
+    # Second turn - simulate tool error with status="error"
+    error_result = ToolMessage(
+        content="Tool execution failed: API error",
+        tool_call_id=response1.tool_calls[0]["id"],
+        status="error",
+    )
+
+    # Should handle error gracefully (is_error flag should be sent)
+    response2 = model.invoke(
+        [HumanMessage("Use failing_tool with x=5"), response1, error_result]
+    )
+
+    # Verify model acknowledged the error
+    assert isinstance(response2, AIMessage)
+    assert isinstance(response2.content, str)

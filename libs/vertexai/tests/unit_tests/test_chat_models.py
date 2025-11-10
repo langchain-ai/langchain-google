@@ -1,11 +1,11 @@
-"""Test chat model integration."""
+"""Chat model unit tests."""
 
 import base64
 import json
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
@@ -37,7 +37,6 @@ from vertexai.generative_models import (
     SafetySetting as VertexSafetySetting,  # TODO: migrate to google-genai
 )
 from vertexai.language_models import (
-    ChatMessage,  # TODO: migrate to google-genai since this is deprecated
     InputOutputTextPair,
 )
 
@@ -46,7 +45,6 @@ from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _bytes_to_base64,
-    _parse_chat_history,
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
@@ -65,50 +63,54 @@ def clear_prediction_client_cache() -> None:
 
 
 def test_init() -> None:
+    """Test initialization of `ChatVertexAI` with different parameter names.
+
+    Done since we have aliasing of some parameters for consistency with other LLMs.
+    """
     for llm in [
         ChatVertexAI(
-            model_name=_DEFAULT_MODEL_NAME,
+            model_name="gemini-2-5-flash",
             project="test-project",
             max_output_tokens=10,
             stop=["bar"],
             location="moon-dark1",
         ),
         ChatVertexAI(
-            model=_DEFAULT_MODEL_NAME,
+            model="gemini-2-5-flash",
+            project="test-proj",
             max_tokens=10,
             stop_sequences=["bar"],
             location="moon-dark1",
-            project="test-proj",
         ),
     ]:
-        assert llm.model_name == _DEFAULT_MODEL_NAME
+        assert llm.model_name == "gemini-2-5-flash"
         assert llm.max_output_tokens == 10
         assert llm.stop == ["bar"]
 
         ls_params = llm._get_ls_params()
         assert ls_params == {
             "ls_provider": "google_vertexai",
-            "ls_model_name": _DEFAULT_MODEL_NAME,
+            "ls_model_name": "gemini-2-5-flash",
             "ls_model_type": "chat",
             "ls_temperature": None,
             "ls_max_tokens": 10,
             "ls_stop": ["bar"],
         }
 
-    # test initialization with an invalid argument to check warning
+    # Test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.chat_models.logger.warning") as mock_warning:
         # Suppress UserWarning during test execution - we're testing the warning
         # mechanism via logger mock assertions, not via pytest's warning system
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             llm = ChatVertexAI(
-                model_name=_DEFAULT_MODEL_NAME,
+                model_name="gemini-2-5-flash",
                 project="test-project",
                 safety_setting={
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
             )
-        assert llm.model_name == _DEFAULT_MODEL_NAME
+        assert llm.model_name == "gemini-2-5-flash"
         assert llm.project == "test-project"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
@@ -120,13 +122,18 @@ def test_init() -> None:
     ("model", "location"),
     [
         (
-            "gemini-1.0-pro-001",
+            "gemini-2-5-flash",
             "moon-dark1",
         ),
-        ("publishers/google/models/gemini-1.0-pro-001", "moon-dark2"),
+        ("publishers/google/models/gemini-2-5-flash", "moon-dark2"),
     ],
 )
 def test_init_client(model: str, location: str) -> None:
+    """Test initialization of `ChatVertexAI` with different models and locations.
+
+    Ensure the user agent is set correctly and the full model name is constructed using
+    the provided project and location.
+    """
     config = {"model": model, "location": location}
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
@@ -147,15 +154,210 @@ def test_init_client(model: str, location: str) -> None:
         assert "langchain-google-vertexai" in client_info.client_library_version
         assert "ChatVertexAI" in client_info.client_library_version
         assert llm.full_model_name == (
-            f"projects/test-proj/locations/{location}/publishers/google/models/gemini-1.0-pro-001"
+            f"projects/test-proj/locations/{location}/publishers/google/models/gemini-2-5-flash"
         )
+
+
+def test_init_client_with_custom_api_endpoint() -> None:
+    """Test that custom API endpoint and transport are set correctly."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://example.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        transport = mock_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://example.com"
+        assert transport == "rest"
+
+
+def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
+    """Test that `base_url` alias is preserved and used in API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "base_url": "https://example.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://example.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        transport = mock_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://example.com"
+        assert transport == "rest"
+
+
+def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
+    """Test that `api_endpoint` field is preserved and used in API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://direct-endpoint.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://direct-endpoint.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        assert client_options.api_endpoint == "https://direct-endpoint.com"
+
+
+async def test_async_base_url_support(clear_prediction_client_cache: Any) -> None:
+    """Test that `base_url` is properly used in async API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "base_url": "https://async-example.com",
+        "api_transport": "grpc_asyncio",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://async-example.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://async-example.com"
+        assert transport == "grpc_asyncio"
+
+
+async def test_async_api_endpoint_support(clear_prediction_client_cache: Any) -> None:
+    """Test that `api_endpoint` is properly used in async API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://async-direct-endpoint.com",
+        "api_transport": "grpc_asyncio",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://async-direct-endpoint.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://async-direct-endpoint.com"
+        assert transport == "grpc_asyncio"
+
+
+async def test_async_api_endpoint_alias_behavior(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """Test that `api_endpoint` and `base_url` are aliases in async calls."""
+    # Test 1: Only api_endpoint specified
+    llm1 = ChatVertexAI(
+        model="gemini-2.5-pro",
+        project="test-proj",
+        api_endpoint="https://api-endpoint-only.com",
+        api_transport="grpc_asyncio",
+    )
+    assert llm1.api_endpoint == "https://api-endpoint-only.com"
+
+    # Test 2: Only base_url specified (should be aliased to api_endpoint)
+    llm2 = ChatVertexAI(
+        model="gemini-2.5-pro",
+        project="test-proj",
+        base_url="https://base-url-only.com",
+        api_transport="grpc_asyncio",
+    )
+    assert llm2.api_endpoint == "https://base-url-only.com"
+
+    # Test async call with base_url
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm2._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://base-url-only.com"
+        assert transport == "grpc_asyncio"
+
+
+def test_init_client_with_custom_model_kwargs() -> None:
+    """Test that custom model kwargs are set correctly."""
+    llm = ChatAnthropicVertex(
+        project="test-project",
+        location="test-location",
+        model_kwargs={"thinking": {"type": "enabled", "budget_tokens": 1024}},
+    )
+    assert llm.model_kwargs == {"thinking": {"type": "enabled", "budget_tokens": 1024}}
+
+    default_params = llm._default_params
+    assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
 
 
 @pytest.mark.parametrize(
     ("model", "location"),
     [
         (
-            "gemini-1.0-pro-001",
+            "gemini-2-5-flash",
             "moon-dark1",
         ),
     ],
@@ -163,6 +365,7 @@ def test_init_client(model: str, location: str) -> None:
 def test_model_name_presence_in_chat_results(
     model: str, location: str, clear_prediction_client_cache: Any
 ) -> None:
+    """Ensure the model name is present in the response metadata of messages."""
     config = {"model": model, "location": location}
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
@@ -179,25 +382,143 @@ def test_model_name_presence_in_chat_results(
         assert isinstance(llm_response.generations[0].message, AIMessage)
         assert (
             llm_response.generations[0].message.response_metadata["model_name"]
-            == "gemini-1.0-pro-001"
+            == "gemini-2-5-flash"
         )
 
 
 def test_tuned_model_name() -> None:
+    """Test initialization of `ChatVertexAI` with a tuned model name.
+
+    Tuned models must be specified using the full resource name.
+    """
     llm = ChatVertexAI(
-        model_name=_DEFAULT_MODEL_NAME,
+        model_name="gemini-2-5-flash",
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
         max_tokens=500,
     )
-    assert llm.model_name == _DEFAULT_MODEL_NAME
+    assert llm.model_name == "gemini-2-5-flash"
     assert llm.tuned_model_name == "projects/123/locations/europe-west4/endpoints/456"
     assert llm.full_model_name == "projects/123/locations/europe-west4/endpoints/456"
     assert llm.max_output_tokens == 500
-    assert llm.max_tokens == 500
+    assert llm.max_tokens == 500  # Alias
+
+
+def test_default_params_gemini() -> None:
+    """Test that default parameters are set correctly in the request."""
+    user_prompt = "Hello"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
+        response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
+
+        model = ChatVertexAI(model_name="gemini-2-5-flash", project="test-project")
+        message = HumanMessage(content=user_prompt)
+        _ = model.invoke([message])
+        mock_generate_content.assert_called_once()
+        assert (
+            mock_generate_content.call_args.kwargs["request"].contents[0].role == "user"
+        )
+        assert (
+            mock_generate_content.call_args.kwargs["request"].contents[0].parts[0].text
+            == "Hello"
+        )
+        expected = GenerationConfig(
+            candidate_count=1,
+        )
+        assert (
+            mock_generate_content.call_args.kwargs["request"].generation_config
+            == expected
+        )
+        assert mock_generate_content.call_args.kwargs["request"].tools == []
+        assert not mock_generate_content.call_args.kwargs["request"].tool_config
+        assert not mock_generate_content.call_args.kwargs["request"].safety_settings
+
+
+def test_generation_config_gemini() -> None:
+    """Test that generation config is set correctly in the request when overridden."""
+    model = ChatVertexAI(
+        model_name="gemini-2-5-flash",
+        project="test-project",
+        temperature=0.2,
+        top_k=3,
+        frequency_penalty=0.2,
+        presence_penalty=0.6,
+    )
+    generation_config = model._generation_config_gemini(
+        temperature=0.3,
+        stop=["stop"],
+        candidate_count=2,
+        frequency_penalty=0.9,
+        presence_penalty=0.8,
+    )
+    # Note merged settings, with method args taking precedence (e.g. temperature)
+    expected = GenerationConfig(
+        stop_sequences=["stop"],
+        temperature=0.3,
+        top_k=3,
+        candidate_count=2,
+        frequency_penalty=0.9,
+        presence_penalty=0.8,
+    )
+    assert generation_config == expected
+
+
+def test_safety_settings_gemini_init() -> None:
+    """Test that safety settings are set correctly when provided at init."""
+    expected_safety_setting = [
+        VertexSafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+            method=SafetySetting.HarmBlockMethod.SEVERITY,
+        )
+    ]
+    model = ChatVertexAI(
+        model_name="gemini-2-5-flash",
+        temperature=0.2,
+        top_k=3,
+        project="test-project",
+        safety_settings=expected_safety_setting,
+    )
+    safety_settings = model._safety_settings_gemini(None)
+    assert safety_settings == expected_safety_setting
+
+
+def test_safety_settings_gemini() -> None:
+    """Test that safety settings are set correctly in the request."""
+    model = ChatVertexAI(
+        model_name="gemini-2-5-flash", temperature=0.2, top_k=3, project="test-project"
+    )
+    expected_safety_setting = SafetySetting(
+        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    )
+    safety_settings = model._safety_settings_gemini([expected_safety_setting])
+    assert safety_settings == [expected_safety_setting]
+    # Ignores for tests that intentionally use invalid dict types
+    safety_settings = model._safety_settings_gemini(
+        # Ignore since testing string conversion
+        {"HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"}  # type: ignore[dict-item]
+    )
+    assert safety_settings == [expected_safety_setting]
+    # Ignore since testing int conversion
+    safety_settings = model._safety_settings_gemini({2: 1})  # type: ignore[dict-item]
+    assert safety_settings == [expected_safety_setting]
+    threshold = SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
+    safety_settings = model._safety_settings_gemini(
+        # Ignore since testing enum conversion
+        {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}  # type: ignore[dict-item]
+    )
+    assert safety_settings == [expected_safety_setting]
 
 
 def test_parse_examples_correct() -> None:
+    """Test parsing of message examples into `InputOutputTextPair` objects."""
     text_question = (
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
@@ -216,6 +537,11 @@ def test_parse_examples_correct() -> None:
 
 
 def test_parse_examples_failes_wrong_sequence() -> None:
+    """Out of order messages should raise an error.
+
+    Ensure that the _parsed_examples function raises an error if the messages are not
+    in the correct Human-AI alternating sequence.
+    """
     with pytest.raises(ValueError) as exc_info:
         _ = _parse_examples([AIMessage(content="a")])
     assert (
@@ -224,33 +550,8 @@ def test_parse_examples_failes_wrong_sequence() -> None:
     )
 
 
-def test_parse_chat_history_correct() -> None:
-    text_context = (
-        "My name is Peter. You are my personal assistant. My "
-        "favorite movies are Lord of the Rings and Hobbit."
-    )
-    context = SystemMessage(content=text_context)
-    text_question = (
-        "Hello, could you recommend a good movie for me to watch this evening, please?"
-    )
-    question = HumanMessage(content=text_question)
-    text_answer = (
-        "Sure, You might enjoy The Lord of the Rings: The Fellowship of the Ring "
-        "(2001): This is the first movie in the Lord of the Rings trilogy."
-    )
-    answer = AIMessage(content=text_answer)
-    history = _parse_chat_history([context, question, answer, question, answer])
-    assert history.context == context.content
-    assert len(history.history) == 4
-    assert history.history == [
-        ChatMessage(content=text_question, author="user"),
-        ChatMessage(content=text_answer, author="bot"),
-        ChatMessage(content=text_question, author="user"),
-        ChatMessage(content=text_answer, author="bot"),
-    ]
-
-
 def test_parse_history_gemini() -> None:
+    """Test parsing of chat history into Gemini format."""
     system_input = "You're supposed to answer math questions."
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
@@ -273,6 +574,10 @@ def test_parse_history_gemini() -> None:
 
 
 def test_parse_history_gemini_number() -> None:
+    """Ensure that numeric strings are parsed correctly as text.
+
+    TODO: remove this? Seems like an edge case of limited value.
+    """
     system_input = "You're supposed to answer math questions."
     text_question1 = "54321.1"
     system_message = SystemMessage(content=system_input)
@@ -290,6 +595,12 @@ def test_parse_history_gemini_number() -> None:
 
 
 def test_parse_history_gemini_function_empty_list() -> None:
+    """Test parsing of chat history with an empty tool call response.
+
+    If the model calls a function/tool but the response is an empty list, it should
+    still be parsed correctly (meaning the function call is recorded, and the function
+    response is recorded as an empty content).
+    """
     system_input = "You're supposed to answer math questions."
     text_question1 = "Solve the following equation. x^2+16=0"
     fn_name_1 = "root"
@@ -341,6 +652,7 @@ def test_parse_history_gemini_function_empty_list() -> None:
 
 
 def test_parse_history_gemini_function() -> None:
+    """Test parsing of chat history with multiple tool calls and responses."""
     system_input = "You're supposed to answer math questions."
     text_question1 = "Which is bigger 2+2, 3*3 or 4-4?"
     fn_name_1 = "add"
@@ -438,7 +750,7 @@ def test_parse_history_gemini_function() -> None:
 
 
 @pytest.mark.parametrize(
-    ("source_history", "expected_sm", "expected_history"),
+    ("source_history", "expected_sys_message", "expected_history"),
     [
         (
             [
@@ -604,51 +916,67 @@ def test_parse_history_gemini_function() -> None:
     ],
 )
 def test_parse_history_gemini_multi(
-    source_history, expected_sm, expected_history
+    source_history, expected_sys_message, expected_history
 ) -> None:
+    """Test parsing of chat history with multiple messages of same type.
+
+    Needed to ensure that multiple system messages are combined into one, and that
+    multiple AI messages are combined into one.
+    """
     image_bytes_loader = ImageBytesLoader()
     sm, result_history = _parse_chat_history_gemini(
         history=source_history, imageBytesLoader=image_bytes_loader
     )
 
-    for result, expected in zip(result_history, expected_history):
+    for result, expected in zip(result_history, expected_history, strict=False):
         assert result == expected
-    assert sm == expected_sm
+    assert sm == expected_sys_message
 
 
-def test_default_params_gemini() -> None:
-    user_prompt = "Hello"
+def test_parse_chat_history_gemini_with_literal_eval() -> None:
+    """Test that string content representing a list is parsed correctly."""
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([text_message])
+    history: list[BaseMessage] = [HumanMessage(content=message)]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+        perform_literal_eval_on_string_raw_content=True,
+    )
+    parts = [
+        Part(text=instruction),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    assert expected == response
 
-    with patch(
-        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
-    ) as mc:
-        response = GenerateContentResponse(
-            candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
-        )
-        mock_generate_content = MagicMock(return_value=response)
-        mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, project="test-project")
-        message = HumanMessage(content=user_prompt)
-        _ = model.invoke([message])
-        mock_generate_content.assert_called_once()
-        assert (
-            mock_generate_content.call_args.kwargs["request"].contents[0].role == "user"
-        )
-        assert (
-            mock_generate_content.call_args.kwargs["request"].contents[0].parts[0].text
-            == "Hello"
-        )
-        expected = GenerationConfig(
-            candidate_count=1,
-        )
-        assert (
-            mock_generate_content.call_args.kwargs["request"].generation_config
-            == expected
-        )
-        assert mock_generate_content.call_args.kwargs["request"].tools == []
-        assert not mock_generate_content.call_args.kwargs["request"].tool_config
-        assert not mock_generate_content.call_args.kwargs["request"].safety_settings
+def test_parse_chat_history_gemini_without_literal_eval() -> None:
+    """Test that string content is not parsed when literal eval is disabled."""
+    instruction = "Describe the attached media in 5 words."
+    text_message = {"type": "text", "text": instruction}
+    message = str([text_message])
+    history: list[BaseMessage] = [HumanMessage(content=message)]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+        perform_literal_eval_on_string_raw_content=False,
+    )
+    parts = [
+        Part(text=message),
+    ]
+    expected = [Content(role="user", parts=parts)]
+    assert expected == response
+
+
+def test_python_literal_inputs() -> None:
+    """In relation to literal eval, ensure that inputs are not misinterpreted."""
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+
+    for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
+        _ = llm._prepare_request_gemini([HumanMessage(input_string)])
 
 
 @pytest.mark.parametrize(
@@ -1044,6 +1372,13 @@ def test_parse_response_candidate(raw_candidate, expected) -> None:
 
 
 def test_parser_multiple_tools() -> None:
+    """Test parsing of multiple function calls into Pydantic models.
+
+    Uses two simple Pydantic models as tools: Add and Multiply. The model is expected
+    to call both functions in a single response, and the parser should correctly parse
+    the response into instances of the respective Pydantic models.
+    """
+
     class Add(BaseModel):
         arg1: int
         arg2: int
@@ -1087,6 +1422,8 @@ def test_parser_multiple_tools() -> None:
         llm = model | parser
         result = llm.invoke([message])
         mock_generate_content.assert_called_once()
+
+        # Verify that the result is a list of Pydantic model instances
         assert isinstance(result, list)
         assert isinstance(result[0], Add)
         assert result[0] == Add(arg1=1, arg2=2)
@@ -1094,79 +1431,8 @@ def test_parser_multiple_tools() -> None:
         assert result[1] == Multiply(arg1=3, arg2=3)
 
 
-def test_generation_config_gemini() -> None:
-    model = ChatVertexAI(
-        model_name=_DEFAULT_MODEL_NAME,
-        project="test-project",
-        temperature=0.2,
-        top_k=3,
-        frequency_penalty=0.2,
-        presence_penalty=0.6,
-    )
-    generation_config = model._generation_config_gemini(
-        temperature=0.3,
-        stop=["stop"],
-        candidate_count=2,
-        frequency_penalty=0.9,
-        presence_penalty=0.8,
-    )
-    expected = GenerationConfig(
-        stop_sequences=["stop"],
-        temperature=0.3,
-        top_k=3,
-        candidate_count=2,
-        frequency_penalty=0.9,
-        presence_penalty=0.8,
-    )
-    assert generation_config == expected
-
-
-def test_safety_settings_gemini() -> None:
-    model = ChatVertexAI(
-        model_name=_DEFAULT_MODEL_NAME, temperature=0.2, top_k=3, project="test-project"
-    )
-    expected_safety_setting = SafetySetting(
-        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-    )
-    safety_settings = model._safety_settings_gemini([expected_safety_setting])
-    assert safety_settings == [expected_safety_setting]
-    safety_settings = model._safety_settings_gemini(
-        # Ignore since testing string conversion
-        {"HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"}  # type: ignore[dict-item]
-    )
-    assert safety_settings == [expected_safety_setting]
-    # Ignore since testing int conversion
-    safety_settings = model._safety_settings_gemini({2: 1})  # type: ignore[dict-item]
-    assert safety_settings == [expected_safety_setting]
-    threshold = SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
-    safety_settings = model._safety_settings_gemini(
-        # Ignore since testing enum conversion
-        {HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold}  # type: ignore[dict-item]
-    )
-    assert safety_settings == [expected_safety_setting]
-
-
-def test_safety_settings_gemini_init() -> None:
-    expected_safety_setting = [
-        VertexSafetySetting(
-            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold=SafetySetting.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-            method=SafetySetting.HarmBlockMethod.SEVERITY,
-        )
-    ]
-    model = ChatVertexAI(
-        model_name=_DEFAULT_MODEL_NAME,
-        temperature=0.2,
-        top_k=3,
-        project="test-project",
-        safety_settings=expected_safety_setting,
-    )
-    safety_settings = model._safety_settings_gemini(None)
-    assert safety_settings == expected_safety_setting
-
-
 def test_multiple_fc() -> None:
+    """Test parsing of multiple function calls in a single response."""
     prompt = (
         "I'm trying to decide whether to go to London or Zurich this weekend. How "
         "hot are those cities? How about Singapore? Or maybe Tokyo. I want to go "
@@ -1252,100 +1518,6 @@ def test_multiple_fc() -> None:
     assert history == expected
 
 
-def test_parse_chat_history_gemini_with_literal_eval() -> None:
-    instruction = "Describe the attached media in 5 words."
-    text_message = {"type": "text", "text": instruction}
-    message = str([text_message])
-    history: list[BaseMessage] = [HumanMessage(content=message)]
-    image_bytes_loader = ImageBytesLoader()
-    _, response = _parse_chat_history_gemini(
-        history=history,
-        imageBytesLoader=image_bytes_loader,
-        perform_literal_eval_on_string_raw_content=True,
-    )
-    parts = [
-        Part(text=instruction),
-    ]
-    expected = [Content(role="user", parts=parts)]
-    assert expected == response
-
-
-def test_parse_chat_history_gemini_without_literal_eval() -> None:
-    instruction = "Describe the attached media in 5 words."
-    text_message = {"type": "text", "text": instruction}
-    message = str([text_message])
-    history: list[BaseMessage] = [HumanMessage(content=message)]
-    image_bytes_loader = ImageBytesLoader()
-    _, response = _parse_chat_history_gemini(
-        history=history,
-        imageBytesLoader=image_bytes_loader,
-        perform_literal_eval_on_string_raw_content=False,
-    )
-    parts = [
-        Part(text=message),
-    ]
-    expected = [Content(role="user", parts=parts)]
-    assert expected == response
-
-
-def test_init_client_with_custom_api_endpoint() -> None:
-    config = {
-        "model": "gemini-2.5-pro",
-        "api_endpoint": "https://example.com",
-        "api_transport": "rest",
-    }
-    llm = ChatVertexAI(
-        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
-    )
-    with patch(
-        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
-    ) as mock_prediction_service:
-        response = GenerateContentResponse(candidates=[])
-        mock_prediction_service.return_value.generate_content.return_value = response
-
-        llm._generate_gemini(messages=[])
-        mock_prediction_service.assert_called_once()
-        client_options = mock_prediction_service.call_args.kwargs["client_options"]
-        transport = mock_prediction_service.call_args.kwargs["transport"]
-        assert client_options.api_endpoint == "https://example.com"
-        assert transport == "rest"
-
-
-def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
-    config = {
-        "model": "gemini-2.5-pro",
-        "base_url": "https://example.com",
-        "api_transport": "rest",
-    }
-    llm = ChatVertexAI(
-        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
-    )
-    with patch(
-        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
-    ) as mock_prediction_service:
-        response = GenerateContentResponse(candidates=[])
-        mock_prediction_service.return_value.generate_content.return_value = response
-
-        llm._generate_gemini(messages=[])
-        mock_prediction_service.assert_called_once()
-        client_options = mock_prediction_service.call_args.kwargs["client_options"]
-        transport = mock_prediction_service.call_args.kwargs["transport"]
-        assert client_options.api_endpoint == "https://example.com"
-        assert transport == "rest"
-
-
-def test_init_client_with_custom_model_kwargs() -> None:
-    llm = ChatAnthropicVertex(
-        project="test-project",
-        location="test-location",
-        model_kwargs={"thinking": {"type": "enabled", "budget_tokens": 1024}},
-    )
-    assert llm.model_kwargs == {"thinking": {"type": "enabled", "budget_tokens": 1024}}
-
-    default_params = llm._default_params
-    assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
-
-
 def test_anthropic_format_output() -> None:
     """Test format output handles different content structures correctly."""
 
@@ -1353,8 +1525,8 @@ def test_anthropic_format_output() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:
@@ -1417,8 +1589,8 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:
@@ -1480,6 +1652,7 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
 
 
 def test_thinking_configuration() -> None:
+    """Test that thinking configuration is set correctly."""
     input_message = HumanMessage("Query requiring reasoning.")
 
     # Test init params
@@ -1505,6 +1678,7 @@ def test_thinking_configuration() -> None:
 
 
 def test_thought_signature() -> None:
+    """Test that thought signatures are correctly parsed and included in requests."""
     llm = ChatVertexAI(
         model=_DEFAULT_MODEL_NAME,
         project="test-project",
@@ -1562,13 +1736,6 @@ def test_thought_signature() -> None:
     ]
 
 
-def test_python_literal_inputs() -> None:
-    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
-
-    for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
-        _ = llm._prepare_request_gemini([HumanMessage(input_string)])
-
-
 def test_v1_function_parts() -> None:
     llm = ChatVertexAI(
         model=_DEFAULT_MODEL_NAME, project="test-project", endpoint_version="v1"
@@ -1586,3 +1753,69 @@ def test_v1_function_parts() -> None:
     ]
 
     assert llm._prepare_request_gemini(messages)
+
+
+def test_thinking_budget_in_params() -> None:
+    """Test that `thinking_budget` and `include_thoughts` are configured correctly."""
+    # Init params
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        thinking_budget=1000,
+        include_thoughts=True,
+    )
+
+    params = llm._prepare_params()
+    # thinking_budget and include_thoughts should NOT be in top-level params
+    # (to avoid conflicts with GenerationConfig)
+    assert "thinking_budget" not in params
+    assert "include_thoughts" not in params
+
+    # But thinking_config should be set for the API
+    assert "thinking_config" in params
+    assert params["thinking_config"]["thinking_budget"] == 1000
+    assert params["thinking_config"]["include_thoughts"] is True
+
+    # Invocation params
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    params = llm._prepare_params(thinking_budget=500, include_thoughts=False)
+    assert "thinking_budget" not in params
+    assert "include_thoughts" not in params
+
+    # Also check that thinking_config is set for the API
+    assert "thinking_config" in params
+    assert params["thinking_config"]["thinking_budget"] == 500
+    assert params["thinking_config"]["include_thoughts"] is False
+
+
+def test_thinking_budget_in_invocation_params() -> None:
+    """Test that thinking parameters are available for LangSmith tracing."""
+    # Init params
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        thinking_budget=1000,
+        include_thoughts=True,
+    )
+
+    invocation_params = llm._get_invocation_params()
+
+    # Verify thinking parameters are included for tracing
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 1000
+    assert invocation_params["include_thoughts"] is True
+
+    # Invocation params
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    invocation_params = llm._get_invocation_params(
+        thinking_budget=500, include_thoughts=False
+    )
+
+    # Verify thinking parameters are included for tracing
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 500
+    assert invocation_params["include_thoughts"] is False
