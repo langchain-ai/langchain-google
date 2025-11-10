@@ -1,0 +1,79 @@
+name: "🐛 Bug Report"
+description: Report a bug in a `langchain-google` package
+labels: ["bug"]
+type: bug
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+        ## Important Links
+        - [Documentation](https://docs.langchain.com/oss/python/integrations/providers/google)
+        - [API Reference](https://reference.langchain.com/python/integrations/langchain_google/)
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      description: Which `langchain-google` package is this bug related to?
+      options:
+        - langchain-google-genai
+        - langchain-google-vertexai
+        - langchain-google-community
+      default: 0
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: Checked other resources
+      description: Please confirm you have done the following before submitting
+      options:
+        - label: I added a descriptive title to this issue
+          required: true
+        - label: I searched the LangChain documentation with the integrated search
+          required: true
+        - label: I used the GitHub search to find a similar issue and didn't find it
+          required: true
+        - label: I am sure this is a bug and not a question or request for help
+          required: true
+
+  - type: textarea
+    attributes:
+      label: Example Code
+      description: |
+        Please provide a minimal, reproducible code example that demonstrates the bug.
+        Without this, it will be very difficult to help you!
+      render: python
+      placeholder: |
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        # or from langchain_google_vertexai import ChatVertexAI
+        # or from langchain_google_community import ...
+
+        # Your Minimal Reproducable Example (MRE) here
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Error Message and Stack Trace (if applicable)
+      description: |
+        If you are reporting an error, please include the full error message and stack trace.
+        This will be automatically formatted into code, so no need for backticks.
+      render: shell
+
+  - type: textarea
+    attributes:
+      label: Description
+      description: |
+        Describe what you're doing, what you expect to happen, and what actually happens.
+
+        Please be as detailed as possible. The more information you provide, the easier it will be to help you.
+      placeholder: |
+        1. What were you trying to do?
+        2. What did you expect to happen?
+        3. What actually happened?
+    validations:
+      required: true

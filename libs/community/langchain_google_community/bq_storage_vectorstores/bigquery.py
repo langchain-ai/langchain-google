@@ -27,16 +27,18 @@ USER_AGENT_PREFIX = "FeatureStore"
 
 
 class BigQueryVectorStore(BaseBigQueryVectorStore):
-    """
-    A vector store implementation that utilizes BigQuery and BigQuery Vector Search.
+    """Vector store implementation that utilizes BigQuery and BigQuery Vector Search.
 
     This class provides efficient storage and retrieval of documents with vector
     embeddings within BigQuery. It is particularly indicated for prototyping, due the
     serverless nature of BigQuery, and batch retrieval.
-    It supports similarity search, filtering, and batch operations through
+
+    Supports similarity search, filtering, and batch operations through
     `batch_search` method.
+
     Optionally, this class can leverage a Vertex AI Feature Store for online serving
     through the `to_vertex_fs_vector_store` method.
+
     Note that the `bigquery.datasets.create permission` is required even if the
     dataset already exists. This can be avoided by specifying `temp_dataset_name` as
     the name of an existing dataset.

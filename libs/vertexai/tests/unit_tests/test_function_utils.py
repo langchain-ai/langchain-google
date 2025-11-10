@@ -4,7 +4,7 @@ import json
 import sys
 from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import google.cloud.aiplatform_v1beta1.types as gapic
@@ -52,7 +52,7 @@ def test_format_json_schema_to_gapic() -> None:
         """Record some identifying information about a person."""
 
         name: str
-        age: Optional[int]
+        age: int | None
 
     schema = RecordPerson.model_json_schema()
     result = _format_json_schema_to_gapic(schema)
@@ -76,10 +76,10 @@ def test_format_json_schema_to_gapic() -> None:
     class A(BaseModel):
         """Class A."""
 
-        int_field: Optional[int]
+        int_field: int | None
 
     class B(BaseModel):
-        object_field: Optional[A] = Field(description="Class A")
+        object_field: A | None = Field(description="Class A")
         array_field: Sequence[A]
         int_field: int = Field(description="int field", ge=1, le=10)
         str_field: str = Field(
@@ -158,7 +158,7 @@ class _RecordPersonV1(BaseModelV1):
     """Record some identifying information about a person."""
 
     name: str
-    age: Optional[int]
+    age: int | None
 
 
 class _StringEnumV1(str, Enum):
@@ -169,11 +169,11 @@ class _StringEnumV1(str, Enum):
 class _AV1(BaseModelV1):
     """Class A."""
 
-    int_field: Optional[int]
+    int_field: int | None
 
 
 class _BV1(BaseModelV1):
-    object_field: Optional[_AV1] = FieldV1(description="Class A")
+    object_field: _AV1 | None = FieldV1(description="Class A")
     array_field: Sequence[_AV1]
     int_field: int = FieldV1(description="int field", minimum=1, maximum=10)
     str_field: str = FieldV1(
@@ -265,11 +265,11 @@ def test_format_json_schema_to_gapic_union_types() -> None:
 
     class RecordPerson_v1(BaseModelV1):
         name: str
-        age: Union[int, str]
+        age: int | str
 
     class RecordPerson(BaseModel):
         name: str
-        age: Union[int, str]
+        age: int | str
 
     schema_v1 = RecordPerson_v1.schema()
     schema_v2 = RecordPerson.model_json_schema()
@@ -372,8 +372,8 @@ mock_vertex = Mock("mock_vertex", wraps=_format_vertex_to_function_declaration)
 
 TO_FUNCTION_DECLARATION_MOCKS = [mock_dict, mock_base_tool, mock_pydantic, mock_vertex]
 
-SRC_EXP_MOCKS_DESC: List[
-    Tuple[_FunctionDeclarationLike, gapic.FunctionDeclaration, List[Mock], str]
+SRC_EXP_MOCKS_DESC: list[
+    tuple[_FunctionDeclarationLike, gapic.FunctionDeclaration, list[Mock], str]
 ] = [
     (search, search_exp, [mock_base_tool], "plain function"),
     (search_tool, search_exp, [mock_base_tool], "LC tool"),
@@ -419,13 +419,13 @@ def test_format_to_gapic_function_declaration() -> None:
 
 
 def test_format_to_gapic_tool() -> None:
-    src: List[_FunctionDeclarationLike] = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
+    src: list[_FunctionDeclarationLike] = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
     fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
     expected = gapic.Tool(function_declarations=fds)
     result = _format_to_gapic_tool(src)
     assert result == expected
 
-    additional_tools: List[_ToolType] = [
+    additional_tools: list[_ToolType] = [
         gapic.Tool(function_declarations=[search_model_exp]),
         vertexai.Tool.from_function_declarations(
             [vertexai.FunctionDeclaration.from_func(search)]
@@ -443,7 +443,7 @@ def test_format_to_gapic_tool() -> None:
     result = _format_to_gapic_tool([src_3])
     assert result == src_3
 
-    src_4: Dict[str, Any] = {"google_search_retrieval": {}}
+    src_4: dict[str, Any] = {"google_search_retrieval": {}}
     result = _format_to_gapic_tool([src_4])
     assert result == src_3
 
@@ -573,7 +573,7 @@ def test_tool_with_union_types() -> None:
         """Get weather information."""
 
         location: str = "New York, USA"
-        date: Union[Helper1, Helper2] = Helper1()
+        date: Helper1 | Helper2 = Helper1()
 
     # Convert the model schema
     schema = GetWeather.model_json_schema()
@@ -624,7 +624,7 @@ def test_tool_with_union_primitive_types() -> None:
         """Search query model with a union parameter."""
 
         query: str = "default query"
-        filter: Union[str, Helper] = "default filter"
+        filter: str | Helper = "default filter"
 
     # Convert the model schema
     schema = SearchQuery.model_json_schema()
@@ -678,14 +678,14 @@ def test_tool_with_nested_union_types() -> None:
         """Contact model."""
 
         email: str = "user@example.com"
-        phone: Optional[str] = None
+        phone: str | None = None
 
     class Person(BaseModel):
         """Person model with complex nested unions."""
 
         name: str
-        location: Union[str, Address] = "Unknown"
-        contacts: List[Union[str, Contact]] = []
+        location: str | Address = "Unknown"
+        contacts: list[str | Contact] = []
 
     # Convert the model schema
     schema = Person.model_json_schema()
@@ -756,7 +756,7 @@ def test_tool_field_union_types() -> None:
         location: str = Field(
             ..., description="The city and country, e.g. New York, USA"
         )
-        date: Union[Helper1, Helper2] = Field(description="Test field")
+        date: Helper1 | Helper2 = Field(description="Test field")
 
     # Convert the model schema
     schema = GetWeather.model_json_schema()
@@ -815,8 +815,8 @@ def test_union_nullable_types() -> None:
         """Config model with nullable fields."""
 
         required_field: str
-        optional_primitive: Optional[int] = None
-        optional_complex: Optional[Dict[str, str]] = None
+        optional_primitive: int | None = None
+        optional_complex: dict[str, str] | None = None
 
     schema = Config.model_json_schema()
     dereferenced_schema = dereference_refs(schema)

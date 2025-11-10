@@ -1,14 +1,9 @@
 import copy
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from enum import Enum, auto
 from typing import (
     Any,
     AsyncContextManager,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Union,
 )
 
 import httpx
@@ -30,13 +25,13 @@ from typing_extensions import Self
 
 from langchain_google_vertexai._base import _VertexAIBase
 
-_MISTRAL_MODELS: List[str] = [
+_MISTRAL_MODELS: list[str] = [
     "mistral-nemo@2407",
     "mistral-large-2411@001",
     "mistral-small-2503@001",
     "codestral-2501@001",
 ]
-_LLAMA_MODELS: List[str] = [
+_LLAMA_MODELS: list[str] = [
     "meta/llama-3.2-90b-vision-instruct-maas",
     "meta/llama-3.3-70b-instruct-maas",
     "meta/llama-4-maverick-17b-128e-instruct-maas",
@@ -44,7 +39,7 @@ _LLAMA_MODELS: List[str] = [
 ]
 
 
-def _get_token(credentials: Optional[Credentials] = None) -> str:
+def _get_token(credentials: Credentials | None = None) -> str:
     """Returns a valid token for GCP auth."""
     credentials = (
         credentials
@@ -91,7 +86,7 @@ async def _araise_on_error(response: httpx.Response) -> None:
 
 async def _aiter_sse(
     event_source_mgr: AsyncContextManager[EventSource],
-) -> AsyncIterator[Dict]:
+) -> AsyncIterator[dict]:
     """Iterate over the server-sent events."""
     async with event_source_mgr as event_source:
         await _araise_on_error(event_source.response)
@@ -121,7 +116,7 @@ class VertexMaaSModelFamily(str, Enum):
 class _BaseVertexMaasModelGarden(_VertexAIBase):
     append_tools_to_system_message: bool = False
     "Whether to append tools to the system message or not."
-    model_family: Optional[VertexMaaSModelFamily] = None
+    model_family: VertexMaaSModelFamily | None = None
     timeout: int = 120
 
     model_config = ConfigDict(
@@ -162,7 +157,7 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
             self.model_name = model
         return self
 
-    def _enrich_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _enrich_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """Fix params to be compliant with Vertex AI."""
         copy_params = copy.deepcopy(params)
         _ = copy_params.pop("safe_prompt", None)
@@ -192,9 +187,7 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
 
 def _create_retry_decorator(
     llm: _BaseVertexMaasModelGarden,
-    run_manager: Optional[
-        Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]
-    ] = None,
+    run_manager: AsyncCallbackManagerForLLMRun | CallbackManagerForLLMRun | None = None,
 ) -> Callable[[Any], Any]:
     """Returns a tenacity retry decorator, preconfigured to handle exceptions."""
     errors = [httpx.RequestError, httpx.StreamError]
@@ -205,7 +198,7 @@ def _create_retry_decorator(
 
 async def acompletion_with_retry(
     llm: _BaseVertexMaasModelGarden,
-    run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+    run_manager: AsyncCallbackManagerForLLMRun | None = None,
     **kwargs: Any,
 ) -> Any:
     """Use tenacity to retry the async completion call."""

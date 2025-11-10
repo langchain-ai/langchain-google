@@ -33,14 +33,28 @@ class DocAIParsingResults:
     """A dataclass to store Document AI parsing results."""
 
     source_path: str
+
     parsed_path: str
 
 
 class DocAIParser(BaseBlobParser):
-    """`Google Cloud Document AI` parser.
+    """Google Cloud Document AI parser.
 
-    For a detailed explanation of Document AI, refer to the product documentation.
-    https://cloud.google.com/document-ai/docs/overview
+    Inherits from [`BaseBlobParser`][langchain_core.document_loaders.BaseBlobParser].
+
+    Parses documents using Google Cloud Document AI for text extraction and
+    layout analysis.
+
+    See [Document AI documentation](https://cloud.google.com/document-ai/docs/overview)
+    for detailed information.
+
+    !!! note "Installation"
+
+        Requires additional dependencies:
+
+        ```bash
+        pip install langchain-google-community[docai]
+        ```
     """
 
     def __init__(
@@ -55,14 +69,14 @@ class DocAIParser(BaseBlobParser):
         """Initializes the parser.
 
         Args:
-            client: a DocumentProcessorServiceClient to use
-            location: a Google Cloud location where a Document AI processor is located
-            gcs_output_path: a path on Google Cloud Storage to store parsing results
-            processor_name: full resource name of a Document AI processor or processor
+            client: A `DocumentProcessorServiceClient` to use
+            location: A Google Cloud location where a Document AI processor is located
+            gcs_output_path: A path on Google Cloud Storage to store parsing results
+            processor_name: Full resource name of a Document AI processor or processor
                 version
 
-        You should provide either a client or location (and then a client
-            would be instantiated).
+        You should provide either a client or location (and then a client would be
+        instantiated).
         """
 
         if bool(client) == bool(location):
@@ -114,10 +128,10 @@ class DocAIParser(BaseBlobParser):
         """Parses a blob lazily.
 
         Args:
-            blob: a Blob to parse
+            blob: a `Blob` to parse
 
-        This is a long-running operation. A recommended way is to batch
-            documents together and use the `batch_parse()` method.
+        This is a long-running operation. A recommended way is to batch documents
+        together and use the `batch_parse` method.
         """
         yield from self.batch_parse([blob], gcs_output_path=self._gcs_output_path)
 
@@ -131,14 +145,13 @@ class DocAIParser(BaseBlobParser):
         """Prepare process options for DocAI process request
 
         Args:
-            enable_native_pdf_parsing: enable pdf embedded text extraction
-            page_range: list of page numbers to parse. If `None`,
-                entire document will be parsed.
-            chunk_size: maximum number of characters per chunk (supported
-                only with Document AI Layout Parser processor).
-            include_ancestor_headings: whether or not to include ancestor
-                headings when splitting (supported only
-                with Document AI Layout Parser processor).
+            enable_native_pdf_parsing: Enable PDF embedded text extraction
+            page_range: list of page numbers to parse. If `None`, entire document will
+                be parsed.
+            chunk_size: Maximum number of characters per chunk (supported only with
+                Document AI Layout Parser processor).
+            include_ancestor_headings: Whether or not to include ancestor headings when
+                splitting (supported only with Document AI Layout Parser processor).
         """
         try:
             from google.cloud.documentai_v1.types import OcrConfig, ProcessOptions
@@ -186,15 +199,14 @@ class DocAIParser(BaseBlobParser):
         field_mask: Optional[str] = None,
         **process_options_kwargs: Any,
     ) -> Iterator[Document]:
-        """Parses a blob lazily using online processing.
+        """Parses a `Blob` lazily using online processing.
 
         Args:
-            blob: a blob to parse.
-            field_mask: a comma-separated list of which fields to include in the
-                Document AI response.
-                suggested: "text,pages.pageNumber,pages.layout"
-            process_options_kwargs: optional parameters to pass to the Document
-                AI processors
+            blob: `Blob` to parse.
+            field_mask: Comma-separated list of which fields to include in the
+                Document AI response. suggested: `'text,pages.pageNumber,pages.layout'`
+            process_options_kwargs: Optional parameters to pass to the Document AI
+                processors
         """
         try:
             from google.cloud import documentai
@@ -261,27 +273,34 @@ class DocAIParser(BaseBlobParser):
         check_in_interval_sec: int = 60,
         **process_options_kwargs: Any,
     ) -> Iterator[Document]:
-        """Parses a list of blobs lazily.
+        """Parses a list of `Blob` lazily.
 
         Args:
-            blobs: a list of blobs to parse.
-            gcs_output_path: a path on Google Cloud Storage to store parsing results.
-            timeout_sec: a timeout to wait for Document AI to complete, in seconds.
-            check_in_interval_sec: an interval to wait until next check
-                whether parsing operations have been completed, in seconds.
-            process_options_kwargs: optional parameters to pass to the Document
-                AI processors
+            blobs: A list of `Blob` to parse.
+            gcs_output_path: Path on Google Cloud Storage to store parsing results.
+            timeout_sec: Timeout to wait for Document AI to complete, in seconds.
+            check_in_interval_sec: Interval to wait until next check whether parsing
+                operations have been completed, in seconds.
+            process_options_kwargs: Optional parameters to pass to the Document AI
+                processors
 
-        This is a long-running operation. A recommended way is to decouple
-            parsing from creating LangChain Documents:
-            >>> operations = parser.docai_parse(blobs, gcs_path)
-            >>> parser.is_running(operations)
-            You can get operations names and save them:
-            >>> names = [op.operation.name for op in operations]
-            And when all operations are finished, you can use their results:
-            >>> operations = parser.operations_from_names(operation_names)
-            >>> results = parser.get_results(operations)
-            >>> docs = parser.parse_from_results(results)
+        ??? example "Long-running operation"
+
+            ```python
+            # Submit async jobs
+            operations = parser.docai_parse(blobs, gcs_path)
+
+            # Optionally poll until finished
+            parser.is_running(operations)
+
+            # Save operation names
+            operation_names = [op.operation.name for op in operations]
+
+            # Later, load results and build Documents
+            operations = parser.operations_from_names(operation_names)
+            results = parser.get_results(operations)
+            docs = parser.parse_from_results(results)
+            ```
         """
         output_path = gcs_output_path or self._gcs_output_path
         if not output_path:
@@ -382,23 +401,23 @@ class DocAIParser(BaseBlobParser):
         field_mask: Optional[str] = None,
         **process_options_kwargs: Any,
     ) -> List["Operation"]:
-        """Runs Google Document AI PDF Batch Processing on a list of blobs.
+        """Runs Google Document AI PDF Batch Processing on a list of `Blob`.
 
         Args:
-            blobs: a list of blobs to be parsed
-            gcs_output_path: a path (folder) on GCS to store results
-            processor_name: name of a Document AI processor.
-            batch_size: amount of documents per batch
-            field_mask: a comma-separated list of which fields to include in the
-                Document AI response.
-                suggested: "text,pages.pageNumber,pages.layout"
-            process_options_kwargs: optional parameters to pass to the Document
-                AI processors
+            blobs: List of `Blob` to be parsed
+            gcs_output_path: Path (folder) on GCS to store results
+            processor_name: Name of a Document AI processor.
+            batch_size: Amount of documents per batch
+            field_mask: Comma-separated list of which fields to include in the Document
+                AI response. Suggested: `'text,pages.pageNumber,pages.layout'`
+            process_options_kwargs: Optional parameters to pass to the Document AI
+                processors
 
         Document AI has a 1000 file limit per batch, so batches larger than that need
         to be split into multiple requests.
-        Batch processing is an async long-running operation
-        and results are stored in a output GCS bucket.
+
+        Batch processing is an async long-running operation and results are stored in a
+        output GCS bucket.
         """
         try:
             from google.cloud import documentai

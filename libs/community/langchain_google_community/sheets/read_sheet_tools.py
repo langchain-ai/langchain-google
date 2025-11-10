@@ -1,8 +1,4 @@
-"""Read tools for Google Sheets.
-
-This module contains all read-related tools for Google Sheets, including
-base schemas, base tool class, and specific read implementations.
-"""
+"""Tools for reading data from Google Sheets."""
 
 from typing import Any, Dict, List, Optional, Type, Union
 
@@ -26,27 +22,28 @@ from .utils import (
 
 
 class ReadBaseSchema(BaseModel):
-    """Base schema for all read operations.
-
-    Contains common fields that are shared across all read tools.
-    """
+    """Base schema for read operations with common fields."""
 
     spreadsheet_id: str = Field(
         description="The ID of the Google Spreadsheet to read from."
     )
+
     value_render_option: ValueRenderOption = Field(
         default=ValueRenderOption.FORMATTED_VALUE,
         description="How values should be rendered in the output.",
     )
+
     date_time_render_option: DateTimeRenderOption = Field(
         default=DateTimeRenderOption.SERIAL_NUMBER,
         description="How dates, times, and durations should be rendered.",
     )
+
     convert_to_records: bool = Field(
         default=False,
         description="Whether to convert data to records (list of dictionaries) "
         "using first row as headers.",
     )
+
     numericise_values: bool = Field(
         default=True,
         description="Whether to automatically convert string numbers to numeric types.",
@@ -61,8 +58,8 @@ class ReadBaseSchema(BaseModel):
 class BaseReadTool(SheetsBaseTool):
     """Base class for Google Sheets read operations.
 
-    Provides shared functionality for data processing, value extraction,
-    and record conversion that is common across all read tools.
+    Provides shared functionality for data processing, value extraction, and record
+    conversion that is common across all read tools.
     """
 
     def _numericise(self, value: str) -> Union[str, int, float]:
@@ -72,7 +69,7 @@ class BaseReadTool(SheetsBaseTool):
             value: String value to convert
 
         Returns:
-            Union[str, int, float]: Converted value or original string
+            Converted value or original string.
         """
         if not isinstance(value, str):
             return value
@@ -99,7 +96,7 @@ class BaseReadTool(SheetsBaseTool):
             values: 2D array of data values
 
         Returns:
-            List[dict]: List of dictionaries with headers as keys
+            List of dictionaries with headers as keys.
         """
         return [dict(zip(headers, row)) for row in values]
 
@@ -117,7 +114,7 @@ class BaseReadTool(SheetsBaseTool):
             numericise_values: Whether to convert string numbers to numeric types
 
         Returns:
-            Union[List[List], List[dict]]: Processed data as 2D array or records
+            Processed data as 2D array or records.
         """
         if not values:
             return []
@@ -157,7 +154,7 @@ class BaseReadTool(SheetsBaseTool):
             grid_data: List of GridData segments from Google Sheets API
 
         Returns:
-            List[List[str]]: Simple 2D array of values from all segments concatenated
+            Simple 2D array of values from all segments concatenated.
         """
         if not grid_data:
             return []
@@ -183,7 +180,7 @@ class BaseReadTool(SheetsBaseTool):
             grid_data: GridData from Google Sheets API
 
         Returns:
-            List[List[str]]: Simple 2D array of values from all segments
+            2D array of values from all segments.
         """
         # Delegate to the new multi-segment implementation
         return self._extract_simple_data_all(grid_data)
@@ -195,7 +192,7 @@ class BaseReadTool(SheetsBaseTool):
 
 
 class ReadSheetDataSchema(ReadBaseSchema):
-    """Input schema for ReadSheetData."""
+    """Input schema for `SheetsReadDataTool`."""
 
     range_name: str = Field(
         description="A1 notation range to read from the spreadsheet."
@@ -203,102 +200,83 @@ class ReadSheetDataSchema(ReadBaseSchema):
 
 
 class SheetsReadDataTool(BaseReadTool):
-    """Tool that reads data from a single range in Google Sheets.
+    """Tool for reading data from a single range in Google Sheets.
 
-    This tool provides comprehensive data reading capabilities from Google Sheets,
-    supporting various rendering options, data transformation, and flexible output
-    formats. It's designed for extracting specific data from single sheet ranges
-    with full control over how the data is processed and returned.
+    Inherits from
+    [`BaseReadTool`][langchain_google_community.sheets.read_sheet_tools.BaseReadTool].
 
-    Instantiate:
+    Reads data from a single range with support for various rendering options and data
+    transformations.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        range (str): The actual range that was read (A1 notation).
+        values (list): Processed data (2D array or list of dictionaries).
+        major_dimension (str): The major dimension ('ROWS' or 'COLUMNS').
+        render_options (dict): Applied rendering options.
+        processing_options (dict): Applied processing options.
+
+    ???+ example "Basic Usage"
+
+        Read data from a range:
+
         ```python
         from langchain_google_community.sheets import SheetsReadDataTool
 
-        tool = SheetsReadDataTool(
-            api_key="your_api_key",
-            value_render_option=ValueRenderOption.FORMATTED_VALUE,
-            convert_to_records=True,
-            numericise_values=True,
+        tool = SheetsReadDataTool(api_key="your_api_key")
+        result = tool.run(
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "range_name": "A1:E10",
+            }
         )
+        print(result["values"])
         ```
 
-    Invoke directly:
+    ??? example "Convert to Records"
+
+        Convert 2D array to list of dictionaries using first row as headers:
+
         ```python
         result = tool.run(
             {
-                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
                 "range_name": "A1:E10",
                 "convert_to_records": True,
             }
         )
+        # Returns: [{"Name": "Alice", "Age": 25, ...}, ...]
         ```
 
-    Invoke with agent:
+    ??? example "Custom Rendering Options"
+
+        Get unformatted values and formulas:
+
         ```python
-        agent.invoke(
-            {"input": ("Read the first 10 rows from the student data spreadsheet")}
+        result = tool.run(
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "range_name": "A1:E10",
+                "value_render_option": "UNFORMATTED_VALUE",
+            }
         )
         ```
 
-    Returns:
-        Dictionary containing:
-            - success: Always True for successful operations
-            - spreadsheet_id: The spreadsheet ID
-            - range: The actual range that was read (A1 notation)
-            - values (List or List[Dict]): Processed data (2D array or records)
-            - major_dimension: The major dimension ("ROWS" or "COLUMNS")
-            - render_options: Applied rendering options
-            - processing_options: Applied processing options
-
-    Data Processing Options:
-        - value_render_option: Control how cell values are rendered
-            * FORMATTED_VALUE: Human-readable format (default)
-            * UNFORMATTED_VALUE: Raw values without formatting
-            * FORMULA: Cell formulas as text
-        - date_time_render_option: Control how dates/times are rendered
-            * SERIAL_NUMBER: Excel-style serial numbers (default)
-            * FORMATTED_STRING: Human-readable date/time strings
-        - convert_to_records: Transform 2D array to list of dictionaries
-        - numericise_values: Automatically convert numeric strings to numbers
-
-    Example Response (with convert_to_records=True):
-        {
-            "success": True,
-            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "range": "Class Data!A1:E3",
-            "values": [
-                {
-                    "Name": "Alice", "Age": 16, "Grade": "10th",
-                    "Subject": "Math", "Score": 95
-                },
-                {
-                    "Name": "Bob", "Age": 17, "Grade": "11th",
-                    "Subject": "Science", "Score": 87
-                }
-            ],
-            "major_dimension": "ROWS",
-            "render_options": {
-                "value_render_option": "FORMATTED_VALUE",
-                "date_time_render_option": "SERIAL_NUMBER"
-            },
-            "processing_options": {
-                "convert_to_records": True,
-                "numericise_values": True
-            }
-        }
-
     Raises:
-        ValueError: If spreadsheet_id or range_name is invalid
-        Exception: For API errors or connection issues
+        ValueError: If `spreadsheet_id` or `range_name` is invalid.
+        Exception: For API errors or connection issues.
     """
 
     name: str = "sheets_read_data"
+
     description: str = (
         "Read data from a single range in Google Sheets with comprehensive "
         "rendering options and data transformation capabilities. Supports "
         "formatted/unformatted values, record conversion, and numeric processing. "
         "Perfect for extracting specific data from single sheet ranges."
     )
+
     args_schema: Type[BaseModel] = ReadSheetDataSchema
 
     def _run(
@@ -313,7 +291,31 @@ class SheetsReadDataTool(BaseReadTool):
         numericise_values: bool = True,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> Dict[str, Any]:
-        """Read data from a Google Spreadsheet."""
+        """Read data from a single range in Google Sheets.
+
+        Args:
+            spreadsheet_id: ID of the spreadsheet to read from.
+            range_name: A1 notation range (e.g., `'A1:E10'` or `'Sheet1!A1:D5'`).
+            value_render_option: How values should be rendered.
+            date_time_render_option: How dates/times should be rendered.
+            convert_to_records: Convert to list of dictionaries using first row
+                as headers.
+            numericise_values: Convert string numbers to numeric types.
+            run_manager: Optional callback manager.
+
+        Returns:
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            range (str): The actual range that was read.
+            values (list): Processed data (2D array or list of dicts).
+            major_dimension (str): The major dimension.
+            render_options (dict): Applied rendering options.
+            processing_options (dict): Applied processing options.
+
+        Raises:
+            ValueError: If `spreadsheet_id` or `range_name` is invalid.
+            Exception: For API errors or connection issues.
+        """
         try:
             # Validate inputs
             validate_spreadsheet_id(spreadsheet_id)
@@ -370,11 +372,12 @@ class SheetsReadDataTool(BaseReadTool):
 
 
 class BatchReadSheetDataSchema(ReadBaseSchema):
-    """Input schema for BatchReadSheetData."""
+    """Input schema for `SheetsBatchReadDataTool`."""
 
     ranges: List[str] = Field(
         description="List of A1 notation ranges to read from the spreadsheet."
     )
+
     major_dimension: MajorDimension = Field(
         default=MajorDimension.ROWS,
         description="The major dimension that results should use.",
@@ -382,111 +385,74 @@ class BatchReadSheetDataSchema(ReadBaseSchema):
 
 
 class SheetsBatchReadDataTool(BaseReadTool):
-    """Tool that reads data from multiple ranges in Google Sheets efficiently.
+    """Tool for reading data from multiple ranges in Google Sheets efficiently.
 
-    This tool provides efficient batch reading capabilities from Google Sheets,
-    allowing you to read multiple ranges in a single API call. It's optimized
-    for scenarios where you need to extract data from multiple sheets, ranges,
-    or sections of a spreadsheet simultaneously, reducing API calls and improving
-    performance.
+    Inherits from
+    [`BaseReadTool`][langchain_google_community.sheets.read_sheet_tools.BaseReadTool].
 
-    Instantiate:
+    Reads multiple ranges in a single API call, reducing network overhead and
+    improving performance.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        requested_ranges (list): The ranges that were requested.
+        total_ranges (int): Total number of ranges processed.
+        successful_ranges (int): Number of successfully processed ranges.
+        failed_ranges (int): Number of failed ranges.
+        results (list): List of results for each range with data and error fields.
+        value_render_option (str): Applied value rendering option.
+        date_time_render_option (str): Applied date/time rendering option.
+        major_dimension (str): Applied major dimension.
+        convert_to_records (bool): Whether data was converted to records.
+        numericise_values (bool): Whether values were numericised.
+
+    ???+ example "Basic Usage"
+
+        Read multiple ranges in one call:
+
         ```python
         from langchain_google_community.sheets import SheetsBatchReadDataTool
 
-        tool = SheetsBatchReadDataTool(
-            api_key="your_api_key",
-            value_render_option=ValueRenderOption.FORMATTED_VALUE,
-            convert_to_records=True,
-            numericise_values=True,
+        tool = SheetsBatchReadDataTool(api_key="your_api_key")
+        result = tool.run(
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
+            }
         )
+        for r in result["results"]:
+            print(f"{r['range']}: {len(r['data'])} rows")
         ```
 
-    Invoke directly:
+    ??? example "With Record Conversion"
+
+        Read and convert to dictionaries:
+
         ```python
         result = tool.run(
             {
-                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
-                "ranges": ["A1:C5", "F1:H5", "Sheet2!A1:D10"],
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "ranges": ["Sheet1!A1:D10", "Sheet2!A1:E10"],
                 "convert_to_records": True,
             }
         )
         ```
 
-    Invoke with agent:
-        ```python
-        agent.invoke({"input": "Read data from multiple ranges in the spreadsheet"})
-        ```
-
-    Returns:
-        Dictionary containing:
-            - success: Always True for successful operations
-            - spreadsheet_id: The spreadsheet ID
-            - requested_ranges (List[str]): The ranges that were requested
-            - total_ranges: Total number of ranges processed
-            - successful_ranges: Number of successfully processed ranges
-            - failed_ranges: Number of failed ranges
-            - results (List[Dict]): List of results for each range
-            - value_render_option: Applied value rendering option
-            - date_time_render_option: Applied date/time rendering option
-            - major_dimension: Applied major dimension
-            - convert_to_records: Whether data was converted to records
-            - numericise_values: Whether values were numericised
-
-    Performance Benefits:
-        - Single API call: Reduces network overhead and rate limiting
-        - Parallel processing: All ranges processed simultaneously
-        - Efficient batching: Optimized for multiple data extraction scenarios
-        - Consistent formatting: All ranges processed with same options
-
-    Example Response (with convert_to_records=True):
-        {
-            "success": True,
-            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "requested_ranges": ["Class Data!A1:C3", "Class Data!F1:H3"],
-            "total_ranges": 2,
-            "successful_ranges": 2,
-            "failed_ranges": 0,
-            "results": [
-                {
-                    "range": "Class Data!A1:C3",
-                    "data": [
-                        {"Name": "Alice", "Age": 16, "Grade": "10th"},
-                        {"Name": "Bob", "Age": 17, "Grade": "11th"}
-                    ],
-                    "error": None
-                },
-                {
-                    "range": "Class Data!F1:H3",
-                    "data": [
-                        {"Subject": "Math", "Score": 95, "Teacher": "Mr. Smith"},
-                        {
-                            "Subject": "Science", "Score": 87,
-                            "Teacher": "Ms. Johnson"
-                        }
-                    ],
-                    "error": None
-                }
-            ],
-            "value_render_option": "FORMATTED_VALUE",
-            "date_time_render_option": "SERIAL_NUMBER",
-            "major_dimension": "ROWS",
-            "convert_to_records": True,
-            "numericise_values": True
-        }
-
     Raises:
-        ValueError: If spreadsheet_id is invalid or ranges list is empty
-        Exception: For API errors or connection issues
+        ValueError: If `spreadsheet_id` is invalid or ranges list is empty.
+        Exception: For API errors or connection issues.
     """
 
     name: str = "sheets_batch_read_data"
+
     description: str = (
         "Read data from multiple ranges in Google Sheets efficiently using "
         "batch API calls. Supports multiple A1 notation ranges, various rendering "
         "options, and data transformation. Optimized for extracting data from "
         "multiple sheets or ranges simultaneously."
     )
+
     args_schema: Type[BaseModel] = BatchReadSheetDataSchema
 
     def _run(
@@ -502,7 +468,36 @@ class SheetsBatchReadDataTool(BaseReadTool):
         numericise_values: bool = True,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> Dict[str, Any]:
-        """Read data from multiple ranges in a Google Spreadsheet."""
+        """Read data from multiple ranges in a Google Spreadsheet efficiently.
+
+        Args:
+            spreadsheet_id: ID of the spreadsheet to read from.
+            ranges: List of A1 notation ranges to read.
+            value_render_option: How values should be rendered.
+            date_time_render_option: How dates/times should be rendered.
+            major_dimension: Major dimension for results.
+            convert_to_records: Convert to list of dictionaries.
+            numericise_values: Convert string numbers to numeric types.
+            run_manager: Optional callback manager.
+
+        Returns:
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            requested_ranges (list): The ranges that were requested.
+            total_ranges (int): Total number of ranges processed.
+            successful_ranges (int): Number of successfully processed ranges.
+            failed_ranges (int): Number of failed ranges.
+            results (list): List of results for each range.
+            value_render_option (str): Applied value rendering option.
+            date_time_render_option (str): Applied date/time rendering option.
+            major_dimension (str): Applied major dimension.
+            convert_to_records (bool): Whether data was converted to records.
+            numericise_values (bool): Whether values were numericised.
+
+        Raises:
+            ValueError: If `spreadsheet_id` is invalid or ranges list is empty.
+            Exception: For API errors or connection issues.
+        """
         try:
             # Validate inputs
             validate_spreadsheet_id(spreadsheet_id)
@@ -586,16 +581,7 @@ class SheetsBatchReadDataTool(BaseReadTool):
 
 
 class DataFilterSchema(BaseModel):
-    """Schema for DataFilter used with getByDataFilter API.
-
-    DataFilters specify which ranges or metadata to read from a spreadsheet.
-    Must specify exactly ONE of: a1Range, gridRange, or developerMetadataLookup.
-
-    Note: This is for range selection, NOT conditional filtering (like "score > 50").
-    For conditional filtering, use Filter Views via the batchUpdate API.
-
-    See: https://developers.google.com/sheets/api/reference/rest/v4/DataFilter
-    """
+    """Schema for `DataFilter` used with `getByDataFilter` API."""
 
     a1Range: Optional[str] = Field(
         None,
@@ -604,6 +590,7 @@ class DataFilterSchema(BaseModel):
             "This is the most common way to specify a range."
         ),
     )
+
     gridRange: Optional[Dict[str, Any]] = Field(
         None,
         description=(
@@ -612,6 +599,7 @@ class DataFilterSchema(BaseModel):
             "'startColumnIndex': 0, 'endColumnIndex': 5}"
         ),
     )
+
     developerMetadataLookup: Optional[Dict[str, Any]] = Field(
         None,
         description=(
@@ -639,7 +627,7 @@ class DataFilterSchema(BaseModel):
 
 
 class FilteredReadSheetDataSchema(ReadBaseSchema):
-    """Input schema for reading data using DataFilters (getByDataFilter API)."""
+    """Input schema for `SheetsFilteredReadDataTool`."""
 
     data_filters: List[DataFilterSchema] = Field(
         ...,
@@ -648,6 +636,7 @@ class FilteredReadSheetDataSchema(ReadBaseSchema):
             "Each filter selects a range using a1Range, gridRange, or metadata lookup."
         ),
     )
+
     include_grid_data: bool = Field(
         default=False,
         description=(
@@ -658,52 +647,55 @@ class FilteredReadSheetDataSchema(ReadBaseSchema):
 
 
 class SheetsFilteredReadDataTool(BaseReadTool):
-    """Tool that reads data from Google Sheets using DataFilters (getByDataFilter API).
+    """Tool for reading data from Google Sheets using DataFilters.
 
-    This tool reads data from spreadsheets using the getByDataFilter API, which
-    allows you to specify ranges using A1 notation, grid coordinates, or developer
-    metadata. It also provides detailed cell formatting and properties when
-    include_grid_data=True.
+    [`BaseReadTool`][langchain_google_community.sheets.read_sheet_tools.BaseReadTool].
 
-    Note: This tool is for RANGE SELECTION, not conditional filtering like
-    "score > 50". For conditional filtering, create a Filter View using the
-    Sheets UI or batchUpdate API.
+    Uses `getByDataFilter` API to read ranges specified by A1 notation, grid
+    coordinates, or developer metadata. Optionally includes detailed cell formatting.
 
-    Use cases:
-    - Read multiple ranges in a single API call
-    - Get detailed cell formatting and properties (gridData)
-    - Select ranges by developer metadata tags
-    - Use grid coordinates instead of A1 notation
+    !!! note "Authentication Required"
 
-    Requires OAuth2 authentication for full functionality.
+        Requires OAuth2 authentication (not API key).
 
-    Instantiate:
+    !!! warning "Range Selection Only"
+
+        This tool is for `RANGE SELECTION`, not conditional filtering like
+        `'score > 50'`. For conditional filtering, create a Filter View using
+        Sheets UI or `batchUpdate` API.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        properties (dict): Spreadsheet-level properties.
+        sheets (list): List of sheets with filtered data containing properties
+            and data segments.
+
+    ???+ example "Basic Usage with A1 Notation"
+
+        Read using A1 notation:
+
         ```python
         from langchain_google_community.sheets import SheetsFilteredReadDataTool
 
-        tool = SheetsFilteredReadDataTool(
-            credentials_path="path/to/credentials.json",
-            include_grid_data=True,
-            convert_to_records=True,
-            numericise_values=True,
-        )
-        ```
-
-    Invoke directly:
-        ```python
-        # Example 1: Read using A1 notation
+        tool = SheetsFilteredReadDataTool(api_resource=service)
         result = tool.run(
             {
-                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
-                "data_filters": [{"a1Range": "Class Data!A1:E10"}],
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "data_filters": [{"a1Range": "Sheet1!A1:E10"}],
                 "include_grid_data": True,
             }
         )
+        ```
 
-        # Example 2: Read using grid coordinates
+    ??? example "Using Grid Coordinates"
+
+        Read using grid coordinates:
+
+        ```python
         result = tool.run(
             {
-                "spreadsheet_id": ("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"),
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
                 "data_filters": [
                     {
                         "gridRange": {
@@ -715,79 +707,17 @@ class SheetsFilteredReadDataTool(BaseReadTool):
                         }
                     }
                 ],
-                "include_grid_data": True,
             }
         )
         ```
 
-    Invoke with agent:
-        ```python
-        agent.invoke(
-            {"input": ("Read the range Class Data!A1:E10 with formatting details")}
-        )
-        ```
-
-    Returns:
-        Dictionary containing:
-            - success: Always True for successful operations
-            - spreadsheet_id: The spreadsheet ID
-            - properties: Spreadsheet-level properties
-            - sheets (List[Dict]): List of sheets with filtered data
-                Each sheet contains:
-                - properties: Sheet properties (title, sheetId, etc.)
-                - data: List of data segments
-                    Each segment is either List[List] or List[Dict]
-                    depending on convert_to_records setting
-
-    DataFilter Types:
-        - a1Range: Most common, uses A1 notation (e.g., "Sheet1!A1:D5")
-        - gridRange: Uses grid coordinates (sheetId, row/column indices)
-        - developerMetadataLookup: Selects ranges tagged with metadata
-
-    Authentication Requirements:
-        - Requires OAuth2 credentials (not API key)
-        - Full access to spreadsheet data
-        - Supports private and shared spreadsheets
-
-    Example Response (with convert_to_records=True):
-        {
-            "success": True,
-            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "properties": {
-                "title": "Student Data",
-                "locale": "en_US",
-                "timeZone": "America/New_York"
-            },
-            "sheets": [
-                {
-                    "properties": {
-                        "sheetId": 0,
-                        "title": "Students",
-                        "index": 0,
-                        "sheetType": "GRID"
-                    },
-                    "data": [
-                        [
-                            {
-                                "Name": "Alice", "Score": 95,
-                                "Subject": "Math", "Grade": "A"
-                            },
-                            {
-                                "Name": "Charlie", "Score": 87,
-                                "Subject": "Science", "Grade": "B"
-                            }
-                        ]
-                    ]
-                }
-            ]
-        }
-
     Raises:
-        ValueError: If spreadsheet_id is invalid or data_filters is empty
-        Exception: For API errors, authentication issues, or connection problems
+        ValueError: If `spreadsheet_id` is invalid or `data_filters` is empty.
+        Exception: For API errors, authentication issues, or connection problems.
     """
 
     name: str = "sheets_get_by_data_filter"
+
     description: str = (
         "Read data from Google Sheets using DataFilters (getByDataFilter API). "
         "Select ranges using A1 notation, grid coordinates, or developer metadata. "
@@ -795,6 +725,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         "Useful for reading multiple ranges or ranges with specific metadata tags. "
         "Requires OAuth2 authentication."
     )
+
     args_schema: Type[BaseModel] = FilteredReadSheetDataSchema
 
     def _run(
@@ -810,7 +741,28 @@ class SheetsFilteredReadDataTool(BaseReadTool):
         numericise_values: bool = True,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> Dict[str, Any]:
-        """Read data from Google Sheets with filtering."""
+        """Read data from Google Sheets using DataFilters.
+
+        Args:
+            spreadsheet_id: ID of the spreadsheet to read from.
+            data_filters: List of DataFilter objects specifying ranges to read.
+            include_grid_data: Include detailed cell formatting.
+            value_render_option: How values should be rendered.
+            date_time_render_option: How dates/times should be rendered.
+            convert_to_records: Convert to list of dictionaries.
+            numericise_values: Convert string numbers to numeric types.
+            run_manager: Optional callback manager.
+
+        Returns:
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            properties (dict): Spreadsheet-level properties.
+            sheets (list): List of sheets with filtered data.
+
+        Raises:
+            ValueError: If `spreadsheet_id` is invalid or `data_filters` is empty.
+            Exception: For API errors, authentication issues, or connection problems.
+        """
         try:
             # Validate inputs
             validate_spreadsheet_id(spreadsheet_id)

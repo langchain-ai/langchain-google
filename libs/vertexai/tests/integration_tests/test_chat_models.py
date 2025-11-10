@@ -5,7 +5,7 @@ import io
 import json
 import os
 import re
-from typing import Any, List, Literal, Optional, cast
+from typing import Any, Literal, cast
 
 try:
     from langgraph.graph.state import CompiledStateGraph
@@ -96,7 +96,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
-def test_initialization(model_name: Optional[str], endpoint_version: str) -> None:
+def test_initialization(model_name: str | None, endpoint_version: str) -> None:
     """Test `ChatVertexAI` initialization.
 
     TODO: why is this a integration test?
@@ -123,7 +123,7 @@ def test_init_from_credentials_obj() -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
-def test_vertexai_single_call(model_name: Optional[str], endpoint_version: str) -> None:
+def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> None:
     """Test making a single invoke call."""
     model = ChatVertexAI(
         model_name=model_name,
@@ -188,7 +188,7 @@ def test_vertexai_stream() -> None:
     message = HumanMessage(content="Hello")
 
     sync_response = model.stream([message])
-    full: Optional[BaseMessageChunk] = None
+    full: BaseMessageChunk | None = None
     chunks_with_usage_metadata = 0
     chunks_with_model_name = 0
     for chunk in sync_response:
@@ -215,7 +215,7 @@ async def test_vertexai_astream() -> None:
     )
     message = HumanMessage(content="Hello")
 
-    full: Optional[BaseMessageChunk] = None
+    full: BaseMessageChunk | None = None
     chunks_with_usage_metadata = 0
     chunks_with_model_name = 0
     async for chunk in model.astream([message]):
@@ -397,7 +397,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
     assert isinstance(output["messages"][-1], AIMessage)
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 def test_audio_timestamp() -> None:
     storage_client = storage.Client()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
@@ -443,7 +443,7 @@ def test_parse_history_gemini_multimodal_FC() -> None:
     instruction = "Describe the attached media in 5 words."
     text_message = {"type": "text", "text": instruction}
     message = str([media_message, text_message])
-    history: List[BaseMessage] = [HumanMessage(content=message)]
+    history: list[BaseMessage] = [HumanMessage(content=message)]
     parts = [
         Part(inline_data=Blob(data=media_base64, mime_type=mime_type)),
         Part(text=instruction),
@@ -484,7 +484,7 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
-def test_vertexai_single_call_with_history(model_name: Optional[str]) -> None:
+def test_vertexai_single_call_with_history(model_name: str | None) -> None:
     model = ChatVertexAI(model_name=model_name, rate_limiter=RATE_LIMITER)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
@@ -710,7 +710,7 @@ def test_chat_model_multiple_system_message() -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("method", [None, "json_mode"])
 def test_chat_vertexai_gemini_with_structured_output(
-    method: Optional[Literal["json_mode"]],
+    method: Literal["json_mode"] | None,
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -788,7 +788,7 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
     assert isinstance(response, Response)
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
@@ -832,7 +832,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     assert len(tool_calls) == 3
 
     tool_response = search.invoke({"question": "sparrow"})
-    tool_messages: List[BaseMessage] = []
+    tool_messages: list[BaseMessage] = []
 
     for tool_call in tool_calls:
         assert tool_call["name"] == "search"
@@ -851,7 +851,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
 
 
 # Image Generation is knwown to be flaky.
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_image_output() -> None:
     model = ChatVertexAI(
@@ -879,7 +879,7 @@ def test_chat_vertexai_gemini_image_output() -> None:
 
 
 # Image Generation is knwown to be flaky.
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME)
@@ -903,6 +903,9 @@ def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
         if isinstance(item, str):
             text_element = item
             break
+        elif isinstance(item, dict) and item.get("type") == "text":
+            text_element = item.get("text")
+            break
     assert text_element is not None, "Did not find the expected text content"
 
 
@@ -910,7 +913,7 @@ def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
 # don't always think before they answer even when thinking is turned on.
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
@@ -925,7 +928,7 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     )
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
@@ -964,7 +967,7 @@ def _check_thinking_output(content: list, output_version: str) -> None:
         assert isinstance(block[thinking_key], str)
 
 
-@pytest.mark.flaky(retries=3)
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
@@ -987,7 +990,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
 
-    _check_thinking_output(cast(list, full.content), output_version)
+    _check_thinking_output(cast("list", full.content), output_version)
 
     assert full.usage_metadata is not None
     assert full.usage_metadata["output_token_details"]["reasoning"] > 0
@@ -1025,7 +1028,7 @@ def test_thought_signatures() -> None:
         "content": "What's the weather in London?",
     }
 
-    full: Optional[BaseMessageChunk] = None
+    full: BaseMessageChunk | None = None
     for chunk in llm_with_tools.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
@@ -1577,7 +1580,7 @@ def test_location_init() -> None:
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
 def test_vertexai_global_location_single_call(
-    model_name: Optional[str], endpoint_version: str
+    model_name: str | None, endpoint_version: str
 ) -> None:
     """Test ChatVertexAI single call with global location."""
     model = ChatVertexAI(
@@ -1599,7 +1602,7 @@ def test_nested_bind_tools() -> None:
 
     class Person(BaseModel):
         name: str = Field(description="The name.")
-        hair_color: Optional[str] = Field("Hair color, only if provided.")
+        hair_color: str | None = Field("Hair color, only if provided.")
 
     class People(BaseModel):
         data: list[Person] = Field(description="The people.")

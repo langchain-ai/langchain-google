@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -78,7 +78,7 @@ def test_tuned_model_name() -> None:
 def test_vertexai_args_passed(clear_prediction_client_cache: Any) -> None:
     response_text = "Goodbye"
     user_prompt = "Hello"
-    prompt_params: Dict[str, Any] = {
+    prompt_params: dict[str, Any] = {
         "max_output_tokens": 1,
         "temperature": 0,
         "top_k": 10,

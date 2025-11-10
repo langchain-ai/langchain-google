@@ -1,21 +1,20 @@
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "langchain-google-vertexai"
-version = "3.0.2"
 description = "An integration package connecting Google VertexAI and LangChain"
-authors = []
 license = {text = "MIT"}
-requires-python = ">=3.10.0,<4.0.0"
 readme = "README.md"
-repository = "https://github.com/langchain-ai/langchain-google"
+authors = []
 
+version = "3.0.2"
+requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
     "langchain-core>=1.0.0,<2.0.0",
     "google-cloud-aiplatform>=1.97.0,<2.0.0",
-    "google-cloud-storage>=2.18.0,<3.0.0",
+    "google-cloud-storage>=2.18.0,<4.0.0",
     "httpx>=0.28.0,<1.0.0",
     "httpx-sse>=0.4.0,<1.0.0",
     "pydantic>=2.9.0,<3.0.0",
@@ -82,12 +81,7 @@ fix = true
 docstring-code-format = true
 
 [tool.ruff.lint]
-# TODO select = [ "ALL",]
-select = [
-    "E", # pycodestyle
-    "F", # pyflakes
-    "I", # isort
-]
+select = [ "ALL",]
 ignore = [
     "C90",     # McCabe complexity
     "COM812",  # Messes with the formatter
@@ -103,18 +97,36 @@ ignore = [
     "TD002",   # Missing author in TODO
     "TD003",   # Missing issue link in TODO
 
-    # 3.9 needs
-    "UP007",
-    "UP006",
-    "UP045",
-    "FA100",
-
     # TODO rules
-    "ANN401",  # No Any types
+    "ANN",
     "BLE",     # Blind exceptions
     "DOC",     # Docstrings (preview)
     "ERA",     # No commented-out code
     "PLR2004", # Comparison to magic number
+    "B",
+    "SIM",
+    "ARG",
+    "D",
+    "FBT",
+    "A",
+    "SLF",
+    "PLC",
+    "N",
+    "PT",
+    "EM",
+    "PERF",
+    "PLW",
+    "T201",
+    "RET",
+    "TRY",
+    "PGH",
+    "UP",
+    "PYI",
+    "G",
+    "PLE",
+    "S",
+    "RUF",
+    "PTH",
 ]
 unfixable = [
     "B028",    # People should intentionally tune the stacklevel

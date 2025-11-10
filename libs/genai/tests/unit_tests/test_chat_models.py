@@ -7,7 +7,7 @@ import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, List, Literal, Optional, Union, cast
-from unittest.mock import ANY, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import google.ai.generativelanguage as glm
 import pytest
@@ -377,7 +377,7 @@ def test_parse_history() -> None:
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
-def test_parse_function_history(content: Union[str, list[Union[str, dict]]]) -> None:
+def test_parse_function_history(content: str | list[str | dict]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
     _parse_chat_history([function_message])
 
@@ -385,7 +385,7 @@ def test_parse_function_history(content: Union[str, list[Union[str, dict]]]) -> 
 @pytest.mark.parametrize(
     "headers", [None, {}, {"X-User-Header": "Coco", "X-User-Header2": "Jamboo"}]
 )
-def test_additional_headers_support(headers: Optional[dict[str, str]]) -> None:
+def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -473,6 +473,216 @@ def test_base_url_support() -> None:
     call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
     assert "langchain-google-genai" in call_client_info.user_agent
     assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+
+
+async def test_async_base_url_support() -> None:
+    """Test that `base_url` is properly merged into `client_options` for async."""
+    mock_async_client = Mock()
+    mock_generate_content = AsyncMock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[
+            Candidate(content=Content(parts=[Part(text="async test response")]))
+        ]
+    )
+    mock_async_client.return_value.generate_content = mock_generate_content
+    base_url = "https://async-example.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
+        mock_async_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport="rest",  # Should keep "rest" when custom endpoint is used
+        )
+
+        response = await chat.ainvoke("async test")
+        assert response.content == "async test response"
+
+        mock_async_client.assert_called_once_with(
+            transport="rest",  # Should keep "rest" when custom endpoint is specified
+            client_options=ANY,
+            client_info=ANY,
+        )
+        call_client_options = mock_async_client.call_args_list[0].kwargs[
+            "client_options"
+        ]
+        assert call_client_options.api_key == param_api_key
+        assert call_client_options.api_endpoint == base_url
+
+
+def test_api_endpoint_via_client_options() -> None:
+    """Test that `api_endpoint` via `client_options` is used in API calls."""
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    api_endpoint = "https://custom-endpoint.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+    param_transport = "rest"
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            client_options={"api_endpoint": api_endpoint},
+            transport=param_transport,
+        )
+
+    response = chat.invoke("test")
+    assert response.content == "test response"
+
+    mock_client.assert_called_once_with(
+        transport=param_transport,
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_key == param_api_key
+    assert call_client_options.api_endpoint == api_endpoint
+    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
+    assert "langchain-google-genai" in call_client_info.user_agent
+    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+
+
+async def test_async_api_endpoint_via_client_options() -> None:
+    """Test that `api_endpoint` via `client_options` is used in async API calls."""
+    mock_async_client = Mock()
+    mock_generate_content = AsyncMock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="async custom endpoint response")])
+            )
+        ]
+    )
+    mock_async_client.return_value.generate_content = mock_generate_content
+    api_endpoint = "https://async-custom-endpoint.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
+        mock_async_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            client_options={"api_endpoint": api_endpoint},
+            transport="grpc_asyncio",
+        )
+
+        response = await chat.ainvoke("async custom endpoint test")
+        assert response.content == "async custom endpoint response"
+
+        mock_async_client.assert_called_once_with(
+            transport="grpc_asyncio",
+            client_options=ANY,
+            client_info=ANY,
+        )
+        call_client_options = mock_async_client.call_args_list[0].kwargs[
+            "client_options"
+        ]
+        assert call_client_options.api_key == param_api_key
+        assert call_client_options.api_endpoint == api_endpoint
+
+
+def test_base_url_preserves_existing_client_options() -> None:
+    """Test that `base_url` doesn't override existing `api_endpoint` in `client_options`."""  # noqa: E501
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    base_url = "https://base-url.com"
+    api_endpoint = "https://client-options-endpoint.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+    param_transport = "rest"
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            client_options={"api_endpoint": api_endpoint},
+            transport=param_transport,
+        )
+
+    response = chat.invoke("test")
+    assert response.content == "test response"
+
+    mock_client.assert_called_once_with(
+        transport=param_transport,
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_key == param_api_key
+    # client_options.api_endpoint should take precedence over base_url
+    assert call_client_options.api_endpoint == api_endpoint
+    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
+    assert "langchain-google-genai" in call_client_info.user_agent
+    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+
+
+async def test_async_base_url_preserves_existing_client_options() -> None:
+    """Test that `base_url` doesn't override existing `api_endpoint` in async client."""
+    mock_async_client = Mock()
+    mock_generate_content = AsyncMock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="async precedence test response")])
+            )
+        ]
+    )
+    mock_async_client.return_value.generate_content = mock_generate_content
+    base_url = "https://async-base-url.com"
+    api_endpoint = "https://async-client-options-endpoint.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
+        mock_async_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            client_options={"api_endpoint": api_endpoint},
+            transport="grpc_asyncio",
+        )
+
+        response = await chat.ainvoke("async precedence test")
+        assert response.content == "async precedence test response"
+
+        mock_async_client.assert_called_once_with(
+            transport="grpc_asyncio",
+            client_options=ANY,
+            client_info=ANY,
+        )
+        call_client_options = mock_async_client.call_args_list[0].kwargs[
+            "client_options"
+        ]
+        assert call_client_options.api_key == param_api_key
+        # client_options.api_endpoint should take precedence over base_url
+        assert call_client_options.api_endpoint == api_endpoint
 
 
 def test_default_metadata_field_alias() -> None:
@@ -1065,7 +1275,6 @@ def test_response_to_result_grounding_metadata(
 
 def test_grounding_metadata_to_citations_conversion() -> None:
     """Test grounding metadata is properly converted to citations in content blocks."""
-
     raw_response = {
         "candidates": [
             {
@@ -1347,9 +1556,9 @@ async def test_timeout_parameter_handling(
     is_async: bool,
     mock_target: str,
     method_name: str,
-    instance_timeout: Optional[float],
-    call_timeout: Optional[float],
-    expected_timeout: Optional[float],
+    instance_timeout: float | None,
+    call_timeout: float | None,
+    expected_timeout: float | None,
     should_have_timeout: bool,
 ) -> None:
     """Test timeout parameter handling for sync and async methods."""
@@ -1408,8 +1617,8 @@ async def test_timeout_parameter_handling(
 @patch("langchain_google_genai.chat_models._chat_with_retry")
 def test_timeout_streaming_parameter_handling(
     mock_retry: Mock,
-    instance_timeout: Optional[float],
-    expected_timeout: Optional[float],
+    instance_timeout: float | None,
+    expected_timeout: float | None,
     should_have_timeout: bool,
 ) -> None:
     """Test timeout parameter handling for streaming methods."""
@@ -1474,7 +1683,7 @@ async def test_max_retries_parameter_handling(
     mock_target: str,
     method_name: str,
     instance_max_retries: int,
-    call_max_retries: Optional[int],
+    call_max_retries: int | None,
     expected_max_retries: int,
     should_have_max_retries: bool,
 ) -> None:
@@ -1917,6 +2126,7 @@ def test_compat() -> None:
     assert result == expected
 
 
+<<<<<<< HEAD
 def test_response_json_schema_parameter() -> None:
     """Test that `response_json_schema` is properly set."""
 
@@ -2215,3 +2425,54 @@ def test_backward_compatibility_response_schema() -> None:
 
     structured_llm_mode = llm.with_structured_output(legacy_schema, method="json_mode")
     assert structured_llm_mode is not None
+=======
+def test_system_message_only_raises_error() -> None:
+    """Test that invoking with only a SystemMessage raises a helpful error."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("test-key"),
+    )
+
+    # Should raise ValueError when only SystemMessage is provided
+    with pytest.raises(
+        ValueError,
+        match=r"No content messages found. The Gemini API requires at least one",
+    ):
+        llm.invoke([SystemMessage(content="You are a helpful assistant")])
+
+
+def test_system_message_with_additional_message_works() -> None:
+    """Test that SystemMessage works when combined with other messages."""
+    mock_response = GenerateContentResponse(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Hello! I'm ready to help."}]},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 10,
+                "candidates_token_count": 5,
+                "total_token_count": 15,
+            },
+        }
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("test-key"),
+    )
+
+    with patch.object(llm.client, "generate_content", return_value=mock_response):
+        # SystemMessage + HumanMessage should work fine
+        result = llm.invoke(
+            [
+                SystemMessage(content="You are a helpful assistant"),
+                HumanMessage(content="Hello"),
+            ]
+        )
+
+    assert isinstance(result, AIMessage)
+    assert result.content == "Hello! I'm ready to help."
+>>>>>>> origin/main

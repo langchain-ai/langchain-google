@@ -3,16 +3,10 @@ from __future__ import annotations
 import contextlib
 import json
 import uuid
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Type,
-    Union,
     cast,
     overload,
 )
@@ -57,18 +51,18 @@ from langchain_google_vertexai.model_garden_maas._base import (
 
 @overload
 def _parse_response_candidate_llama(
-    response_candidate: Dict[str, str], streaming: Literal[False] = False
+    response_candidate: dict[str, str], streaming: Literal[False] = False
 ) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate_llama(
-    response_candidate: Dict[str, str], streaming: Literal[True]
+    response_candidate: dict[str, str], streaming: Literal[True]
 ) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate_llama(
-    response_candidate: Dict[str, Any], streaming: bool = False
+    response_candidate: dict[str, Any], streaming: bool = False
 ) -> AIMessage:
     content = response_candidate.get("content", "")
     role = response_candidate["role"]
@@ -139,37 +133,26 @@ def _parse_response_candidate_llama(
 class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
     r"""Integration for Llama 3.1 on Google Cloud Vertex AI Model-as-a-Service.
 
-    For more information, see:
-        https://cloud.google.com/blog/products/ai-machine-learning/llama-3-1-on-vertex-ai
+    [More information](https://cloud.google.com/blog/products/ai-machine-learning/llama-3-1-on-vertex-ai)
 
     Setup:
         You need to enable a corresponding MaaS model (Google Cloud UI console ->
         Vertex AI -> Model Garden -> search for a model you need and click enable)
 
-        You must have the langchain-google-vertexai Python package installed
-        .. code-block:: bash
-
-            pip install -U langchain-google-vertexai
-
         And either:
-            - Have credentials configured for your environment
-                (gcloud, workload identity, etc...)
+            - Have credentials configured for your environment (gcloud, workload
+                identity, etc...)
             - Store the path to a service account JSON file as the
-                GOOGLE_APPLICATION_CREDENTIALS environment variable
+                `GOOGLE_APPLICATION_CREDENTIALS` environment variable
 
-        This codebase uses the google.auth library which first looks for the application
-        credentials variable mentioned above, and then looks for system-level auth.
-
-        For more information, see:
-        https://cloud.google.com/docs/authentication/application-default-credentials#GAC
-        and https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth.
+        This codebase uses the `google.auth` library which first looks for the
+        application credentials variable mentioned above, and then looks for system-level auth.
 
     Key init args — completion params:
         model: str
-            Name of VertexMaaS model to use ("meta/llama3-405b-instruct-maas")
+            Name of VertexMaaS model to use (`'meta/llama3-405b-instruct-maas'`)
         append_tools_to_system_message: bool
             Whether to append tools to a system message
-
 
     Key init args — client params:
         credentials: Optional[google.auth.credentials.Credentials]
@@ -183,70 +166,69 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
     See full list of supported init args and their descriptions in the params section.
 
     Instantiate:
-        .. code-block:: python
+        ```python
+        from langchain_google_vertexai import VertexMaaS
 
-            from langchain_google_vertexai import VertexMaaS
-
-            llm = VertexModelGardenLlama(
-                model="meta/llama3-405b-instruct-maas",
-                # other params...
-            )
+        llm = VertexModelGardenLlama(
+            model="meta/llama3-405b-instruct-maas",
+            # other params...
+        )
+        ```
 
     Invoke:
-        .. code-block:: python
+        ```python
+        messages = [
+            (
+                "system",
+                "You are a helpful translator. Translate the user sentence to French.",
+            ),
+            ("human", "I love programming."),
+        ]
+        llm.invoke(messages)
+        ```
 
-            messages = [
-                (
-                    "system",
-                    "You are a helpful translator. Translate the user sentence to French.",
-                ),
-                ("human", "I love programming."),
-            ]
-            llm.invoke(messages)
-
-        .. code-block:: python
-
-            AIMessage(
-                content="J'adore programmer. \n",
-                id="run-925ce305-2268-44c4-875f-dde9128520ad-0",
-            )
+        ```python
+        AIMessage(
+            content="J'adore programmer. \n",
+            id="run-925ce305-2268-44c4-875f-dde9128520ad-0",
+        )
+        ```
 
     Stream:
-        .. code-block:: python
+        ```python
+        for chunk in llm.stream(messages):
+            print(chunk)
+        ```
 
-            for chunk in llm.stream(messages):
-                print(chunk)
+        ```python
+        AIMessageChunk(content="J", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
+        AIMessageChunk(
+            content="'adore programmer. \n",
+            id="run-9df01d73-84d9-42db-9d6b-b1466a019e89",
+        )
+        AIMessageChunk(content="", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
+        ```
 
-        .. code-block:: python
+        ```python
+        stream = llm.stream(messages)
+        full = next(stream)
+        for chunk in stream:
+            full += chunk
+        full
+        ```
 
-            AIMessageChunk(content="J", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
-            AIMessageChunk(
-                content="'adore programmer. \n",
-                id="run-9df01d73-84d9-42db-9d6b-b1466a019e89",
-            )
-            AIMessageChunk(content="", id="run-9df01d73-84d9-42db-9d6b-b1466a019e89")
-
-        .. code-block:: python
-
-            stream = llm.stream(messages)
-            full = next(stream)
-            for chunk in stream:
-                full += chunk
-            full
-
-        .. code-block:: python
-
-            AIMessageChunk(
-                content="J'adore programmer. \n",
-                id="run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb",
-            )
-
+        ```python
+        AIMessageChunk(
+            content="J'adore programmer. \n",
+            id="run-b7f7492c-4cb5-42d0-8fc3-dce9b293b0fb",
+        )
+        ```
     """  # noqa: E501
 
     def _convert_messages(
-        self, messages: List[BaseMessage], tools: Optional[List[BaseTool]] = None
-    ) -> List[Dict[str, Any]]:
-        converted_messages: List[Dict[str, Any]] = []
+        self, messages: list[BaseMessage], tools: list[BaseTool] | None = None
+    ) -> list[dict[str, Any]]:
+        converted_messages: list[dict[str, Any]] = []
         if tools and not self.append_tools_to_system_message:
             msg = (
                 "If providing tools, either format system message yourself or "
@@ -334,12 +316,12 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        stream: Optional[bool] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        stream: bool | None = None,
         *,
-        tools: Optional[List[BaseTool]] = None,
+        tools: list[BaseTool] | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Generate next turn in the conversation.
@@ -347,12 +329,12 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         Args:
             messages: The history of the conversation as a list of messages. Code chat
                 does not support context.
-            stop: The list of stop words (optional).
-            run_manager: The CallbackManager for LLM run, it's not used at the moment.
+            stop: List of stop words.
+            run_manager: The `CallbackManager` for LLM run. Not used at the moment.
             stream: Whether to use the streaming endpoint.
 
         Returns:
-            The ChatResult that contains outputs generated by the model.
+            `ChatResult` that contains outputs generated by the model.
 
         Raises:
             ValueError: if the last message in the list is not from human.
@@ -375,12 +357,12 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
     async def _agenerate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
-        stream: Optional[bool] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        stream: bool | None = None,
         *,
-        tools: Optional[List[BaseTool]] = None,
+        tools: list[BaseTool] | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         if stream:
@@ -395,7 +377,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         )
         return self._create_chat_result(response)
 
-    def _create_chat_result(self, response: Dict) -> ChatResult:
+    def _create_chat_result(self, response: dict) -> ChatResult:
         generations = []
         token_usage = response.get("usage", {})
         for candidate in response["choices"]:
@@ -421,7 +403,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         """Return type of chat model."""
         return "vertexai_model_garden_maas_llama"
 
-    def _parse_chunk(self, chunk: Dict) -> AIMessageChunk:
+    def _parse_chunk(self, chunk: dict) -> AIMessageChunk:
         chunk_delta = chunk["choices"][0]["delta"]
         content = chunk_delta.get("content", "")
         if chunk_delta.get("role") != "assistant":
@@ -466,11 +448,11 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
     def _stream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[List[BaseTool]] = None,
+        tools: list[BaseTool] | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         converted_messages = self._convert_messages(messages, tools=tools)
@@ -491,11 +473,11 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
     async def _astream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
         *,
-        tools: Optional[List[BaseTool]] = None,
+        tools: list[BaseTool] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         converted_messages = self._convert_messages(messages, tools=tools)
@@ -516,7 +498,7 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
+        tools: Sequence[dict[str, Any] | type | Callable | BaseTool],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model."""
