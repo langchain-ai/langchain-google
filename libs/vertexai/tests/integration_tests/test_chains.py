@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pytest
 from langchain_core.messages import (
     AIMessage,
@@ -16,9 +14,7 @@ class RecordPerson(BaseModel):
 
     name: str = Field(..., description="The person's name")
     age: int = Field(..., description="The person's age")
-    fav_food: Optional[str] = Field(
-        default=None, description="The person's favorite food"
-    )
+    fav_food: str | None = Field(default=None, description="The person's favorite food")
 
 
 class RecordDog(BaseModel):
@@ -26,7 +22,7 @@ class RecordDog(BaseModel):
 
     name: str = Field(..., description="The dog's name")
     color: str = Field(..., description="The dog's color")
-    fav_food: Optional[str] = Field(default=None, description="The dog's favorite food")
+    fav_food: str | None = Field(default=None, description="The dog's favorite food")
 
 
 @pytest.mark.release

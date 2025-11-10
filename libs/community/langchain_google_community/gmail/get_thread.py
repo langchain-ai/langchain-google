@@ -7,7 +7,7 @@ from langchain_google_community.gmail.base import GmailBaseTool
 
 
 class GetThreadSchema(BaseModel):
-    """Input for GetMessageTool."""
+    """Input schema for `GetThreadTool`."""
 
     # From https://support.google.com/mail/answer/7190?hl=en
     thread_id: str = Field(
@@ -20,11 +20,13 @@ class GmailGetThread(GmailBaseTool):
     """Tool that gets a thread by ID from Gmail."""
 
     name: str = "get_gmail_thread"
+
     description: str = (
         "Use this tool to search for email messages."
         " The input must be a valid Gmail query."
         " The output is a JSON list of messages."
     )
+
     args_schema: Type[GetThreadSchema] = GetThreadSchema
 
     def _run(

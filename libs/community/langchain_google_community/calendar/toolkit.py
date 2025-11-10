@@ -32,14 +32,17 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 class CalendarToolkit(BaseToolkit):
     """Toolkit for interacting with Google Calendar.
 
-    *Security Note*: This toolkit contains tools that can read and modify
-        the state of a service; e.g., by reading, creating, updating, deleting
-        data associated with this service.
+    Provides tools for calendar operations including creating, searching,
+    updating, moving, and deleting events.
 
-        For example, this toolkit can be used to create events on behalf of the
-        associated account.
 
-        See https://python.langchain.com/docs/security for more information.
+    !!! warning "Security"
+        This toolkit contains tools that can read and modify the state of a
+        service. For example, it can create, update, and delete calendar events
+        on behalf of the associated account.
+
+        See [Security Policy](https://docs.langchain.com/oss/python/security-policy)
+        for more information.
     """
 
     api_resource: Resource = Field(default_factory=build_calendar_service)

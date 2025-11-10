@@ -1,17 +1,12 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import Executor
 from typing import (
     Any,
-    Callable,
     ClassVar,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
+    Literal,
     cast,
 )
 
@@ -41,7 +36,7 @@ from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Value
 from langchain_core.outputs import Generation, LLMResult
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing_extensions import Literal, Self
+from typing_extensions import Self
 from vertexai.generative_models._generative_models import (
     SafetySettingsType,  # TODO: migrate to google-genai since this is deprecated
 )
@@ -60,52 +55,65 @@ _DEFAULT_LOCATION = "us-central1"
 
 
 class _VertexAIBase(BaseModel):
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
-    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
-    project: Optional[str] = None
-    "The default GCP project to use when making Vertex API calls."
+    client: Any = Field(default=None, exclude=True)
+
+    async_client: Any = Field(default=None, exclude=True)
+
+    project: str | None = None
+    """The default GCP project to use when making Vertex API calls."""
+
     location: str = Field(default=_DEFAULT_LOCATION)
-    "The default location to use when making API calls."
+    """The default location to use when making API calls."""
+
     request_parallelism: int = 5
-    "The amount of parallelism allowed for requests issued to VertexAI models. "
-    "Default is 5."
+    """The amount of parallelism allowed for requests issued to VertexAI models."""
+
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
-    task_executor: ClassVar[Optional[Executor]] = Field(default=None, exclude=True)
-    stop: Optional[List[str]] = Field(default=None, alias="stop_sequences")
-    "Optional list of stop words to use when generating."
-    model_name: Optional[str] = Field(default=None, alias="model")
-    "Underlying model name."
-    full_model_name: Optional[str] = Field(
-        default=None, exclude=True
-    )  #: :meta private:
-    "The full name of the model's endpoint."
-    client_options: Optional[ClientOptions] = Field(
-        default=None, exclude=True
-    )  #: :meta private:
-    api_endpoint: Optional[str] = Field(default=None, alias="base_url")
-    "Desired API endpoint, e.g., us-central1-aiplatform.googleapis.com"
-    api_transport: Optional[str] = None
-    """The desired API transport method, can be either 'grpc' or 'rest'.
-    Uses the default parameter in vertexai.init if defined.
-    """
-    default_metadata: Sequence[Tuple[str, str]] = Field(
-        default_factory=list
-    )  #: :meta private:
-    additional_headers: Optional[Dict[str, str]] = Field(default=None)
-    "A key-value dictionary representing additional headers for the model call"
-    client_cert_source: Optional[Callable[[], Tuple[bytes, bytes]]] = None
-    "A callback which returns client certificate bytes and private key bytes both "
-    "in PEM format."
-    credentials: Any = Field(default=None, exclude=True)
-    "The default custom credentials (google.auth.credentials.Credentials) to use "
-    "when making API calls. If not provided, credentials will be ascertained from "
-    "the environment."
-    endpoint_version: Literal["v1", "v1beta1"] = "v1beta1"
-    """Whether to use v1 or v1beta1 endpoint.
 
-    v1 is more performant, but v1beta1 might have some new features.
+    task_executor: ClassVar[Executor | None] = Field(default=None, exclude=True)
+
+    stop: list[str] | None = Field(default=None, alias="stop_sequences")
+    """Optional list of stop words to use when generating."""
+
+    model_name: str | None = Field(default=None, alias="model")
+    """Underlying model name."""
+
+    full_model_name: str | None = Field(default=None, exclude=True)
+    """The full name of the model's endpoint."""
+
+    client_options: ClientOptions | None = Field(default=None, exclude=True)
+
+    api_endpoint: str | None = Field(default=None, alias="base_url")
+    """Desired API endpoint, e.g., `us-central1-aiplatform.googleapis.com`."""
+
+    api_transport: str | None = Field(default=None, alias="transport")
+    """The desired API transport method, can be either `'grpc'` or `'rest'`.
+
+    Uses the default parameter from `vertexai.init` if defined, otherwise uses
+    the Google client library default (typically `'grpc'`).
     """
+
+    default_metadata: Sequence[tuple[str, str]] = Field(default_factory=list)
+
+    additional_headers: dict[str, str] | None = Field(default=None)
+    """Key-value dictionary representing additional headers for the model call."""
+
+    client_cert_source: Callable[[], tuple[bytes, bytes]] | None = None
+    """A callback which returns client certificate bytes and private key bytes.
+
+    Both should be in PEM format.
+    """
+
+    credentials: Any = Field(default=None, exclude=True)
+    """The default custom credentials to use when making API calls.
+
+    (`google.auth.credentials.Credentials`)
+
+    If not provided, credentials will be ascertained from the environment.
+    """
+    endpoint_version: Literal["v1", "v1beta1"] = "v1beta1"
+    """Whether to use `v1` or `v1beta1` endpoint."""
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -150,8 +158,8 @@ class _VertexAIBase(BaseModel):
     @property
     def prediction_client(
         self,
-    ) -> Union[v1beta1PredictionServiceClient, v1PredictionServiceClient]:
-        """Returns PredictionServiceClient."""
+    ) -> v1beta1PredictionServiceClient | v1PredictionServiceClient:
+        """Returns `PredictionServiceClient`."""
         if self.client is None:
             self.client = _get_prediction_client(
                 endpoint_version=self.endpoint_version,
@@ -165,13 +173,14 @@ class _VertexAIBase(BaseModel):
     @property
     def async_prediction_client(
         self,
-    ) -> Union[v1PredictionServiceAsyncClient, v1beta1PredictionServiceAsyncClient]:
-        """Returns PredictionServiceClient."""
+    ) -> v1PredictionServiceAsyncClient | v1beta1PredictionServiceAsyncClient:
+        """Returns `PredictionServiceClient`."""
         if self.async_client is None:
             self.async_client = _get_async_prediction_client(
                 endpoint_version=self.endpoint_version,
                 credentials=self.credentials,
                 client_options=cast("ClientOptions", self.client_options),
+                transport=self.api_transport,
                 user_agent=self._user_agent,
             )
         return self.async_client
@@ -190,36 +199,47 @@ class _VertexAIBase(BaseModel):
 
 
 class _VertexAICommon(_VertexAIBase):
-    client_preview: Any = Field(default=None, exclude=True)  #: :meta private:
-    model_name: Optional[str] = Field(default=None, alias="model")
+    client_preview: Any = Field(default=None, exclude=True)
+
+    model_name: str | None = Field(default=None, alias="model")
     """Underlying model name."""
-    temperature: Optional[float] = None
+
+    temperature: float | None = None
     """Sampling temperature, it controls the degree of randomness in token selection."""
-    frequency_penalty: Optional[float] = None
+
+    frequency_penalty: float | None = None
     """Positive values penalize tokens that repeatedly appear in the generated text,
     decreasing the probability of repeating content."""
-    presence_penalty: Optional[float] = None
+
+    presence_penalty: float | None = None
     """Positive values penalize tokens that already appear in the generated text,
     increasing the probability of generating more diverse content."""
-    max_output_tokens: Optional[int] = Field(default=None, alias="max_tokens")
+
+    max_output_tokens: int | None = Field(default=None, alias="max_tokens")
     """Token limit determines the maximum amount of text output from one prompt."""
-    top_p: Optional[float] = None
-    """Tokens are selected from most probable to least until the sum of their 
-    probabilities equals the top-p value. Top-p is ignored for Codey models."""
-    top_k: Optional[int] = None
+
+    top_p: float | None = None
+    """Tokens are selected from most probable to least until the sum of their
+    probabilities equals the top-p value."""
+
+    top_k: int | None = None
     """How the model selects tokens for output, the next token is selected from
-    among the top-k most probable tokens. Top-k is ignored for Codey models."""
+    among the top-k most probable tokens."""
+
     n: int = 1
     """How many completions to generate for each prompt."""
-    seed: Optional[int] = None
+
+    seed: int | None = None
     """Random seed for the generation."""
+
     streaming: bool = False
     """Whether to stream the results or not."""
-    safety_settings: Optional[SafetySettingsType] = None
+
+    safety_settings: SafetySettingsType | None = None
     """The default safety settings to use for all generations.
 
-        For example:
-
+        Example:
+            ```python
             from langchain_google_vertexai import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
@@ -229,26 +249,31 @@ class _VertexAICommon(_VertexAIBase):
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             }
+            ```
     """  # noqa: E501
 
-    tuned_model_name: Optional[str] = None
+    tuned_model_name: str | None = None
     """The name of a tuned model."""
 
-    response_modalities: Optional[List[Modality]] = Field(
-        default=None, description=("A list of modalities of the response")
+    response_modalities: list[Modality] | None = Field(
+        default=None,
     )
+    """A list of modalities of the response."""
 
-    thinking_budget: Optional[int] = Field(
-        default=None, description="Indicates the thinking budget in tokens."
-    )
-    include_thoughts: Optional[bool] = Field(
+    thinking_budget: int | None = Field(
         default=None,
-        description="Indicates whether to include thoughts in the response.",
     )
-    audio_timestamp: Optional[bool] = Field(
+    """Indicates the thinking budget in tokens."""
+
+    include_thoughts: bool | None = Field(
         default=None,
-        description="Enable timestamp understanding of audio-only files",
     )
+    """Indicates whether to include thoughts in the response."""
+
+    audio_timestamp: bool | None = Field(
+        default=None,
+    )
+    """Enable timestamp understanding of audio-only files."""
 
     @property
     def _llm_type(self) -> str:
@@ -259,13 +284,13 @@ class _VertexAICommon(_VertexAIBase):
         return self.max_output_tokens
 
     @property
-    def _identifying_params(self) -> Dict[str, Any]:
+    def _identifying_params(self) -> dict[str, Any]:
         """Gets the identifying parameters."""
         return {"model_name": self.model_name, **self._default_params}
 
     @property
-    def _default_params(self) -> Dict[str, Any]:
-        default_params: Dict[str, Any] = {}
+    def _default_params(self) -> dict[str, Any]:
+        default_params: dict[str, Any] = {}
         params = {
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
@@ -284,7 +309,7 @@ class _VertexAICommon(_VertexAIBase):
         return updated_params
 
     @classmethod
-    def _init_vertexai(cls, values: Dict) -> None:
+    def _init_vertexai(cls, values: dict) -> None:
         vertexai.init(
             project=values.get("project"),
             location=values.get("location"),
@@ -298,7 +323,7 @@ class _VertexAICommon(_VertexAIBase):
 
     def _prepare_params(
         self,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
         stream: bool = False,
         **kwargs: Any,
     ) -> dict:
@@ -314,15 +339,22 @@ class _VertexAICommon(_VertexAIBase):
 class _BaseVertexAIModelGarden(_VertexAIBase):
     """Large language models served from Vertex AI Model Garden."""
 
-    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
+    async_client: Any = Field(default=None, exclude=True)
+
     endpoint_id: str
     """A name of an endpoint where the model has been deployed."""
-    allowed_model_args: Optional[List[str]] = None
+
+    allowed_model_args: list[str] | None = None
     """Allowed optional args to be passed to the model."""
+
     prompt_arg: str = "prompt"
-    result_arg: Optional[str] = "generated_text"
-    """Set result_arg to None if output of the model is expected to be a string.
-    Otherwise, if it's a dict, provided an argument that contains the result."""
+
+    result_arg: str | None = "generated_text"
+    """Set `result_arg` to `None` if output of the model is expected to be a string.
+
+    Otherwise, if it's a `dict`, provided an argument that contains the result.
+    """
+
     single_example_per_request: bool = True
     """LLM endpoint currently serves only the first example in the request"""
 
@@ -355,7 +387,7 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
     def _llm_type(self) -> str:
         return "vertexai_model_garden"
 
-    def _prepare_request(self, prompts: List[str], **kwargs: Any) -> List[Value]:
+    def _prepare_request(self, prompts: list[str], **kwargs: Any) -> list[Value]:
         instances = []
         for prompt in prompts:
             if self.allowed_model_args:
@@ -372,7 +404,7 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
         ]
 
     def _parse_response(self, predictions: Prediction) -> LLMResult:
-        generations: List[List[Generation]] = []
+        generations: list[list[Generation]] = []
         for result in predictions.predictions:
             if isinstance(result, str):
                 generations.append([Generation(text=self._parse_prediction(result))])

@@ -1,5 +1,4 @@
 import json
-from typing import List
 
 import pytest
 from langchain_core.messages import (
@@ -116,7 +115,7 @@ async def test_tools(model_name: str) -> None:
     assert len(tool_calls) > 0
 
     tool_response = search.invoke("sparrow")
-    tool_messages: List[BaseMessage] = []
+    tool_messages: list[BaseMessage] = []
 
     for tool_call in tool_calls:
         assert tool_call["name"] == "search"

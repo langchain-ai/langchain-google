@@ -1,5 +1,5 @@
 import threading
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
@@ -33,16 +33,19 @@ class VertexAICallbackHandler(BaseCallbackHandler):
 
     @property
     def always_verbose(self) -> bool:
-        """Whether to call verbose callbacks even if verbose is False."""
+        """Whether to call verbose callbacks even if verbose is `False`."""
         return True
 
     def on_llm_start(
-        self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
+        self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any
     ) -> None:
         """Runs when LLM starts running."""
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        """Runs on new LLM token. Only available when streaming is enabled."""
+        """Runs on new LLM token.
+
+        Only available when streaming is enabled.
+        """
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Collects token usage."""

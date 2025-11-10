@@ -10,14 +10,14 @@ def validate_column_in_bq_schema(
 
     Args:
         columns: A dictionary of BigQuery SchemaField objects representing
-        the table schema.
+            the table schema.
         column_name: The name of the column to validate.
         expected_types: A list of acceptable data types for the column.
         expected_modes: A list of acceptable modes for the column.
 
     Raises:
         ValueError: If the column doesn't exist, has an unacceptable type,
-        or has an unacceptable mode.
+            or has an unacceptable mode.
     """
 
     if column_name not in columns:
