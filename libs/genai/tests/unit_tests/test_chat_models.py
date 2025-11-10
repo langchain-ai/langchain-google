@@ -1957,7 +1957,7 @@ def test_system_message_with_additional_message_works() -> None:
         # SystemMessage + HumanMessage should work fine
         result = llm.invoke([
             SystemMessage(content="You are a helpful assistant"),
-            HumanMessage(content="Hello")
+            HumanMessage(content="Hello"),
         ])
 
     assert isinstance(result, AIMessage)
