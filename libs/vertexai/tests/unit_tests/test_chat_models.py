@@ -5,7 +5,7 @@ import json
 import warnings
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
@@ -183,7 +183,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
 
 
 def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
-    """Test that custom base URL and transport are set correctly."""
+    """Test that `base_url` alias is preserved and used in API calls."""
     config = {
         "model": "gemini-2.5-pro",
         "base_url": "https://example.com",
@@ -192,6 +192,9 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
+
+    assert llm.api_endpoint == "https://example.com"
+
     with patch(
         "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
@@ -204,6 +207,137 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
         transport = mock_prediction_service.call_args.kwargs["transport"]
         assert client_options.api_endpoint == "https://example.com"
         assert transport == "rest"
+
+
+def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
+    """Test that `api_endpoint` field is preserved and used in API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://direct-endpoint.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://direct-endpoint.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        assert client_options.api_endpoint == "https://direct-endpoint.com"
+
+
+async def test_async_base_url_support(clear_prediction_client_cache: Any) -> None:
+    """Test that `base_url` is properly used in async API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "base_url": "https://async-example.com",
+        "api_transport": "grpc_asyncio",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://async-example.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://async-example.com"
+        assert transport == "grpc_asyncio"
+
+
+async def test_async_api_endpoint_support(clear_prediction_client_cache: Any) -> None:
+    """Test that `api_endpoint` is properly used in async API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://async-direct-endpoint.com",
+        "api_transport": "grpc_asyncio",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://async-direct-endpoint.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://async-direct-endpoint.com"
+        assert transport == "grpc_asyncio"
+
+
+async def test_async_api_endpoint_alias_behavior(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """Test that `api_endpoint` and `base_url` are aliases in async calls."""
+    # Test 1: Only api_endpoint specified
+    llm1 = ChatVertexAI(
+        model="gemini-2.5-pro",
+        project="test-proj",
+        api_endpoint="https://api-endpoint-only.com",
+        api_transport="grpc_asyncio",
+    )
+    assert llm1.api_endpoint == "https://api-endpoint-only.com"
+
+    # Test 2: Only base_url specified (should be aliased to api_endpoint)
+    llm2 = ChatVertexAI(
+        model="gemini-2.5-pro",
+        project="test-proj",
+        base_url="https://base-url-only.com",
+        api_transport="grpc_asyncio",
+    )
+    assert llm2.api_endpoint == "https://base-url-only.com"
+
+    # Test async call with base_url
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm2._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://base-url-only.com"
+        assert transport == "grpc_asyncio"
 
 
 def test_init_client_with_custom_model_kwargs() -> None:
