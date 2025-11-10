@@ -17,7 +17,7 @@ pip install langchain-google-vertexai
 
 ## 📖 Documentation
 
-For full documentation, see the [API reference](https://reference.langchain.com/python/langchain_google_vertexai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-cloud).
+For full documentation, see the [API reference](https://reference.langchain.com/python/integrations/langchain_google_vertexai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-cloud).
 
 ## 📕 Releases & Versioning
 
