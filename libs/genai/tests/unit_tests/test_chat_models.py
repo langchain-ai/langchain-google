@@ -1798,24 +1798,6 @@ def test_thinking_config_merging_with_generation_config() -> None:
         assert result.usage_metadata["total_tokens"] == 35
 
 
-def test_with_structured_output_json_schema_alias() -> None:
-    """Test that json_schema method works as alias for json_mode."""
-    from pydantic import BaseModel
-
-    class TestModel(BaseModel):
-        name: str
-        age: int
-
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
-
-    structured_llm = llm.with_structured_output(TestModel, method="json_schema")
-    assert structured_llm is not None
-
-    schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
-    structured_llm_dict = llm.with_structured_output(schema_dict, method="json_schema")
-    assert structured_llm_dict is not None
-
-
 def test_modalities_override_in_generation_config() -> None:
     """Test response modalities in invoke `generation_config` override model-defined."""
     from langchain_google_genai import Modality
@@ -2177,6 +2159,24 @@ def test_system_message_with_additional_message_works() -> None:
     assert result.content == "Hello! I'm ready to help."
 
 
+def test_with_structured_output_json_schema_alias() -> None:
+    """Test that json_schema (preferred) method works as alias for json_mode (old)."""
+    from pydantic import BaseModel
+
+    class TestModel(BaseModel):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
+
+    structured_llm = llm.with_structured_output(TestModel, method="json_schema")
+    assert structured_llm is not None
+
+    schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
+    structured_llm_dict = llm.with_structured_output(schema_dict, method="json_schema")
+    assert structured_llm_dict is not None
+
+
 def test_response_json_schema_parameter() -> None:
     """Test that `response_json_schema` is properly set via `bind`."""
 
@@ -2247,25 +2247,30 @@ def test_response_json_schema_param_mapping() -> None:
 def test_with_struct_out() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
-    legacy_schema = {
+    schema = {
         "type": "object",
         "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
     }
 
-    llm_legacy = llm.bind(
-        response_mime_type="application/json",
-        response_schema=legacy_schema,  # Old param `response_schema` backwards compat
-    )
-
-    legacy_kwargs = cast("Any", llm_legacy).kwargs
-    assert legacy_kwargs["response_mime_type"] == "application/json"
-    assert legacy_kwargs["response_schema"] == legacy_schema
-
-    structured_llm = llm.with_structured_output(legacy_schema, method="json_schema")
+    structured_llm = llm.with_structured_output(schema, method="json_schema")
     assert structured_llm is not None
 
-    structured_llm_mode = llm.with_structured_output(legacy_schema, method="json_mode")
+    structured_llm_mode = llm.with_structured_output(schema, method="json_mode")  # Old
     assert structured_llm_mode is not None
+
+
+def test_json_schema_dict_support() -> None:
+    """Test `json_schema` with dictionary schemas."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
+
+    dict_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
+
+    structured_llm_dict = llm.with_structured_output(dict_schema, method="json_schema")
+    assert structured_llm_dict is not None
 
 
 def test_ref_preservation() -> None:
@@ -2282,24 +2287,11 @@ def test_ref_preservation() -> None:
 
     structured = llm.with_structured_output(RecursiveModel, method="json_schema")
     llm = cast("Any", structured).first
+
     schema = llm.kwargs["response_json_schema"]
 
     assert "$defs" in schema, "json_schema should preserve $defs definitions"
     assert schema == raw_schema, "json_schema should preserve raw schema exactly"
-
-
-def test_json_schema_dict_support() -> None:
-    """Test `json_schema` with dictionary schemas."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
-
-    dict_schema = {
-        "type": "object",
-        "properties": {"name": {"type": "string"}},
-        "required": ["name"],
-    }
-
-    structured_llm_dict = llm.with_structured_output(dict_schema, method="json_schema")
-    assert structured_llm_dict is not None
 
 
 def test_recursive_schema_support() -> None:

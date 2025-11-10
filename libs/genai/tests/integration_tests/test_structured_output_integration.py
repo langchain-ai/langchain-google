@@ -83,7 +83,7 @@ def test_basic_response_json_schema() -> None:
     assert response_data["count"] == 5
 
 
-def test_response_json_schema_vs_response_schema() -> None:
+def test_response_json_schema_union() -> None:
     """Test that `response_json_schema` works with unions"""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
 
@@ -131,7 +131,7 @@ def test_response_json_schema_vs_response_schema() -> None:
 
 
 def test_json_schema_with_pydantic_model() -> None:
-    """Test json_schema with a Pydantic model."""
+    """Test `json_schema` with a Pydantic model."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
     structured_llm = llm.with_structured_output(SimpleResponse, method="json_schema")
 
@@ -145,7 +145,7 @@ def test_json_schema_with_pydantic_model() -> None:
 
 
 def test_json_schema_with_dict_schema() -> None:
-    """Test json_schema with a dictionary schema."""
+    """Test `json_schema` with a `dict` schema."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
 
     schema = {
@@ -171,7 +171,7 @@ def test_json_schema_with_dict_schema() -> None:
 
 
 def test_recursive_schema_integration() -> None:
-    """Test recursive schemas with actual API calls."""
+    """Test recursive schemas."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
 
     structured_llm = llm.with_structured_output(TreeNode, method="json_schema")
@@ -196,7 +196,7 @@ def test_recursive_schema_integration() -> None:
 
 
 def test_union_schema_integration() -> None:
-    """Test union schemas with anyOf support."""
+    """Test union schemas with `anyOf` support."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
 
     # Test with union schema

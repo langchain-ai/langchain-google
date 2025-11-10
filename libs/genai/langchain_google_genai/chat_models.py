@@ -2041,7 +2041,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         if schema_to_use is not None:
-            if response_mime_type not in "application/json":
+            if response_mime_type != "application/json":
                 param_name = (
                     "response_json_schema"
                     if response_json_schema is not None
