@@ -98,24 +98,37 @@ print(response.content)
 Some Gemini models supports both text and inline image outputs.
 
 ```python
-from langchain_google_genai import ChatGoogleGenerativeAI
+# Running inside a Jupyter notebook:
+import base64
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-image")
+from IPython.display import Image, display
+from langchain_core.messages import AIMessage
+from langchain_google_genai import ChatGoogleGenerativeAI, Modality
+
+llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash-image")
+
+message = {
+    "role": "user",
+    "content": "Generate a photorealistic image of a cuddly cat wearing a hat.",
+}
 
 response = llm.invoke(
-    "Generate an image of a cat and say meow",
-    generation_config=dict(response_modalities=["TEXT", "IMAGE"]),
+    [message],
+    response_modalities=[Modality.TEXT, Modality.IMAGE],
 )
 
-image_base64 = response.content[1].get("image_url").get("url").split(",")[-1]
-meow_text = response.content[0]
-print(meow_text)
-# In Jupyter, display the image:
-from base64 import b64decode
-from IPython.display import Image, display
 
-img_bytes = b64decode(image_base64)
-display(Image(data=img_bytes))
+def _get_image_base64(response: AIMessage) -> None:
+    image_block = next(
+        block
+        for block in response.content
+        if isinstance(block, dict) and block.get("image_url")
+    )
+    return image_block["image_url"].get("url").split(",")[-1]
+
+
+image_base64 = _get_image_base64(response)
+display(Image(data=base64.b64decode(image_base64), width=300))
 ```
 
 ---

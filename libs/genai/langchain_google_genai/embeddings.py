@@ -339,7 +339,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         try:
             request: EmbedContentRequest = self._prepare_request(
                 text=text,
-                task_type=task_type,
+                task_type=task_type_to_use,
                 title=title,
                 output_dimensionality=output_dimensionality,
             )
@@ -432,7 +432,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         try:
             request: EmbedContentRequest = self._prepare_request(
                 text=text,
-                task_type=task_type,
+                task_type=task_type_to_use,
                 title=title,
                 output_dimensionality=output_dimensionality,
             )

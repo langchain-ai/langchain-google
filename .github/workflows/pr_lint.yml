@@ -25,8 +25,10 @@
 #   • revert     — reverts a previous commit
 #   • release    — prepare a new release
 #
-# Allowed Scopes (optional):
+# Allowed Scope(s) (optional):
 #   genai, vertexai, community, infra
+#
+# Multiple scopes can be used by separating them with a comma.
 #
 # Rules & Tips for New Committers:
 #   1. Subject (type) must start with a lowercase letter and, if possible, be
@@ -45,7 +47,7 @@
 #   • Conventional Commits spec: https://www.conventionalcommits.org/en/v1.0.0/
 # -----------------------------------------------------------------------------
 
-name: '🏷️ PR Title Lint'
+name: "🏷️ PR Title Lint"
 
 permissions:
   pull-requests: read
@@ -57,10 +59,10 @@ on:
 jobs:
   # Validates that PR title follows Conventional Commits specification
   lint-pr-title:
-    name: 'Validate PR Title Format'
+    name: "Validate PR Title Format"
     runs-on: ubuntu-latest
     steps:
-      - name: '✅ Validate Conventional Commits Format'
+      - name: "✅ Validate Conventional Commits Format"
         uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

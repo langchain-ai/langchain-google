@@ -96,6 +96,11 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """A dictionary of client options to pass to the Google API client.
 
     Example: `api_endpoint`
+
+    !!! warning
+
+        If both `client_options['api_endpoint']` and `base_url` are specified,
+        the `api_endpoint` in `client_options` takes precedence.
     """
 
     base_url: str | None = Field(
@@ -103,14 +108,25 @@ class _BaseGoogleGenerativeAI(BaseModel):
     )
     """Base URL to use for the API client.
 
-    Alias of `client_options['api_endpoint']`.
+    This is a convenience alias for `client_options['api_endpoint']`.
+
+    !!! warning
+
+        If `client_options` already contains an `api_endpoint`, this parameter will be
+        ignored in favor of the existing value.
     """
 
     transport: str | None = Field(
         default=None,
         alias="api_transport",
     )
-    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`."""
+    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`.
+
+    The Google client library defaults to `'grpc'` for sync clients.
+
+    For async clients, `'rest'` is converted to `'grpc_asyncio'` unless
+    a custom endpoint is specified.
+    """
 
     additional_headers: dict[str, str] | None = Field(
         default=None,
