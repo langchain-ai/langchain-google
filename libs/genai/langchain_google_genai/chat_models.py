@@ -933,6 +933,8 @@ def _parse_response_candidate(
         hasattr(response_candidate, "logprobs_result")
         and response_candidate.logprobs_result
     ):
+        # Note: logprobs is flaky, sometimes available, sometimes not
+        # https://discuss.ai.google.dev/t/logprobs-is-not-enabled-for-gemini-models/107989/15
         response_metadata["logprobs"] = MessageToDict(
             response_candidate.logprobs_result._pb,
             preserving_proto_field_name=True,
