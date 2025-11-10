@@ -1,7 +1,6 @@
-"""Get metadata information from Google Sheets."""
+"""Tool for retrieving Google Sheets metadata and structure information."""
 
-import json
-from typing import List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
@@ -11,13 +10,14 @@ from .utils import validate_spreadsheet_id
 
 
 class GetSpreadsheetInfoSchema(BaseModel):
-    """Input schema for GetSpreadsheetInfo."""
+    """Input schema for `SheetsGetSpreadsheetInfoTool`."""
 
     spreadsheet_id: str = Field(
         ...,
         description="The ID of the Google Spreadsheet to get information about. "
         "Can be extracted from URL or provided directly.",
     )
+
     include_grid_data: bool = Field(
         default=False,
         description=(
@@ -25,21 +25,25 @@ class GetSpreadsheetInfoSchema(BaseModel):
             "Note: This can significantly increase response size."
         ),
     )
+
     include_formatting: bool = Field(
         default=False,
         description="Whether to include cell formatting information when "
         "include_grid_data is True.",
     )
+
     include_validation: bool = Field(
         default=False,
         description="Whether to include data validation rules when "
         "include_grid_data is True.",
     )
+
     ranges: Optional[List[str]] = Field(
         default=None,
         description="Specific ranges to get information about. "
         "If None, gets info for all sheets.",
     )
+
     fields: Optional[str] = Field(
         default=None,
         description="Specific fields to return (e.g., "
@@ -49,92 +53,84 @@ class GetSpreadsheetInfoSchema(BaseModel):
 
 
 class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
-    """Tool that retrieves comprehensive metadata information from Google Sheets.
-    This tool provides detailed metadata extraction capabilities from Google Sheets,
-    allowing you to understand spreadsheet structure, sheet properties, named ranges,
-    and other organizational information. It's essential for exploring spreadsheet
-    contents before reading data and understanding the overall structure.
-    Instantiate:
-        .. code-block:: python
-            from langchain_google_community.sheets import SheetsGetSpreadsheetInfoTool
-            tool = SheetsGetSpreadsheetInfoTool(
-                api_key="your_api_key",
-                include_grid_data=False,
-                include_formatting=False,
-                include_validation=False,
-            )
-    Invoke directly:
-        .. code-block:: python
-            result = tool.run(
-                {
-                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-                    "include_grid_data": False,
-                    "fields": "properties,sheets.properties",
-                }
-            )
-    Invoke with agent:
-        .. code-block:: python
-            agent.invoke({"input": "Get information about the spreadsheet structure"})
-    Returns:
-        JSON string containing:
-            - Spreadsheet properties: Title, locale, timezone, etc.
-            - Sheet information: Names, IDs, dimensions, properties
-            - Named ranges: Defined ranges and their locations
-            - Grid data: Detailed cell information (optional)
-            - Metadata: Processing information and data structure
-    Information Types Available:
-        - Basic info: Title, locale, timezone, creation date
-        - Sheet details: Names, IDs, row/column counts, properties
-        - Named ranges: Defined ranges and their sheet references
-        - Grid data: Cell properties, formatting, validation rules
-        - Developer metadata: Custom properties and annotations
-    Example Response:
-        {
-            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "properties": {
-                "title": "Student Data",
-                "locale": "en_US",
-                "timeZone": "America/New_York",
-                "createdTime": "2024-01-15T10:30:00Z"
-            },
-            "sheets": [
-                {
-                    "properties": {
-                        "sheetId": 0,
-                        "title": "Students",
-                        "rowCount": 100,
-                        "columnCount": 10,
-                        "gridProperties": {
-                            "rowCount": 100,
-                            "columnCount": 10
-                        }
-                    }
-                }
-            ],
-            "named_ranges": [
-                {
-                    "name": "StudentList",
-                    "range": "Students!A1:E100"
-                }
-            ],
-            "metadata": {
-                "total_sheets": 1,
-                "total_named_ranges": 1,
-                "processing_time": "0.2s"
+    """Tool for retrieving Google Sheets metadata and structure information.
+
+    Inherits from
+    [`SheetsBaseTool`][langchain_google_community.sheets.base.SheetsBaseTool].
+
+    Retrieves spreadsheet properties, sheet details, named ranges, and organizational
+    structure. Essential for understanding spreadsheet contents before reading data.
+
+    Tool Output:
+        success (bool): Whether operation succeeded.
+        spreadsheet_id (str): The spreadsheet ID.
+        title (str): Spreadsheet title.
+        locale (str): Spreadsheet locale (e.g., 'en_US').
+        time_zone (str): Spreadsheet timezone (e.g., 'America/New_York').
+        auto_recalc (str): Auto-recalculation setting.
+        default_format (dict): Default cell format.
+        sheets (list): List of sheet information with properties.
+        named_ranges (list): List of named ranges with locations.
+        developer_metadata (list): Developer metadata entries.
+        grid_data (list): Detailed cell data (when `include_grid_data=True`).
+
+    ??? example "Basic Usage"
+
+        Get basic spreadsheet information:
+
+        ```python
+        from langchain_google_community.sheets import SheetsGetSpreadsheetInfoTool
+
+        tool = SheetsGetSpreadsheetInfoTool(api_key="your_api_key")
+        result = tool.run(
+            {"spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"}
+        )
+        print(f"Title: {result['title']}")
+        print(f"Sheets: {[s['title'] for s in result['sheets']]}")
+        ```
+
+    ??? example "With Specific Fields"
+
+        Get only specific fields to reduce response size:
+
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "fields": "properties.title,sheets.properties",
             }
-        }
+        )
+        ```
+
+    ??? example "Include Grid Data"
+
+        Get detailed cell data and formatting:
+
+        ```python
+        result = tool.run(
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "include_grid_data": True,
+                "include_formatting": True,
+                "ranges": ["Sheet1!A1:D10"],
+            }
+        )
+        ```
+
     Raises:
-        ValueError: If spreadsheet_id is invalid
-        Exception: For API errors or connection issues
+        ValueError: If spreadsheet_id is invalid.
+        Exception: For API errors or connection issues.
     """
 
     name: str = "sheets_get_spreadsheet_info"
+
     description: str = (
         "Retrieve comprehensive metadata information from Google Sheets including "
         "spreadsheet properties, sheet details, named ranges, and organizational "
         "structure. Essential for understanding spreadsheet contents before reading "
         "data and exploring spreadsheet structure."
     )
+
     args_schema: Type[GetSpreadsheetInfoSchema] = GetSpreadsheetInfoSchema
 
     def _run(
@@ -146,8 +142,35 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         ranges: Optional[List[str]] = None,
         fields: Optional[str] = None,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
-        """Run the tool to get spreadsheet information."""
+    ) -> Dict[str, Any]:
+        """Get spreadsheet metadata and structure information.
+
+        Args:
+            spreadsheet_id: ID of the spreadsheet to retrieve information about.
+            include_grid_data: Whether to include detailed grid data.
+            include_formatting: Whether to include cell formatting.
+            include_validation: Whether to include data validation rules.
+            ranges: Specific ranges to get information about.
+            fields: Specific fields to return (reduces response size).
+            run_manager: Optional callback manager.
+
+        Returns:
+            success (bool): Whether operation succeeded.
+            spreadsheet_id (str): The spreadsheet ID.
+            title (str): Spreadsheet title.
+            locale (str): Spreadsheet locale.
+            time_zone (str): Spreadsheet timezone.
+            auto_recalc (str): Auto-recalculation setting.
+            default_format (dict): Default cell format.
+            sheets (list): List of sheet information with properties.
+            named_ranges (list): List of named ranges with locations.
+            developer_metadata (list): Developer metadata entries.
+            grid_data (list): Detailed cell data (when `include_grid_data=True`).
+
+        Raises:
+            ValueError: If `spreadsheet_id` is invalid.
+            Exception: For API errors or connection issues.
+        """
         try:
             # Validate spreadsheet ID
             validated_spreadsheet_id = validate_spreadsheet_id(spreadsheet_id)
@@ -174,7 +197,10 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
                 response, include_formatting, include_validation
             )
 
-            return json.dumps(processed_info, indent=2, default=str)
+            # Add success field
+            processed_info["success"] = True
+
+            return processed_info
 
         except Exception as error:
             raise Exception(f"Error getting spreadsheet info: {error}") from error
@@ -253,61 +279,63 @@ class SheetsGetSpreadsheetInfoTool(SheetsBaseTool):
         return spreadsheet_info
 
     def _process_grid_data(self, grid_data: List[dict]) -> List[List[str]]:
-        """Process grid data using simplified patterns from the guide."""
+        """Process ALL grid data segments using simplified patterns.
+
+        Now processes all GridData segments to prevent data loss when the API
+        returns multiple segments.
+        """
         if not grid_data:
             return []
 
-        # Get the first GridData (usually contains all data)
-        grid = grid_data[0]
-
-        # Extract simple data using the safe extraction pattern
-        result = []
-        for row_data in grid.get("rowData", []):
-            row_values = []
-            for cell_data in row_data.get("values", []):
-                # Use the safe extraction pattern
-                value = self._safe_get_cell_value(cell_data)
-                row_values.append(value)
-            result.append(row_values)
+        # Process ALL grids, not just the first
+        result: List[List[str]] = []
+        for grid in grid_data:
+            for row_data in grid.get("rowData", []) or []:
+                row_values: List[str] = []
+                for cell_data in row_data.get("values", []) or []:
+                    # Use the safe extraction pattern
+                    value = self._safe_get_cell_value(cell_data)
+                    row_values.append(value)
+                result.append(row_values)
 
         return result
 
     def _extract_formatting(self, grid_data: List[dict]) -> List[List[dict]]:
-        """Extract cell formatting information."""
+        """Extract cell formatting information from ALL grid segments."""
         if not grid_data:
             return []
 
-        grid = grid_data[0]
-        formatting_info = []
-
-        for row_data in grid.get("rowData", []):
-            row_formatting = []
-            for cell_data in row_data.get("values", []):
-                cell_formatting = {
-                    "user_entered_format": cell_data.get("userEnteredFormat", {}),
-                    "effective_format": cell_data.get("effectiveFormat", {}),
-                }
-                row_formatting.append(cell_formatting)
-            formatting_info.append(row_formatting)
+        # Process ALL grids, not just the first
+        formatting_info: List[List[dict]] = []
+        for grid in grid_data:
+            for row_data in grid.get("rowData", []) or []:
+                row_formatting: List[dict] = []
+                for cell_data in row_data.get("values", []) or []:
+                    cell_formatting = {
+                        "user_entered_format": cell_data.get("userEnteredFormat", {}),
+                        "effective_format": cell_data.get("effectiveFormat", {}),
+                    }
+                    row_formatting.append(cell_formatting)
+                formatting_info.append(row_formatting)
 
         return formatting_info
 
     def _extract_validation(self, grid_data: List[dict]) -> List[List[dict]]:
-        """Extract data validation rules."""
+        """Extract data validation rules from ALL grid segments."""
         if not grid_data:
             return []
 
-        grid = grid_data[0]
-        validation_info = []
-
-        for row_data in grid.get("rowData", []):
-            row_validation = []
-            for cell_data in row_data.get("values", []):
-                validation_rule = cell_data.get("dataValidation", {})
-                if validation_rule:
-                    row_validation.append(validation_rule)
-                else:
-                    row_validation.append({})
-            validation_info.append(row_validation)
+        # Process ALL grids, not just the first
+        validation_info: List[List[dict]] = []
+        for grid in grid_data:
+            for row_data in grid.get("rowData", []) or []:
+                row_validation: List[dict] = []
+                for cell_data in row_data.get("values", []) or []:
+                    validation_rule = cell_data.get("dataValidation", {})
+                    if validation_rule:
+                        row_validation.append(validation_rule)
+                    else:
+                        row_validation.append({})
+                validation_info.append(row_validation)
 
         return validation_info

@@ -27,10 +27,7 @@ def get_user_agent(module: Optional[str] = None) -> Tuple[str, str]:
     r"""Returns a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
-    Returns:
-        Tuple[str, str]
+        module: The module for a custom user agent header.
     """
     try:
         langchain_version = metadata.version("langchain-google-community")
@@ -51,10 +48,7 @@ def get_client_info(module: Optional[str] = None) -> "ClientInfo":
     r"""Returns a client info object with a custom user agent header.
 
     Args:
-        module (Optional[str]):
-            Optional. The module for a custom user agent header.
-    Returns:
-        google.api_core.gapic_v1.client_info.ClientInfo
+        module: The module for a custom user agent header.
     """
     client_library_version, user_agent = get_user_agent(module)
     return ClientInfo(
@@ -67,7 +61,7 @@ def import_google() -> Tuple[Request, Credentials, ServiceCredentials]:
     """Import google libraries.
 
     Returns:
-        Tuple[Request, Credentials]: Request and Credentials classes.
+        `Request` and `Credentials` classes.
     """
     return (
         guard_import(
@@ -84,10 +78,10 @@ def import_google() -> Tuple[Request, Credentials, ServiceCredentials]:
 
 
 def import_installed_app_flow() -> InstalledAppFlow:
-    """Import InstalledAppFlow class.
+    """Import `InstalledAppFlow` class.
 
     Returns:
-        InstalledAppFlow: InstalledAppFlow class.
+        `InstalledAppFlow` class.
     """
     return guard_import(
         module_name="google_auth_oauthlib.flow", pip_name="google-auth-oauthlib"
@@ -95,10 +89,10 @@ def import_installed_app_flow() -> InstalledAppFlow:
 
 
 def import_googleapiclient_resource_builder() -> build_resource:
-    """Import googleapiclient.discovery.build function.
+    """Import `googleapiclient.discovery.build` function.
 
     Returns:
-        build_resource: googleapiclient.discovery.build function.
+        `googleapiclient.discovery.build` function.
     """
     return guard_import(
         module_name="googleapiclient.discovery", pip_name="google-api-python-client"

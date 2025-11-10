@@ -1,4 +1,3 @@
-from typing import Type
 from unittest.mock import patch
 
 import pytest
@@ -22,7 +21,7 @@ pytestmark = pytest.mark.filterwarnings(
 
 class TestGemini_AIStandard(ChatModelUnitTests):
     @property
-    def chat_model_class(self) -> Type[BaseChatModel]:
+    def chat_model_class(self) -> type[BaseChatModel]:
         with patch(
             "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
         ) as mock_prediction_service:

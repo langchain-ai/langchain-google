@@ -5,7 +5,7 @@ import mimetypes
 import os
 import re
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
@@ -25,17 +25,19 @@ class ImageBytesLoader:
     """Loads image bytes from multiple sources given a string.
 
     Currently supported:
-        - B64 Encoded image string
-        - URL
+
+    - B64 Encoded image string
+    - URL
     """
 
     def load_bytes(self, image_string: str) -> bytes:
-        """Routes to the correct loader based on the ``'image_string'``.
+        """Routes to the correct loader based on the `'image_string'`.
 
         Args:
             image_string: Can be either:
-                    - B64 Encoded image string
-                    - URL
+
+                - B64 Encoded image string
+                - URL
 
         Returns:
             Image bytes.
@@ -88,7 +90,7 @@ class ImageBytesLoader:
             )
             raise ValueError(msg)
 
-        inline_data: Dict[str, Any] = {"data": bytes_}
+        inline_data: dict[str, Any] = {"data": bytes_}
 
         mime_type, _ = mimetypes.guess_type(image_string)
         if not mime_type:
@@ -179,8 +181,8 @@ def image_bytes_to_b64_string(
 
     Args:
         image_bytes: Bytes of the image.
-        encoding: Type of encoding in the string. ``'ascii'`` by default.
-        image_format: Format of the image. ``'png'`` by default.
+        encoding: Type of encoding in the string. `'ascii'` by default.
+        image_format: Format of the image. `'png'` by default.
 
     Returns:
         B64 image encoded string.
