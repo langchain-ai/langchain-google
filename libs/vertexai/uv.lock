@@ -1004,7 +1004,7 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.35.0,<1.0.0" },
     { name = "bottleneck", specifier = ">=1.4.0,<2.0.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.97.0,<2.0.0" },
-    { name = "google-cloud-storage", specifier = ">=2.18.0,<3.0.0" },
+    { name = "google-cloud-storage", specifier = ">=2.18.0,<4.0.0" },
     { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "httpx-sse", specifier = ">=0.4.0,<1.0.0" },
     { name = "langchain-core", specifier = ">=1.0.0,<2.0.0" },
