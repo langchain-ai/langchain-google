@@ -6,7 +6,7 @@ import json
 import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, List, Literal, Optional, Union, cast
+from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import google.ai.generativelanguage as glm
@@ -2126,7 +2126,57 @@ def test_compat() -> None:
     assert result == expected
 
 
-<<<<<<< HEAD
+def test_system_message_only_raises_error() -> None:
+    """Test that invoking with only a SystemMessage raises a helpful error."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("test-key"),
+    )
+
+    # Should raise ValueError when only SystemMessage is provided
+    with pytest.raises(
+        ValueError,
+        match=r"No content messages found. The Gemini API requires at least one",
+    ):
+        llm.invoke([SystemMessage(content="You are a helpful assistant")])
+
+
+def test_system_message_with_additional_message_works() -> None:
+    """Test that SystemMessage works when combined with other messages."""
+    mock_response = GenerateContentResponse(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Hello! I'm ready to help."}]},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 10,
+                "candidates_token_count": 5,
+                "total_token_count": 15,
+            },
+        }
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr("test-key"),
+    )
+
+    with patch.object(llm.client, "generate_content", return_value=mock_response):
+        # SystemMessage + HumanMessage should work fine
+        result = llm.invoke(
+            [
+                SystemMessage(content="You are a helpful assistant"),
+                HumanMessage(content="Hello"),
+            ]
+        )
+
+    assert isinstance(result, AIMessage)
+    assert result.content == "Hello! I'm ready to help."
+
+
 def test_response_json_schema_parameter() -> None:
     """Test that `response_json_schema` is properly set."""
 
@@ -2145,7 +2195,7 @@ def test_response_json_schema_parameter() -> None:
     llm_with_json_schema = llm.bind(
         response_mime_type="application/json", response_json_schema=schema_dict
     )
-    bound_kwargs = cast(Any, llm_with_json_schema).kwargs
+    bound_kwargs = cast("Any", llm_with_json_schema).kwargs
     assert bound_kwargs["response_mime_type"] == "application/json"
     assert bound_kwargs["response_json_schema"] == schema_dict
 
@@ -2171,7 +2221,7 @@ def test_response_json_schema_precedence_over_response_schema() -> None:
         response_json_schema=new_schema,
     )
 
-    bound_kwargs = cast(Any, llm_with_both).kwargs
+    bound_kwargs = cast("Any", llm_with_both).kwargs
     assert bound_kwargs["response_json_schema"] == new_schema
     # (Still there but not used)
     # TODO this isn't intuitive to me why it needs to be there
@@ -2185,7 +2235,7 @@ def test_with_structured_output_json_schema_v2() -> None:
     class Person(BaseModel):
         name: str
         age: int
-        skills: List[str]
+        skills: list[str]
 
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
     structured_llm = llm.with_structured_output(Person, method="json_schema_v2")
@@ -2203,7 +2253,7 @@ def test_ref_preservation_between_methods() -> None:
 
     class RecursiveModel(BaseModel):
         name: str
-        children: Optional[List["RecursiveModel"]] = None
+        children: list["RecursiveModel"] | None = None
 
     RecursiveModel.model_rebuild()
 
@@ -2214,12 +2264,12 @@ def test_ref_preservation_between_methods() -> None:
 
     # Test legacy json_schema method
     structured_legacy = llm.with_structured_output(RecursiveModel, method="json_schema")
-    legacy_llm = cast(Any, structured_legacy).first
+    legacy_llm = cast("Any", structured_legacy).first
     legacy_schema = legacy_llm.kwargs["response_schema"]
 
     # Test new json_schema_v2 method
     structured_v2 = llm.with_structured_output(RecursiveModel, method="json_schema_v2")
-    v2_llm = cast(Any, structured_v2).first
+    v2_llm = cast("Any", structured_v2).first
     v2_schema = v2_llm.kwargs["response_json_schema"]
 
     assert "$defs" not in legacy_schema, "Legacy method should lose $defs definitions"
@@ -2274,7 +2324,7 @@ def test_union_schema_support() -> None:
     class ModerationResult(BaseModel):
         """The result of content moderation."""
 
-        decision: Union[SpamDetails, NotSpamDetails]
+        decision: SpamDetails | NotSpamDetails
 
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=SecretStr("test-key"))
 
@@ -2283,8 +2333,8 @@ def test_union_schema_support() -> None:
         ModerationResult, method="json_schema_v2"
     )
 
-    v1_llm = cast(Any, structured_v1).first
-    v2_llm = cast(Any, structured_v2).first
+    v1_llm = cast("Any", structured_v1).first
+    v2_llm = cast("Any", structured_v2).first
 
     # v1 should have response_schema (processed schema without $refs)
     assert "response_schema" in v1_llm.kwargs
@@ -2304,7 +2354,7 @@ def test_recursive_schema_support() -> None:
 
     class TreeNode(BaseModel):
         value: str
-        children: Optional[List["TreeNode"]] = None
+        children: list["TreeNode"] | None = None
 
     TreeNode.model_rebuild()  # Rebuild to resolve forward references
 
@@ -2415,7 +2465,7 @@ def test_backward_compatibility_response_schema() -> None:
         response_mime_type="application/json", response_schema=legacy_schema
     )
 
-    legacy_kwargs = cast(Any, llm_legacy).kwargs
+    legacy_kwargs = cast("Any", llm_legacy).kwargs
     assert legacy_kwargs["response_mime_type"] == "application/json"
     assert legacy_kwargs["response_schema"] == legacy_schema
 
@@ -2425,54 +2475,3 @@ def test_backward_compatibility_response_schema() -> None:
 
     structured_llm_mode = llm.with_structured_output(legacy_schema, method="json_mode")
     assert structured_llm_mode is not None
-=======
-def test_system_message_only_raises_error() -> None:
-    """Test that invoking with only a SystemMessage raises a helpful error."""
-    llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME,
-        google_api_key=SecretStr("test-key"),
-    )
-
-    # Should raise ValueError when only SystemMessage is provided
-    with pytest.raises(
-        ValueError,
-        match=r"No content messages found. The Gemini API requires at least one",
-    ):
-        llm.invoke([SystemMessage(content="You are a helpful assistant")])
-
-
-def test_system_message_with_additional_message_works() -> None:
-    """Test that SystemMessage works when combined with other messages."""
-    mock_response = GenerateContentResponse(
-        {
-            "candidates": [
-                {
-                    "content": {"parts": [{"text": "Hello! I'm ready to help."}]},
-                    "finish_reason": "STOP",
-                }
-            ],
-            "usage_metadata": {
-                "prompt_token_count": 10,
-                "candidates_token_count": 5,
-                "total_token_count": 15,
-            },
-        }
-    )
-
-    llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME,
-        google_api_key=SecretStr("test-key"),
-    )
-
-    with patch.object(llm.client, "generate_content", return_value=mock_response):
-        # SystemMessage + HumanMessage should work fine
-        result = llm.invoke(
-            [
-                SystemMessage(content="You are a helpful assistant"),
-                HumanMessage(content="Hello"),
-            ]
-        )
-
-    assert isinstance(result, AIMessage)
-    assert result.content == "Hello! I'm ready to help."
->>>>>>> origin/main

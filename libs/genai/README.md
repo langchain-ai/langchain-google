@@ -19,23 +19,6 @@ View the [documentation](https://docs.langchain.com/oss/python/integrations/prov
 
 This package provides access to Google Gemini's chat, vision, embeddings, and other capabilities within the LangChain ecosystem.
 
-## Table of Contents
-
-- [langchain-google-genai](#langchain-google-genai)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Quickstart](#quickstart)
-  - [Chat Models](#chat-models)
-    - [Multimodal Inputs](#multimodal-inputs)
-    - [Multimodal Outputs](#multimodal-outputs)
-    - [Audio Output](#audio-output)
-    - [Multimodal Outputs in Chains](#multimodal-outputs-in-chains)
-    - [Thinking Support](#thinking-support)
-    - [Structured Output](#structured-output)
-  - [Embeddings](#embeddings)
-  - [Semantic Retrieval (RAG)](#semantic-retrieval-rag)
-  - [Resources](#resources)
-
 ---
 
 ## Overview

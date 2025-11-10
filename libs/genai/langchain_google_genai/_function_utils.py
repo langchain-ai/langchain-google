@@ -612,7 +612,7 @@ def _replace_refs_in_list(items: list[Any], defs: dict[str, Any]) -> list[Any]:
     """Replace `$ref` references in a list of items.
 
     Args:
-        items: List that may contain dictionaries with `$ref` keys
+        items: `list` that may contain dictionaries with `$ref` keys
         defs: Schema definitions to resolve references from
 
     Returns:

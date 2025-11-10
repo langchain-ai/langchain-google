@@ -1,6 +1,5 @@
 import json
 import os
-from typing import List, Optional, Union
 
 import pytest
 from pydantic import BaseModel
@@ -26,7 +25,7 @@ class PersonResponse(BaseModel):
 
     name: str
     age: int
-    skills: List[str]
+    skills: list[str]
 
 
 class TextContent(BaseModel):
@@ -44,14 +43,14 @@ class NumberContent(BaseModel):
 
 
 # Union type for testing anyOf support
-ContentUnion = Union[TextContent, NumberContent]
+ContentUnion = TextContent | NumberContent
 
 
 class TreeNode(BaseModel):
     """Tree node for recursive schema testing."""
 
     value: str
-    children: Optional[List["TreeNode"]] = None
+    children: list["TreeNode"] | None = None
 
 
 # Rebuild to resolve forward references
