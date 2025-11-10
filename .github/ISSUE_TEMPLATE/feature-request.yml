@@ -1,0 +1,105 @@
+name: "✨ Feature Request"
+description: Request a new feature or enhancement for `langchain-google` packages
+labels: ["feature request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this feature request!
+
+        ## Important Links
+        - [Documentation](https://docs.langchain.com/oss/python/integrations/providers/google)
+        - [API Reference](https://reference.langchain.com/python/integrations/langchain_google/)
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      description: Which langchain-google package should this feature be added to?
+      options:
+        - langchain-google-genai
+        - langchain-google-vertexai
+        - langchain-google-community
+        - Not sure / General
+      default: 0
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: Checked other resources
+      description: Please confirm you have done the following before submitting
+      options:
+        - label: I added a descriptive title to this issue
+          required: true
+        - label: I searched the LangChain documentation with the integrated search
+          required: true
+        - label: I used the GitHub search to find a similar issue and didn't find it
+          required: true
+        - label: I am sure this is a feature request and not a bug report or question
+          required: true
+
+  - type: textarea
+    attributes:
+      label: Feature Description
+      description: |
+        Provide a detailed description of the feature you'd like to see implemented.
+        Be specific about what functionality you want and how it should work.
+      placeholder: |
+        I would like to see...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Use Case
+      description: |
+        Describe the problem this feature would solve and why it's valuable.
+        What is your use case? What are you trying to accomplish?
+      placeholder: |
+        This feature would help me...
+
+        Currently, I have to...
+
+        This would be valuable because...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Proposed Solution
+      description: |
+        If you have ideas about how this feature could be implemented, share them here.
+        Include code examples if helpful.
+      render: python
+      placeholder: |
+        # Example of how the feature might work:
+
+        from langchain_google_genai import SomeNewFeature
+
+        feature = SomeNewFeature(...)
+        result = feature.do_something()
+
+  - type: textarea
+    attributes:
+      label: Alternatives Considered
+      description: |
+        Have you considered any alternative solutions or workarounds?
+        Why don't those alternatives work for your use case?
+      placeholder: |
+        I've tried...
+
+        The problem with this approach is...
+
+  - type: textarea
+    attributes:
+      label: Additional Context
+      description: |
+        Add any other context, screenshots, links to similar features in other libraries,
+        or examples that might be helpful.
+      placeholder: |
+        Related issues: #123
+
+        Similar feature in other libraries: ...
+
+        Additional context: ...
