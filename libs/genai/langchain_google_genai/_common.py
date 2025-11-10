@@ -16,7 +16,7 @@ from langchain_google_genai._enums import (
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
-
+# Cache package version at module import time to avoid blocking I/O in async contexts
 try:
     LC_GOOGLE_GENAI_VERSION = metadata.version("langchain-google-genai")
 except metadata.PackageNotFoundError:
