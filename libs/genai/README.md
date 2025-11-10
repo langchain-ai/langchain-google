@@ -102,7 +102,7 @@ Some Gemini models supports both text and inline image outputs.
 import base64
 
 from IPython.display import Image, display
-from langchain.messages import AIMessage
+from langchain_core.messages import AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI, Modality
 
 llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash-image")
