@@ -54,7 +54,7 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
 
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
-    dimensions: Optional[int] = None
+    dimensions: int | None = None
     """Default output dimensionality for embeddings. If not specified, uses the
     model's default. Can be overridden per request in embed() method."""
 
