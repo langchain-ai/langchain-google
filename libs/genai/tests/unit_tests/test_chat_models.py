@@ -684,7 +684,8 @@ async def test_async_base_url_preserves_existing_client_options() -> None:
         assert call_client_options.api_key == param_api_key
         # client_options.api_endpoint should take precedence over base_url
         # For gRPC async transport, URL is formatted to hostname:port
-        assert call_client_options.api_endpoint == "async-client-options-endpoint.com:443"
+        expected_endpoint = "async-client-options-endpoint.com:443"
+        assert call_client_options.api_endpoint == expected_endpoint
 
 
 def test_grpc_base_url_valid_hostname() -> None:
