@@ -51,7 +51,6 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
-from google.protobuf.json_format import MessageToDict
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -113,14 +112,12 @@ from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai._function_utils import (
-    _dict_to_gapic_schema,
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _ToolConfigDict,
     _ToolDict,
     convert_to_genai_function_declarations,
     is_basemodel_subclass_safe,
-    replace_defs_in_schema,
     tool_to_dict,
 )
 from langchain_google_genai._image_utils import (
@@ -955,83 +952,6 @@ def _parse_response_candidate(
     )
 
 
-def _extract_grounding_metadata(candidate: Any) -> dict[str, Any]:
-    """Extract grounding metadata from candidate.
-
-    core's block translator converts this metadata into citation annotations.
-
-    Uses `MessageToDict` for complete unfiltered extraction.
-
-    Falls back to custom field extraction in cases of failure for robustness.
-    """
-    if not hasattr(candidate, "grounding_metadata") or not candidate.grounding_metadata:
-        return {}
-
-    grounding_metadata = candidate.grounding_metadata
-
-    try:
-        # proto-plus wraps protobuf messages - access ._pb to get the raw protobuf
-        # message that MessageToDict expects
-        pb_message = (
-            grounding_metadata._pb
-            if hasattr(grounding_metadata, "_pb")
-            else grounding_metadata
-        )
-
-        return MessageToDict(  # type: ignore[call-arg]
-            pb_message,
-            preserving_proto_field_name=True,
-            always_print_fields_with_no_presence=True,
-            # type stub issue - ensures that protobuf fields with default values
-            # (like start_index=0) are included in the output
-        )
-    except (AttributeError, TypeError, ImportError):
-        # Attempt manual extraction of known fields
-        result: dict[str, Any] = {}
-
-        # Grounding chunks
-        if hasattr(grounding_metadata, "grounding_chunks"):
-            grounding_chunks = []
-            for chunk in grounding_metadata.grounding_chunks:
-                chunk_data: dict[str, Any] = {}
-                if hasattr(chunk, "web") and chunk.web:
-                    chunk_data["web"] = {
-                        "uri": chunk.web.uri if hasattr(chunk.web, "uri") else "",
-                        "title": chunk.web.title if hasattr(chunk.web, "title") else "",
-                    }
-                grounding_chunks.append(chunk_data)
-            result["grounding_chunks"] = grounding_chunks
-
-        # Grounding supports
-        if hasattr(grounding_metadata, "grounding_supports"):
-            grounding_supports = []
-            for support in grounding_metadata.grounding_supports:
-                support_data: dict[str, Any] = {}
-                if hasattr(support, "segment") and support.segment:
-                    support_data["segment"] = {
-                        "start_index": getattr(support.segment, "start_index", 0),
-                        "end_index": getattr(support.segment, "end_index", 0),
-                        "text": getattr(support.segment, "text", ""),
-                        "part_index": getattr(support.segment, "part_index", 0),
-                    }
-                if hasattr(support, "grounding_chunk_indices"):
-                    support_data["grounding_chunk_indices"] = list(
-                        support.grounding_chunk_indices
-                    )
-                if hasattr(support, "confidence_scores"):
-                    support_data["confidence_scores"] = [
-                        round(score, 6) for score in support.confidence_scores
-                    ]
-                grounding_supports.append(support_data)
-            result["grounding_supports"] = grounding_supports
-
-        # Web search queries
-        if hasattr(grounding_metadata, "web_search_queries"):
-            result["web_search_queries"] = list(grounding_metadata.web_search_queries)
-
-        return result
-
-
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
@@ -1094,15 +1014,20 @@ def _response_to_result(
             proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
             for safety_rating in candidate.safety_ratings
         ]
-        grounding_metadata = _extract_grounding_metadata(candidate)
-        generation_info["grounding_metadata"] = grounding_metadata
         message = _parse_response_candidate(candidate, streaming=stream)
-
-        message.usage_metadata = lc_usage
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
-        message.response_metadata["grounding_metadata"] = grounding_metadata
+
+        try:
+            if candidate.grounding_metadata:
+                grounding_metadata = proto.Message.to_dict(candidate.grounding_metadata)
+                generation_info["grounding_metadata"] = grounding_metadata
+                message.response_metadata["grounding_metadata"] = grounding_metadata
+        except AttributeError:
+            pass
+
+        message.usage_metadata = lc_usage
 
         if stream:
             generations.append(
@@ -1534,9 +1459,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         * `method='function_calling'` (default): Uses tool calling to extract
             structured data. Compatible with all models.
-        * `method='json_schema'`: Uses Gemini's native structured output with
-            `responseSchema`. `method="json_mode"` also works for backwards
-            compatibility but is a misnomer.
+        * `method='json_schema'`: Uses Gemini's native structured output.
+
+            Supports unions (`anyOf`), recursive schemas (`$ref`), property ordering
+            preservation, and streaming of partial JSON chunks.
+
+            Uses Gemini's `response_json_schema` API param. Refer to the Gemini API
+            [docs](https://ai.google.dev/gemini-api/docs/structured-output) for more
+            details.
 
         The `json_schema` method is recommended for better reliability as it
         constrains the model's generation process directly rather than relying on
@@ -1788,15 +1718,33 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Supported MIME types:
         * `'text/plain'`: (default) Text output.
         * `'application/json'`: JSON response in the candidates.
-        * `'text/x.enum'`: Enum in plain text.
+        * `'text/x.enum'`: Enum in plain text. (legacy; use JSON schema output instead)
 
-    The model also needs to be prompted to output the appropriate response
-    type, otherwise the behavior is undefined. (This is a preview feature.)
+    !!! note
+
+        The model also needs to be prompted to output the appropriate response type,
+        otherwise the behavior is undefined.
+
+        (In other words, simply setting this param doesn't force the model to comply;
+        it only tells the model the kind of output expected. You still need to prompt it
+        correctly.)
     """
 
     response_schema: dict[str, Any] | None = None
-    """Enforce a schema to the output. The format of the dictionary should follow Open
-    API schema.
+    """Enforce a schema to the output.
+
+    The format of the dictionary should follow Open API schema.
+
+    Has JSON Schema support including:
+
+    - `anyOf` for unions
+    - `$ref` for recursive schemas
+    - Output property ordering
+    - Minimum/maximum constraints
+    - Streaming of partial JSON chunks
+
+    Refer to the Gemini API [docs](https://ai.google.dev/gemini-api/docs/structured-output)
+    for more details.
     """
 
     cached_content: str | None = None
@@ -2080,18 +2028,36 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen_config["response_mime_type"] = response_mime_type
 
         response_schema = kwargs.get("response_schema", self.response_schema)
-        if response_schema is not None:
-            allowed_mime_types = ("application/json", "text/x.enum")
-            if response_mime_type not in allowed_mime_types:
-                error_message = (
-                    "`response_schema` is only supported when "
-                    f"`response_mime_type` is set to one of {allowed_mime_types}"
+
+        # In case passed in as a direct kwarg
+        response_json_schema = kwargs.get("response_json_schema")
+
+        # Handle both response_schema and response_json_schema
+        # (Regardless, we use `response_json_schema` in the request)
+        schema_to_use = (
+            response_json_schema
+            if response_json_schema is not None
+            else response_schema
+        )
+
+        if schema_to_use is not None:
+            if response_mime_type != "application/json":
+                param_name = (
+                    "response_json_schema"
+                    if response_json_schema is not None
+                    else "response_schema"
                 )
+                error_message = (
+                    f"'{param_name}' is only supported when "
+                    f"response_mime_type is set to 'application/json'"
+                )
+                if response_mime_type == "text/x.enum":
+                    error_message += (
+                        ". Instead of 'text/x.enum', define enums using JSON schema."
+                    )
                 raise ValueError(error_message)
 
-            gapic_response_schema = _dict_to_gapic_schema(response_schema)
-            if gapic_response_schema is not None:
-                gen_config["response_schema"] = gapic_response_schema
+            gen_config["response_json_schema"] = schema_to_use
 
         media_resolution = kwargs.get("media_resolution", self.media_resolution)
         if media_resolution is not None:
@@ -2454,10 +2420,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         parser: OutputParserLike
 
-        # `json_schema` preferred, but `json_mode` kept for backwards compatibility
+        # `json_mode` kept for backwards compatibility; shouldn't be used in new code
         if method in ("json_mode", "json_schema"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
+                # Handle Pydantic models
                 if issubclass(schema, BaseModelV1):
+                    # Use legacy schema generation for pydantic v1 models
                     schema_json = schema.schema()
                 else:
                     schema_json = schema.model_json_schema()
@@ -2472,19 +2440,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     raise ValueError(msg)
                 parser = JsonOutputParser()
 
-            # Resolve refs in schema because they are not supported
-            # by the Gemini API.
-            schema_json = replace_defs_in_schema(schema_json)
-
             llm = self.bind(
                 response_mime_type="application/json",
-                response_schema=schema_json,
+                response_json_schema=schema_json,
                 ls_structured_output_format={
                     "kwargs": {"method": method},
                     "schema": schema_json,
                 },
             )
         else:
+            # LangChain tool calling structured output method (discouraged)
             tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
             if isinstance(schema, type) and is_basemodel_subclass_safe(schema):
                 parser = PydanticToolsParser(tools=[schema], first_tool_only=True)

@@ -7,6 +7,8 @@
 
 Looking for the JS/TS version? Check out [LangChain.js](https://github.com/langchain-ai/langchainjs).
 
+This package contains the LangChain integrations for Google products that are not part of `langchain-google-vertexai` or `langchain-google-genai` packages.
+
 ## Quick Install
 
 ```bash
@@ -15,6 +17,10 @@ pip install langchain-google-community
 
 ## 📖 Documentation
 
-View the [documentation](https://docs.langchain.com/oss/python/integrations/providers/google) for more details.
+For full documentation, see the [API reference](https://reference.langchain.com/python/integrations/langchain_google_community/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google).
 
-This package contains the LangChain integrations for Google products that are not part of `langchain-google-vertexai` or `langchain-google-genai` packages.
+## 💁 Contributing
+
+As an open-source project in a rapidly developing field, we are extremely open to contributions, whether it be in the form of a new feature, improved infrastructure, or better documentation.
+
+For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview).

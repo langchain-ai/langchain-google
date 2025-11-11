@@ -9,7 +9,7 @@ license = {text = "MIT"}
 readme = "README.md"
 authors = []
 
-version = "3.0.2"
+version = "3.0.3"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
     "langchain-core>=1.0.0,<2.0.0",
@@ -25,9 +25,13 @@ dependencies = [
 ]
 
 [project.urls]
-"Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/vertexai"
-"Release Notes" = "https://github.com/langchain-ai/langchain-google/releases"
-repository = "https://github.com/langchain-ai/langchain-google"
+Homepage = "https://docs.langchain.com/oss/python/integrations/providers/google"
+Documentation = "https://reference.langchain.com/python/integrations/langchain_google_vertexai/"
+Source = "https://github.com/langchain-ai/langchain-google/tree/master/libs/vertexai"
+Changelog = "https://github.com/langchain-ai/langchain-google/releases?q=%22vertexai%22"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.35.0,<1.0.0"]
