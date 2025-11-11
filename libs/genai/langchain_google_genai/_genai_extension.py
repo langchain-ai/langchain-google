@@ -10,6 +10,7 @@ import re
 from collections.abc import Iterator, MutableSequence
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import google.ai.generativelanguage as genai
 import langchain_core
@@ -250,6 +251,20 @@ def _prepare_config(
     formatted_client_options: dict = {"api_endpoint": _config.api_endpoint}
     if client_options:
         formatted_client_options.update(**client_options)
+
+    # Validate and format API endpoint for gRPC transports
+    if (
+        transport in ("grpc", "grpc_asyncio")
+        and "api_endpoint" in formatted_client_options
+    ):
+        api_endpoint = formatted_client_options["api_endpoint"]
+        if isinstance(api_endpoint, str):
+            _validate_grpc_endpoint(api_endpoint, transport)
+            # Format the endpoint for gRPC if needed
+            formatted_client_options["api_endpoint"] = _format_grpc_endpoint(
+                api_endpoint
+            )
+
     if not credentials and api_key:
         formatted_client_options["api_key"] = api_key
     elif not credentials and not api_key:
@@ -267,6 +282,65 @@ def _prepare_config(
         "transport": transport,
     }
     return {k: v for k, v in config.items() if v is not None}
+
+
+def _validate_grpc_endpoint(endpoint: str, transport: str) -> None:
+    """Validate that an endpoint is compatible with gRPC transports.
+
+    Args:
+        endpoint: The API endpoint to validate.
+        transport: The transport type (`'grpc'` or `'grpc_asyncio'`).
+
+    Raises:
+        ValueError: If the endpoint format is incompatible with gRPC.
+    """
+    if endpoint.startswith(("http://", "https://")):
+        parsed = urlparse(endpoint)
+        if parsed.path and parsed.path.rstrip("/") != "":
+            msg = (
+                f"gRPC transport '{transport}' does not support URL paths. "
+                f"Endpoint '{endpoint}' contains path '{parsed.path}'. "
+                "Use format 'hostname:port' or consider using 'rest' transport "
+                "instead."
+            )
+            raise ValueError(msg)
+    elif "/" in endpoint and not endpoint.startswith(
+        "["
+    ):  # IPv6 addresses use brackets
+        msg = (
+            f"gRPC transport '{transport}' does not support URL paths. "
+            f"Endpoint '{endpoint}' appears to contain a path. "
+            f"Use format 'hostname:port' or consider using 'rest' transport instead."
+        )
+        raise ValueError(msg)
+
+
+def _format_grpc_endpoint(endpoint: str) -> str:
+    """Format an endpoint for gRPC compatibility.
+
+    Args:
+        endpoint: The original endpoint.
+
+    Returns:
+        Properly formatted endpoint for gRPC (`hostname:port` format).
+    """
+    if not endpoint.startswith(("http://", "https://")) and ":" in endpoint:
+        return endpoint
+
+    # Handle URLs with protocol scheme (but no path, validated above)
+    if endpoint.startswith(("http://", "https://")):
+        parsed = urlparse(endpoint)
+        hostname = parsed.hostname
+        port = parsed.port
+        if not port:
+            port = 443 if endpoint.startswith("https://") else 80
+        return f"{hostname}:{port}"
+
+    # If no port specified, add default HTTPS port
+    if ":" not in endpoint:
+        return f"{endpoint}:443"
+
+    return endpoint
 
 
 def build_generative_service(

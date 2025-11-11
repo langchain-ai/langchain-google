@@ -110,6 +110,20 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     This is a convenience alias for `client_options['api_endpoint']`.
 
+    - **REST transport** (`transport="rest"`): Accepts full URLs with paths
+
+        - `https://api.example.com/v1/path`
+        - `https://webhook.site/unique-path`
+
+    - **gRPC transports** (`transport="grpc"` or `transport="grpc_asyncio"`): Only
+        accepts `hostname:port` format
+
+        - `api.example.com:443`
+        - `custom.googleapis.com:443`
+        - `https://api.example.com` (auto-formatted to `api.example.com:443`)
+        - NOT `https://webhook.site/path` (paths are not supported in gRPC)
+        - NOT `api.example.com/path` (paths are not supported in gRPC)
+
     !!! warning
 
         If `client_options` already contains an `api_endpoint`, this parameter will be

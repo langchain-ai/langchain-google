@@ -685,6 +685,174 @@ async def test_async_base_url_preserves_existing_client_options() -> None:
         assert call_client_options.api_endpoint == api_endpoint
 
 
+def test_grpc_base_url_valid_hostname() -> None:
+    """Test that valid `hostname:port` `base_url` works with `gRPC`."""
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="grpc test response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    base_url = "example.com:443"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport="grpc",
+        )
+
+    response = chat.invoke("grpc test")
+    assert response.content == "grpc test response"
+
+    mock_client.assert_called_once_with(
+        transport="grpc",
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_endpoint == base_url
+
+
+async def test_async_grpc_base_url_valid_hostname() -> None:
+    """Test that valid `hostname:port` `base_url` works with `grpc_asyncio`."""
+    mock_async_client = Mock()
+    mock_generate_content = AsyncMock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[
+            Candidate(content=Content(parts=[Part(text="async grpc test response")]))
+        ]
+    )
+    mock_async_client.return_value.generate_content = mock_generate_content
+    base_url = "async.example.com:443"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
+        mock_async_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport="grpc_asyncio",
+        )
+
+        response = await chat.ainvoke("async grpc test")
+        assert response.content == "async grpc test response"
+
+    mock_async_client.assert_called_once_with(
+        transport="grpc_asyncio",
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_async_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_endpoint == base_url
+
+
+def test_grpc_base_url_formats_https_without_path() -> None:
+    """Test that `https://` URLs without paths are formatted correctly for `gRPC`."""
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="formatted response")]))]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    base_url = "https://custom.googleapis.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport="grpc",
+        )
+
+    response = chat.invoke("format test")
+    assert response.content == "formatted response"
+
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    # Should be formatted as hostname:port for gRPC
+    assert call_client_options.api_endpoint == "custom.googleapis.com:443"
+
+
+def test_grpc_base_url_with_path_raises_error() -> None:
+    """Test that `base_url` with path raises `ValueError` for `gRPC`."""
+    base_url = "https://webhook.site/path-not-allowed"
+    param_secret_api_key = SecretStr("[secret]")
+
+    with pytest.raises(
+        ValueError, match="gRPC transport 'grpc' does not support URL paths"
+    ):
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport="grpc",
+        )
+
+
+def test_grpc_asyncio_base_url_with_path_raises_error() -> None:
+    """Test that `base_url` with path raises `ValueError` for `grpc_asyncio`."""
+    base_url = "example.com/api/v1"
+    param_secret_api_key = SecretStr("[secret]")
+
+    with pytest.raises(
+        ValueError, match="gRPC transport 'grpc_asyncio' does not support URL paths"
+    ):
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport="grpc_asyncio",
+        )
+
+
+def test_grpc_base_url_adds_default_port() -> None:
+    """Test that hostname without port gets default port `443` for `gRPC`."""
+    mock_client = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[
+            Candidate(content=Content(parts=[Part(text="default port response")]))
+        ]
+    )
+    mock_client.return_value.generate_content = mock_generate_content
+    base_url = "custom.example.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
+        mock_client,
+    ):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport="grpc",
+        )
+
+    response = chat.invoke("default port test")
+    assert response.content == "default port response"
+
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    # Should add default port 443
+    assert call_client_options.api_endpoint == "custom.example.com:443"
+
+
 def test_default_metadata_field_alias() -> None:
     """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
     # Test with default_metadata_input field name (alias) - should accept None without
