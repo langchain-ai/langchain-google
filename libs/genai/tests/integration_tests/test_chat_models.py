@@ -59,7 +59,8 @@ def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
 
 
 def _check_usage_metadata(message: AIMessage) -> None:
-    """Ensure `usage_metadata` is present and valid (greater than `0` and correct sum)."""
+    """Ensure `usage_metadata` is present and valid (greater than `0` and correct
+    sum)."""
     assert message.usage_metadata is not None
     assert message.usage_metadata["input_tokens"] > 0
     assert message.usage_metadata["output_tokens"] > 0
