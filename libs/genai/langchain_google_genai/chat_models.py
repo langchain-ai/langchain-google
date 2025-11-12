@@ -1697,12 +1697,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
     """
 
-    client: Any = Field(default=None, exclude=True)
+    client: Any = Field(
+        default=None,
+        exclude=True,  # Excluded from serialization
+    )
 
-    async_client_running: Any = Field(default=None, exclude=True)
+    async_client_running: Any = Field(
+        default=None,
+        exclude=True,  # Excluded from serialization
+    )
 
     default_metadata: Sequence[tuple[str, str]] | None = Field(
-        default=None, alias="default_metadata_input"
+        default=None,
+        alias="default_metadata_input",
     )
 
     convert_system_message_to_human: bool = False
@@ -1804,10 +1811,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def _supports_code_execution(self) -> bool:
         """Whether the model supports code execution.
 
-        See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
-        full list.
+        See [Gemini models](https://ai.google.dev/gemini-api/docs/models) for a list.
         """
-        # TODO: Refactor to use `capabilities` property`
+        # TODO: Refactor to use `capabilities` property
         return "gemini-2" in self.model or "gemini-3" in self.model
 
     @classmethod
@@ -1823,7 +1829,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        """Validates params and passes them to `google-generativeai` package."""
+        """Validates params and builds client."""
         if self.temperature is not None and not 0 <= self.temperature <= 2.0:
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)
@@ -1838,19 +1844,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
-        client_info = get_client_info(f"ChatGoogleGenerativeAI:{self.model}")
+
         google_api_key = None
         if not self.credentials:
             if isinstance(self.google_api_key, SecretStr):
                 google_api_key = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
-        transport: str | None = self.transport
 
-        # Merge base_url into client_options if provided
+        client_info = get_client_info(f"ChatGoogleGenerativeAI:{self.model}")
+
         client_options = self.client_options or {}
         if self.base_url and "api_endpoint" not in client_options:
             client_options = {**client_options, "api_endpoint": self.base_url}
+
+        transport: str | None = self.transport
 
         self.client = genaix.build_generative_service(
             credentials=self.credentials,
