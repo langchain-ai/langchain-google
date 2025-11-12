@@ -2405,7 +2405,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         result = self.client.count_tokens(
             model=self.model, contents=[Content(parts=[Part(text=text)])]
         )
-        return result.total_tokens
+        return result.total_tokens if result and result.total_tokens is not None else 0
 
     def with_structured_output(
         self,
