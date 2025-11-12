@@ -1,4 +1,4 @@
-"""Test ChatGoogleGenerativeAI chat model."""
+"""Test `ChatGoogleGenerativeAI`."""
 
 import asyncio
 import json
@@ -13,6 +13,7 @@ from langchain_core.messages import (
     BaseMessageChunk,
     HumanMessage,
     SystemMessage,
+    TextContentBlock,
     ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig
@@ -28,6 +29,7 @@ from langchain_google_genai import (
 )
 
 _MODEL = "gemini-2.5-flash"
+_PRO_MODEL = "gemini-2.5-flash"
 _VISION_MODEL = "gemini-2.5-flash"
 _IMAGE_OUTPUT_MODEL = "gemini-2.5-flash-image"
 _AUDIO_OUTPUT_MODEL = "gemini-2.5-flash-preview-tts"
@@ -36,13 +38,13 @@ _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJ
 
 
 def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
-    """Determines if the given bytes represent a WAV file by inspecting the header.
+    """Determine if the given bytes represent a WAV file by inspecting the header.
 
     Args:
         file_bytes: Bytes representing the file content.
 
     Returns:
-        True if the bytes represent a WAV file, False otherwise.
+        If the bytes represent a WAV file.
     """
     if len(file_bytes) < 12:
         return False
@@ -57,7 +59,8 @@ def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
 
 
 def _check_usage_metadata(message: AIMessage) -> None:
-    """Ensure usage metadata is present and valid (greater than 0 and correct sum)."""
+    """Ensure `usage_metadata` is present and valid (greater than `0` and correct
+    sum)."""
     assert message.usage_metadata is not None
     assert message.usage_metadata["input_tokens"] > 0
     assert message.usage_metadata["output_tokens"] > 0
@@ -102,7 +105,7 @@ def _check_tool_call_args(tool_call_args: dict) -> None:
 @pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize("with_tags", [False, True])
 async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
-    """Test batch tokens from ChatGoogleGenerativeAI."""
+    """Test batch tokens."""
     llm = ChatGoogleGenerativeAI(model=_MODEL)
     messages: Sequence[str] = [
         "This is a test. Say 'foo'",
@@ -121,7 +124,7 @@ async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
 
 @pytest.mark.parametrize("is_async", [False, True])
 async def test_chat_google_genai_invoke(is_async: bool) -> None:
-    """Test invoke tokens from ChatGoogleGenerativeAI."""
+    """Test invoke tokens."""
     llm = ChatGoogleGenerativeAI(model=_MODEL)
 
     if is_async:
@@ -144,11 +147,11 @@ async def test_chat_google_genai_invoke(is_async: bool) -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 def test_chat_google_genai_invoke_with_image() -> None:
-    """Test generating an image and then text from ChatGoogleGenerativeAI.
+    """Test generating an image and then text.
 
     Using `generation_config` to specify response modalities.
 
-    Up to 9 retries possible due to inner loop and Pytest retries.
+    Up to `9` retries possible due to inner loop and Pytest retries.
     """
     llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
 
@@ -196,7 +199,7 @@ def test_chat_google_genai_invoke_with_image() -> None:
 
 
 def test_chat_google_genai_invoke_with_audio() -> None:
-    """Test generating audio from ChatGoogleGenerativeAI."""
+    """Test generating audio."""
     llm = ChatGoogleGenerativeAI(
         model=_AUDIO_OUTPUT_MODEL, response_modalities=[Modality.AUDIO]
     )
@@ -232,7 +235,7 @@ def test_chat_google_genai_invoke_with_audio() -> None:
 def test_chat_google_genai_invoke_thinking(
     thinking_budget: int | None, test_description: str
 ) -> None:
-    """Test invoke thinking model with different thinking budget configurations."""
+    """Test invoke a thinking model with different thinking budget configurations."""
     llm_kwargs: dict[str, str | int] = {"model": _THINKING_MODEL}
     if thinking_budget is not None:
         llm_kwargs["thinking_budget"] = thinking_budget
@@ -288,7 +291,7 @@ def _check_thinking_output(content: list, output_version: str) -> None:
 def test_chat_google_genai_invoke_thinking_include_thoughts(
     output_version: str,
 ) -> None:
-    """Test invoke thinking model with `include_thoughts` on the chat model."""
+    """Test invoke thinking model with `include_thoughts`."""
     llm = ChatGoogleGenerativeAI(
         model=_THINKING_MODEL, include_thoughts=True, output_version=output_version
     )
@@ -460,7 +463,7 @@ def test_chat_google_genai_invoke_thinking_with_tools(
 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
-    """Test invoke thinking model with a zero `thinking_budget`."""
+    """Test invoking a thinking model with zero `thinking_budget`."""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=0)
 
     result = llm.invoke(
@@ -617,15 +620,15 @@ def test_chat_google_genai_single_call_with_history() -> None:
 
 @pytest.mark.parametrize(
     "model_name",
-    [_MODEL, "models/gemini-2.5-pro"],
+    [_MODEL, _PRO_MODEL],
 )
 def test_chat_google_genai_system_message(
     model_name: str,
 ) -> None:
-    """Test system message handling in ChatGoogleGenerativeAI.
+    """Test system message handling.
 
-    Tests that system messages are properly converted to system instructions
-    for different models.
+    Tests that system messages are properly converted to system instructions for
+    different models.
     """
     model = ChatGoogleGenerativeAI(
         model=model_name,
@@ -650,7 +653,7 @@ def test_generativeai_get_num_tokens_gemini() -> None:
 
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_safety_settings_gemini(use_streaming: bool) -> None:
-    """Test safety settings with both invoke and stream methods."""
+    """Test safety settings with both `invoke` and `stream` methods."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
     }
@@ -690,7 +693,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
     }
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-pro", safety_settings=safety)
+    llm = ChatGoogleGenerativeAI(model=_PRO_MODEL, safety_settings=safety)
     llm_with_search = llm.bind(
         functions=tools,
     )
@@ -931,8 +934,8 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
 @pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) -> None:
-    """Test invoke/ainvoke and stream/astream without event loop."""
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    """Test `invoke` and `stream` (sync & async) without event loop."""
+    model = ChatGoogleGenerativeAI(model=_MODEL)
 
     if use_streaming:
         if is_async:
@@ -967,19 +970,19 @@ def _check_web_search_output(message: AIMessage, output_version: str) -> None:
     text_blocks = [block for block in content_blocks if block["type"] == "text"]
     assert len(text_blocks) == 1
     text_block = text_blocks[0]
-    assert text_block["annotations"]
+    assert text_block.get("annotations")
 
     if output_version == "v1":
         text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[misc,index]
         assert len(text_blocks) == 1
-        text_block = text_blocks[0]
-        assert text_block["annotations"]
+        v1_text_block: TextContentBlock = text_blocks[0]
+        assert v1_text_block.get("annotations")
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_search_builtin(output_version: str) -> None:
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.0-flash-001", output_version=output_version
+        model=_MODEL, output_version=output_version
     ).bind_tools([{"google_search": {}}])
     input_message = {
         "role": "user",
@@ -1004,10 +1007,8 @@ def test_search_builtin(output_version: str) -> None:
 
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_search_builtin_with_citations(use_streaming: bool) -> None:
-    """Test that citations are properly extracted from grounding metadata."""
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash").bind_tools(
-        [{"google_search": {}}]
-    )
+    """Test that citations are properly extracted from `grounding_metadata`."""
+    llm = ChatGoogleGenerativeAI(model=_MODEL).bind_tools([{"google_search": {}}])
     input_message = {
         "role": "user",
         "content": "Who won the 2024 UEFA Euro championship? Use search/citations.",
@@ -1143,7 +1144,7 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_code_execution_builtin(output_version: str) -> None:
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.0-flash-001", output_version=output_version
+        model=_MODEL, output_version=output_version
     ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",

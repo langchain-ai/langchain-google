@@ -13,6 +13,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
+_FLASH_MODEL = "gemini-2.5-flash"
+_PRO_MODEL = "gemini-2.5-pro"
+
 
 def _has_multimodal_secrets() -> bool:
     """Check if integration test secrets are available.
@@ -30,7 +33,7 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "gemini-2.5-flash",
+            "model": _FLASH_MODEL,
             "rate_limiter": rate_limiter,
         }
 
@@ -59,6 +62,7 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
         reason=(
             "Multimodal tests require integration secrets (user agent to fetch "
             "external resources)"
+            # (Won't run locally without LANGCHAIN_TESTS_USER_AGENT)
         ),
         run=False,
     )
@@ -71,6 +75,7 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
         reason=(
             "Multimodal tests require integration secrets (user agent to fetch "
             "external resources)"
+            # (Won't run locally without LANGCHAIN_TESTS_USER_AGENT)
         ),
         run=False,
     )
@@ -87,7 +92,7 @@ class TestGeminiProStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model": "gemini-2.5-pro",
+            "model": _PRO_MODEL,
             "rate_limiter": rate_limiter,
         }
 

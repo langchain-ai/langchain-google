@@ -1,3 +1,5 @@
+"""Test `GoogleGenerativeAIEmbeddings`."""
+
 import numpy as np
 import pytest
 from pydantic import SecretStr
@@ -62,7 +64,7 @@ def test_embed_documents() -> None:
 
 @pytest.mark.asyncio
 async def test_aembed_documents() -> None:
-    """Test embedding a query."""
+    """Asynchronously test embedding a query."""
     model = GoogleGenerativeAIEmbeddings(
         model=_MODEL,
     )

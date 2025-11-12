@@ -1,4 +1,4 @@
-"""Test ChatGoogleGenerativeAI function call."""
+"""Test `ChatGoogleGenerativeAI` function calling abilities."""
 
 import json
 
