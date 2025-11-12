@@ -1807,11 +1807,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
         full list.
         """
-        return (
-            "gemini-1.5-pro" in self.model
-            or "gemini-1.5-flash" in self.model
-            or "gemini-2" in self.model
-        )
+        # TODO: Refactor to use `capabilities` property`
+        return "gemini-2" in self.model or "gemini-3" in self.model
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
