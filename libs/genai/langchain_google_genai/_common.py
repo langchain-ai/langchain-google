@@ -1,6 +1,6 @@
 import os
 from importlib import metadata
-from typing import Any, TypedDict
+from typing import Any
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
@@ -11,6 +11,7 @@ from langchain_google_genai._enums import (
     HarmCategory,
     MediaResolution,
     Modality,
+    SafetySetting,
 )
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
@@ -242,7 +243,4 @@ def get_client_info(module: str | None = None) -> "ClientInfo":
     )
 
 
-class SafetySettingDict(TypedDict):
-    category: HarmCategory
-
-    threshold: HarmBlockThreshold
+SafetySettingDict = SafetySetting
