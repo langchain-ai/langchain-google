@@ -105,7 +105,7 @@ def test_integration_initialization() -> None:
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
             )
-        assert llm.model == f"models/{MODEL_NAME}"
+        assert llm.model == f"{MODEL_NAME}"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
@@ -129,7 +129,7 @@ def test_safety_settings_initialization() -> None:
     # Verify the safety_settings are stored correctly
     assert llm.safety_settings == safety_settings
     assert llm.temperature == 0.7
-    assert llm.model == f"models/{MODEL_NAME}"
+    assert llm.model == f"{MODEL_NAME}"
 
 
 def test_initialization_inside_threadpool() -> None:
@@ -1316,7 +1316,7 @@ def test_model_kwargs() -> None:
         convert_system_message_to_human=True,
         model_kwargs={"foo": "bar"},
     )
-    assert llm.model == f"models/{MODEL_NAME}"
+    assert llm.model == f"{MODEL_NAME}"
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
 
@@ -1326,7 +1326,7 @@ def test_model_kwargs() -> None:
             convert_system_message_to_human=True,
             foo="bar",
         )
-    assert llm.model == f"models/{MODEL_NAME}"
+    assert llm.model == f"{MODEL_NAME}"
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
 
