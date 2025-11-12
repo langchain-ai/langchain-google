@@ -1800,10 +1800,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     )
 
     @property
-    def lc_secrets(self) -> dict[str, str]:
-        return {"google_api_key": "GOOGLE_API_KEY"}
-
-    @property
     def _llm_type(self) -> str:
         return "chat-google-generative-ai"
 
