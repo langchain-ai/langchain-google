@@ -1836,9 +1836,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "top_k must be positive"
             raise ValueError(msg)
 
-        if not any(self.model.startswith(prefix) for prefix in ("models/",)):
-            self.model = f"models/{self.model}"
-
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
         client_info = get_client_info(f"ChatGoogleGenerativeAI:{self.model}")
