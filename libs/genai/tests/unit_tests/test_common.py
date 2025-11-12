@@ -2,8 +2,49 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 from langchain_google_genai._common import (
+    _BaseGoogleGenerativeAI,
     get_user_agent,
 )
+
+
+@patch.dict("os.environ", {"GOOGLE_API_KEY": "test_google_key"}, clear=True)
+def test_google_api_key_env_var() -> None:
+    """Test that `GOOGLE_API_KEY` environment variable is properly loaded."""
+
+    class TestModel(_BaseGoogleGenerativeAI):
+        model: str = "test-model"
+
+    model = TestModel()
+    assert model.google_api_key is not None
+    assert model.google_api_key.get_secret_value() == "test_google_key"
+
+
+@patch.dict("os.environ", {"GEMINI_API_KEY": "test_gemini_key"}, clear=True)
+def test_gemini_api_key_env_var() -> None:
+    """Test that `GEMINI_API_KEY` environment variable is properly loaded."""
+
+    class TestModel(_BaseGoogleGenerativeAI):
+        model: str = "test-model"
+
+    model = TestModel()
+    assert model.google_api_key is not None
+    assert model.google_api_key.get_secret_value() == "test_gemini_key"
+
+
+@patch.dict(
+    "os.environ",
+    {"GOOGLE_API_KEY": "test_google_key", "GEMINI_API_KEY": "test_gemini_key"},
+    clear=True,
+)
+def test_google_api_key_precedence() -> None:
+    """Test that `GOOGLE_API_KEY` takes precedence over GEMINI_API_KEY."""
+
+    class TestModel(_BaseGoogleGenerativeAI):
+        model: str = "test-model"
+
+    model = TestModel()
+    assert model.google_api_key is not None
+    assert model.google_api_key.get_secret_value() == "test_google_key"
 
 
 @patch("langchain_google_genai._common.os.environ.get")
@@ -31,7 +72,8 @@ def test_get_user_agent_without_telemetry_env_variable(
 
 
 def test_version_is_cached_at_module_level() -> None:
-    """Test that version is cached at module level and doesn't call metadata.version."""
+    """Test that version is cached at module level and doesn't call
+    `metadata.version`."""
     from langchain_google_genai import _common
 
     # The cached version should be a string
@@ -41,10 +83,10 @@ def test_version_is_cached_at_module_level() -> None:
 
 
 async def test_get_user_agent_no_blocking_in_async_context() -> None:
-    """Test that get_user_agent doesn't perform blocking I/O in async context.
+    """Test that `get_user_agent` doesn't perform blocking I/O in async context.
 
-    This test verifies that get_user_agent uses the cached version
-    and doesn't call metadata.version() which would be blocking I/O.
+    This test verifies that `get_user_agent` uses the cached version and doesn't call
+    `metadata.version()` which would be blocking I/O.
     """
     # Mock metadata.version to raise an error if it's called
     with patch("langchain_google_genai._common.metadata.version") as mock_version:

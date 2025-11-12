@@ -49,7 +49,7 @@ from langchain_google_genai.chat_models import (
     _response_to_result,
 )
 
-MODEL_NAME = "gemini-flash-lite-latest"
+MODEL_NAME = "gemini-2.5-flash"
 
 FAKE_API_KEY = "fake-api-key"
 
@@ -113,7 +113,7 @@ def test_integration_initialization() -> None:
 
 
 def test_safety_settings_initialization() -> None:
-    """Test chat model initialization with safety_settings parameter."""
+    """Test chat model initialization with `safety_settings` parameter."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
     }
@@ -601,7 +601,8 @@ async def test_async_api_endpoint_via_client_options() -> None:
 
 
 def test_base_url_preserves_existing_client_options() -> None:
-    """Test that `base_url` doesn't override existing `api_endpoint` in `client_options`."""  # noqa: E501
+    """Test that `base_url` doesn't override existing `api_endpoint` in
+    `client_options`."""
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -691,7 +692,7 @@ async def test_async_base_url_preserves_existing_client_options() -> None:
 
 
 def test_grpc_base_url_valid_hostname() -> None:
-    """Test that valid `hostname:port` `base_url` works with `gRPC`."""
+    """Test that valid `hostname:port` `base_url` works with gRPC."""
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -763,7 +764,7 @@ async def test_async_grpc_base_url_valid_hostname() -> None:
 
 
 def test_grpc_base_url_formats_https_without_path() -> None:
-    """Test that `https://` URLs without paths are formatted correctly for `gRPC`."""
+    """Test that `https://` URLs without paths are formatted correctly for gRPC."""
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -794,7 +795,7 @@ def test_grpc_base_url_formats_https_without_path() -> None:
 
 
 def test_grpc_base_url_with_path_raises_error() -> None:
-    """Test that `base_url` with path raises `ValueError` for `gRPC`."""
+    """Test that `base_url` with path raises `ValueError` for gRPC."""
     base_url = "https://webhook.site/path-not-allowed"
     param_secret_api_key = SecretStr(FAKE_API_KEY)
 
@@ -826,7 +827,7 @@ def test_grpc_asyncio_base_url_with_path_raises_error() -> None:
 
 
 def test_grpc_base_url_adds_default_port() -> None:
-    """Test that hostname without port gets default port `443` for `gRPC`."""
+    """Test that hostname without port gets default port `443` for gRPC."""
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
@@ -1214,7 +1215,8 @@ def test_parse_response_candidate_includes_model_provider() -> None:
 
 
 def test_parse_response_candidate_includes_model_name() -> None:
-    """Test that _parse_response_candidate includes model_name in response_metadata."""
+    """Test that _parse_response_candidate includes `model_name` in
+    `response_metadata`."""
     raw_candidate = {
         "content": {"parts": [{"text": "Hello, world!"}]},
         "finish_reason": 1,
@@ -1277,7 +1279,7 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 
 
 def test_temperature_range_pydantic_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]."""
+    """Test that temperature is in the range `[0.0, 2.0]`."""
     with pytest.raises(ValidationError):
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=2.1)
 
@@ -1299,7 +1301,7 @@ def test_temperature_range_pydantic_validation() -> None:
 
 
 def test_temperature_range_model_validation() -> None:
-    """Test that temperature is in the range [0.0, 2.0]."""
+    """Test that temperature is in the range `[0.0, 2.0]`."""
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=2.5)
 
@@ -1308,7 +1310,7 @@ def test_temperature_range_model_validation() -> None:
 
 
 def test_model_kwargs() -> None:
-    """Test we can transfer unknown params to model_kwargs."""
+    """Test we can transfer unknown params to `model_kwargs`."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         convert_system_message_to_human=True,
@@ -1431,7 +1433,7 @@ def test_retry_decorator_with_custom_parameters() -> None:
 def test_response_to_result_grounding_metadata(
     raw_response: dict, expected_grounding_metadata: dict
 ) -> None:
-    """Test that _response_to_result includes grounding_metadata in the response."""
+    """Test that `_response_to_result` includes grounding_metadata in the response."""
     response = GenerateContentResponse(raw_response)
     result = _response_to_result(response, stream=False)
 
@@ -1860,7 +1862,7 @@ async def test_max_retries_parameter_handling(
     expected_max_retries: int,
     should_have_max_retries: bool,
 ) -> None:
-    """Test max_retries parameter handling for sync and async methods."""
+    """Test `max_retries` handling for sync and async methods."""
     with patch(f"langchain_google_genai.chat_models.{mock_target}") as mock_retry:
         mock_retry.return_value = GenerateContentResponse(
             {
@@ -1906,7 +1908,8 @@ async def test_max_retries_parameter_handling(
 
 
 def test_thinking_config_merging_with_generation_config() -> None:
-    """Test that thinking_config is properly merged when passed in generation_config."""
+    """Test that `thinking_config` is properly merged when passed in
+    `generation_config`."""
     with patch("langchain_google_genai.chat_models._chat_with_retry") as mock_retry:
         # Mock response with thinking content followed by regular text
         mock_response = GenerateContentResponse(
@@ -2088,7 +2091,8 @@ def test_modalities_override_in_generation_config() -> None:
 
 
 def test_chat_google_genai_image_content_blocks() -> None:
-    """Test generating an image with mocked response and content_blocks translation."""
+    """Test generating an image with mocked response and `content_blocks`
+    translation."""
     mock_response = GenerateContentResponse(
         {
             "candidates": [
@@ -2203,7 +2207,7 @@ def test_content_blocks_translation_with_mixed_image_content() -> None:
 
 
 def test_chat_google_genai_invoke_with_audio_mocked() -> None:
-    """Test generating audio with mocked response and content_blocks translation."""
+    """Test generating audio with mocked response and `content_blocks` translation."""
     mock_response = GenerateContentResponse(
         {
             "candidates": [
@@ -2282,7 +2286,7 @@ def test_compat() -> None:
 
 
 def test_system_message_only_raises_error() -> None:
-    """Test that invoking with only a SystemMessage raises a helpful error."""
+    """Test that invoking with only a `SystemMessage` raises a helpful error."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -2297,7 +2301,7 @@ def test_system_message_only_raises_error() -> None:
 
 
 def test_system_message_with_additional_message_works() -> None:
-    """Test that SystemMessage works when combined with other messages."""
+    """Test that `SystemMessage` works when combined with other messages."""
     mock_response = GenerateContentResponse(
         {
             "candidates": [
@@ -2333,7 +2337,8 @@ def test_system_message_with_additional_message_works() -> None:
 
 
 def test_with_structured_output_json_schema_alias() -> None:
-    """Test that json_schema (preferred) method works as alias for json_mode (old)."""
+    """Test that `json_schema` (preferred) method works as alias for `json_mode`
+    (old)."""
     from pydantic import BaseModel
 
     class TestModel(BaseModel):
@@ -2549,10 +2554,10 @@ def test_union_schema_with_anyof() -> None:
 
 
 def test_union_schema_support() -> None:
-    """Test that Union types work correctly with both json_schema methods.
+    """Test that `Union` types work correctly with both `json_schema` methods.
 
-    This addresses a bug where json_schema method would fail with KeyError
-    when processing Union types that generate anyOf arrays with $ref entries.
+    This addresses a bug where `json_schema` method would fail with `KeyError`
+    when processing `Union` types that generate `anyOf` arrays with `$ref` entries.
     """
 
     class SpamDetails(BaseModel):

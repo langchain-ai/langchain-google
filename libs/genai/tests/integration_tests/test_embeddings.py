@@ -5,7 +5,7 @@ from pydantic import SecretStr
 from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
-_MODEL = "models/gemini-embedding-001"
+_MODEL = "gemini-embedding-001"
 _OUTPUT_DIMENSIONALITY = 768
 
 

@@ -2,7 +2,7 @@ from langchain_core.tools import tool
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-MODEL = "gemini-flash-lite-latest"
+MODEL = "gemini-2.5-flash-lite"
 
 
 @tool
