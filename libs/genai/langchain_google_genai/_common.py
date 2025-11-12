@@ -34,17 +34,22 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """Model name to use."""
 
     google_api_key: SecretStr | None = Field(
-        alias="api_key", default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
+        alias="api_key",
+        default_factory=secret_from_env(
+            ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
+        ),
     )
     """Google AI API key.
 
-    If not specified will be read from env var `GOOGLE_API_KEY`.
+    If not specified, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY` with
+    precedence given to `GOOGLE_API_KEY`.
     """
 
     credentials: Any = None
     """The default custom credentials to use when making API calls.
 
-    If not provided, credentials will be ascertained from the `GOOGLE_API_KEY` env var.
+    If not provided, credentials will be ascertained from the `GOOGLE_API_KEY`
+    or `GEMINI_API_KEY` env vars with precedence given to `GOOGLE_API_KEY`.
     """
 
     temperature: float = 0.7
@@ -186,7 +191,11 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     @property
     def lc_secrets(self) -> dict[str, str]:
-        return {"google_api_key": "GOOGLE_API_KEY"}
+        # Either could contain the API key
+        return {
+            "google_api_key": "GOOGLE_API_KEY",
+            "gemini_api_key": "GEMINI_API_KEY",
+        }
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
