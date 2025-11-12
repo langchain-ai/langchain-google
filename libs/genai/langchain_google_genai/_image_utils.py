@@ -5,12 +5,14 @@ import mimetypes
 import os
 import re
 from enum import Enum
-from typing import Any
 from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
 import requests
-from google.ai.generativelanguage_v1beta.types import Part
+from google.genai.types import Blob, Part
+
+# Note: noticed the previous generativelanguage_v1beta Part has a `part_metadata` field
+# that is not present in the genai.types.Part.
 
 
 class Route(Enum):
@@ -90,18 +92,15 @@ class ImageBytesLoader:
             )
             raise ValueError(msg)
 
-        inline_data: dict[str, Any] = {"data": bytes_}
-
         mime_type, _ = mimetypes.guess_type(image_string)
         if not mime_type:
             kind = filetype.guess(bytes_)
             if kind:
                 mime_type = kind.mime
 
-        if mime_type:
-            inline_data["mime_type"] = mime_type
+        blob = Blob(data=bytes_, mime_type=mime_type)
 
-        return Part(inline_data=inline_data)
+        return Part(inline_data=blob)
 
     def _route(self, image_string: str) -> Route:
         if image_string.startswith("data:image/"):
