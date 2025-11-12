@@ -88,7 +88,7 @@ def test_safety_settings_gemini(model_name: str) -> None:
 
     # safety filters
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
     }
 
     # test with safety filters directly to generate

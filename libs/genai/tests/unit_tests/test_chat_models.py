@@ -115,7 +115,7 @@ def test_integration_initialization() -> None:
 def test_safety_settings_initialization() -> None:
     """Test chat model initialization with `safety_settings` parameter."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
     }
 
     # Test initialization with safety_settings
