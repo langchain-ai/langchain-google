@@ -2402,6 +2402,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Returns:
             The integer number of tokens in the text.
         """
+        if self.client is None:
+            msg = "Client not initialized."
+            raise ValueError(msg)
+
         result = self.client.count_tokens(
             model=self.model, contents=[Content(parts=[Part(text=text)])]
         )
