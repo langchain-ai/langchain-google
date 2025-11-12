@@ -2416,7 +2416,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
                 The final output is always a `dict` with keys `'raw'`, `'parsed'`, and
                 `'parsing_error'`.
-            method: If set to `'json_schema'` it will use controlled genetration to
+            method: If set to `'json_schema'` it will use controlled generation to
                 generate the response rather than function calling.
 
                 Does not work with schemas with references or Pydantic models with
@@ -2740,7 +2740,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             if finish_reason and finish_reason != "FINISH_REASON_UNSPECIFIED":
                 message.response_metadata["model_name"] = self.model_name
             # is_blocked is part of "safety_ratings" list
-            # but if it's True/False then chunks can't be marged
+            # but if it's True/False then chunks can't be merged
             generation_info.pop("is_blocked", None)
 
         message.response_metadata["model_provider"] = "google_vertexai"
