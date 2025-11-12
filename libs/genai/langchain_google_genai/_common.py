@@ -113,6 +113,10 @@ class _BaseGoogleGenerativeAI(BaseModel):
     )
     """Base URL to use for the API client.
 
+    If not provided, will default to the public API at
+    `https://generativelanguage.googleapis.com`.
+
+
     This is a convenience alias for `client_options['api_endpoint']`.
 
     - **REST transport** (`transport="rest"`): Accepts full URLs with paths
