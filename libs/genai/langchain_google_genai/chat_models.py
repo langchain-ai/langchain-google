@@ -1819,7 +1819,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @model_validator(mode="before")
     @classmethod
     def build_extra(cls, values: dict[str, Any]) -> Any:
-        """Build extra kwargs from additional params that were passed in."""
+        """Build extra kwargs from additional params that were passed in.
+
+        In other words, handle additional params that aren't explicitly defined as model
+        fields. Used to pass extra config to underlying APIs without defining them all
+        here.
+        """
         all_required_field_names = get_pydantic_field_names(cls)
         return _build_model_kwargs(values, all_required_field_names)
 
