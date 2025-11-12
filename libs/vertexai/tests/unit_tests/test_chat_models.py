@@ -1819,3 +1819,66 @@ def test_thinking_budget_in_invocation_params() -> None:
     assert "include_thoughts" in invocation_params
     assert invocation_params["thinking_budget"] == 500
     assert invocation_params["include_thoughts"] is False
+
+
+def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
+    """Test that json_mode uses serialization mode for Pydantic v2 model_json_schema.
+
+    This ensures that FieldInfo objects are properly serialized when generating
+    the JSON schema for structured output in json_mode. Using mode='serialization'
+    is semantically correct since the schema describes the model's output format,
+    not its input validation rules.
+    """
+    from pydantic import Field
+
+    class TestModel(BaseModel):
+        """Test model with Pydantic v2 FieldInfo metadata."""
+
+        name: str = Field(description="Person's name")
+        age: int = Field(gt=0, le=150, description="Person's age")
+
+    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+
+    # This should not raise any errors when creating structured output
+    structured_llm = llm.with_structured_output(TestModel, method="json_mode")
+    assert structured_llm is not None
+
+    # Verify that model_json_schema works with mode='serialization'
+    schema = TestModel.model_json_schema(mode="serialization")
+    assert "properties" in schema
+    assert "name" in schema["properties"]
+    assert "age" in schema["properties"]
+    # Verify field metadata is preserved
+    assert "description" in schema["properties"]["name"]
+    assert schema["properties"]["name"]["description"] == "Person's name"
+
+
+def test_json_mode_pydantic_v1_backward_compatibility() -> None:
+    """Test that Pydantic v1 models continue to work with json_mode.
+
+    This ensures backward compatibility - Pydantic v1 models use schema()
+    method while v2 models use model_json_schema(mode='serialization').
+    """
+    from pydantic.v1 import BaseModel as BaseModelV1
+
+    class V1Model(BaseModelV1):
+        """Test model using Pydantic v1 API."""
+
+        name: str
+        age: int
+
+    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+
+    # V1 models should work without issues
+    structured_llm = llm.with_structured_output(V1Model, method="json_mode")
+    assert structured_llm is not None
+
+    # Verify V1 model uses schema() method, not model_json_schema()
+    assert hasattr(V1Model, "schema")
+    assert not hasattr(V1Model, "model_json_schema")
+
+    # Verify schema generation works
+    schema = V1Model.schema()
+    assert "properties" in schema
+    assert "name" in schema["properties"]
+    assert "age" in schema["properties"]
