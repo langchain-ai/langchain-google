@@ -183,7 +183,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         !!! example
 
             ```python
-            from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
+            from google.genai.types import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
