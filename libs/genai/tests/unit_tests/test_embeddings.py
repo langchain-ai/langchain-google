@@ -163,7 +163,7 @@ def test_embed_documents_with_numerous_texts() -> None:
 
 
 def test_base_url_support() -> None:
-    """Test that base_url is properly merged into client_options."""
+    """Test that `base_url` is properly merged into `client_options`."""
     base_url = "https://example.com"
     param_api_key = "[secret]"
     param_secret_api_key = SecretStr(param_api_key)
@@ -193,10 +193,8 @@ def test_base_url_support() -> None:
 
 
 def test_embed_query_default_task_type() -> None:
-    """Test that embed_query uses default RETRIEVAL_QUERY when task_type is None.
-
-    Regression test for issue #1299.
-    """
+    """Test that embed_query uses default `RETRIEVAL_QUERY` when `task_type` is
+    `None`."""
     with patch(
         "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
     ) as mock_prediction_service:
