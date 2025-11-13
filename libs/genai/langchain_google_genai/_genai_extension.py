@@ -30,7 +30,6 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_API_ENDPOINT = "generativelanguage.googleapis.com"
 _USER_AGENT = f"langchain/{langchain_core.__version__}"
 _DEFAULT_PAGE_SIZE = 20
-_DEFAULT_GENERATE_SERVICE_MODEL = "models/aqa"
 _MAX_REQUEST_PER_CHUNK = 100
 _NAME_REGEX = re.compile(r"^corpora/([^/]+?)(/documents/([^/]+?)(/chunks/([^/]+?))?)?$")
 
@@ -230,6 +229,7 @@ def _get_credentials() -> credentials.Credentials | None:
 
 
 def build_semantic_retriever() -> genai.RetrieverServiceClient:
+    """Uses the default `'grpc'` transport to build a semantic retriever client."""
     credentials = _get_credentials()
     return genai.RetrieverServiceClient(
         credentials=credentials,
@@ -619,128 +619,6 @@ def query_document(
         )
     )
     return list(response.relevant_chunks)
-
-
-@dataclass
-class Passage:
-    text: str
-    id: str
-
-
-@dataclass
-class GroundedAnswer:
-    answer: str
-    attributed_passages: list[Passage]
-    answerable_probability: float | None
-
-
-@dataclass
-class GenerateAnswerError(Exception):
-    finish_reason: genai.Candidate.FinishReason
-    finish_message: str
-    safety_ratings: MutableSequence[genai.SafetyRating]
-
-    def __str__(self) -> str:
-        return (
-            f"finish_reason: {self.finish_reason} "
-            f"finish_message: {self.finish_message} "
-            f"safety ratings: {self.safety_ratings}"
-        )
-
-
-def generate_answer(
-    *,
-    prompt: str,
-    passages: list[str],
-    answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-    safety_settings: list[genai.SafetySetting] | None = None,
-    temperature: float | None = None,
-    client: genai.GenerativeServiceClient,
-) -> GroundedAnswer:
-    # TODO: Consider passing in the corpus ID instead of the actual
-    # passages.
-    if safety_settings is None:
-        safety_settings = []
-    response = client.generate_answer(
-        genai.GenerateAnswerRequest(
-            contents=[
-                genai.Content(parts=[genai.Part(text=prompt)]),
-            ],
-            model=_DEFAULT_GENERATE_SERVICE_MODEL,
-            answer_style=answer_style,
-            safety_settings=safety_settings,
-            temperature=temperature,
-            inline_passages=genai.GroundingPassages(
-                passages=[
-                    genai.GroundingPassage(
-                        # IDs here takes alphanumeric only. No dashes allowed.
-                        id=str(index),
-                        content=genai.Content(parts=[genai.Part(text=chunk)]),
-                    )
-                    for index, chunk in enumerate(passages)
-                ]
-            ),
-        )
-    )
-
-    if response.answer.finish_reason != genai.Candidate.FinishReason.STOP:
-        finish_message = _get_finish_message(response.answer)
-        raise GenerateAnswerError(
-            finish_reason=response.answer.finish_reason,
-            finish_message=finish_message,
-            safety_ratings=response.answer.safety_ratings,
-        )
-
-    assert len(response.answer.content.parts) == 1
-    return GroundedAnswer(
-        answer=response.answer.content.parts[0].text,
-        attributed_passages=[
-            Passage(
-                text=passage.content.parts[0].text,
-                id=passage.source_id.grounding_passage.passage_id,
-            )
-            for passage in response.answer.grounding_attributions
-            if len(passage.content.parts) > 0
-        ],
-        answerable_probability=response.answerable_probability,
-    )
-
-
-def _get_finish_message(candidate: genai.Candidate) -> str:
-    """Get a human-readable finish message from the candidate.
-
-    Uses the official finish_message field if available, otherwise falls back
-    to a manual mapping of finish reasons to descriptive messages.
-    """
-    # Use the official field when available
-    if hasattr(candidate, "finish_message") and candidate.finish_message:
-        return candidate.finish_message
-
-    # Fallback to manual mapping for all known finish reasons
-    finish_messages: dict[int, str] = {
-        genai.Candidate.FinishReason.STOP: "Generation completed successfully",
-        genai.Candidate.FinishReason.MAX_TOKENS: (
-            "Maximum token in context window reached"
-        ),
-        genai.Candidate.FinishReason.SAFETY: "Blocked because of safety",
-        genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
-        genai.Candidate.FinishReason.LANGUAGE: "Unsupported language detected",
-        genai.Candidate.FinishReason.BLOCKLIST: "Content hit forbidden terms",
-        genai.Candidate.FinishReason.PROHIBITED_CONTENT: (
-            "Inappropriate content detected"
-        ),
-        genai.Candidate.FinishReason.SPII: "Sensitive personal information detected",
-        genai.Candidate.FinishReason.IMAGE_SAFETY: "Image safety violation",
-        genai.Candidate.FinishReason.MALFORMED_FUNCTION_CALL: "Malformed function call",
-        genai.Candidate.FinishReason.UNEXPECTED_TOOL_CALL: "Unexpected tool call",
-        genai.Candidate.FinishReason.OTHER: "Other generation issue",
-        genai.Candidate.FinishReason.FINISH_REASON_UNSPECIFIED: (
-            "Unspecified finish reason"
-        ),
-    }
-
-    finish_reason = candidate.finish_reason
-    return finish_messages.get(finish_reason, "Unexpected generation error")
 
 
 def _convert_to_metadata(metadata: dict[str, Any]) -> list[genai.CustomMetadata]:
