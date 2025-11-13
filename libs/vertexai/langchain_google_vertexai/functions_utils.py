@@ -192,7 +192,7 @@ def _format_base_tool_to_function_declaration(
         )
 
     if hasattr(tool.args_schema, "model_json_schema"):
-        schema = tool.args_schema.model_json_schema()
+        schema = tool.args_schema.model_json_schema(mode="serialization")
         pydantic_version = "v2"
     else:
         schema = tool.args_schema.schema()  # type: ignore[attr-defined]
@@ -211,7 +211,7 @@ def _format_pydantic_to_function_declaration(
     pydantic_model: type[BaseModel],
 ) -> gapic.FunctionDeclaration:
     if hasattr(pydantic_model, "model_json_schema"):
-        schema = pydantic_model.model_json_schema()
+        schema = pydantic_model.model_json_schema(mode="serialization")
         pydantic_version = "v2"
     else:
         schema = pydantic_model.schema()
