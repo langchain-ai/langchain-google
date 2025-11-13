@@ -1,5 +1,5 @@
 name: "🐛 Bug Report"
-description: Report a bug in a `langchain-google` package
+description: Report a bug
 labels: ["bug"]
 type: bug
 assignees: []
@@ -16,15 +16,13 @@ body:
   - type: checkboxes
     id: package
     attributes:
-      label: Package
-      description: Which `langchain-google` package(s) is this bug related to? (Select all that apply)
+      label: Package (Required)
+      description: Which package(s) is this bug related to? **Please select at least one**
       options:
         - label: langchain-google-genai
         - label: langchain-google-vertexai
         - label: langchain-google-community
-        - label: Other / not sure
-    validations:
-      required: true
+        - label: Other / not sure / general
 
   - type: checkboxes
     attributes:

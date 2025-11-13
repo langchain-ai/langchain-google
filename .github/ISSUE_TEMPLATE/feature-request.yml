@@ -16,15 +16,13 @@ body:
   - type: checkboxes
     id: package
     attributes:
-      label: Package
-      description: Which package(s) should this feature be added to? (Select all that apply)
+      label: Package (Required)
+      description: Which package(s) should this feature be added to? **Please select at least one**
       options:
         - label: langchain-google-genai
         - label: langchain-google-vertexai
         - label: langchain-google-community
-        - label: Not sure / general
-    validations:
-      required: true
+        - label: Other / not sure / general
 
   - type: checkboxes
     attributes:
@@ -33,7 +31,7 @@ body:
       options:
         - label: I added a descriptive title to this issue
           required: true
-        - label: I searched the LangChain documentation
+        - label: I searched the LangChain documentation and API reference (linked above)
           required: true
         - label: I used the GitHub search to find a similar issue and didn't find it
           required: true
