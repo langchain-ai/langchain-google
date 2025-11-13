@@ -13,18 +13,16 @@ body:
         - [Documentation](https://docs.langchain.com/oss/python/integrations/providers/google)
         - [API Reference](https://reference.langchain.com/python/integrations/langchain_google/)
 
-  - type: dropdown
+  - type: checkboxes
     id: package
     attributes:
       label: Package
-      description: Which package should this feature be added to?
+      description: Which package(s) should this feature be added to? (Select all that apply)
       options:
-        - langchain-google-genai
-        - langchain-google-vertexai
-        - langchain-google-community
-        - All packages
-        - Not sure / general
-      default: 0
+        - label: langchain-google-genai
+        - label: langchain-google-vertexai
+        - label: langchain-google-community
+        - label: Not sure / general
     validations:
       required: true
 

@@ -21,7 +21,11 @@ jobs:
             const match = body.match(/### Package\s+([\s\S]*?)\n###/i);
             if (!match) return;
 
-            const pkg = match[1].trim();
+            const packageSection = match[1].trim();
+
+            // Parse checkbox selections (look for "- [x] package-name" patterns)
+            const checkboxMatches = packageSection.match(/- \[x\]\s+([^\n\r]+)/gi);
+            if (!checkboxMatches) return;
 
             // Mapping table
             const mapping = {
@@ -30,12 +34,22 @@ jobs:
               "langchain-google-community": "community",
             };
 
-            const label = mapping[pkg];
-            if (!label) return;
+            // Extract package names and map to labels
+            const labels = [];
+            for (const match of checkboxMatches) {
+              const packageName = match.replace(/- \[x\]\s+/i, '').trim();
+              const label = mapping[packageName];
+              if (label && !labels.includes(label)) {
+                labels.push(label);
+              }
+            }
 
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              labels: [label]
-            });
+            // Add labels if any were found
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: labels
+              });
+            }
