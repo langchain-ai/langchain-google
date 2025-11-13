@@ -6,7 +6,6 @@ import io
 import json
 import logging
 import mimetypes
-import os
 import time
 import uuid
 import warnings
@@ -1948,11 +1947,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 google_api_key = self.google_api_key.get_secret_value()
             else:
                 google_api_key = self.google_api_key
-        # Fallback
-        if not google_api_key:
-            google_api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get(
-                "GEMINI_API_KEY"
-            )
 
         base_url = self.base_url
         if isinstance(self.base_url, dict):

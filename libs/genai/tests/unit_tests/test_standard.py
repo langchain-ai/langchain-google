@@ -5,6 +5,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 MODEL_NAME = "gemini-2.5-flash"
 
+FAKE_API_KEY = "fake-api-key"
+
 
 class TestGeminiAIStandard(ChatModelUnitTests):
     @property
@@ -13,12 +15,12 @@ class TestGeminiAIStandard(ChatModelUnitTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model": MODEL_NAME}
+        return {"model": MODEL_NAME, "google_api_key": FAKE_API_KEY}
 
     @property
     def init_from_env_params(self) -> tuple[dict, dict, dict]:
         return (
             {"GOOGLE_API_KEY": "api_key"},
-            self.chat_model_params,
+            {"model": MODEL_NAME},
             {"google_api_key": "api_key"},
         )
