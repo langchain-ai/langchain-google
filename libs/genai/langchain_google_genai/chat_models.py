@@ -957,7 +957,7 @@ def _response_to_result(
     stream: bool = False,
     prev_usage: UsageMetadata | None = None,
 ) -> ChatResult:
-    """Converts a PaLM API response into a LangChain `ChatResult`."""
+    """Converts a Google AI response into a LangChain `ChatResult`."""
     llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
 
     # Get usage metadata
@@ -1413,12 +1413,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     Search:
         ```python
-        from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+        from google.genai.types import Tool as GoogleTool
 
         llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
         resp = llm.invoke(
             "When is the next total solar eclipse in US?",
-            tools=[GenAITool(google_search={})],
+            tools=[GoogleTool(google_search={})],
         )
         ```
 
