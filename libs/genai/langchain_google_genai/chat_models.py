@@ -2597,6 +2597,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Returns:
             The integer number of tokens in the text.
+
+        Example:
+            ```python
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+            num_tokens = llm.get_num_tokens("Hello, world!")
+            print(num_tokens)
+            # 4
+            ```
         """
         if self.client is None:
             msg = "Client not initialized."
