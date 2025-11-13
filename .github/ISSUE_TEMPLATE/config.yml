@@ -3,7 +3,7 @@ contact_links:
   - name: 📚 LangChain Documentation
     url: https://docs.langchain.com/oss/python/integrations/providers/google
     about: View documentation for Google integrations with LangChain
-  - name: 📚 API Reference Documentation
+  - name: 📚 API Reference Documentation (langchain-google)
     url: https://reference.langchain.com/python/integrations/langchain_google/
     about: View documentation for Google integrations with LangChain
   - name: 💬 LangChain Forum

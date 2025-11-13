@@ -1,0 +1,39 @@
+name: Auto Label Issues by Package
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  label-by-package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract package and apply label
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const body = context.payload.issue.body || "";
+
+            // Extract text under "### Package"
+            const match = body.match(/### Package\s+([\s\S]*?)\n###/i);
+            if (!match) return;
+
+            const pkg = match[1].trim();
+
+            // Mapping table
+            const mapping = {
+              "langchain-google-genai": "genai",
+              "langchain-google-vertexai": "vertexai",
+              "langchain-google-community": "community",
+            };
+
+            const label = mapping[pkg];
+            if (!label) return;
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [label]
+            });
