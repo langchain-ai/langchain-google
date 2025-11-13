@@ -6,6 +6,7 @@ from collections.abc import Generator, Sequence
 from typing import Literal, cast
 
 import pytest
+from google.genai.types import Tool as GoogleTool
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -1138,6 +1139,16 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
     # Lazy parsing
     expected_block_types = {"server_tool_call", "server_tool_result", "text"}
     assert {block["type"] for block in message.content_blocks} == expected_block_types
+
+
+def test_search_with_googletool() -> None:
+    """Test using `GoogleTool` with Google Search."""
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash")
+    resp = llm.invoke(
+        "When is the next total solar eclipse in US?",
+        tools=[GoogleTool(google_search={})],
+    )
+    assert "grounding_metadata" in resp.response_metadata
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")

@@ -40,14 +40,19 @@ class _BaseGoogleGenerativeAI(BaseModel):
             ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
         ),
     )
-    """Google AI API key.
+    """Google AI API key. Used for Gemini API.
 
     If not specified, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY` with
     precedence given to `GOOGLE_API_KEY`.
+
+    !!! warning "Vertex AI"
+
+        To use `langchain-google-genai` with Vertex AI, you must provide a `credentials`
+        object instead of an API key.
     """
 
     credentials: Any = None
-    """The default custom credentials to use when making API calls.
+    """The default custom credentials to use when making API calls. Used for Vertex AI.
 
     If not provided, credentials will be ascertained from the `GOOGLE_API_KEY`
     or `GEMINI_API_KEY` env vars with precedence given to `GOOGLE_API_KEY`.

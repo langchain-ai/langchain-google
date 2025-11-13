@@ -1,6 +1,6 @@
 from unittest.mock import ANY, Mock, patch
 
-from google.ai.generativelanguage_v1beta.types import (
+from google.genai.types import (
     Candidate,
     Content,
     GenerateContentResponse,
@@ -59,20 +59,37 @@ def test_tracing_params() -> None:
 
 def test_base_url_support() -> None:
     """Test that `base_url` is properly passed through to `ChatGoogleGenerativeAI`."""
-    mock_client = Mock()
+    mock_client_instance = Mock()
+    mock_models = Mock()
     mock_generate_content = Mock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+
+    # Create a proper mock response with the required attributes
+    mock_response = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))],
+        prompt_feedback=None,  # This is optional and can be None
     )
-    mock_client.return_value.generate_content = mock_generate_content
+    mock_generate_content.return_value = mock_response
+    mock_models.generate_content = mock_generate_content
+    mock_client_instance.models = mock_models
+
+    mock_client_class = Mock()
+    mock_client_class.return_value = mock_client_instance
+
     base_url = "https://example.com"
     param_api_key = "[secret]"
     param_secret_api_key = SecretStr(param_api_key)
     param_transport = "rest"
 
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
+    # Also mock the _chat_with_retry function to ensure it returns our mock response
+    with (
+        patch(
+            "langchain_google_genai.chat_models.Client",
+            mock_client_class,
+        ),
+        patch(
+            "langchain_google_genai.chat_models._chat_with_retry",
+            return_value=mock_response,
+        ),
     ):
         llm = GoogleGenerativeAI(
             model=MODEL_NAME,
@@ -81,14 +98,12 @@ def test_base_url_support() -> None:
             transport=param_transport,
         )
 
-    response = llm.invoke("test")
-    assert response == "test response"
+        response = llm.invoke("test")
+        assert response == "test response"
 
-    mock_client.assert_called_once_with(
-        transport=param_transport,
-        client_options=ANY,
-        client_info=ANY,
+    mock_client_class.assert_called_once_with(
+        api_key=param_api_key,
+        http_options=ANY,
     )
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_key == param_api_key
-    assert call_client_options.api_endpoint == base_url
+    call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
+    assert call_http_options.base_url == base_url
