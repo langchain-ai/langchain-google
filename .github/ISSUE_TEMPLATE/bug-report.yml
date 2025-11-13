@@ -33,7 +33,7 @@ body:
       options:
         - label: I added a descriptive title to this issue
           required: true
-        - label: I searched the LangChain documentation with the integrated search
+        - label: I searched the LangChain documentation and API reference (linked above)
           required: true
         - label: I used the GitHub search to find a similar issue and didn't find it
           required: true
@@ -42,17 +42,18 @@ body:
 
   - type: textarea
     attributes:
-      label: Example Code
+      label: Example Code (Python)
       description: |
         Please provide a minimal, reproducible code example that demonstrates the bug.
-        Without this, it will be very difficult to help you!
+        Without this, we may not be able to investigate the issue.
+        (This will be automatically formatted into code, so no need for backticks.)
       render: python
       placeholder: |
         from langchain_google_genai import ChatGoogleGenerativeAI
         # or from langchain_google_vertexai import ChatVertexAI
         # or from langchain_google_community import ...
 
-        # Your Minimal Reproducable Example (MRE) here
+        # Your example here
     validations:
       required: true
 
@@ -60,15 +61,16 @@ body:
     attributes:
       label: Error Message and Stack Trace (if applicable)
       description: |
-        If you are reporting an error, please include the full error message and stack trace.
-        This will be automatically formatted into code, so no need for backticks.
+        If you are reporting an error, please copy and paste the full error message and
+        stack trace.
+        (This will be automatically formatted into code, so no need for backticks.)
       render: shell
 
   - type: textarea
     attributes:
       label: Description
       description: |
-        Describe what you're doing, what you expect to happen, and what actually happens.
+        Describe what you're doing (e.g. how you encountered this bug), what you expect to happen, and what actually happens.
 
         Please be as detailed as possible. The more information you provide, the easier it will be to help you.
       placeholder: |
