@@ -571,7 +571,6 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = []
 lint = [{ name = "ruff", specifier = ">=0.13.1,<0.14.0" }]
 test = [
     { name = "freezegun", specifier = ">=1.5.0,<2.0.0" },

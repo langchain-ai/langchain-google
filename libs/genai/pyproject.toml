@@ -52,12 +52,9 @@ test = [
     "numpy>=2.1.0; python_version>='3.13'",
     "langchain-tests>=1.0.0,<2.0.0",
 ]
-
 test_integration = [
     "pytest>=8.4.0,<9.0.0",
 ]
-
-dev = []
 
 [tool.ruff]
 fix = true
