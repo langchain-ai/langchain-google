@@ -739,7 +739,7 @@ def _parse_chat_history(
             role = "user"
             parts = _convert_to_parts(message.content)
             if i == 1 and convert_system_message_to_human and system_instruction:
-                parts = list(system_instruction.parts) + parts
+                parts = list(system_instruction.parts or []) + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
