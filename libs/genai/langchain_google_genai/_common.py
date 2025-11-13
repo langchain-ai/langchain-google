@@ -53,6 +53,52 @@ class _BaseGoogleGenerativeAI(BaseModel):
     or `GEMINI_API_KEY` env vars with precedence given to `GOOGLE_API_KEY`.
     """
 
+    base_url: str | dict | None = Field(default=None, alias="client_options")
+    """Base URL to use for the API client.
+
+    If not provided, will default to the public API at
+    `https://generativelanguage.googleapis.com`.
+
+
+    - **REST transport** (`transport="rest"`): Accepts full URLs with paths
+
+        - `https://api.example.com/v1/path`
+        - `https://webhook.site/unique-path`
+
+    - **gRPC transports** (`transport="grpc"` or `transport="grpc_asyncio"`): Only
+        accepts `hostname:port` format
+
+        - `api.example.com:443`
+        - `custom.googleapis.com:443`
+        - `https://api.example.com` (auto-formatted to `api.example.com:443`)
+        - NOT `https://webhook.site/path` (paths are not supported in gRPC)
+        - NOT `api.example.com/path` (paths are not supported in gRPC)
+
+    !!! note
+
+        Typed to accept `dict` to support backwards compatiblity for the (now removed)
+        `client_options` param.
+
+        If a `dict` is passed in, it will only extract the `'api_endpoint'` key.
+    """
+
+    transport: str | None = Field(
+        default=None,
+        alias="api_transport",
+    )
+    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`.
+
+    The Google client library defaults to `'grpc'` for sync clients.
+
+    For async clients, `'rest'` is converted to `'grpc_asyncio'` unless
+    a custom endpoint is specified.
+    """
+
+    additional_headers: dict[str, str] | None = Field(
+        default=None,
+    )
+    """Key-value dictionary representing additional headers for the model call"""
+
     temperature: float = 0.7
     """Run inference with this temperature.
 
@@ -95,67 +141,6 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     timeout: float | None = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
-
-    client_options: dict | None = Field(
-        default=None,
-    )
-    """A dictionary of client options to pass to the Google API client.
-
-    Example: `api_endpoint`
-
-    !!! warning
-
-        If both `client_options['api_endpoint']` and `base_url` are specified,
-        the `api_endpoint` in `client_options` takes precedence.
-    """
-
-    base_url: str | None = Field(
-        default=None,
-    )
-    """Base URL to use for the API client.
-
-    If not provided, will default to the public API at
-    `https://generativelanguage.googleapis.com`.
-
-
-    This is a convenience alias for `client_options['api_endpoint']`.
-
-    - **REST transport** (`transport="rest"`): Accepts full URLs with paths
-
-        - `https://api.example.com/v1/path`
-        - `https://webhook.site/unique-path`
-
-    - **gRPC transports** (`transport="grpc"` or `transport="grpc_asyncio"`): Only
-        accepts `hostname:port` format
-
-        - `api.example.com:443`
-        - `custom.googleapis.com:443`
-        - `https://api.example.com` (auto-formatted to `api.example.com:443`)
-        - NOT `https://webhook.site/path` (paths are not supported in gRPC)
-        - NOT `api.example.com/path` (paths are not supported in gRPC)
-
-    !!! warning
-
-        If `client_options` already contains an `api_endpoint`, this parameter will be
-        ignored in favor of the existing value.
-    """
-
-    transport: str | None = Field(
-        default=None,
-        alias="api_transport",
-    )
-    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`.
-
-    The Google client library defaults to `'grpc'` for sync clients.
-
-    For async clients, `'rest'` is converted to `'grpc_asyncio'` unless
-    a custom endpoint is specified.
-    """
-
-    additional_headers: dict[str, str] | None = Field(
-        default=None,
-    )
-    """Key-value dictionary representing additional headers for the model call"""
 
     response_modalities: list[Modality] | None = Field(
         default=None,
