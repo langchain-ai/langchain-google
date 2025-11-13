@@ -672,7 +672,10 @@ def _parse_chat_history(
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
-                system_instruction.parts.extend(system_parts)
+                if system_instruction.parts is None:
+                    system_instruction.parts = system_parts
+                else:
+                    system_instruction.parts.extend(system_parts)
             else:
                 pass
             continue
