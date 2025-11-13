@@ -2083,6 +2083,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.client is None:
+            msg = "Client not initialized."
+            raise ValueError(msg)
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -2122,6 +2125,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.async_client is None:
+            msg = "Client not initialized."
+            raise ValueError(msg)
         if not self.async_client:
             updated_kwargs = {
                 **kwargs,
@@ -2174,6 +2180,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        if self.async_client is None:
+            msg = "Client not initialized."
+            raise ValueError(msg)
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -2230,6 +2239,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: _ToolChoiceType | bool | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        if self.async_client is None:
+            msg = "Client not initialized."
+            raise ValueError(msg)
         if not self.async_client:
             updated_kwargs = {
                 **kwargs,
