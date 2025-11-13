@@ -13,16 +13,16 @@ body:
         - [Documentation](https://docs.langchain.com/oss/python/integrations/providers/google)
         - [API Reference](https://reference.langchain.com/python/integrations/langchain_google/)
 
-  - type: dropdown
+  - type: checkboxes
     id: package
     attributes:
       label: Package
-      description: Which `langchain-google` package is this bug related to?
+      description: Which `langchain-google` package(s) is this bug related to? (Select all that apply)
       options:
-        - langchain-google-genai
-        - langchain-google-vertexai
-        - langchain-google-community
-      default: 0
+        - label: langchain-google-genai
+        - label: langchain-google-vertexai
+        - label: langchain-google-community
+        - label: Other / not sure
     validations:
       required: true
 
