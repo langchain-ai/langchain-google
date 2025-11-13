@@ -1996,7 +1996,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
             if "tools" not in kwargs:
-                code_execution_tool = GoogleTool(code_execution=CodeExecution())
+                code_execution_tool = GoogleTool(code_execution=ToolCodeExecution())
                 kwargs["tools"] = [code_execution_tool]
 
             else:
@@ -2358,7 +2358,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             raise ValueError(msg)
 
         formatted_tools = None
-        code_execution_tool = GoogleTool(code_execution=CodeExecution())
+        code_execution_tool = GoogleTool(code_execution=ToolCodeExecution())
         if tools == [code_execution_tool]:
             formatted_tools = tools
         elif tools:
