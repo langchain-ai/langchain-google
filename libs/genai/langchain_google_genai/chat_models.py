@@ -375,10 +375,9 @@ def _convert_to_parts(
                             "'data' field."
                         )
                         raise ValueError(msg)
-                    inline_data: dict = {"data": bytes_}
-                    if "mime_type" in part:
-                        inline_data["mime_type"] = part["mime_type"]
-                    else:
+
+                    mime_type = part.get("mime_type")
+                    if not mime_type:
                         # Guess MIME type based on data field if not provided
                         source = cast(
                             "str",
@@ -390,9 +389,15 @@ def _convert_to_parts(
                             kind = filetype.guess(bytes_)
                             if kind:
                                 mime_type = kind.mime
-                        if mime_type:
-                            inline_data["mime_type"] = mime_type
-                    parts.append(Part(inline_data=inline_data))
+                    parts.append(
+                        Part(
+                            inline_data=Blob(
+                                data=bytes_,
+                                mime_type=mime_type,
+                            )
+                        )
+                    )
+
                 elif part["type"] == "image_url":
                     # Chat Completions image format
                     img_url = part["image_url"]
