@@ -4,6 +4,7 @@ from langchain_google_community.bigquery import BigQueryLoader
 
 
 @pytest.mark.extended
+@pytest.mark.xfail(reason="TEMPORARY until dependency issues are resolved.")
 def test_bigquery_loader_no_options() -> None:
     loader = BigQueryLoader("SELECT 1 AS a, 2 AS b")
     docs = loader.load()
@@ -14,6 +15,7 @@ def test_bigquery_loader_no_options() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.xfail(reason="TEMPORARY until dependency issues are resolved.")
 def test_bigquery_loader_page_content_columns() -> None:
     loader = BigQueryLoader(
         "SELECT 1 AS a, 2 AS b UNION ALL SELECT 3 AS a, 4 AS b",
@@ -30,6 +32,7 @@ def test_bigquery_loader_page_content_columns() -> None:
 
 
 @pytest.mark.extended
+@pytest.mark.xfail(reason="TEMPORARY until dependency issues are resolved.")
 def test_bigquery_loader_metadata_columns() -> None:
     loader = BigQueryLoader(
         "SELECT 1 AS a, 2 AS b",
