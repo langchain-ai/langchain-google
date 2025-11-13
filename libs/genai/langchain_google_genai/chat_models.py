@@ -430,7 +430,7 @@ def _convert_to_parts(
                         msg = f"Media part must have either data or file_uri: {part}"
                         raise ValueError(msg)
                     if "video_metadata" in part:
-                        metadata = VideoMetadata(part["video_metadata"])
+                        metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
                 elif part["type"] == "function_call_signature":
@@ -527,7 +527,8 @@ def _convert_to_parts(
                         outcome = 1  # Default to success if not specified
                     code_execution_result_part = Part(
                         code_execution_result=CodeExecutionResult(
-                            output=part["code_execution_result"], outcome=outcome
+                            outcome=outcome,
+                            output=part["code_execution_result"],
                         )
                     )
                     parts.append(code_execution_result_part)
@@ -791,7 +792,8 @@ def _parse_response_candidate(
     # Track function call signatures separately to handle them conditionally
     function_call_signatures: list[dict] = []
 
-    for part in response_candidate.content.parts:
+    parts = response_candidate.content.parts or [] if response_candidate.content else []
+    for part in parts:
         text: str | None = None
         try:
             if hasattr(part, "text") and part.text is not None:
@@ -863,45 +865,43 @@ def _parse_response_candidate(
             content = _append_to_content(content, execution_result)
 
         if (
-            hasattr(part, "inline_data")
-            and part.inline_data
-            and part.inline_data.mime_type.startswith("audio/")
+            part.inline_data
+            and part.inline_data.data
+            and part.inline_data.mime_type
         ):
-            buffer = io.BytesIO()
+            if part.inline_data.mime_type.startswith("audio/"):
+                buffer = io.BytesIO()
 
-            with wave.open(buffer, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                # TODO: Read Sample Rate from MIME content type.
-                wf.setframerate(24000)
-                wf.writeframes(part.inline_data.data)
+                with wave.open(buffer, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    # TODO: Read Sample Rate from MIME content type.
+                    wf.setframerate(24000)
+                    wf.writeframes(part.inline_data.data)
 
-            audio_data = buffer.getvalue()
-            additional_kwargs["audio"] = audio_data
+                audio_data = buffer.getvalue()
+                additional_kwargs["audio"] = audio_data
 
-            # For backwards compatibility, audio stays in additional_kwargs by default
-            # and is accessible via .content_blocks property
+                # For backwards compatibility, audio stays in additional_kwargs by
+                # default and is accessible via .content_blocks property
 
-        if (
-            hasattr(part, "inline_data")
-            and part.inline_data
-            and part.inline_data.mime_type.startswith("image/")
-        ):
-            image_format = part.inline_data.mime_type[6:]
-            image_message = {
-                "type": "image_url",
-                "image_url": {
-                    "url": image_bytes_to_b64_string(
-                        part.inline_data.data, image_format=image_format
-                    )
-                },
-            }
-            content = _append_to_content(content, image_message)
+            if part.inline_data.mime_type.startswith("image/"):
+                image_format = part.inline_data.mime_type[6:]
+                image_message = {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_bytes_to_b64_string(
+                            part.inline_data.data,
+                            image_format=image_format,
+                        )
+                    },
+                }
+                content = _append_to_content(content, image_message)
 
         if part.function_call:
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
-            function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            function_call_args_dict = part.function_call.model_dump()["args"]
 
             # Fix: Correct integer-like floats from protobuf conversion
             # The protobuf library sometimes converts integers to floats
@@ -999,15 +999,24 @@ def _response_to_result(
     prev_usage: UsageMetadata | None = None,
 ) -> ChatResult:
     """Converts a Google AI response into a LangChain `ChatResult`."""
-    llm_output = {"prompt_feedback": proto.Message.to_dict(response.prompt_feedback)}
+    llm_output = (
+        {"prompt_feedback": response.prompt_feedback.model_dump()}
+        if response.prompt_feedback
+        else {}
+    )
 
     # Get usage metadata
     try:
-        input_tokens = response.usage_metadata.prompt_token_count
-        thought_tokens = response.usage_metadata.thoughts_token_count
-        output_tokens = response.usage_metadata.candidates_token_count + thought_tokens
-        total_tokens = response.usage_metadata.total_token_count
-        cache_read_tokens = response.usage_metadata.cached_content_token_count
+        if response.usage_metadata is None:
+            msg = "Usage metadata is None"
+            raise AttributeError(msg)
+        input_tokens = response.usage_metadata.prompt_token_count or 0
+        thought_tokens = response.usage_metadata.thoughts_token_count or 0
+        output_tokens = (
+            response.usage_metadata.candidates_token_count or 0
+            ) + thought_tokens
+        total_tokens = response.usage_metadata.total_token_count or 0
+        cache_read_tokens = response.usage_metadata.cached_content_token_count or 0
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
             if thought_tokens > 0:
                 cumulative_usage = UsageMetadata(
@@ -1045,16 +1054,17 @@ def _response_to_result(
 
     generations: list[ChatGeneration] = []
 
-    for candidate in response.candidates:
-        generation_info = {}
+    for candidate in response.candidates or []:
+        generation_info: dict[str, Any] = {}
         if candidate.finish_reason:
             generation_info["finish_reason"] = candidate.finish_reason.name
             # Add model_name in last chunk
-            generation_info["model_name"] = response.model_version
-        generation_info["safety_ratings"] = [
-            proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
-            for safety_rating in candidate.safety_ratings
-        ]
+            generation_info["model_name"] = response.model_version or ""
+        generation_info["safety_ratings"] = (
+            [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
+            if candidate.safety_ratings
+            else []
+        )
         message = _parse_response_candidate(candidate, streaming=stream)
 
         if not hasattr(message, "response_metadata"):
@@ -1062,7 +1072,7 @@ def _response_to_result(
 
         try:
             if candidate.grounding_metadata:
-                grounding_metadata = proto.Message.to_dict(candidate.grounding_metadata)
+                grounding_metadata = candidate.grounding_metadata.model_dump()
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
         except AttributeError:
