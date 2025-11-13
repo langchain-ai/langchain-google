@@ -51,6 +51,9 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.genai.errors import (
+    ClientError,
+)
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -149,11 +152,11 @@ def _create_retry_decorator(
     wait_exponential_min: float = 1.0,
     wait_exponential_max: float = 60.0,
 ) -> Callable[[Any], Any]:
-    """Creates and returns a preconfigured tenacity retry decorator.
+    """Create and return a preconfigured tenacity retry decorator.
 
-    The retry decorator is configured to handle specific Google API exceptions such as
-    `ResourceExhausted` and `ServiceUnavailable`. It uses an exponential backoff
-    strategy for retries.
+    The decorator is configured to handle specific Google API exceptions.
+
+    Uses an exponential backoff strategy for retries.
 
     Returns:
         A retry decorator configured for handling specific Google API exceptions.
@@ -176,11 +179,12 @@ def _create_retry_decorator(
 
 
 def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
-    """Executes a chat generation method with retry logic using tenacity.
+    """Execute a chat generation method with retry logic.
 
-    This function is a wrapper that applies a retry mechanism to a provided chat
-    generation function. It is useful for handling intermittent issues like network
-    errors or temporary service unavailability.
+    Wrapper that applies a retry mechanism to a provided `generation_method` function.
+
+    Useful for handling intermittent issues like network errors or temporary service
+    unavailability.
 
     Args:
         generation_method: The chat generation method to be executed.
@@ -194,24 +198,36 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
         wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
         wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
+    )
+
+    allowed_params = kwargs.get(
+        "allowed_params", _allowed_params_prediction_service_gapi
     )
 
     @retry_decorator
     def _chat_with_retry(**kwargs: Any) -> Any:
         try:
             return generation_method(**kwargs)
+
+        except ClientError as e:
+            if e.status == "INVALID_ARGUMENT":
+                msg = f"Invalid argument provided to Gemini: {e}"
+
+                raise ChatGoogleGenerativeAIError(msg) from e
+
         except FailedPrecondition as exc:
             if "location is not supported" in exc.message:
-                error_msg = (
+                msg = (
                     "Your location is not supported by google-generativeai "
-                    "at the moment. Try to use ChatVertexAI LLM from "
+                    "at the moment. Try to use ChatVertexAI from "
                     "langchain_google_vertexai."
                 )
-                raise ValueError(error_msg)
+                raise ValueError(msg)
 
         except InvalidArgument as e:
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
+
         except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
             if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
@@ -223,21 +239,20 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise
 
     params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if (request := kwargs.get("request"))
-        and hasattr(request, "model")
-        and "gemini" in request.model
+        {k: v for k, v in kwargs.items() if k in allowed_params}
+        if (model := kwargs.get("model")) and "gemini" in model
         else kwargs
     )
     return _chat_with_retry(**params)
 
 
 async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
-    """Executes a chat generation method with retry logic using tenacity.
+    """Asynchronously execute a chat generation method with retry logic.
 
-    This function is a wrapper that applies a retry mechanism to a provided chat
-    generation function. It is useful for handling intermittent issues like network
-    errors or temporary service unavailability.
+    Wrapper that applies a retry mechanism to a provided `generation_method` function.
+
+    Useful for handling intermittent issues like network errors or temporary service
+    unavailability.
 
     Args:
         generation_method: The chat generation method to be executed.
@@ -253,14 +268,34 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
     )
 
+    allowed_params = kwargs.get(
+        "allowed_params", _allowed_params_prediction_service_gapi
+    )
+
     @retry_decorator
     async def _achat_with_retry(**kwargs: Any) -> Any:
         try:
             return await generation_method(**kwargs)
+
+        except ClientError as e:
+            if e.status == "INVALID_ARGUMENT":
+                msg = f"Invalid argument provided to Gemini: {e}"
+
+                raise ChatGoogleGenerativeAIError(msg) from e
+
+        except FailedPrecondition as exc:
+            if "location is not supported" in exc.message:
+                msg = (
+                    "Your location is not supported by google-generativeai "
+                    "at the moment. Try to use ChatVertexAI from "
+                    "langchain_google_vertexai."
+                )
+                raise ValueError(msg)
+
         except InvalidArgument as e:
-            # Do not retry for these errors.
             msg = f"Invalid argument provided to Gemini: {e}"
             raise ChatGoogleGenerativeAIError(msg) from e
+
         except ResourceExhausted as e:
             # Handle quota-exceeded error with recommended retry delay
             if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
@@ -272,10 +307,8 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             raise
 
     params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if (request := kwargs.get("request"))
-        and hasattr(request, "model")
-        and "gemini" in request.model
+        {k: v for k, v in kwargs.items() if k in allowed_params}
+        if (model := kwargs.get("model")) and "gemini" in model
         else kwargs
     )
     return await _achat_with_retry(**params)
