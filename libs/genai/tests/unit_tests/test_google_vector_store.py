@@ -381,5 +381,3 @@ def test_delete(
     assert delete_chunk_request_2 == genai.DeleteChunkRequest(
         name="corpora/123/documents/456/chunks/1002",
     )
-
-

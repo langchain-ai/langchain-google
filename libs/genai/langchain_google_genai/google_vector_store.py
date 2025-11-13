@@ -456,4 +456,3 @@ class GoogleVectorStore(VectorStore):
         i.e. one in `[0, 1]` where higher means more *similar*.
         """
         return lambda score: score
-
