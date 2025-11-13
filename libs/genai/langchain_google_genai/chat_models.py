@@ -700,10 +700,8 @@ def _parse_chat_history(
 
                 for tool_call_idx, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
-                        {
-                            "name": tool_call["name"],
-                            "args": tool_call["args"],
-                        }
+                        name=tool_call["name"],
+                        args=tool_call["args"],
                     )
                     # Check if there's a signature for this function call
                     # (We use the index to match signature to function call)
@@ -724,10 +722,8 @@ def _parse_chat_history(
                 continue
             if raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
-                    {
-                        "name": raw_function_call["name"],
-                        "args": json.loads(raw_function_call["arguments"]),
-                    }
+                    name=raw_function_call["name"],
+                    args=json.loads(raw_function_call["arguments"]),
                 )
                 parts = [Part(function_call=function_call)]
             elif message.response_metadata.get("output_version") == "v1":
