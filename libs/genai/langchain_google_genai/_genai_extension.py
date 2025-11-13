@@ -7,7 +7,7 @@
 import datetime
 import logging
 import re
-from collections.abc import Iterator, MutableSequence
+from collections.abc import MutableSequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -377,16 +377,6 @@ def build_generative_async_service(
     return v1betaGenerativeServiceAsyncClient(**config)
 
 
-def list_corpora(
-    *,
-    client: genai.RetrieverServiceClient,
-) -> Iterator[Corpus]:
-    for corpus in client.list_corpora(
-        genai.ListCorporaRequest(page_size=_config.page_size)
-    ):
-        yield Corpus.from_corpus(corpus)
-
-
 def get_corpus(
     *,
     corpus_id: str,
@@ -433,19 +423,6 @@ def delete_corpus(
     client.delete_corpus(
         genai.DeleteCorpusRequest(name=str(EntityName(corpus_id=corpus_id)), force=True)
     )
-
-
-def list_documents(
-    *,
-    corpus_id: str,
-    client: genai.RetrieverServiceClient,
-) -> Iterator[Document]:
-    for document in client.list_documents(
-        genai.ListDocumentsRequest(
-            parent=str(EntityName(corpus_id=corpus_id)), page_size=_DEFAULT_PAGE_SIZE
-        )
-    ):
-        yield Document.from_document(document)
 
 
 def get_document(
