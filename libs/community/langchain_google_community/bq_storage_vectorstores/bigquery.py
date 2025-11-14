@@ -27,16 +27,18 @@ USER_AGENT_PREFIX = "FeatureStore"
 
 
 class BigQueryVectorStore(BaseBigQueryVectorStore):
-    """
-    A vector store implementation that utilizes BigQuery and BigQuery Vector Search.
+    """Vector store implementation that utilizes BigQuery and BigQuery Vector Search.
 
     This class provides efficient storage and retrieval of documents with vector
     embeddings within BigQuery. It is particularly indicated for prototyping, due the
     serverless nature of BigQuery, and batch retrieval.
-    It supports similarity search, filtering, and batch operations through
+
+    Supports similarity search, filtering, and batch operations through
     `batch_search` method.
+
     Optionally, this class can leverage a Vertex AI Feature Store for online serving
     through the `to_vertex_fs_vector_store` method.
+
     Note that the `bigquery.datasets.create permission` is required even if the
     dataset already exists. This can be avoided by specifying `temp_dataset_name` as
     the name of an existing dataset.
@@ -74,11 +76,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         filter: Optional[Union[Dict[str, Any], str]] = None,
         **kwargs: Any,
     ) -> List[Document]:
-        """Search documents by their ids or metadata values.
+        """Search documents by their IDs or metadata values.
 
         Args:
-            ids: List of ids of documents to retrieve from the vectorstore.
-            filter: (Optional) A dictionary or a string specifying filter criteria.
+            ids: List of IDs of documents to retrieve from the `VectorStore`.
+            filter: A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
                 corresponding values. The method will generate SQL expressions based
                 on the data types defined in `self.table_schema`. The value is enclosed
@@ -87,7 +89,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of IDs from adding the texts into the `VectorStore`.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
@@ -721,13 +723,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """Return VectorStore initialized from input texts
 
         Args:
-            texts: List of strings to add to the vectorstore.
+            texts: List of strings to add to the `VectorStore`.
             embedding: An embedding model instance for text to vector transformations.
             metadatas: Optional list of metadata records associated with the texts.
                 (ie [{"url": "www.myurl1.com", "title": "title1"},
                 {"url": "www.myurl2.com", "title": "title2"}])
         Returns:
-            List of ids from adding the texts into the vectorstore.
+            List of ids from adding the texts into the `VectorStore`.
         """
         vs_obj = BigQueryVectorStore(embedding=embedding, **kwargs)
         vs_obj.add_texts(texts, metadatas)
@@ -737,7 +739,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         """Creates and returns a VertexFSVectorStore instance based on configuration.
 
         This method merges the base BigQuery vector store configuration with provided
-        keyword arguments, then uses the combined parameters to instantiate a 
+        keyword arguments, then uses the combined parameters to instantiate a
         VertexFSVectorStore.
 
         Args:

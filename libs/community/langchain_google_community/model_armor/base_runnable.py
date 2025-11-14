@@ -31,9 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class ModelArmorParams(BaseModel):
-    """
-    Model Armor parameters.
-    """
+    """Model Armor parameters."""
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -61,7 +59,7 @@ class ModelArmorParams(BaseModel):
 
     client_options: Optional["ClientOptions"] = Field(
         default=None, exclude=True, description="Client options for the API client."
-    )  #: :meta private:
+    )
 
     client_info: Optional[Any] = Field(
         default=None, exclude=True, description="Client info for the API client."
@@ -112,11 +110,12 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
     Setup:
         You must either:
             - Have credentials configured for your environment (gcloud, workload
-              identity , etc...)
+                identity , etc...)
             - Store the path to a service account JSON file as the
-              GOOGLE_APPLICATION_CREDENTIALS environment variable.
+                `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
 
         For more information, see:
+
         - https://cloud.google.com/docs/authentication/application-default-credentials#GAC
         - https://googleapis.dev/python/google-auth/latest/reference/google.auth.html#module-google.auth
 
@@ -124,7 +123,7 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
         client: A Model Armor client instance for making sanitization requests.
     """
 
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
+    client: Any = Field(default=None, exclude=True)
 
     def __init__(
         self,
@@ -189,11 +188,11 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
 
         Args:
             value: Input content that can be:
-                - str: Direct string content
-                - BaseMessage: LangChain message (HumanMessage, AIMessage, etc.)
-                - BasePromptTemplate: LangChain prompt template
-                - List[BaseMessage]: List of LangChain messages
-                - Any other object with __str__, to_string(), or format() methods
+                - `str`: Direct string content
+                - `BaseMessage`: LangChain message (`HumanMessage`, `AIMessage`, etc.)
+                - `BasePromptTemplate`: LangChain prompt template
+                - `list[BaseMessage]`: List of LangChain messages
+                - Any other object with `__str__`, `to_string()`, or `format()` methods
 
         Returns:
             str: Extracted string content for Model Armor API sanitization requests
@@ -258,14 +257,15 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
         Evaluate findings from Model Armor.
 
         Args:
-            content (str): User prompt or model response.
-            findings (SanitizationResult): SanitizationResult object from
-                Model Armor sanitization request.
-            config (Optional[RunnableConfig]): A config to use when invoking
-                the Runnable. Please refer to the RunnableConfig for more details.
+            content: User prompt or model response.
+            findings: `SanitizationResult` object from Model Armor sanitization request.
+            config: Config to use when invoking the `Runnable`.
+
+                Please refer to `RunnableConfig` for more details.
 
         Returns:
-            bool: True if all findings are safe, False if any are unsafe (MATCH_FOUND).
+            bool: `True` if all findings are safe, `False` if any are unsafe
+                (`MATCH_FOUND`).
         """
         is_safe = True
         if not findings:

@@ -11,7 +11,7 @@ from langchain_google_community.calendar.base import CalendarBaseTool
 
 
 class CurrentDatetimeSchema(BaseModel):
-    """Input for GetCurrentDatetime."""
+    """Input schema for `GetCurrentDatetime`."""
 
     calendar_id: Optional[str] = Field(
         default="primary", description="The calendar ID. Defaults to 'primary'."
@@ -22,10 +22,12 @@ class GetCurrentDatetime(CalendarBaseTool):  # type: ignore[override, override]
     """Tool that gets the current datetime according to the calendar timezone."""
 
     name: str = "get_current_datetime"
+
     description: str = (
         "Use this tool to get the current datetime according to the calendar timezone."
         "The output datetime format is 'YYYY-MM-DD HH:MM:SS'"
     )
+
     args_schema: Type[CurrentDatetimeSchema] = CurrentDatetimeSchema
 
     def get_timezone(self, calendar_id: Optional[str]) -> str:

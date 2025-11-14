@@ -9,7 +9,20 @@ from langchain_google_community._utils import get_client_info
 
 
 class GCSFileLoader(BaseLoader):
-    """Load from GCS file."""
+    """Load documents from Google Cloud Storage file.
+
+    Inherits from [`BaseLoader`][langchain_core.document_loaders.BaseLoader].
+
+    Downloads and loads a single file from GCS bucket using configurable loader.
+
+    !!! note "Installation"
+
+        Requires additional dependencies:
+
+        ```bash
+        pip install langchain-google-community[gcs]
+        ```
+    """
 
     def __init__(
         self,
@@ -25,18 +38,26 @@ class GCSFileLoader(BaseLoader):
             bucket: The name of the GCS bucket.
             blob: The name of the GCS blob to load.
             loader_func: A loader function that instantiates a loader based on a
-                file_path argument. If nothing is provided, the
-                UnstructuredFileLoader is used.
+                `file_path` argument. If nothing is provided, the
+                `UnstructuredFileLoader` is used.
 
-        Examples:
-            To use an alternative PDF loader:
-            >> from from langchain_community.document_loaders import PyPDFLoader
-            >> loader = GCSFileLoader(..., loader_func=PyPDFLoader)
+        ??? example "Using Alternative PDF Loader"
 
-            To use UnstructuredFileLoader with additional arguments:
-            >> loader = GCSFileLoader(...,
-            >>      loader_func=lambda x: UnstructuredFileLoader(x, mode="elements"))
+            ```python
+            from langchain_community.document_loaders import PyPDFLoader
 
+            loader = GCSFileLoader(..., loader_func=PyPDFLoader)
+            ```
+
+        ??? example "Using UnstructuredFileLoader with Custom Arguments"
+
+            ```python
+            from langchain_community.document_loaders import UnstructuredFileLoader
+
+            loader = GCSFileLoader(
+                ..., loader_func=lambda x: UnstructuredFileLoader(x, mode="elements")
+            )
+            ```
         """
         self.bucket = bucket
         self.blob = blob
@@ -69,7 +90,7 @@ class GCSFileLoader(BaseLoader):
                 "`pip install langchain-google-community[gcs]`"
             )
 
-        # initialize a client
+        # Initialize a client
         storage_client = storage.Client(
             self.project_name, client_info=get_client_info("google-cloud-storage")
         )

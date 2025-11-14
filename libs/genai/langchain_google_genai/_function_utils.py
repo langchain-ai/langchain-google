@@ -4,17 +4,11 @@ import collections
 import importlib
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Type,
     TypedDict,
-    Union,
     cast,
 )
 
@@ -54,20 +48,18 @@ _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
 
 # Info: This is a FunctionDeclaration(=fc).
-_FunctionDeclarationLike = Union[
-    BaseTool, Type[BaseModel], gapic.FunctionDeclaration, Callable, Dict[str, Any]
-]
-_GoogleSearchRetrievalLike = Union[
-    gapic.GoogleSearchRetrieval,
-    Dict[str, Any],
-]
-_GoogleSearchLike = Union[gapic.Tool.GoogleSearch, Dict[str, Any]]
-_CodeExecutionLike = Union[gapic.CodeExecution, Dict[str, Any]]
+_FunctionDeclarationLike = (
+    BaseTool | type[BaseModel] | gapic.FunctionDeclaration | Callable | dict[str, Any]
+)
+_GoogleSearchRetrievalLike = gapic.GoogleSearchRetrieval | dict[str, Any]
+
+_GoogleSearchLike = gapic.Tool.GoogleSearch | dict[str, Any]
+_CodeExecutionLike = gapic.CodeExecution | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
     function_declarations: Sequence[_FunctionDeclarationLike]
-    google_search_retrieval: Optional[_GoogleSearchRetrievalLike]
+    google_search_retrieval: _GoogleSearchRetrievalLike | None
     google_search: NotRequired[_GoogleSearchLike]
     code_execution: NotRequired[_CodeExecutionLike]
 
@@ -75,12 +67,12 @@ class _ToolDict(TypedDict):
 # Info: This means one tool=Sequence of FunctionDeclaration
 # The dict should be gapic.Tool like. {"function_declarations": [ { "name": ...}.
 # OpenAI like dict is not be accepted. {{'type': 'function', 'function': {'name': ...}
-_ToolType = Union[gapic.Tool, _ToolDict, _FunctionDeclarationLike]
+_ToolType = gapic.Tool | _ToolDict | _FunctionDeclarationLike
 _ToolsType = Sequence[_ToolType]
 
 
-def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
-    converted_schema: Dict[str, Any] = {}
+def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
+    converted_schema: dict[str, Any] = {}
     for key, value in schema.items():
         if key == "definitions":
             continue
@@ -105,7 +97,7 @@ def _format_json_schema_to_gapic(schema: Dict[str, Any]) -> Dict[str, Any]:
     return converted_schema
 
 
-def _dict_to_gapic_schema(schema: Dict[str, Any]) -> Optional[gapic.Schema]:
+def _dict_to_gapic_schema(schema: dict[str, Any]) -> gapic.Schema | None:
     if schema:
         dereferenced_schema = dereference_refs(schema)
         formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
@@ -115,7 +107,7 @@ def _dict_to_gapic_schema(schema: Dict[str, Any]) -> Optional[gapic.Schema]:
 
 
 def _format_dict_to_function_declaration(
-    tool: Union[FunctionDescription, Dict[str, Any]],
+    tool: FunctionDescription | dict[str, Any],
 ) -> gapic.FunctionDeclaration:
     return gapic.FunctionDeclaration(
         name=tool.get("name") or tool.get("title"),
@@ -284,9 +276,9 @@ def _format_base_tool_to_function_declaration(
 
 
 def _convert_pydantic_to_genai_function(
-    pydantic_model: Type[BaseModel],
-    tool_name: Optional[str] = None,
-    tool_description: Optional[str] = None,
+    pydantic_model: type[BaseModel],
+    tool_name: str | None = None,
+    tool_description: str | None = None,
 ) -> gapic.FunctionDeclaration:
     if issubclass(pydantic_model, BaseModel):
         schema = pydantic_model.model_json_schema()
@@ -313,22 +305,22 @@ def _convert_pydantic_to_genai_function(
     )
 
 
-def _get_properties_from_schema_any(schema: Any) -> Dict[str, Any]:
-    if isinstance(schema, Dict):
+def _get_properties_from_schema_any(schema: Any) -> dict[str, Any]:
+    if isinstance(schema, dict):
         return _get_properties_from_schema(schema)
     return {}
 
 
-def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
-    properties: Dict[str, Dict[str, Union[str, int, Dict, List]]] = {}
+def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
+    properties: dict[str, dict[str, str | int | dict | list]] = {}
     for k, v in schema.items():
         if not isinstance(k, str):
             logger.warning(f"Key '{k}' is not supported in schema, type={type(k)}")
             continue
-        if not isinstance(v, Dict):
+        if not isinstance(v, dict):
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
-        properties_item: Dict[str, Union[str, int, Dict, List]] = {}
+        properties_item: dict[str, str | int | dict | list] = {}
 
         # Preserve description and other schema properties before manipulation
         original_description = v.get("description")
@@ -419,18 +411,18 @@ def _get_properties_from_schema(schema: Dict) -> Dict[str, Any]:
     return properties
 
 
-def _get_items_from_schema_any(schema: Any) -> Dict[str, Any]:
+def _get_items_from_schema_any(schema: Any) -> dict[str, Any]:
     if isinstance(schema, (dict, list, str)):
         return _get_items_from_schema(schema)
     return {}
 
 
-def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
-    items: Dict = {}
-    if isinstance(schema, List):
+def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
+    items: dict = {}
+    if isinstance(schema, list):
         for i, v in enumerate(schema):
             items[f"item{i}"] = _get_properties_from_schema_any(v)
-    elif isinstance(schema, Dict):
+    elif isinstance(schema, dict):
         items["type_"] = _get_type_from_schema(schema)
         if items["type_"] == glm.Type.OBJECT and "properties" in schema:
             items["properties"] = _get_properties_from_schema_any(schema["properties"])
@@ -457,11 +449,11 @@ def _get_items_from_schema(schema: Union[Dict, List, str]) -> Dict[str, Any]:
     return items
 
 
-def _get_type_from_schema(schema: Dict[str, Any]) -> int:
+def _get_type_from_schema(schema: dict[str, Any]) -> int:
     return _get_nullable_type_from_schema(schema) or glm.Type.STRING
 
 
-def _get_nullable_type_from_schema(schema: Dict[str, Any]) -> Optional[int]:
+def _get_nullable_type_from_schema(schema: dict[str, Any]) -> int | None:
     if "anyOf" in schema:
         types = [
             _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
@@ -480,7 +472,7 @@ def _get_nullable_type_from_schema(schema: Dict[str, Any]) -> Optional[int]:
     return glm.Type.STRING  # Default to string if no valid types found
 
 
-def _is_nullable_schema(schema: Dict[str, Any]) -> bool:
+def _is_nullable_schema(schema: dict[str, Any]) -> bool:
     if "anyOf" in schema:
         types = [
             _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
@@ -495,12 +487,12 @@ def _is_nullable_schema(schema: Dict[str, Any]) -> bool:
     return False
 
 
-_ToolChoiceType = Union[Literal["auto", "none", "any", True], dict, List[str], str]
+_ToolChoiceType = Literal["auto", "none", "any", True] | dict | list[str] | str
 
 
 class _FunctionCallingConfigDict(TypedDict):
-    mode: Union[gapic.FunctionCallingConfig.Mode, str]
-    allowed_function_names: Optional[List[str]]
+    mode: gapic.FunctionCallingConfig.Mode | str
+    allowed_function_names: list[str] | None
 
 
 class _ToolConfigDict(TypedDict):
@@ -509,9 +501,9 @@ class _ToolConfigDict(TypedDict):
 
 def _tool_choice_to_tool_config(
     tool_choice: _ToolChoiceType,
-    all_names: List[str],
+    all_names: list[str],
 ) -> _ToolConfigDict:
-    allowed_function_names: Optional[List[str]] = None
+    allowed_function_names: list[str] | None = None
     if tool_choice is True or tool_choice == "any":
         mode = "ANY"
         allowed_function_names = all_names
@@ -551,7 +543,7 @@ def _tool_choice_to_tool_config(
     )
 
 
-def is_basemodel_subclass_safe(tool: Type) -> bool:
+def is_basemodel_subclass_safe(tool: type) -> bool:
     if safe_import("langchain_core.utils.pydantic", "is_basemodel_subclass"):
         from langchain_core.utils.pydantic import (
             is_basemodel_subclass,
@@ -571,7 +563,7 @@ def safe_import(module_name: str, attribute_name: str = "") -> bool:
         return False
 
 
-def replace_defs_in_schema(original_schema: dict, defs: Optional[dict] = None) -> dict:
+def replace_defs_in_schema(original_schema: dict, defs: dict | None = None) -> dict:
     """Given an OpenAPI schema with a property '$defs' replaces all occurrences of
     referenced items in the dictionary.
 

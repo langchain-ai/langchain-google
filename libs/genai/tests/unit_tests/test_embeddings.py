@@ -1,6 +1,6 @@
 """Test embeddings model integration."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from google.ai.generativelanguage_v1beta.types import (
@@ -160,3 +160,59 @@ def test_embed_documents_with_numerous_texts() -> None:
         )
         mock_embed.assert_called_with(request)
         assert mock_embed.call_count == test_corpus_size / test_batch_size
+
+
+def test_base_url_support() -> None:
+    """Test that base_url is properly merged into client_options."""
+    base_url = "https://example.com"
+    param_api_key = "[secret]"
+    param_secret_api_key = SecretStr(param_api_key)
+    param_transport = "rest"
+
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
+    ) as mock_client:
+        _ = GoogleGenerativeAIEmbeddings(
+            model=f"models/{MODEL_NAME}",
+            google_api_key=param_secret_api_key,
+            base_url=base_url,
+            transport=param_transport,
+        )
+
+    mock_client.assert_called_once_with(
+        transport=param_transport,
+        client_options=ANY,
+        client_info=ANY,
+    )
+    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
+    assert call_client_options.api_key == param_api_key
+    assert call_client_options.api_endpoint == base_url
+    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
+    assert "langchain-google-genai" in call_client_info.user_agent
+    assert "GoogleGenerativeAIEmbeddings" in call_client_info.user_agent
+
+
+def test_embed_query_default_task_type() -> None:
+    """Test that embed_query uses default RETRIEVAL_QUERY when task_type is None.
+
+    Regression test for issue #1299.
+    """
+    with patch(
+        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient"
+    ) as mock_prediction_service:
+        mock_embed = MagicMock()
+        mock_embed.return_value = EmbedContentResponse(
+            embedding=ContentEmbedding(values=[1.0, 2])
+        )
+        mock_prediction_service.return_value.embed_content = mock_embed
+        llm = GoogleGenerativeAIEmbeddings(
+            model=f"models/{MODEL_NAME}",
+            google_api_key=SecretStr("test-key"),
+        )
+        llm.embed_query("test text")
+        request = EmbedContentRequest(
+            model=f"models/{MODEL_NAME}",
+            content={"parts": [{"text": "test text"}]},
+            task_type="RETRIEVAL_QUERY",
+        )
+        mock_embed.assert_called_once_with(request)

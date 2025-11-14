@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from google.cloud import aiplatform, storage
 from google.cloud.aiplatform import telemetry
@@ -16,8 +16,9 @@ from langchain_google_vertexai._utils import get_client_info, get_user_agent
 
 class VectorSearchSDKManager:
     """Class in charge of building all Google Cloud SDK Objects needed to build
-    VectorStores from project_id, credentials or other specifications. Abstracts
-    away the authentication layer.
+    VectorStores from `project_id`, credentials or other specifications.
+
+    Abstracts away the authentication layer.
     """
 
     def __init__(
@@ -25,17 +26,18 @@ class VectorSearchSDKManager:
         *,
         project_id: str,
         region: str,
-        credentials: Union[Credentials, None] = None,
-        credentials_path: Union[str, None] = None,
+        credentials: Credentials | None = None,
+        credentials_path: str | None = None,
     ) -> None:
         """Constructor.
+
         If `credentials` is provided, those credentials are used. If not provided
         `credentials_path` is used to retrieve credentials from a file. If also not
         provided, falls back to default credentials.
 
         Args:
             project_id: Id of the project.
-            region: Region of the project. E.j. 'us-central1'
+            region: Region of the project. e.g. `'us-central1'`
             credentials: Google cloud Credentials object.
             credentials_path: Google Cloud Credentials json file path.
         """
@@ -43,7 +45,7 @@ class VectorSearchSDKManager:
         self._region = region
 
         if credentials is not None:
-            self._credentials: Optional[Credentials] = credentials
+            self._credentials: Credentials | None = credentials
         elif credentials_path is not None:
             self._credentials = Credentials.from_service_account_file(credentials_path)
         else:
@@ -52,7 +54,7 @@ class VectorSearchSDKManager:
         self.initialize_aiplatform()
 
     def initialize_aiplatform(self) -> None:
-        """Initializes aiplatform."""
+        """Initializes `aiplatform`."""
         aiplatform.init(
             project=self._project_id,
             location=self._region,
@@ -84,13 +86,13 @@ class VectorSearchSDKManager:
         return client.get_bucket(bucket_name)
 
     def get_index(self, index_id: str) -> MatchingEngineIndex:
-        """Retrieves a MatchingEngineIndex (VectorSearchIndex) by id.
+        """Retrieves a `MatchingEngineIndex` (`VectorSearchIndex`) by ID.
 
         Args:
-            index_id: Id of the index to be retrieved.
+            index_id: ID of the index to be retrieved.
 
         Returns:
-            MatchingEngineIndex instance.
+            `MatchingEngineIndex` instance.
         """
         _, user_agent = get_user_agent("vertex-ai-matching-engine")
         with telemetry.tool_context_manager(user_agent):
@@ -102,14 +104,14 @@ class VectorSearchSDKManager:
             )
 
     def get_endpoint(self, endpoint_id: str) -> MatchingEngineIndexEndpoint:
-        """Retrieves a MatchingEngineIndexEndpoint (VectorSearchIndexEndpoint) by id.
+        """Retrieves a `MatchingEngineIndexEndpoint` (`VectorSearchIndexEndpoint`) by ID.
 
         Args:
-            endpoint_id: Id of the endpoint to be retrieved.
+            endpoint_id: ID of the endpoint to be retrieved.
 
         Returns:
-            MatchingEngineIndexEndpoint instance.
-        """
+            `MatchingEngineIndexEndpoint` instance.
+        """  # noqa: E501
         _, user_agent = get_user_agent("vertex-ai-matching-engine")
         with telemetry.tool_context_manager(user_agent):
             return MatchingEngineIndexEndpoint(
@@ -120,13 +122,13 @@ class VectorSearchSDKManager:
             )
 
     def get_datastore_client(self, **kwargs: Any) -> "datastore.Client":
-        """Gets a datastore Client.
+        """Gets a `datastore` Client.
 
         Args:
-            **kwargs: Keyword arguments to pass to datastore.Client constructor.
+            **kwargs: Keyword arguments to pass to `datastore.Client` constructor.
 
         Returns:
-            datastore Client.
+            `datastore` Client.
         """
         from google.cloud import datastore  # type: ignore[attr-defined, unused-ignore]
 

@@ -12,24 +12,28 @@ from langchain_google_community.gmail.base import GmailBaseTool
 
 
 class SendMessageSchema(BaseModel):
-    """Input for SendMessageTool."""
+    """Input schema for `SendMessageTool`."""
 
     message: str = Field(
         ...,
         description="The message to send.",
     )
+
     to: Union[str, List[str]] = Field(
         ...,
         description="The list of recipients.",
     )
+
     subject: str = Field(
         ...,
         description="The subject of the message.",
     )
+
     cc: Optional[Union[str, List[str]]] = Field(
         default=None,
         description="The list of CC recipients.",
     )
+
     bcc: Optional[Union[str, List[str]]] = Field(
         default=None,
         description="The list of BCC recipients.",
@@ -40,9 +44,11 @@ class GmailSendMessage(GmailBaseTool):
     """Tool that sends a message to Gmail."""
 
     name: str = "send_gmail_message"
+
     description: str = (
         "Use this tool to send email messages. The input is the message, recipients"
     )
+
     args_schema: Type[SendMessageSchema] = SendMessageSchema
 
     def _prepare_message(

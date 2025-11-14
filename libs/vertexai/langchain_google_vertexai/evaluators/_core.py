@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Union
+from typing import Any
 from warnings import warn
 
 from langchain_core.runnables.config import run_in_executor
@@ -42,8 +42,8 @@ class _EvalArgsMixin:
 
     def _check_evaluation_args(
         self,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
     ) -> None:
         """Check if the evaluation arguments are valid.
 
@@ -86,15 +86,15 @@ class StringEvaluator(_EvalArgsMixin, ABC):
     def _evaluate_strings(
         self,
         *,
-        prediction: Union[str, Any],
-        reference: Optional[Union[str, Any]] = None,
-        input: Optional[Union[str, Any]] = None,
+        prediction: str | Any,
+        reference: str | Any | None = None,
+        input: str | Any | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate Chain or LLM output, based on optional input and label.
 
         Args:
-            prediction (str): The LLM or chain prediction to evaluate.
+            prediction: The LLM or chain prediction to evaluate.
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
@@ -102,23 +102,23 @@ class StringEvaluator(_EvalArgsMixin, ABC):
         Returns:
             dict: The evaluation results containing the score or value.
                 It is recommended that the dictionary contain the following keys:
-                     - score: the score of the evaluation, if applicable.
-                     - value: the string value of the evaluation, if applicable.
-                     - reasoning: the reasoning for the evaluation, if applicable.
+                    - score: the score of the evaluation, if applicable.
+                    - value: the string value of the evaluation, if applicable.
+                    - reasoning: the reasoning for the evaluation, if applicable.
         """  # noqa: E501
 
     async def _aevaluate_strings(
         self,
         *,
-        prediction: Union[str, Any],
-        reference: Optional[Union[str, Any]] = None,
-        input: Optional[Union[str, Any]] = None,
+        prediction: str | Any,
+        reference: str | Any | None = None,
+        input: str | Any | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate Chain or LLM output, based on optional input and label.
 
         Args:
-            prediction (str): The LLM or chain prediction to evaluate.
+            prediction: The LLM or chain prediction to evaluate.
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
@@ -126,9 +126,9 @@ class StringEvaluator(_EvalArgsMixin, ABC):
         Returns:
             dict: The evaluation results containing the score or value.
                 It is recommended that the dictionary contain the following keys:
-                     - score: the score of the evaluation, if applicable.
-                     - value: the string value of the evaluation, if applicable.
-                     - reasoning: the reasoning for the evaluation, if applicable.
+                    - score: the score of the evaluation, if applicable.
+                    - value: the string value of the evaluation, if applicable.
+                    - reasoning: the reasoning for the evaluation, if applicable.
         """  # noqa: E501
         return await run_in_executor(
             None,
@@ -143,14 +143,14 @@ class StringEvaluator(_EvalArgsMixin, ABC):
         self,
         *,
         prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate Chain or LLM output, based on optional input and label.
 
         Args:
-            prediction (str): The LLM or chain prediction to evaluate.
+            prediction: The LLM or chain prediction to evaluate.
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
@@ -167,14 +167,14 @@ class StringEvaluator(_EvalArgsMixin, ABC):
         self,
         *,
         prediction: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate Chain or LLM output, based on optional input and label.
 
         Args:
-            prediction (str): The LLM or chain prediction to evaluate.
+            prediction: The LLM or chain prediction to evaluate.
             reference (Optional[str], optional): The reference label to evaluate against.
             input (Optional[str], optional): The input to consider during evaluation.
             **kwargs: Additional keyword arguments, including callbacks, tags, etc.
@@ -197,15 +197,15 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate the output string pairs.
 
         Args:
-            prediction (str): The output string from the first model.
-            prediction_b (str): The output string from the second model.
+            prediction: The output string from the first model.
+            prediction_b: The output string from the second model.
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.
@@ -219,15 +219,15 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate the output string pairs.
 
         Args:
-            prediction (str): The output string from the first model.
-            prediction_b (str): The output string from the second model.
+            prediction: The output string from the first model.
+            prediction_b: The output string from the second model.
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.
@@ -250,15 +250,15 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Evaluate the output string pairs.
 
         Args:
-            prediction (str): The output string from the first model.
-            prediction_b (str): The output string from the second model.
+            prediction: The output string from the first model.
+            prediction_b: The output string from the second model.
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.
@@ -280,15 +280,15 @@ class PairwiseStringEvaluator(_EvalArgsMixin, ABC):
         *,
         prediction: str,
         prediction_b: str,
-        reference: Optional[str] = None,
-        input: Optional[str] = None,
+        reference: str | None = None,
+        input: str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Asynchronously evaluate the output string pairs.
 
         Args:
-            prediction (str): The output string from the first model.
-            prediction_b (str): The output string from the second model.
+            prediction: The output string from the first model.
+            prediction_b: The output string from the second model.
             reference (Optional[str], optional): The expected output / reference string.
             input (Optional[str], optional): The input string.
             **kwargs: Additional keyword arguments, such as callbacks and optional reference strings.

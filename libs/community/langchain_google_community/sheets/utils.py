@@ -69,8 +69,10 @@ def build_sheets_service_with_api_key(api_key: str) -> Resource:
         Resource: Google Sheets API service with read-only access to public
             spreadsheets.
 
-    Note:
+    !!! note
+
         API key authentication only works with public spreadsheets.
+
         For private spreadsheets, use OAuth2 credentials instead.
     """
     builder = import_googleapiclient_resource_builder()
@@ -84,7 +86,7 @@ def validate_spreadsheet_id(spreadsheet_id: str) -> str:
         spreadsheet_id: The spreadsheet ID to validate.
 
     Returns:
-        str: The validated spreadsheet ID.
+        The validated spreadsheet ID.
 
     Raises:
         ValueError: If the spreadsheet ID is invalid.
@@ -156,18 +158,18 @@ def validate_a1_range(range_name: str) -> bool:
     """Validate A1 notation range format.
 
     Supports:
-    - Single cells: "A1", "Z99"
-    - Areas: "A1:B2"
-    - Whole columns: "A:A", "B:D"
-    - Whole rows: "1:1", "5:10"
-    - Sheet-qualified: "Sheet1!A1", "'My Sheet'!A1:B2"
-    - Named ranges: "MyData", "Sales_2024"
+    - Single cells: `'A1'`, `'Z99'`
+    - Areas: `'A1:B2'`
+    - Whole columns: `'A:A'`, `'B:D'`
+    - Whole rows: `'1:1'`, `'5:10'`
+    - Sheet-qualified: `'Sheet1!A1'`, `"'My Sheet'!A1:B2"`
+    - Named ranges: `'MyData'`, `'Sales_2024'`
 
     Args:
         range_name: Range string to validate.
 
     Returns:
-        True if valid format, False otherwise.
+        `True` if valid format, `False` otherwise.
 
     Examples:
         >>> validate_a1_range("A1")
@@ -201,18 +203,18 @@ def validate_range_name(range_name: str) -> str:
     """Validate and normalize a range name.
 
     Permissive A1 validator. Supports:
-    - Single cells: "A1", "Z99"
-    - Areas: "A1:B2", "AA1:BB10"
-    - Whole columns: "A:A", "B:D"
-    - Whole rows: "1:1", "5:10"
-    - Sheet-qualified: "Sheet1!A1", "'My Sheet'!A1:B2"
-    - Named ranges: "MyData", "Sales_2024" (let API validate)
+    - Single cells: `'A1'`, `'Z99'`
+    - Areas: `'A1:B2'`
+    - Whole columns: `'A:A'`, `'B:D'`
+    - Whole rows: `'1:1'`, `'5:10'`
+    - Sheet-qualified: `'Sheet1!A1'`, `"'My Sheet'!A1:B2"`
+    - Named ranges: `'MyData'`, `'Sales_2024'`
 
     Args:
-        range_name: The range name to validate (e.g., "A1:Z100", "Sheet1!A1:B2").
+        range_name: The range name to validate (e.g., `'A1:Z100'`, `'Sheet1!A1:B2'`).
 
     Returns:
-        str: The validated range name.
+        The validated range name.
 
     Raises:
         ValueError: If the range name is invalid.

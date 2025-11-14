@@ -3,7 +3,7 @@
 import asyncio
 import json
 from collections.abc import Generator, Sequence
-from typing import Literal, Optional, Union, cast
+from typing import Literal, cast
 
 import pytest
 from langchain_core.messages import (
@@ -27,7 +27,7 @@ from langchain_google_genai import (
     Modality,
 )
 
-_MODEL = "gemini-flash-lite-latest"
+_MODEL = "models/gemini-2.5-flash"
 _VISION_MODEL = "models/gemini-2.0-flash-001"
 _IMAGE_OUTPUT_MODEL = "models/gemini-2.0-flash-exp-image-generation"
 _AUDIO_OUTPUT_MODEL = "models/gemini-2.5-flash-preview-tts"
@@ -108,12 +108,12 @@ async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
         "This is a test. Say 'foo'",
         "This is a test, say 'bar'",
     ]
-    config: Union[RunnableConfig, None] = {"tags": ["foo"]} if with_tags else None
+    config: RunnableConfig | None = {"tags": ["foo"]} if with_tags else None
 
     if is_async:
-        result = await llm.abatch(cast(list, messages), config=config)
+        result = await llm.abatch(cast("list", messages), config=config)
     else:
-        result = llm.batch(cast(list, messages), config=config)
+        result = llm.batch(cast("list", messages), config=config)
 
     for token in result:
         assert isinstance(token.content, str)
@@ -222,30 +222,22 @@ def test_chat_google_genai_invoke_with_audio() -> None:
     # TODO: no model currently supports audio input
 
 
-def test_chat_google_genai_invoke_thinking_default() -> None:
-    """Test invoke thinking model with default thinking config."""
-    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL)
+@pytest.mark.parametrize(
+    ("thinking_budget", "test_description"),
+    [
+        (None, "default thinking config"),
+        (100, "explicit thinking budget"),
+    ],
+)
+def test_chat_google_genai_invoke_thinking(
+    thinking_budget: int | None, test_description: str
+) -> None:
+    """Test invoke thinking model with different thinking budget configurations."""
+    llm_kwargs: dict[str, str | int] = {"model": _THINKING_MODEL}
+    if thinking_budget is not None:
+        llm_kwargs["thinking_budget"] = thinking_budget
 
-    result = llm.invoke(
-        "How many O's are in Google? Please tell me how you double checked the result",
-    )
-
-    assert isinstance(result, AIMessage)
-    assert isinstance(result.content, str)
-
-    _check_usage_metadata(result)
-
-    assert result.usage_metadata is not None
-    if (
-        "output_token_details" in result.usage_metadata
-        and "reasoning" in result.usage_metadata["output_token_details"]
-    ):
-        assert result.usage_metadata["output_token_details"]["reasoning"] > 0
-
-
-def test_chat_google_genai_invoke_thinking() -> None:
-    """Test invoke thinking model with `thinking_budget`."""
-    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=100)
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
 
     result = llm.invoke(
         "How many O's are in Google? Please tell me how you double checked the result",
@@ -265,28 +257,33 @@ def test_chat_google_genai_invoke_thinking() -> None:
 
 
 def _check_thinking_output(content: list, output_version: str) -> None:
+    """Check thinking output format, handling both structured and simple responses."""
     if output_version == "v0":
         thinking_key = "thinking"
-        assert isinstance(content[-1], str)
+        if content:
+            assert isinstance(content[-1], str)
 
-    else:
-        # v1
+    else:  # v1
         thinking_key = "reasoning"
-        assert isinstance(content[-1], dict)
-        assert content[-1].get("type") == "text"
-        assert isinstance(content[-1].get("text"), str)
+        if content:
+            assert isinstance(content[-1], dict)
+            assert content[-1].get("type") == "text"
+            assert isinstance(content[-1].get("text"), str)
 
-    assert isinstance(content, list)
+    assert isinstance(content, list), f"Expected list content, got {type(content)}"
     thinking_blocks = [
         item
         for item in content
         if isinstance(item, dict) and item.get("type") == thinking_key
     ]
-    assert thinking_blocks
+    assert thinking_blocks, f"No {thinking_key} blocks found in content: {content}"
     for block in thinking_blocks:
-        assert isinstance(block[thinking_key], str)
+        assert isinstance(block[thinking_key], str), (
+            f"Expected string {thinking_key}, got {type(block[thinking_key])}"
+        )
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts(
     output_version: str,
@@ -315,7 +312,14 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
     model_provider = response_metadata.get("model_provider", "google_genai")
     assert model_provider == "google_genai"
 
-    _check_thinking_output(cast(list, full.content), output_version)
+    # With include_thoughts=True, content should always be structured list format
+    assert isinstance(full.content, list), (
+        f"Expected list content with thinking blocks when include_thoughts=True, "
+        f"got {type(full.content)}: {full.content!r}. This suggests thinking "
+        f"functionality failed to activate properly."
+    )
+    _check_thinking_output(full.content, output_version)
+
     _check_usage_metadata(full)
     assert full.usage_metadata is not None
     if (
@@ -328,7 +332,12 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
     next_message = {"role": "user", "content": "Thanks!"}
     result = llm.invoke([input_message, full, next_message])
     assert isinstance(result, AIMessage)
-    _check_thinking_output(cast(list, result.content), output_version)
+    # Follow-up response should also maintain structured format
+    assert isinstance(result.content, list), (
+        f"Expected list content with thinking blocks in follow-up response, "
+        f"got {type(result.content)}: {result.content!r}"
+    )
+    _check_thinking_output(result.content, output_version)
 
 
 @pytest.mark.flaky(retries=5, delay=1)
@@ -607,21 +616,19 @@ def test_chat_google_genai_single_call_with_history() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model_name", "convert_system_message_to_human"),
-    [(_MODEL, True), ("models/gemini-2.5-pro", False)],
+    "model_name",
+    [_MODEL, "models/gemini-2.5-pro"],
 )
 def test_chat_google_genai_system_message(
-    model_name: str, convert_system_message_to_human: bool
+    model_name: str,
 ) -> None:
     """Test system message handling in ChatGoogleGenerativeAI.
 
-    Parameterized to test different models and system message conversion settings.
-
-    Useful since I think some models (e.g. Gemini Pro) do not like system messages?
+    Tests that system messages are properly converted to system instructions
+    for different models.
     """
     model = ChatGoogleGenerativeAI(
         model=model_name,
-        convert_system_message_to_human=convert_system_message_to_human,
     )
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
@@ -798,6 +805,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     assert content_blocks[0].get("type") == "tool_call"
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize(
     ("model_name", "method"),
     [
@@ -809,7 +817,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
 )
 def test_chat_google_genai_with_structured_output(
     model_name: str,
-    method: Optional[Literal["function_calling", "json_mode", "json_schema"]],
+    method: Literal["function_calling", "json_mode", "json_schema"] | None,
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -823,8 +831,12 @@ def test_chat_google_genai_with_structured_output(
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
     response = model.invoke([message])
-    assert isinstance(response, MyModel)
-    assert response == MyModel(name="Erick", age=27)
+    assert response is not None, f"Structured output returned None for method={method}."
+    assert isinstance(response, MyModel), (
+        f"Expected MyModel instance, got {type(response)}: {response}"
+    )
+    expected = MyModel(name="Erick", age=27)
+    assert response == expected, f"Expected {expected}, got {response}"
 
     model = llm.with_structured_output(
         {
@@ -834,8 +846,9 @@ def test_chat_google_genai_with_structured_output(
         }
     )
     response = model.invoke([message])
-    expected = {"name": "Erick", "age": 27}
-    assert response == expected
+    assert response is not None, "Structured output with schema dict returned None"
+    expected = {"name": "Erick", "age": 27}  # type: ignore[assignment]
+    assert response == expected, f"Expected {expected}, got {response}"
 
     # This won't work with json_schema/json_mode as it expects an OpenAPI dict
     if method is None:
@@ -848,10 +861,14 @@ def test_chat_google_genai_with_structured_output(
             method=method,
         )
         response = model.invoke([message])
-        assert response == {
-            "name": "Erick",
+        assert response is not None, (
+            f"Structured output with method={method} returned None"
+        )
+        expected = {
+            "name": "Erick",  # type: ignore[assignment]
             "age": 27,
         }
+        assert response == expected, f"Expected {expected}, got {response}"
 
     model = llm.with_structured_output(
         {
@@ -867,10 +884,14 @@ def test_chat_google_genai_with_structured_output(
         method=method,
     )
     response = model.invoke([message])
-    assert response == {
-        "name": "Erick",
+    assert response is not None, (
+        f"Structured output with JSON schema and method={method} returned None"
+    )
+    expected = {
+        "name": "Erick",  # type: ignore[assignment]
         "age": 27,
     }
+    assert response == expected, f"Expected {expected}, got {response}"
 
 
 def test_chat_google_genai_with_structured_output_nested_model() -> None:
@@ -965,7 +986,7 @@ def test_search_builtin(output_version: str) -> None:
         "content": "What is today's news?",
     }
 
-    full: Optional[BaseMessageChunk] = None
+    full: BaseMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
@@ -993,7 +1014,7 @@ def test_search_builtin_with_citations(use_streaming: bool) -> None:
     }
 
     if use_streaming:
-        full: Optional[BaseMessageChunk] = None
+        full: BaseMessageChunk | None = None
         for chunk in llm.stream([input_message]):
             assert isinstance(chunk, AIMessageChunk)
             full = chunk if full is None else full + chunk
@@ -1129,7 +1150,7 @@ def test_code_execution_builtin(output_version: str) -> None:
         "content": "What is 3^3?",
     }
 
-    full: Optional[BaseMessageChunk] = None
+    full: BaseMessageChunk | None = None
     for chunk in llm.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk

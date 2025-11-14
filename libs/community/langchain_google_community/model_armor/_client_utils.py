@@ -20,13 +20,11 @@ def _get_model_armor_client(
     Initialize the Model Armor client.
 
     Args:
-        location (str): The location of the Model Armor client.
-        credentials (Optional[credentials.Credentials]): The credentials to use when
-            making API calls.
-        transport (Optional[str]): The desired API transport method, can be either
-            grpc or rest.
-        client_options (Optional[ClientOptions]): The client options for the API client.
-        client_info (Optional[Any]): The client info for the API client.
+        location: The location of the Model Armor client.
+        credentials: Credentials to use when making API calls.
+        transport: Desired API transport method, can be either `'grpc'` or `'rest'`.
+        client_options: Client options for the API client.
+        client_info: Client info for the API client.
 
     Returns:
         ModelArmorClient: The Model Armor client.

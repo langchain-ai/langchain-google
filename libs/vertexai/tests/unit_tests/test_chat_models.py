@@ -4,8 +4,8 @@ import base64
 import json
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from google.cloud.aiplatform_v1beta1.types import (
@@ -183,7 +183,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
 
 
 def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
-    """Test that custom base URL and transport are set correctly."""
+    """Test that `base_url` alias is preserved and used in API calls."""
     config = {
         "model": "gemini-2.5-pro",
         "base_url": "https://example.com",
@@ -192,6 +192,9 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
     llm = ChatVertexAI(
         **{k: v for k, v in config.items() if v is not None}, project="test-proj"
     )
+
+    assert llm.api_endpoint == "https://example.com"
+
     with patch(
         "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
     ) as mock_prediction_service:
@@ -204,6 +207,137 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
         transport = mock_prediction_service.call_args.kwargs["transport"]
         assert client_options.api_endpoint == "https://example.com"
         assert transport == "rest"
+
+
+def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
+    """Test that `api_endpoint` field is preserved and used in API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://direct-endpoint.com",
+        "api_transport": "rest",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://direct-endpoint.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        llm._generate_gemini(messages=[])
+        mock_prediction_service.assert_called_once()
+        client_options = mock_prediction_service.call_args.kwargs["client_options"]
+        assert client_options.api_endpoint == "https://direct-endpoint.com"
+
+
+async def test_async_base_url_support(clear_prediction_client_cache: Any) -> None:
+    """Test that `base_url` is properly used in async API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "base_url": "https://async-example.com",
+        "api_transport": "grpc_asyncio",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://async-example.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://async-example.com"
+        assert transport == "grpc_asyncio"
+
+
+async def test_async_api_endpoint_support(clear_prediction_client_cache: Any) -> None:
+    """Test that `api_endpoint` is properly used in async API calls."""
+    config = {
+        "model": "gemini-2.5-pro",
+        "api_endpoint": "https://async-direct-endpoint.com",
+        "api_transport": "grpc_asyncio",
+    }
+    llm = ChatVertexAI(
+        **{k: v for k, v in config.items() if v is not None}, project="test-proj"
+    )
+
+    assert llm.api_endpoint == "https://async-direct-endpoint.com"
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://async-direct-endpoint.com"
+        assert transport == "grpc_asyncio"
+
+
+async def test_async_api_endpoint_alias_behavior(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """Test that `api_endpoint` and `base_url` are aliases in async calls."""
+    # Test 1: Only api_endpoint specified
+    llm1 = ChatVertexAI(
+        model="gemini-2.5-pro",
+        project="test-proj",
+        api_endpoint="https://api-endpoint-only.com",
+        api_transport="grpc_asyncio",
+    )
+    assert llm1.api_endpoint == "https://api-endpoint-only.com"
+
+    # Test 2: Only base_url specified (should be aliased to api_endpoint)
+    llm2 = ChatVertexAI(
+        model="gemini-2.5-pro",
+        project="test-proj",
+        base_url="https://base-url-only.com",
+        api_transport="grpc_asyncio",
+    )
+    assert llm2.api_endpoint == "https://base-url-only.com"
+
+    # Test async call with base_url
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceAsyncClient"
+    ) as mock_async_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate_content = AsyncMock(return_value=response)
+        mock_async_prediction_service.return_value.generate_content = (
+            mock_generate_content
+        )
+
+        await llm2._agenerate_gemini(messages=[])
+        mock_async_prediction_service.assert_called_once()
+        client_options = mock_async_prediction_service.call_args.kwargs[
+            "client_options"
+        ]
+        transport = mock_async_prediction_service.call_args.kwargs["transport"]
+        assert client_options.api_endpoint == "https://base-url-only.com"
+        assert transport == "grpc_asyncio"
 
 
 def test_init_client_with_custom_model_kwargs() -> None:
@@ -794,7 +928,7 @@ def test_parse_history_gemini_multi(
         history=source_history, imageBytesLoader=image_bytes_loader
     )
 
-    for result, expected in zip(result_history, expected_history):
+    for result, expected in zip(result_history, expected_history, strict=False):
         assert result == expected
     assert sm == expected_sys_message
 
@@ -1391,8 +1525,8 @@ def test_anthropic_format_output() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:
@@ -1455,8 +1589,8 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     class Usage:
         input_tokens: int
         output_tokens: int
-        cache_creation_input_tokens: Optional[int]
-        cache_read_input_tokens: Optional[int]
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
 
     @dataclass
     class Message:
@@ -1619,3 +1753,69 @@ def test_v1_function_parts() -> None:
     ]
 
     assert llm._prepare_request_gemini(messages)
+
+
+def test_thinking_budget_in_params() -> None:
+    """Test that `thinking_budget` and `include_thoughts` are configured correctly."""
+    # Init params
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        thinking_budget=1000,
+        include_thoughts=True,
+    )
+
+    params = llm._prepare_params()
+    # thinking_budget and include_thoughts should NOT be in top-level params
+    # (to avoid conflicts with GenerationConfig)
+    assert "thinking_budget" not in params
+    assert "include_thoughts" not in params
+
+    # But thinking_config should be set for the API
+    assert "thinking_config" in params
+    assert params["thinking_config"]["thinking_budget"] == 1000
+    assert params["thinking_config"]["include_thoughts"] is True
+
+    # Invocation params
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    params = llm._prepare_params(thinking_budget=500, include_thoughts=False)
+    assert "thinking_budget" not in params
+    assert "include_thoughts" not in params
+
+    # Also check that thinking_config is set for the API
+    assert "thinking_config" in params
+    assert params["thinking_config"]["thinking_budget"] == 500
+    assert params["thinking_config"]["include_thoughts"] is False
+
+
+def test_thinking_budget_in_invocation_params() -> None:
+    """Test that thinking parameters are available for LangSmith tracing."""
+    # Init params
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        thinking_budget=1000,
+        include_thoughts=True,
+    )
+
+    invocation_params = llm._get_invocation_params()
+
+    # Verify thinking parameters are included for tracing
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 1000
+    assert invocation_params["include_thoughts"] is True
+
+    # Invocation params
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    invocation_params = llm._get_invocation_params(
+        thinking_budget=500, include_thoughts=False
+    )
+
+    # Verify thinking parameters are included for tracing
+    assert "thinking_budget" in invocation_params
+    assert "include_thoughts" in invocation_params
+    assert invocation_params["thinking_budget"] == 500
+    assert invocation_params["include_thoughts"] is False
