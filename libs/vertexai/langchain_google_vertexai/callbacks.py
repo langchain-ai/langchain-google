@@ -1,3 +1,5 @@
+"""DEPRECATED"""
+
 import threading
 from typing import Any
 

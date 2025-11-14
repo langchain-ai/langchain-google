@@ -1,3 +1,5 @@
+"""DEPRECATED"""
+
 from collections.abc import Sequence
 
 import google.cloud.aiplatform_v1beta1.types as gapic
