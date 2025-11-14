@@ -17,12 +17,9 @@ and third-party models available on Vertex Model Garden.
     `model_garden_maas.VertexModelGardenMistral`.
 4. Third-party foundational models deployed on Vertex AI endpoints from Vertex Model
     Garden or Huggingface - `VertexAIModelGarden`.
-5. Gemma deployed on Vertex AI endpoints or locally - `GemmaChatLocalHF`,
-    `GemmaChatLocalKaggle`, `GemmaChatVertexAIModelGarden`, `GemmaLocalHF`,
-    `GemmaLocalKaggle`, `GemmaVertexAIModelGarden`.
-6. Vector Search on Vertex AI - `VectorSearchVectorStore`,
+5. Vector Search on Vertex AI - `VectorSearchVectorStore`,
     `VectorSearchVectorStoreDatastore`, `VectorSearchVectorStoreGCS`.
-7. Vertex AI evaluators for generative AI - `VertexPairWiseStringEvaluator`,
+6. Vertex AI evaluators for generative AI - `VertexPairWiseStringEvaluator`,
     `VertexStringEvaluator`.
 
 You need to enable required Google Cloud APIs (depending on the integration you're

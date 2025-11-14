@@ -341,6 +341,10 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
 
     async_client: Any = Field(default=None, exclude=True)
 
+    # NOTE: we inherit the .prediction_client property from _VertexAIBase which may
+    # cause issues since Model Garden uses aiplatform.gapic.PredictionServiceClient
+    # instead of the v1/v1beta1 clients
+
     endpoint_id: str
     """A name of an endpoint where the model has been deployed."""
 
