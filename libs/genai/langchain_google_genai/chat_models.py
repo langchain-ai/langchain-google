@@ -2053,7 +2053,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "max_output_tokens": self.max_output_tokens,
                 "top_k": self.top_k,
                 "top_p": self.top_p,
-                "logprobs": getattr(self, "logprobs", None),
                 "response_modalities": self.response_modalities,
                 "thinking_config": (
                     (
@@ -2075,7 +2074,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             }.items()
             if v is not None
         }
-        if getattr(self, "logprobs", None) is not None:
+        logprobs = getattr(self, "logprobs", None)
+        if logprobs:
+            gen_config["logprobs"] = logprobs
             gen_config["response_logprobs"] = True
         if generation_config:
             gen_config = {**gen_config, **generation_config}
