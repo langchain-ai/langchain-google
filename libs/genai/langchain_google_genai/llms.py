@@ -78,7 +78,6 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             max_tokens=self.max_output_tokens,
             timeout=self.timeout,
             model=self.model,
-            client_options=self.client_options,
             base_url=self.base_url,
             transport=self.transport,
             additional_headers=self.additional_headers,

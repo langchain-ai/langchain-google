@@ -1,6 +1,6 @@
 import os
 from importlib import metadata
-from typing import Any, TypedDict
+from typing import Any
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
@@ -11,6 +11,7 @@ from langchain_google_genai._enums import (
     HarmCategory,
     MediaResolution,
     Modality,
+    SafetySetting,
 )
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
@@ -39,18 +40,69 @@ class _BaseGoogleGenerativeAI(BaseModel):
             ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
         ),
     )
-    """Google AI API key.
+    """Google AI API key. Used for Gemini API.
 
     If not specified, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY` with
     precedence given to `GOOGLE_API_KEY`.
+
+    !!! warning "Vertex AI"
+
+        To use `langchain-google-genai` with Vertex AI, you must provide a `credentials`
+        object instead of an API key.
     """
 
     credentials: Any = None
-    """The default custom credentials to use when making API calls.
+    """The default custom credentials to use when making API calls. Used for Vertex AI.
 
     If not provided, credentials will be ascertained from the `GOOGLE_API_KEY`
     or `GEMINI_API_KEY` env vars with precedence given to `GOOGLE_API_KEY`.
     """
+
+    base_url: str | dict | None = Field(default=None, alias="client_options")
+    """Base URL to use for the API client.
+
+    If not provided, will default to the public API at
+    `https://generativelanguage.googleapis.com`.
+
+
+    - **REST transport** (`transport="rest"`): Accepts full URLs with paths
+
+        - `https://api.example.com/v1/path`
+        - `https://webhook.site/unique-path`
+
+    - **gRPC transports** (`transport="grpc"` or `transport="grpc_asyncio"`): Only
+        accepts `hostname:port` format
+
+        - `api.example.com:443`
+        - `custom.googleapis.com:443`
+        - `https://api.example.com` (auto-formatted to `api.example.com:443`)
+        - NOT `https://webhook.site/path` (paths are not supported in gRPC)
+        - NOT `api.example.com/path` (paths are not supported in gRPC)
+
+    !!! note
+
+        Typed to accept `dict` to support backwards compatiblity for the (now removed)
+        `client_options` param.
+
+        If a `dict` is passed in, it will only extract the `'api_endpoint'` key.
+    """
+
+    transport: str | None = Field(
+        default=None,
+        alias="api_transport",
+    )
+    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`.
+
+    The Google client library defaults to `'grpc'` for sync clients.
+
+    For async clients, `'rest'` is converted to `'grpc_asyncio'` unless
+    a custom endpoint is specified.
+    """
+
+    additional_headers: dict[str, str] | None = Field(
+        default=None,
+    )
+    """Key-value dictionary representing additional headers for the model call"""
 
     temperature: float = 0.7
     """Run inference with this temperature.
@@ -95,63 +147,6 @@ class _BaseGoogleGenerativeAI(BaseModel):
     timeout: float | None = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
 
-    client_options: dict | None = Field(
-        default=None,
-    )
-    """A dictionary of client options to pass to the Google API client.
-
-    Example: `api_endpoint`
-
-    !!! warning
-
-        If both `client_options['api_endpoint']` and `base_url` are specified,
-        the `api_endpoint` in `client_options` takes precedence.
-    """
-
-    base_url: str | None = Field(
-        default=None,
-    )
-    """Base URL to use for the API client.
-
-    This is a convenience alias for `client_options['api_endpoint']`.
-
-    - **REST transport** (`transport="rest"`): Accepts full URLs with paths
-
-        - `https://api.example.com/v1/path`
-        - `https://webhook.site/unique-path`
-
-    - **gRPC transports** (`transport="grpc"` or `transport="grpc_asyncio"`): Only
-        accepts `hostname:port` format
-
-        - `api.example.com:443`
-        - `custom.googleapis.com:443`
-        - `https://api.example.com` (auto-formatted to `api.example.com:443`)
-        - NOT `https://webhook.site/path` (paths are not supported in gRPC)
-        - NOT `api.example.com/path` (paths are not supported in gRPC)
-
-    !!! warning
-
-        If `client_options` already contains an `api_endpoint`, this parameter will be
-        ignored in favor of the existing value.
-    """
-
-    transport: str | None = Field(
-        default=None,
-        alias="api_transport",
-    )
-    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`.
-
-    The Google client library defaults to `'grpc'` for sync clients.
-
-    For async clients, `'rest'` is converted to `'grpc_asyncio'` unless
-    a custom endpoint is specified.
-    """
-
-    additional_headers: dict[str, str] | None = Field(
-        default=None,
-    )
-    """Key-value dictionary representing additional headers for the model call"""
-
     response_modalities: list[Modality] | None = Field(
         default=None,
     )
@@ -178,7 +173,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         !!! example
 
             ```python
-            from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
+            from google.genai.types import HarmBlockThreshold, HarmCategory
 
             safety_settings = {
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
@@ -238,7 +233,4 @@ def get_client_info(module: str | None = None) -> "ClientInfo":
     )
 
 
-class SafetySettingDict(TypedDict):
-    category: HarmCategory
-
-    threshold: HarmBlockThreshold
+SafetySettingDict = SafetySetting

@@ -6,6 +6,7 @@ from collections.abc import Generator, Sequence
 from typing import Literal, cast
 
 import pytest
+from google.genai.types import Tool as GoogleTool
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -655,7 +656,7 @@ def test_generativeai_get_num_tokens_gemini() -> None:
 def test_safety_settings_gemini(use_streaming: bool) -> None:
     """Test safety settings with both `invoke` and `stream` methods."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
     }
     # Test with safety filters on bind
     llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL).bind(
@@ -691,7 +692,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     tools = [search]
 
     safety: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
     llm = ChatGoogleGenerativeAI(model=_PRO_MODEL, safety_settings=safety)
     llm_with_search = llm.bind(
@@ -750,7 +751,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
         likes: list[str]
 
     safety: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
     # Test .bind_tools with BaseModel
     message = HumanMessage(
@@ -827,7 +828,7 @@ def test_chat_google_genai_with_structured_output(
         age: int
 
     safety: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
     llm = ChatGoogleGenerativeAI(model=model_name, safety_settings=safety)
     model = llm.with_structured_output(MyModel, method=method)
@@ -1138,6 +1139,16 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
     # Lazy parsing
     expected_block_types = {"server_tool_call", "server_tool_result", "text"}
     assert {block["type"] for block in message.content_blocks} == expected_block_types
+
+
+def test_search_with_googletool() -> None:
+    """Test using `GoogleTool` with Google Search."""
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash")
+    resp = llm.invoke(
+        "When is the next total solar eclipse in US?",
+        tools=[GoogleTool(google_search={})],
+    )
+    assert "grounding_metadata" in resp.response_metadata
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")

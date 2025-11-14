@@ -1,7 +1,7 @@
 """Temporary high-level library of the Google GenerativeAI API.
 
-(The content of this file should eventually go into the Python package
-`google.generativeai`)
+The content of this file should eventually go into the Python package
+google.generativeai.
 """
 
 import datetime
@@ -12,13 +12,16 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
-import google.ai.generativelanguage as genai
 import langchain_core
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceAsyncClient as v1betaGenerativeServiceAsyncClient,
 )
 from google.ai.generativelanguage_v1beta import (
     GenerativeServiceClient as v1betaGenerativeServiceClient,
+)
+from google.ai.generativelanguage_v1beta import types as old_genai
+from google.ai.generativelanguage_v1beta.services.retriever_service import (
+    RetrieverServiceClient,
 )
 from google.api_core import client_options as client_options_lib
 from google.api_core import exceptions as gapi_exception
@@ -94,7 +97,7 @@ class Corpus:
         return name.corpus_id
 
     @classmethod
-    def from_corpus(cls, c: genai.Corpus) -> "Corpus":
+    def from_corpus(cls, c: old_genai.Corpus) -> "Corpus":
         return cls(
             name=c.name,
             display_name=c.display_name,
@@ -109,7 +112,7 @@ class Document:
     display_name: str | None
     create_time: timestamp_pb2.Timestamp | None
     update_time: timestamp_pb2.Timestamp | None
-    custom_metadata: MutableSequence[genai.CustomMetadata] | None
+    custom_metadata: MutableSequence[old_genai.CustomMetadata] | None
 
     @property
     def corpus_id(self) -> str:
@@ -123,7 +126,7 @@ class Document:
         return name.document_id
 
     @classmethod
-    def from_document(cls, d: genai.Document) -> "Document":
+    def from_document(cls, d: old_genai.Document) -> "Document":
         return cls(
             name=d.name,
             display_name=d.display_name,
@@ -228,10 +231,9 @@ def _get_credentials() -> credentials.Credentials | None:
     return None
 
 
-def build_semantic_retriever() -> genai.RetrieverServiceClient:
-    """Uses the default `'grpc'` transport to build a semantic retriever client."""
+def build_semantic_retriever() -> RetrieverServiceClient:
     credentials = _get_credentials()
-    return genai.RetrieverServiceClient(
+    return RetrieverServiceClient(
         credentials=credentials,
         # TODO: remove ignore once google-auth has types.
         client_info=gapic_v1.client_info.ClientInfo(user_agent=_USER_AGENT),  # type: ignore[no-untyped-call]
@@ -380,11 +382,11 @@ def build_generative_async_service(
 def get_corpus(
     *,
     corpus_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Corpus | None:
     try:
         corpus = client.get_corpus(
-            genai.GetCorpusRequest(name=str(EntityName(corpus_id=corpus_id)))
+            old_genai.GetCorpusRequest(name=str(EntityName(corpus_id=corpus_id)))
         )
         return Corpus.from_corpus(corpus)
     except Exception as e:
@@ -399,16 +401,19 @@ def create_corpus(
     *,
     corpus_id: str | None = None,
     display_name: str | None = None,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Corpus:
     name: str | None
-    name = str(EntityName(corpus_id=corpus_id)) if corpus_id is not None else None
+    if corpus_id is not None:
+        name = str(EntityName(corpus_id=corpus_id))
+    else:
+        name = None
 
     new_display_name = display_name or f"Untitled {datetime.datetime.now()}"
 
     new_corpus = client.create_corpus(
-        genai.CreateCorpusRequest(
-            corpus=genai.Corpus(name=name, display_name=new_display_name)
+        old_genai.CreateCorpusRequest(
+            corpus=old_genai.Corpus(name=name, display_name=new_display_name)
         )
     )
 
@@ -418,10 +423,12 @@ def create_corpus(
 def delete_corpus(
     *,
     corpus_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> None:
     client.delete_corpus(
-        genai.DeleteCorpusRequest(name=str(EntityName(corpus_id=corpus_id)), force=True)
+        old_genai.DeleteCorpusRequest(
+            name=str(EntityName(corpus_id=corpus_id)), force=True
+        )
     )
 
 
@@ -429,11 +436,11 @@ def get_document(
     *,
     corpus_id: str,
     document_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Document | None:
     try:
         document = client.get_document(
-            genai.GetDocumentRequest(
+            old_genai.GetDocumentRequest(
                 name=str(EntityName(corpus_id=corpus_id, document_id=document_id))
             )
         )
@@ -451,7 +458,7 @@ def create_document(
     document_id: str | None = None,
     display_name: str | None = None,
     metadata: dict[str, Any] | None = None,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> Document:
     name: str | None
     if document_id is not None:
@@ -463,9 +470,9 @@ def create_document(
     new_metadatas = _convert_to_metadata(metadata) if metadata else None
 
     new_document = client.create_document(
-        genai.CreateDocumentRequest(
+        old_genai.CreateDocumentRequest(
             parent=str(EntityName(corpus_id=corpus_id)),
-            document=genai.Document(
+            document=old_genai.Document(
                 name=name, display_name=new_display_name, custom_metadata=new_metadatas
             ),
         )
@@ -478,10 +485,10 @@ def delete_document(
     *,
     corpus_id: str,
     document_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> None:
     client.delete_document(
-        genai.DeleteDocumentRequest(
+        old_genai.DeleteDocumentRequest(
             name=str(EntityName(corpus_id=corpus_id, document_id=document_id)),
             force=True,
         )
@@ -494,8 +501,8 @@ def batch_create_chunk(
     document_id: str,
     texts: list[str],
     metadatas: list[dict[str, Any]] | None = None,
-    client: genai.RetrieverServiceClient,
-) -> list[genai.Chunk]:
+    client: RetrieverServiceClient,
+) -> list[old_genai.Chunk]:
     if metadatas is None:
         metadatas = [{} for _ in texts]
     if len(texts) != len(metadatas):
@@ -507,18 +514,18 @@ def batch_create_chunk(
 
     doc_name = str(EntityName(corpus_id=corpus_id, document_id=document_id))
 
-    created_chunks: list[genai.Chunk] = []
+    created_chunks: list[old_genai.Chunk] = []
 
-    batch_request = genai.BatchCreateChunksRequest(
+    batch_request = old_genai.BatchCreateChunksRequest(
         parent=doc_name,
         requests=[],
     )
-    for text, metadata in zip(texts, metadatas, strict=False):
+    for text, metadata in zip(texts, metadatas):
         batch_request.requests.append(
-            genai.CreateChunkRequest(
+            old_genai.CreateChunkRequest(
                 parent=doc_name,
-                chunk=genai.Chunk(
-                    data=genai.ChunkData(string_value=text),
+                chunk=old_genai.Chunk(
+                    data=old_genai.ChunkData(string_value=text),
                     custom_metadata=_convert_to_metadata(metadata),
                 ),
             )
@@ -528,7 +535,7 @@ def batch_create_chunk(
             response = client.batch_create_chunks(batch_request)
             created_chunks.extend(list(response.chunks))
             # Prepare a new batch for next round.
-            batch_request = genai.BatchCreateChunksRequest(
+            batch_request = old_genai.BatchCreateChunksRequest(
                 parent=doc_name,
                 requests=[],
             )
@@ -546,10 +553,10 @@ def delete_chunk(
     corpus_id: str,
     document_id: str,
     chunk_id: str,
-    client: genai.RetrieverServiceClient,
+    client: RetrieverServiceClient,
 ) -> None:
     client.delete_chunk(
-        genai.DeleteChunkRequest(
+        old_genai.DeleteChunkRequest(
             name=str(
                 EntityName(
                     corpus_id=corpus_id, document_id=document_id, chunk_id=chunk_id
@@ -565,10 +572,10 @@ def query_corpus(
     query: str,
     k: int = 4,
     filter: dict[str, Any] | None = None,
-    client: genai.RetrieverServiceClient,
-) -> list[genai.RelevantChunk]:
+    client: RetrieverServiceClient,
+) -> list[old_genai.RelevantChunk]:
     response = client.query_corpus(
-        genai.QueryCorpusRequest(
+        old_genai.QueryCorpusRequest(
             name=str(EntityName(corpus_id=corpus_id)),
             query=query,
             metadata_filters=_convert_filter(filter),
@@ -585,10 +592,10 @@ def query_document(
     query: str,
     k: int = 4,
     filter: dict[str, Any] | None = None,
-    client: genai.RetrieverServiceClient,
-) -> list[genai.RelevantChunk]:
+    client: RetrieverServiceClient,
+) -> list[old_genai.RelevantChunk]:
     response = client.query_document(
-        genai.QueryDocumentRequest(
+        old_genai.QueryDocumentRequest(
             name=str(EntityName(corpus_id=corpus_id, document_id=document_id)),
             query=query,
             metadata_filters=_convert_filter(filter),
@@ -598,13 +605,13 @@ def query_document(
     return list(response.relevant_chunks)
 
 
-def _convert_to_metadata(metadata: dict[str, Any]) -> list[genai.CustomMetadata]:
-    cs: list[genai.CustomMetadata] = []
+def _convert_to_metadata(metadata: dict[str, Any]) -> list[old_genai.CustomMetadata]:
+    cs: list[old_genai.CustomMetadata] = []
     for key, value in metadata.items():
         if isinstance(value, str):
-            c = genai.CustomMetadata(key=key, string_value=value)
+            c = old_genai.CustomMetadata(key=key, string_value=value)
         elif isinstance(value, (float, int)):
-            c = genai.CustomMetadata(key=key, numeric_value=value)
+            c = old_genai.CustomMetadata(key=key, numeric_value=value)
         else:
             msg = f"Metadata value {value} is not supported"
             raise ValueError(msg)
@@ -613,25 +620,25 @@ def _convert_to_metadata(metadata: dict[str, Any]) -> list[genai.CustomMetadata]
     return cs
 
 
-def _convert_filter(fs: dict[str, Any] | None) -> list[genai.MetadataFilter]:
+def _convert_filter(fs: dict[str, Any] | None) -> list[old_genai.MetadataFilter]:
     if fs is None:
         return []
     assert isinstance(fs, dict)
 
-    filters: list[genai.MetadataFilter] = []
+    filters: list[old_genai.MetadataFilter] = []
     for key, value in fs.items():
         if isinstance(value, str):
-            condition = genai.Condition(
-                operation=genai.Condition.Operator.EQUAL, string_value=value
+            condition = old_genai.Condition(
+                operation=old_genai.Condition.Operator.EQUAL, string_value=value
             )
         elif isinstance(value, (float, int)):
-            condition = genai.Condition(
-                operation=genai.Condition.Operator.EQUAL, numeric_value=value
+            condition = old_genai.Condition(
+                operation=old_genai.Condition.Operator.EQUAL, numeric_value=value
             )
         else:
             msg = f"Filter value {value} is not supported"
             raise ValueError(msg)
 
-        filters.append(genai.MetadataFilter(key=key, conditions=[condition]))
+        filters.append(old_genai.MetadataFilter(key=key, conditions=[condition]))
 
     return filters
