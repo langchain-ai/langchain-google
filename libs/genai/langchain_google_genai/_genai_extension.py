@@ -36,7 +36,6 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_API_ENDPOINT = "generativelanguage.googleapis.com"
 _USER_AGENT = f"langchain/{langchain_core.__version__}"
 _DEFAULT_PAGE_SIZE = 20
-_DEFAULT_GENERATE_SERVICE_MODEL = "models/aqa"
 _MAX_REQUEST_PER_CHUNK = 100
 _NAME_REGEX = re.compile(r"^corpora/([^/]+?)(/documents/([^/]+?)(/chunks/([^/]+?))?)?$")
 
