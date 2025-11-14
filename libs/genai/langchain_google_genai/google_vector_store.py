@@ -1,4 +1,4 @@
-"""Google Generative AI Vector Store.
+"""DEPRECATED. To be removed or re-written for file search service.
 
 The GenAI Semantic Retriever API is a managed end-to-end service that allows developers
 to create a corpus of documents to perform semantic search on related passages given a
