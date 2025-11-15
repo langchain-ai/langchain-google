@@ -263,12 +263,30 @@ class _VertexAICommon(_VertexAIBase):
     thinking_budget: int | None = Field(
         default=None,
     )
-    """Indicates the thinking budget in tokens."""
+    """Indicates the thinking budget in tokens.
+
+    Used to disable thinking for supported models (when set to `0`) or to constrain
+    the number of tokens used for thinking.
+
+    Dynamic thinking (allowing the model to decide how many tokens to use) is
+    enabled when set to `-1`.
+
+    More information, including per-model limits, can be found in the
+    [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking#set-budget).
+    """
 
     include_thoughts: bool | None = Field(
         default=None,
     )
-    """Indicates whether to include thoughts in the response."""
+    """Indicates whether to include thoughts in the response.
+
+    !!! note
+
+        This parameter is only applicable for models that support thinking.
+
+        This does not disable thinking; to disable thinking, set `thinking_budget` to
+        `0`. for supported models. See the `thinking_budget` parameter for more details.
+    """
 
     audio_timestamp: bool | None = Field(
         default=None,
