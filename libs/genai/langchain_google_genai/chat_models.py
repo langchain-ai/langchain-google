@@ -222,13 +222,9 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         except Exception:
             raise
 
-    params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if (request := kwargs.get("request"))
-        and hasattr(request, "model")
-        and "gemini" in request.model
-        else kwargs
-    )
+    params = {
+        k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service
+    }
     return _chat_with_retry(**params)
 
 
@@ -271,13 +267,9 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
         except Exception:
             raise
 
-    params = (
-        {k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service}
-        if (request := kwargs.get("request"))
-        and hasattr(request, "model")
-        and "gemini" in request.model
-        else kwargs
-    )
+    params = {
+        k: v for k, v in kwargs.items() if k in _allowed_params_prediction_service
+    }
     return await _achat_with_retry(**params)
 
 
@@ -654,7 +646,10 @@ def _parse_chat_history(
                             if sig_str and isinstance(sig_str, str):
                                 # Decode base64-encoded signature back to bytes
                                 sig_bytes = base64.b64decode(sig_str)
-                                function_call_sigs[idx] = sig_bytes
+                                if "index" in item:
+                                    function_call_sigs[item["index"]] = sig_bytes
+                                else:
+                                    function_call_sigs[idx] = sig_bytes
 
                 for tool_call_idx, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
@@ -911,6 +906,7 @@ def _parse_response_candidate(
                 sig_block = {
                     "type": "function_call_signature",
                     "signature": thought_sig,
+                    "index": len(tool_calls) - 1,
                 }
                 function_call_signatures.append(sig_block)
 
@@ -1649,6 +1645,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         This research paper assesses and mitigates multi-turn jailbreak vulnerabilities
         in large language models using the Crescendo attack study, evaluating attack
         success rates and mitigation strategies like prompt...
+        ```
+
+    Thinking:
+        For thinking models, you have the option to adjust the number of internal
+        thinking tokens used (`thinking_budget`) or to disable thinking altogether.
+        Note that not all models allow disabling thinking.
+
+        See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
+        more details on thinking models.
+
+        To see a thinking model's thoughts, set `include_thoughts=True` to have the
+        model's reasoning summaries included in the response.
+
+        ```python
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            include_thoughts=True,
+        )
+        ai_msg = llm.invoke("How many 'r's are in the word 'strawberry'?")
         ```
 
     Token usage:

@@ -14,6 +14,7 @@ import pytest
 from google.ai.generativelanguage_v1beta.types import (
     Candidate,
     Content,
+    FunctionCall,
     GenerateContentResponse,
     Part,
 )
@@ -2283,6 +2284,338 @@ def test_compat() -> None:
     result = _convert_from_v1_to_generativelanguage_v1beta([block], "google_genai")
     expected = [{"text": "foo", "thought_signature": "bar"}]
     assert result == expected
+
+
+def test_thought_signature_conversion() -> None:
+    """Test comprehensive thought signature conversion scenarios."""
+
+    # Test ReasoningContentBlock with signature
+    reasoning_block = {
+        "type": "reasoning",
+        "reasoning": "Let me think about this...",
+        "extras": {"signature": "signature123"},
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [reasoning_block],  # type: ignore[list-item]
+        "google_genai",
+    )
+    expected = [
+        {
+            "thought": True,
+            "text": "Let me think about this...",
+            "thought_signature": "signature123",
+        }
+    ]
+    assert result == expected
+
+    # Test ReasoningContentBlock without signature (should be skipped)
+    reasoning_without_sig = {
+        "type": "reasoning",
+        "reasoning": "Thinking without signature...",
+        "extras": {},
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [reasoning_without_sig],  # type: ignore[list-item]
+        "google_genai",
+    )
+    assert result == []
+
+    # Without an extras key (should be skipped)
+    reasoning_no_extras = {
+        "type": "reasoning",
+        "reasoning": "Thinking without extras...",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [reasoning_no_extras],  # type: ignore[list-item]
+        "google_genai",
+    )
+    assert result == []
+
+    # Test TextContentBlock
+    text_no_sig = {"type": "text", "text": "Hello world"}
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [text_no_sig],  # type: ignore[list-item]
+        "google_genai",
+    )
+    expected = [{"text": "Hello world"}]
+    assert result == expected
+
+    # Test TextContentBlock with empty signature
+    text_empty_sig = {"type": "text", "text": "Hello", "extras": {"signature": ""}}
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [text_empty_sig],  # type: ignore[list-item]
+        "google_genai",
+    )
+    expected = [{"text": "Hello"}]
+    assert result == expected
+
+    # Test non-google_genai provider ignores signatures
+    text_with_sig_other_provider = {
+        "type": "text",
+        "text": "foo",
+        "extras": {"signature": "bar"},
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [text_with_sig_other_provider],  # type: ignore[list-item]
+        "other_provider",
+    )
+    expected = [{"text": "foo"}]
+    assert result == expected
+
+    reasoning_other_provider = {
+        "type": "reasoning",
+        "reasoning": "thinking...",
+        "extras": {"signature": "sig123"},
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [reasoning_other_provider],  # type: ignore[list-item]
+        "other_provider",
+    )
+    assert result == []
+
+
+def test_thought_signature_extraction_from_response() -> None:
+    """Test thought signature extraction from API response Parts."""
+
+    # Test thought part with signature
+    binary_signature = b"test_signature_data"
+    thought_part = Part(
+        text="I need to think about this...",
+        thought=True,
+        thought_signature=binary_signature,
+    )
+
+    candidate = Candidate(content=Content(parts=[thought_part]))
+
+    # Parse candidate (the function will extract signature if present)
+    result = _parse_response_candidate(candidate, streaming=False)
+
+    # Check that signature was extracted and base64 encoded
+    assert isinstance(result.content, list)
+    thinking_blocks = [
+        b for b in result.content if isinstance(b, dict) and b.get("type") == "thinking"
+    ]
+    assert len(thinking_blocks) == 1
+    assert "signature" in thinking_blocks[0]
+
+    # Verify signature is base64 encoded
+    extracted_sig = thinking_blocks[0]["signature"]
+    assert extracted_sig == base64.b64encode(binary_signature).decode("ascii")
+
+    # Test text part with signature
+    text_part_with_sig = Part(
+        text="Final answer here", thought_signature=binary_signature
+    )
+
+    candidate_text = Candidate(content=Content(parts=[text_part_with_sig]))
+    result_text = _parse_response_candidate(candidate_text, streaming=False)
+
+    assert isinstance(result_text.content, list)
+    text_blocks = [
+        b
+        for b in result_text.content
+        if isinstance(b, dict) and b.get("type") == "text"
+    ]
+    assert len(text_blocks) == 1
+    assert "extras" in text_blocks[0]
+    assert "signature" in text_blocks[0]["extras"]
+    assert text_blocks[0]["extras"]["signature"] == base64.b64encode(
+        binary_signature
+    ).decode("ascii")
+
+    # Test part without signature
+    regular_part = Part(text="Regular text without signature")
+    candidate_regular = Candidate(content=Content(parts=[regular_part]))
+    result_regular = _parse_response_candidate(candidate_regular, streaming=False)
+
+    # Should be simple string content without signatures
+    assert isinstance(result_regular.content, str)
+    assert result_regular.content == "Regular text without signature"
+
+    # Test empty signature handling
+    empty_sig_part = Part(text="Text with empty signature", thought_signature=b"")
+    candidate_empty = Candidate(content=Content(parts=[empty_sig_part]))
+    result_empty = _parse_response_candidate(candidate_empty, streaming=False)
+
+    # Empty signature should be ignored
+    assert isinstance(result_empty.content, str)
+    assert result_empty.content == "Text with empty signature"
+
+    # Test invalid signature handling (None bytes)
+    invalid_sig_part = Part(text="Text with None signature", thought_signature=None)
+    candidate_invalid = Candidate(content=Content(parts=[invalid_sig_part]))
+    result_invalid = _parse_response_candidate(candidate_invalid, streaming=False)
+
+    # None signature should be ignored
+    assert isinstance(result_invalid.content, str)
+    assert result_invalid.content == "Text with None signature"
+
+
+def test_signature_round_trip_conversion() -> None:
+    """Test complete round-trip signature handling in conversation context."""
+
+    # Create a mock response with thought signature
+    binary_sig = b"test_sig_data"
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(
+                            text="I need to think...",
+                            thought=True,
+                            thought_signature=binary_sig,
+                        ),
+                        Part(text="Final answer", thought_signature=binary_sig),
+                    ]
+                )
+            )
+        ]
+    )
+
+    with patch("langchain_google_genai.chat_models._chat_with_retry") as mock_chat:
+        mock_chat.return_value = mock_response
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            output_version="v1",
+            include_thoughts=True,
+        )
+
+        # First call - get response with signatures
+        result = llm.invoke("Test message")
+
+        # Verify signatures were extracted
+        assert isinstance(result.content, list)
+
+        # Find blocks with signatures
+        sig_blocks = []
+        for block in result.content:
+            if isinstance(block, dict):
+                if block.get("type") == "reasoning" and "signature" in block:
+                    sig_blocks.append(block)
+                elif block.get("extras") and "signature" in block["extras"]:
+                    sig_blocks.append(block)
+
+        assert len(sig_blocks) >= 1, (
+            f"Expected signature blocks, got content: {result.content}"
+        )
+
+        # Now simulate passing this result back in a conversation
+        with patch(
+            "langchain_google_genai.chat_models._convert_from_v1_to_generativelanguage_v1beta"
+        ) as mock_convert:
+            from langchain_google_genai._compat import (
+                _convert_from_v1_to_generativelanguage_v1beta as real_convert,
+            )
+
+            mock_convert.side_effect = real_convert
+
+            # Create conversation with the signature-containing message
+            conversation = [
+                HumanMessage(content="First message"),
+                result,  # This contains signatures
+                HumanMessage(content="Follow up"),
+            ]
+
+            # This should trigger signature conversion
+            mock_chat.return_value = GenerateContentResponse(
+                candidates=[
+                    Candidate(content=Content(parts=[Part(text="Follow up response")]))
+                ]
+            )
+
+            follow_up = llm.invoke(conversation)
+
+            # Verify conversion was called
+            assert mock_convert.call_count >= 1
+
+            # Find calls with signatures
+            calls_with_signatures = []
+            for call in mock_convert.call_args_list:
+                content_blocks, model_provider = call[0]
+                if model_provider == "google_genai":
+                    for block in content_blocks:
+                        if isinstance(block, dict):
+                            if block.get("type") == "reasoning" and block.get(
+                                "extras", {}
+                            ).get("signature"):
+                                calls_with_signatures.append(call)
+                                break
+                            if block.get("type") == "text" and block.get(
+                                "extras", {}
+                            ).get("signature"):
+                                calls_with_signatures.append(call)
+                                break
+
+            assert len(calls_with_signatures) >= 1, (
+                "Expected at least one call to convert signatures"
+            )
+
+            # Verify follow-up succeeded
+            assert isinstance(follow_up, AIMessage)
+            assert follow_up.content is not None
+
+
+def test_parse_response_candidate_adds_index_to_signature() -> None:
+    """Test _parse_response_candidate adds index to function_call_signature blocks."""
+    # Mock a candidate with thinking and function call with signature
+    part1 = Part(text="Thinking...", thought=True)
+
+    # Signature must be bytes
+    sig = b"mysig"
+    part2 = Part(
+        function_call=FunctionCall(name="tool", args={}), thought_signature=sig
+    )
+
+    candidate = Candidate(content=Content(parts=[part1, part2]))
+
+    msg = _parse_response_candidate(candidate)
+
+    # Check if signature block is present and has index
+    found = False
+    for block in msg.content:
+        if isinstance(block, dict) and block.get("type") == "function_call_signature":
+            assert block.get("signature") == base64.b64encode(sig).decode("ascii")
+            assert "index" in block
+            assert block["index"] == 0
+            found = True
+
+    assert found, "Signature block not found"
+
+
+def test_parse_chat_history_uses_index_for_signature() -> None:
+    """Test _parse_chat_history uses the index field to map signatures to tool calls."""
+    sig_bytes = b"dummy_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+
+    # Content with thinking block (index 0) and signature block (index 1)
+    # The signature block points to tool call index 0
+    content = [
+        {"type": "thinking", "thinking": "I should use the tool."},
+        {"type": "function_call_signature", "signature": sig_b64, "index": 0},
+    ]
+
+    tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
+
+    message = AIMessage(content=content, tool_calls=tool_calls)  # type: ignore[arg-type]
+
+    # Parse the history
+    _, formatted_messages = _parse_chat_history([message])
+
+    # Check the result
+    model_content = formatted_messages[0]
+    assert model_content.role == "model"
+    assert len(model_content.parts) == 1
+    part = model_content.parts[0]
+
+    # Check if function_call is present
+    assert part.function_call is not None
+    assert part.function_call.name == "my_tool"
+
+    # Check if thought_signature is correctly attached
+    assert part.thought_signature == sig_bytes
 
 
 def test_system_message_only_raises_error() -> None:

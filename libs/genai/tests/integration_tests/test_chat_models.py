@@ -4,6 +4,7 @@ import asyncio
 import json
 from collections.abc import Generator, Sequence
 from typing import Literal, cast
+from unittest.mock import patch
 
 import pytest
 from langchain_core.messages import (
@@ -459,7 +460,82 @@ def test_chat_google_genai_invoke_thinking_with_tools(
 
         # Test we can pass the result back in (with signature)
         next_message = {"role": "user", "content": "Thanks!"}
-        _ = llm_with_tools.invoke([input_message, result, next_message])
+        follow_up_result = llm_with_tools.invoke([input_message, result, next_message])
+
+        # Verify the follow-up call succeeded and returned a valid response
+        assert isinstance(follow_up_result, AIMessage)
+        assert follow_up_result.content is not None
+
+        # If there were signatures in the original response, verify they were properly
+        # handled in the follow-up (no errors should occur)
+        if signature_blocks:
+            # The fact that we got a successful response means signatures were converted
+            # correctly
+            # Additional verification that response metadata is preserved
+            assert "model_provider" in follow_up_result.response_metadata
+            assert (
+                follow_up_result.response_metadata["model_provider"] == "google_genai"
+            )
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+def test_thought_signature_round_trip() -> None:
+    """Test thought signatures are properly preserved in round-trip conversations."""
+
+    @tool
+    def simple_tool(query: str) -> str:
+        """A simple tool for testing."""
+        return f"Response to: {query}"
+
+    llm = ChatGoogleGenerativeAI(
+        model=_THINKING_MODEL, include_thoughts=True, output_version="v1"
+    )
+    llm_with_tools = llm.bind_tools([simple_tool])
+
+    # First call with function calling to generate signatures
+    first_message = {
+        "role": "user",
+        "content": "Use the tool to help answer: What is 2+2?",
+    }
+
+    # Patch the conversion function to verify it's called with signatures
+    with patch(
+        "langchain_google_genai.chat_models._convert_from_v1_to_generativelanguage_v1beta"
+    ) as mock_convert:
+        # Set up the mock to call the real function but also track calls
+        from langchain_google_genai._compat import (
+            _convert_from_v1_to_generativelanguage_v1beta as real_convert,
+        )
+
+        mock_convert.side_effect = real_convert
+
+        first_result = llm_with_tools.invoke([first_message])
+
+        # Verify we got a response with structured content (contains signatures)
+        assert isinstance(first_result, AIMessage)
+        assert isinstance(first_result.content, list)
+
+        # Second call - this should trigger signature conversion
+        second_message = {"role": "user", "content": "Thanks!"}
+        second_result = llm_with_tools.invoke(
+            [first_message, first_result, second_message]
+        )
+
+        # Verify the conversion function was called when processing the first_result
+        # (it should be called once for the first_result message)
+        assert mock_convert.call_count >= 1
+
+        # Find the call that processed our AI message with signatures
+        ai_message_calls = [
+            call
+            for call in mock_convert.call_args_list
+            if call[0][1] == "google_genai"  # model_provider argument
+        ]
+        assert len(ai_message_calls) >= 1
+
+        # Verify the second call succeeded (signatures were properly converted)
+        assert isinstance(second_result, AIMessage)
+        assert second_result.content is not None
 
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:

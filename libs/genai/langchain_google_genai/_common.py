@@ -80,6 +80,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
     If unset, will use the model's default value, which varies by model.
 
     See [docs](https://ai.google.dev/gemini-api/docs/models) for model-specific limits.
+
+    To constrain the number of thinking tokens to use when generating a response, see
+    the `thinking_budget` parameter.
     """
 
     n: int = 1
@@ -157,20 +160,38 @@ class _BaseGoogleGenerativeAI(BaseModel):
     )
     """A list of modalities of the response"""
 
-    thinking_budget: int | None = Field(
-        default=None,
-    )
-    """Indicates the thinking budget in tokens."""
-
     media_resolution: MediaResolution | None = Field(
         default=None,
     )
     """Media resolution for the input media."""
 
+    thinking_budget: int | None = Field(
+        default=None,
+    )
+    """Indicates the thinking budget in tokens.
+
+    Used to disable thinking for supported models (when set to `0`) or to constrain
+    the number of tokens used for thinking.
+
+    Dynamic thinking (allowing the model to decide how many tokens to use) is
+    enabled when set to `-1`.
+
+    More information, including per-model limits, can be found in the
+    [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking#set-budget).
+    """
+
     include_thoughts: bool | None = Field(
         default=None,
     )
-    """Indicates whether to include thoughts in the response."""
+    """Indicates whether to include thoughts in the response.
+
+    !!! note
+
+        This parameter is only applicable for models that support thinking.
+
+        This does not disable thinking; to disable thinking, set `thinking_budget` to
+        `0`. for supported models. See the `thinking_budget` parameter for more details.
+    """
 
     safety_settings: dict[HarmCategory, HarmBlockThreshold] | None = None
     """Default safety settings to use for all generations.
