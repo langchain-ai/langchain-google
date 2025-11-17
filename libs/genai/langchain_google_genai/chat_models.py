@@ -134,6 +134,19 @@ _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
 
+_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
+    "__gemini_function_call_thought_signatures__"
+)
+
+
+def _bytes_to_base64(data: bytes) -> str:
+    return base64.b64encode(data).decode("utf-8")
+
+
+def _base64_to_bytes(input_str: str) -> bytes:
+    return base64.b64decode(input_str.encode("utf-8"))
+
+
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Custom exception class for errors associated with the `Google GenAI` API.
 
@@ -387,11 +400,6 @@ def _convert_to_parts(
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
                     parts.append(media_part)
-                elif part["type"] == "function_call_signature":
-                    # Signature for function_call Part - skip it here as it should be
-                    # attached to the actual function_call Part
-                    # This is handled separately in the history parsing logic
-                    pass
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format that we continue to store as
                     thought_sig = None
@@ -634,23 +642,9 @@ def _parse_chat_history(
             role = "model"
             if message.tool_calls:
                 ai_message_parts = []
-                # Extract any function_call_signature blocks from content
-                function_call_sigs: dict[int, bytes] = {}
-                if isinstance(message.content, list):
-                    for idx, item in enumerate(message.content):
-                        if (
-                            isinstance(item, dict)
-                            and item.get("type") == "function_call_signature"
-                        ):
-                            sig_str = item.get("signature", "")
-                            if sig_str and isinstance(sig_str, str):
-                                # Decode base64-encoded signature back to bytes
-                                sig_bytes = base64.b64decode(sig_str)
-                                if "index" in item:
-                                    function_call_sigs[item["index"]] = sig_bytes
-                                else:
-                                    function_call_sigs[idx] = sig_bytes
-
+                function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
+                    _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                )
                 for tool_call_idx, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         {
@@ -659,11 +653,13 @@ def _parse_chat_history(
                         }
                     )
                     # Check if there's a signature for this function call
-                    # (We use the index to match signature to function call)
-                    sig = function_call_sigs.get(tool_call_idx)
+                    sig = function_call_sigs.get(tool_call.get("id"))
                     if sig:
                         ai_message_parts.append(
-                            Part(function_call=function_call, thought_signature=sig)
+                            Part(
+                                function_call=function_call,
+                                thought_signature=_base64_to_bytes(sig),
+                            )
                         )
                     else:
                         ai_message_parts.append(Part(function_call=function_call))
@@ -742,9 +738,6 @@ def _parse_response_candidate(
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
-    # Track function call signatures separately to handle them conditionally
-    function_call_signatures: list[dict] = []
-
     for part in response_candidate.content.parts:
         text: str | None = None
         try:
@@ -867,12 +860,13 @@ def _parse_response_candidate(
             function_call["arguments"] = json.dumps(corrected_args)
             additional_kwargs["function_call"] = function_call
 
+            tool_call_id = function_call.get("id", str(uuid.uuid4()))
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=function_call.get("id", str(uuid.uuid4())),
+                        id=tool_call_id,
                         index=function_call.get("index"),  # type: ignore
                     )
                 )
@@ -887,7 +881,7 @@ def _parse_response_candidate(
                         invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
-                            id=function_call.get("id", str(uuid.uuid4())),
+                            id=tool_call_id,
                             error=str(e),
                         )
                     )
@@ -896,26 +890,21 @@ def _parse_response_candidate(
                         tool_call(
                             name=tool_call_dict["name"],
                             args=tool_call_dict["args"],
-                            id=tool_call_dict.get("id", str(uuid.uuid4())),
+                            id=tool_call_id,
                         )
                     )
 
             # If this function_call Part has a signature, track it separately
-            # We'll add it to content only if there's other content present
             if thought_sig:
-                sig_block = {
-                    "type": "function_call_signature",
-                    "signature": thought_sig,
-                    "index": len(tool_calls) - 1,
-                }
-                function_call_signatures.append(sig_block)
-
-    # Add function call signatures to content only if there's already other content
-    # This preserves backward compatibility where content is "" for
-    # function-only responses
-    if function_call_signatures and content is not None:
-        for sig_block in function_call_signatures:
-            content = _append_to_content(content, sig_block)
+                if _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY not in additional_kwargs:
+                    additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY] = {}
+                additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY][
+                    tool_call_id
+                ] = (
+                    _bytes_to_base64(thought_sig)
+                    if isinstance(thought_sig, bytes)
+                    else thought_sig
+                )
 
     if content is None:
         content = ""
