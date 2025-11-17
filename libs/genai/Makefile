@@ -15,7 +15,7 @@ test tests:
 	uv run --group test pytest --disable-socket --allow-unix-socket $(TEST_FILE)
 
 integration_test integration_tests:
-	uv run --group test --group test_integration pytest --retries 3 --retry-delay 1 $(TEST_FILE)
+	uv run --group test --group test_integration pytest -n auto --retries 3 --retry-delay 1 $(TEST_FILE)
 
 check_imports: $(shell find langchain_google_genai -name '*.py')
 	uv run --all-groups python ./scripts/check_imports.py $^
