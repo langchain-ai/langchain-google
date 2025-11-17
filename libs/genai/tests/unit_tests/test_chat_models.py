@@ -2572,17 +2572,11 @@ def test_parse_response_candidate_adds_index_to_signature() -> None:
     candidate = Candidate(content=Content(parts=[part1, part2]))
 
     msg = _parse_response_candidate(candidate)
-
-    # Check if signature block is present and has index
-    found = False
-    for block in msg.content:
-        if isinstance(block, dict) and block.get("type") == "function_call_signature":
-            assert block.get("signature") == base64.b64encode(sig).decode("ascii")
-            assert "index" in block
-            assert block["index"] == 0
-            found = True
-
-    assert found, "Signature block not found"
+    function_call_map = msg.additional_kwargs[
+        "__gemini_function_call_thought_signatures__"
+    ]
+    tool_call_id = msg.tool_calls[0]["id"]
+    assert function_call_map[tool_call_id] == base64.b64encode(sig).decode("ascii")
 
 
 def test_parse_chat_history_uses_index_for_signature() -> None:
@@ -2592,14 +2586,17 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
 
     # Content with thinking block (index 0) and signature block (index 1)
     # The signature block points to tool call index 0
-    content = [
-        {"type": "thinking", "thinking": "I should use the tool."},
-        {"type": "function_call_signature", "signature": sig_b64, "index": 0},
-    ]
+    content = [{"type": "thinking", "thinking": "I should use the tool."}]
 
     tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
 
-    message = AIMessage(content=content, tool_calls=tool_calls)  # type: ignore[arg-type]
+    message = AIMessage(
+        content=content,  # type: ignore[arg-type]
+        tool_calls=tool_calls,
+        additional_kwargs={
+            "__gemini_function_call_thought_signatures__": {"call_1": sig_b64}
+        },
+    )
 
     # Parse the history
     _, formatted_messages = _parse_chat_history([message])
