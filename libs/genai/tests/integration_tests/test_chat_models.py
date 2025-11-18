@@ -593,23 +593,6 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> No
                 ),
             ],
         ),
-        (
-            "url_multimodal_message",
-            [
-                HumanMessage(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": "Guess what's in this picture! You have 3 guesses.",
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": "https://picsum.photos/seed/picsum/200/300",
-                        },
-                    ]
-                ),
-            ],
-        ),
     ],
 )
 @pytest.mark.parametrize("use_streaming", [False, True])
@@ -653,11 +636,11 @@ def test_chat_google_genai_multimodal(
             content=[
                 {
                     "type": "text",
-                    "text": "Guess what's in this picture! You have 3 guesses.",
+                    "text": "Give a concise description of this image.",
                 },
                 {
                     "type": "image_url",
-                    "image_url": "https://picsum.photos/seed/picsum/200/300",
+                    "image_url": "https://raw.githubusercontent.com/langchain-ai/docs/4d11d08b6b0e210bd456943f7a22febbd168b543/src/images/agentic-rag-output.png",
                 },
             ]
         ),
