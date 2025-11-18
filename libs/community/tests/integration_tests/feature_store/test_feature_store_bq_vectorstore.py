@@ -29,7 +29,7 @@ def store_bq_vectorstore(request: pytest.FixtureRequest) -> BigQueryVectorStore:
     Example:
     export PROJECT_ID=...
     """
-    from google.cloud import bigquery
+    from google.cloud import bigquery  # type: ignore[attr-defined]
 
     embedding_model = FakeEmbeddings(size=EMBEDDING_SIZE)
     TestBigQueryVectorStore_bq_vectorstore.store_bq_vectorstore = BigQueryVectorStore(
@@ -68,7 +68,7 @@ def existing_store_bq_vectorstore(
     Example:
     export PROJECT_ID=...
     """
-    from google.cloud import bigquery
+    from google.cloud import bigquery  # type: ignore[attr-defined]
 
     embedding_model = FakeEmbeddings(size=EMBEDDING_SIZE)
     TestBigQueryVectorStore_bq_vectorstore.existing_store_bq_vectorstore = (

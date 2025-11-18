@@ -54,6 +54,9 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
 
     max_retries: int = 6
     """The maximum number of retries to make when generating."""
+    dimensions: int | None = None
+    """Default output dimensionality for embeddings. If not specified, uses the
+    model's default. Can be overridden per request in embed() method."""
 
     @model_validator(mode="before")
     @classmethod
@@ -130,10 +133,11 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
 
                 The following are only supported on preview models:
                     `QUESTION_ANSWERING`, `FACT_VERIFICATION`.
-            dimensions: Optional output embeddings dimensions.
+            dimensions: Output embeddings dimensions.
 
-                Only supported on preview models.
-            title: Optional title for the text.
+                Only supported on preview models. If not provided, uses the
+                default dimensions specified in the constructor.
+            title: Title for the text.
 
                 Only applicable when `TaskType` is `RETRIEVAL_DOCUMENT`.
 
@@ -142,10 +146,11 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
         """
         if len(texts) == 0:
             return []
+        effective_dimensions = dimensions if dimensions is not None else self.dimensions
         embeddings = self._get_embeddings_with_retry(
             texts=texts,
             embeddings_type=embeddings_task_type,
-            dimensions=dimensions,
+            dimensions=effective_dimensions,
             title=title,
         )
         return embeddings

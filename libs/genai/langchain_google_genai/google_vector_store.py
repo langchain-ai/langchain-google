@@ -1,4 +1,4 @@
-"""Google Generative AI Vector Store.
+"""DEPRECATED. To be removed or re-written for file search service.
 
 The GenAI Semantic Retriever API is a managed end-to-end service that allows developers
 to create a corpus of documents to perform semantic search on related passages given a
@@ -17,16 +17,10 @@ from typing import (
 import google.ai.generativelanguage as genai
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 from langchain_core.vectorstores import VectorStore
 from pydantic import BaseModel, PrivateAttr
 
 from . import _genai_extension as genaix
-from .genai_aqa import (
-    AqaInput,
-    AqaOutput,
-    GenAIAqa,
-)
 
 
 class ServerSideEmbedding(Embeddings):
@@ -223,15 +217,6 @@ class GoogleVectorStore(VectorStore):
         )
         ```
 
-    !!! example "Ask the corpus for grounded responses"
-
-        ```python
-        aqa = store.as_aqa()
-        response = aqa.invoke("Who caught the gingerbread man?")
-        print(response.answer)
-        print(response.attributed_passages)
-        print(response.answerability_probability)
-        ```
 
     You can also operate at Google's Document level.
 
@@ -471,52 +456,3 @@ class GoogleVectorStore(VectorStore):
         i.e. one in `[0, 1]` where higher means more *similar*.
         """
         return lambda score: score
-
-    def as_aqa(
-        self,
-        *,
-        answer_style: int = 1,
-        safety_settings: list[Any] | None = None,
-        temperature: float | None = None,
-    ) -> Runnable[str, AqaOutput]:
-        """Construct a Google Generative AI AQA engine.
-
-        All arguments are optional.
-
-        Args:
-            answer_style: See
-                `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`.
-            safety_settings: See `google.ai.generativelanguage.SafetySetting`.
-            temperature: Value between `0.0` and `1.0` controlling randomness.
-        """
-        return (
-            RunnablePassthrough[str]()
-            | {
-                "prompt": RunnablePassthrough(),  # type: ignore[dict-item]
-                "passages": self.as_retriever(),
-            }
-            | RunnableLambda(_toAqaInput)
-            | GenAIAqa(
-                answer_style=answer_style,
-                safety_settings=safety_settings,
-                temperature=temperature,
-            )
-        )
-
-
-def _toAqaInput(input: dict[str, Any]) -> AqaInput:
-    prompt = input["prompt"]
-    assert isinstance(prompt, str)
-
-    passages = input["passages"]
-    assert isinstance(passages, list)
-
-    source_passages: list[str] = []
-    for passage in passages:
-        assert isinstance(passage, Document)
-        source_passages.append(passage.page_content)
-
-    return AqaInput(
-        prompt=prompt,
-        source_passages=source_passages,
-    )

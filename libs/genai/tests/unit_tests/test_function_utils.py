@@ -22,7 +22,6 @@ from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
     _ToolConfigDict,
     convert_to_genai_function_declarations,
-    replace_defs_in_schema,
     tool_to_dict,
 )
 
@@ -30,8 +29,8 @@ from langchain_google_genai._function_utils import (
 def test_tool_with_anyof_nullable_param() -> None:
     """Example test.
 
-    Checks a string parameter marked as Optional, verifying it's recognized as a
-    'string' & 'nullable'.
+    Checks a string parameter marked as optional, verifying it's recognized as a
+    `string` & `nullable`.
     """
 
     @tool(parse_docstring=True)
@@ -74,9 +73,9 @@ def test_tool_with_anyof_nullable_param() -> None:
 
 
 def test_tool_with_array_anyof_nullable_param() -> None:
-    """Checks an array parameter marked as Optional.
+    """Checks an array parameter marked as optional.
 
-    Verifying it's recognized As an 'array' & 'nullable', and that the items are
+    Verifying it's recognized As an `array` & `nullable`, and that the items are
     correctly typed.
     """
 
@@ -128,20 +127,20 @@ def test_tool_with_array_anyof_nullable_param() -> None:
 
 
 def test_tool_with_nested_object_anyof_nullable_param() -> None:
-    """Checks an object parameter (dict) marked as Optional.
+    """Checks an object parameter (`dict`) marked as optional.
 
-    Verifying it's recognized as an 'object' but defaults to string if there are no real
-    properties, and that it is 'nullable'.
+    Verifying it's recognized as an `object` but defaults to string if there are no real
+    properties, and that it is `nullable`.
     """
 
     @tool(parse_docstring=True)
     def possibly_none_dict(
         data: dict | None = None,
     ) -> str:
-        """A test function whose argument can be an object (dict) or None.
+        """A test function whose argument can be an object (`dict`) or `None`.
 
         Args:
-            data: Possibly a dict or None.
+            data: Possibly a `dict` or `None`.
         """
         return "value"
 
@@ -176,9 +175,9 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
 
 
 def test_tool_with_enum_anyof_nullable_param() -> None:
-    """Checks a parameter with an enum, marked as Optional.
+    """Checks a parameter with an enum, marked as optional.
 
-    Verifying it's recognized as 'string' & 'nullable', and that the 'enum' field is
+    Verifying it's recognized as `string` & `nullable`, and that the `enum` field is
     captured.
     """
 
@@ -839,7 +838,7 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
 
 
 def test_tool_with_doubly_nested_list_param() -> None:
-    """Tests a tool parameter with a doubly nested list (list[list[str]]).
+    """Tests a tool parameter with a doubly nested `list` (`list[list[str]]`).
 
     Verifying that the GAPIC schema correctly represents the nested items.
     """
@@ -898,66 +897,11 @@ def test_tool_with_doubly_nested_list_param() -> None:
     assert "description" in items_level2
 
 
-def test_schema_no_defs() -> None:
-    schema = {"type": "integer"}
-    expected_schema = {"type": "integer"}
-    assert replace_defs_in_schema(schema) == expected_schema
-
-
-def test_schema_empty_defs() -> None:
-    schema = {"$defs": {}, "type": "integer"}
-    expected_schema = {"type": "integer"}
-    assert replace_defs_in_schema(schema) == expected_schema
-
-
-def test_schema_simple_ref_replacement() -> None:
-    schema = {
-        "$defs": {"MyDefinition": {"type": "string"}},
-        "property": {"$ref": "#/$defs/MyDefinition"},
-    }
-    expected_schema = {"property": {"type": "string"}}
-    assert replace_defs_in_schema(schema) == expected_schema
-
-
-def test_schema_nested_ref_replacement() -> None:
-    schema = {
-        "$defs": {
-            "MyDefinition": {
-                "type": "object",
-                "properties": {"name": {"$ref": "#/$defs/NameDefinition"}},
-            },
-            "NameDefinition": {"type": "string"},
-        },
-        "property": {"$ref": "#/$defs/MyDefinition"},
-    }
-    expected_schema = {
-        "property": {"type": "object", "properties": {"name": {"type": "string"}}}
-    }
-    assert replace_defs_in_schema(schema) == expected_schema
-
-
-def test_schema_recursive_error_self_reference() -> None:
-    schema = {
-        "$defs": {
-            "Node": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "children": {"type": "array", "items": {"$ref": "#/$defs/Node"}},
-                },
-            }
-        },
-        "root": {"$ref": "#/$defs/Node"},
-    }
-    with pytest.raises(RecursionError):
-        _ = replace_defs_in_schema(schema)
-
-
 def test_tool_with_union_types() -> None:
     """Test union types with tools.
 
-    Tests that validates tools with Union types in function declarations are correctly
-    converted to 'anyOf' in the schema.
+    Tests that validates tools with `Union` types in function declarations are correctly
+    converted to `anyOf` in the schema.
     """
 
     class Helper1(BaseModel):
@@ -1027,8 +971,8 @@ def test_tool_with_union_types() -> None:
 def test_tool_with_union_primitive_types() -> None:
     """Test union primitive types for tools.
 
-    Tests that validates tools with Union types that include primitive types are
-    correctly converted to 'anyOf' in the schema.
+    Tests that validates tools with `Union` types that include primitive types are
+    correctly converted to `anyOf` in the schema.
     """
 
     class Helper(BaseModel):
@@ -1094,8 +1038,8 @@ def test_tool_with_union_primitive_types() -> None:
 def test_tool_with_nested_union_types() -> None:
     """Test nested union types.
 
-    Tests that validates tools with nested Union types are correctly converted to nested
-    'anyOf' structures in the schema.
+    Tests that validates tools with nested `Union` types are correctly converted to
+    nested `anyOf` structures in the schema.
     """
 
     class Address(BaseModel):
@@ -1160,7 +1104,7 @@ def test_tool_with_nested_union_types() -> None:
 def test_tool_invocation_with_union_types() -> None:
     """Test invocation with union types.
 
-    Tests that validates tools with Union types can be correctly invoked with either
+    Tests that validates tools with `Union` types can be correctly invoked with either
     type from the union.
     """
 
@@ -1232,8 +1176,8 @@ def test_tool_invocation_with_union_types() -> None:
 def test_tool_field_union_types() -> None:
     """Test field union types.
 
-    Test that validates Field with Union types in Pydantic models are correctly
-    converted to 'anyOf' in the schema.
+    Test that validates `Field` with `Union` types in Pydantic models are correctly
+    converted to `anyOf` in the schema.
     """
 
     class Helper1(BaseModel):
@@ -1314,7 +1258,8 @@ def test_tool_field_union_types() -> None:
 
 
 def test_union_type_schema_validation() -> None:
-    """Test that Union types get proper type_ assignment for Gemini compatibility."""
+    """Test that `Union` types get proper `type_` assignment for Gemini
+    compatibility."""
 
     class Response(BaseModel):
         """Response to user."""
@@ -1344,7 +1289,7 @@ def test_union_type_schema_validation() -> None:
 
 
 def test_optional_dict_schema_validation() -> None:
-    """Test that Optional types get proper OBJECT type for Gemini compatibility."""
+    """Test that optional types get proper `OBJECT` type for Gemini compatibility."""
 
     class RequestsGetToolInput(BaseModel):
         url: str = Field(description="The URL to send the GET request to")

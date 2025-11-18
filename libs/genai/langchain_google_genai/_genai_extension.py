@@ -7,9 +7,10 @@
 import datetime
 import logging
 import re
-from collections.abc import Iterator, MutableSequence
+from collections.abc import MutableSequence
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import google.ai.generativelanguage as genai
 import langchain_core
@@ -29,7 +30,6 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_API_ENDPOINT = "generativelanguage.googleapis.com"
 _USER_AGENT = f"langchain/{langchain_core.__version__}"
 _DEFAULT_PAGE_SIZE = 20
-_DEFAULT_GENERATE_SERVICE_MODEL = "models/aqa"
 _MAX_REQUEST_PER_CHUNK = 100
 _NAME_REGEX = re.compile(r"^corpora/([^/]+?)(/documents/([^/]+?)(/chunks/([^/]+?))?)?$")
 
@@ -229,6 +229,7 @@ def _get_credentials() -> credentials.Credentials | None:
 
 
 def build_semantic_retriever() -> genai.RetrieverServiceClient:
+    """Uses the default `'grpc'` transport to build a semantic retriever client."""
     credentials = _get_credentials()
     return genai.RetrieverServiceClient(
         credentials=credentials,
@@ -250,6 +251,20 @@ def _prepare_config(
     formatted_client_options: dict = {"api_endpoint": _config.api_endpoint}
     if client_options:
         formatted_client_options.update(**client_options)
+
+    # Validate and format API endpoint for gRPC transports
+    if (
+        transport in ("grpc", "grpc_asyncio")
+        and "api_endpoint" in formatted_client_options
+    ):
+        api_endpoint = formatted_client_options["api_endpoint"]
+        if isinstance(api_endpoint, str):
+            _validate_grpc_endpoint(api_endpoint, transport)
+            # Format the endpoint for gRPC if needed
+            formatted_client_options["api_endpoint"] = _format_grpc_endpoint(
+                api_endpoint
+            )
+
     if not credentials and api_key:
         formatted_client_options["api_key"] = api_key
     elif not credentials and not api_key:
@@ -267,6 +282,65 @@ def _prepare_config(
         "transport": transport,
     }
     return {k: v for k, v in config.items() if v is not None}
+
+
+def _validate_grpc_endpoint(endpoint: str, transport: str) -> None:
+    """Validate that an endpoint is compatible with gRPC transports.
+
+    Args:
+        endpoint: The API endpoint to validate.
+        transport: The transport type (`'grpc'` or `'grpc_asyncio'`).
+
+    Raises:
+        ValueError: If the endpoint format is incompatible with gRPC.
+    """
+    if endpoint.startswith(("http://", "https://")):
+        parsed = urlparse(endpoint)
+        if parsed.path and parsed.path.rstrip("/") != "":
+            msg = (
+                f"gRPC transport '{transport}' does not support URL paths. "
+                f"Endpoint '{endpoint}' contains path '{parsed.path}'. "
+                "Use format 'hostname:port' or consider using 'rest' transport "
+                "instead."
+            )
+            raise ValueError(msg)
+    elif "/" in endpoint and not endpoint.startswith(
+        "["
+    ):  # IPv6 addresses use brackets
+        msg = (
+            f"gRPC transport '{transport}' does not support URL paths. "
+            f"Endpoint '{endpoint}' appears to contain a path. "
+            f"Use format 'hostname:port' or consider using 'rest' transport instead."
+        )
+        raise ValueError(msg)
+
+
+def _format_grpc_endpoint(endpoint: str) -> str:
+    """Format an endpoint for gRPC compatibility.
+
+    Args:
+        endpoint: The original endpoint.
+
+    Returns:
+        Properly formatted endpoint for gRPC (`hostname:port` format).
+    """
+    if not endpoint.startswith(("http://", "https://")) and ":" in endpoint:
+        return endpoint
+
+    # Handle URLs with protocol scheme (but no path, validated above)
+    if endpoint.startswith(("http://", "https://")):
+        parsed = urlparse(endpoint)
+        hostname = parsed.hostname
+        port = parsed.port
+        if not port:
+            port = 443 if endpoint.startswith("https://") else 80
+        return f"{hostname}:{port}"
+
+    # If no port specified, add default HTTPS port
+    if ":" not in endpoint:
+        return f"{endpoint}:443"
+
+    return endpoint
 
 
 def build_generative_service(
@@ -301,16 +375,6 @@ def build_generative_async_service(
         client_info=client_info,
     )
     return v1betaGenerativeServiceAsyncClient(**config)
-
-
-def list_corpora(
-    *,
-    client: genai.RetrieverServiceClient,
-) -> Iterator[Corpus]:
-    for corpus in client.list_corpora(
-        genai.ListCorporaRequest(page_size=_config.page_size)
-    ):
-        yield Corpus.from_corpus(corpus)
 
 
 def get_corpus(
@@ -359,19 +423,6 @@ def delete_corpus(
     client.delete_corpus(
         genai.DeleteCorpusRequest(name=str(EntityName(corpus_id=corpus_id)), force=True)
     )
-
-
-def list_documents(
-    *,
-    corpus_id: str,
-    client: genai.RetrieverServiceClient,
-) -> Iterator[Document]:
-    for document in client.list_documents(
-        genai.ListDocumentsRequest(
-            parent=str(EntityName(corpus_id=corpus_id)), page_size=_DEFAULT_PAGE_SIZE
-        )
-    ):
-        yield Document.from_document(document)
 
 
 def get_document(
@@ -545,128 +596,6 @@ def query_document(
         )
     )
     return list(response.relevant_chunks)
-
-
-@dataclass
-class Passage:
-    text: str
-    id: str
-
-
-@dataclass
-class GroundedAnswer:
-    answer: str
-    attributed_passages: list[Passage]
-    answerable_probability: float | None
-
-
-@dataclass
-class GenerateAnswerError(Exception):
-    finish_reason: genai.Candidate.FinishReason
-    finish_message: str
-    safety_ratings: MutableSequence[genai.SafetyRating]
-
-    def __str__(self) -> str:
-        return (
-            f"finish_reason: {self.finish_reason} "
-            f"finish_message: {self.finish_message} "
-            f"safety ratings: {self.safety_ratings}"
-        )
-
-
-def generate_answer(
-    *,
-    prompt: str,
-    passages: list[str],
-    answer_style: int = genai.GenerateAnswerRequest.AnswerStyle.ABSTRACTIVE,
-    safety_settings: list[genai.SafetySetting] | None = None,
-    temperature: float | None = None,
-    client: genai.GenerativeServiceClient,
-) -> GroundedAnswer:
-    # TODO: Consider passing in the corpus ID instead of the actual
-    # passages.
-    if safety_settings is None:
-        safety_settings = []
-    response = client.generate_answer(
-        genai.GenerateAnswerRequest(
-            contents=[
-                genai.Content(parts=[genai.Part(text=prompt)]),
-            ],
-            model=_DEFAULT_GENERATE_SERVICE_MODEL,
-            answer_style=answer_style,
-            safety_settings=safety_settings,
-            temperature=temperature,
-            inline_passages=genai.GroundingPassages(
-                passages=[
-                    genai.GroundingPassage(
-                        # IDs here takes alphanumeric only. No dashes allowed.
-                        id=str(index),
-                        content=genai.Content(parts=[genai.Part(text=chunk)]),
-                    )
-                    for index, chunk in enumerate(passages)
-                ]
-            ),
-        )
-    )
-
-    if response.answer.finish_reason != genai.Candidate.FinishReason.STOP:
-        finish_message = _get_finish_message(response.answer)
-        raise GenerateAnswerError(
-            finish_reason=response.answer.finish_reason,
-            finish_message=finish_message,
-            safety_ratings=response.answer.safety_ratings,
-        )
-
-    assert len(response.answer.content.parts) == 1
-    return GroundedAnswer(
-        answer=response.answer.content.parts[0].text,
-        attributed_passages=[
-            Passage(
-                text=passage.content.parts[0].text,
-                id=passage.source_id.grounding_passage.passage_id,
-            )
-            for passage in response.answer.grounding_attributions
-            if len(passage.content.parts) > 0
-        ],
-        answerable_probability=response.answerable_probability,
-    )
-
-
-def _get_finish_message(candidate: genai.Candidate) -> str:
-    """Get a human-readable finish message from the candidate.
-
-    Uses the official finish_message field if available, otherwise falls back
-    to a manual mapping of finish reasons to descriptive messages.
-    """
-    # Use the official field when available
-    if hasattr(candidate, "finish_message") and candidate.finish_message:
-        return candidate.finish_message
-
-    # Fallback to manual mapping for all known finish reasons
-    finish_messages: dict[int, str] = {
-        genai.Candidate.FinishReason.STOP: "Generation completed successfully",
-        genai.Candidate.FinishReason.MAX_TOKENS: (
-            "Maximum token in context window reached"
-        ),
-        genai.Candidate.FinishReason.SAFETY: "Blocked because of safety",
-        genai.Candidate.FinishReason.RECITATION: "Blocked because of recitation",
-        genai.Candidate.FinishReason.LANGUAGE: "Unsupported language detected",
-        genai.Candidate.FinishReason.BLOCKLIST: "Content hit forbidden terms",
-        genai.Candidate.FinishReason.PROHIBITED_CONTENT: (
-            "Inappropriate content detected"
-        ),
-        genai.Candidate.FinishReason.SPII: "Sensitive personal information detected",
-        genai.Candidate.FinishReason.IMAGE_SAFETY: "Image safety violation",
-        genai.Candidate.FinishReason.MALFORMED_FUNCTION_CALL: "Malformed function call",
-        genai.Candidate.FinishReason.UNEXPECTED_TOOL_CALL: "Unexpected tool call",
-        genai.Candidate.FinishReason.OTHER: "Other generation issue",
-        genai.Candidate.FinishReason.FINISH_REASON_UNSPECIFIED: (
-            "Unspecified finish reason"
-        ),
-    }
-
-    finish_reason = candidate.finish_reason
-    return finish_messages.get(finish_reason, "Unexpected generation error")
 
 
 def _convert_to_metadata(metadata: dict[str, Any]) -> list[genai.CustomMetadata]:

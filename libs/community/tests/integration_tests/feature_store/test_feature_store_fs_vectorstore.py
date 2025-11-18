@@ -29,7 +29,7 @@ def store_fs_vectorstore(request: pytest.FixtureRequest) -> VertexFSVectorStore:
     Example:
     export PROJECT_ID=...
     """
-    from google.cloud import bigquery
+    from google.cloud import bigquery  # type: ignore[attr-defined]
 
     embedding_model = FakeEmbeddings(size=EMBEDDING_SIZE)
 

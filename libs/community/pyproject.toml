@@ -9,8 +9,8 @@ license = {text = "MIT"}
 readme = "README.md"
 authors = []
 
-version = "3.0.0"
-requires-python = ">=3.10.0,<3.13.0"
+version = "3.0.1"
+requires-python = ">=3.10.0,<3.14.0"
 dependencies = [
     "langchain-core>=1.0.0,<2.0.0",
     "langchain-community>=0.4.0,<2.0.0",
@@ -22,15 +22,21 @@ dependencies = [
 ]
 
 [project.urls]
-"Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/community"
+Homepage = "https://docs.langchain.com/oss/python/integrations/providers/google"
+Documentation = "https://reference.langchain.com/python/integrations/langchain_google_community/"
+Source = "https://github.com/langchain-ai/langchain-google/tree/master/libs/community"
+Changelog = "https://github.com/langchain-ai/langchain-google/releases?q=%22community%22"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
-bigquery = ["google-cloud-bigquery>=3.21.0,<4.0.0"]
+#bigquery = ["google-cloud-bigquery>=3.21.0,<4.0.0"]
 calendar = ["google-auth>=2.36.0,<3.0.0", "google-auth-oauthlib>=1.2.0,<2.0.0"]
 docai = [
     "google-cloud-documentai>=2.26.0,<3.0.0",
     "google-cloud-contentwarehouse>=0.7.7,<1.0.0",
-    "google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0",
+    #"google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0",
     "gapic-google-longrunning>=0.11.2,<1.0.0",
 ]
 drive = ["google-auth-httplib2>=0.2.0,<1.0.0", "google-auth-oauthlib>=1.2.0,<2.0.0"]
@@ -55,8 +61,8 @@ test = [
     "pytest-retry>=1.7.0,<2.0.0",
     "pytest-socket>=0.7.0,<1.0.0",
     "google-cloud-documentai>=2.24.2,<3.0.0",
-    "google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0; python_version<'3.13'",
-    "google-cloud-bigquery>=3.19.0,<4.0.0",
+    #"google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0",
+    #"google-cloud-bigquery>=3.21.0,<4.0.0",
     "google-cloud-discoveryengine>=0.11.14,<1.0.0",
     "cloudpickle>=3.0.0,<4.0.0",
 ]
@@ -66,7 +72,7 @@ test_integration = [
 ]
 
 lint = [
-    "ruff>=0.12.10,<1",
+    "ruff>=0.14.0,<1",
 ]
 
 typing = [
@@ -86,7 +92,6 @@ dev = [
 ]
 
 [tool.ruff]
-target-version = "py39"
 fix = true
 
 [tool.ruff.format]

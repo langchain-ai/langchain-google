@@ -1,4 +1,4 @@
-"""Test ChatGoogleGenerativeAI function call."""
+"""Test `ChatGoogleGenerativeAI` function calling abilities."""
 
 import json
 
@@ -11,7 +11,7 @@ from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
 )
 
-MODEL_NAMES = ["gemini-flash-lite-latest"]
+MODEL_NAMES = ["gemini-2.5-flash-lite"]
 
 
 @pytest.mark.parametrize(

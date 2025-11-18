@@ -9,7 +9,7 @@ license = {text = "MIT"}
 readme = "README.md"
 authors = []
 
-version = "3.0.1"
+version = "3.0.3"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
     "langchain-core>=1.0.0,<2.0.0",
@@ -19,9 +19,13 @@ dependencies = [
 ]
 
 [project.urls]
-"Source Code" = "https://github.com/langchain-ai/langchain-google/tree/main/libs/genai"
-"Release Notes" = "https://github.com/langchain-ai/langchain-google/releases"
-repository = "https://github.com/langchain-ai/langchain-google"
+Homepage = "https://docs.langchain.com/oss/python/integrations/providers/google"
+Documentation = "https://reference.langchain.com/python/integrations/langchain_google_genai/"
+Source = "https://github.com/langchain-ai/langchain-google/tree/master/libs/genai"
+Changelog = "https://github.com/langchain-ai/langchain-google/releases?q=%22genai%22"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
 lint = ["ruff>=0.13.1,<0.14.0"]
@@ -47,12 +51,9 @@ test = [
     "numpy>=2.1.0; python_version>='3.13'",
     "langchain-tests>=1.0.0,<2.0.0",
 ]
-
 test_integration = [
     "pytest>=8.4.0,<9.0.0",
 ]
-
-dev = []
 
 [tool.ruff]
 fix = true
@@ -84,7 +85,7 @@ ignore = [
     "ERA",     # No commented-out code
     "PLR2004", # Comparison to magic number
     "PLC0415", # Import top level
-    "SIM117",  # Single with statement 
+    "SIM117",  # Single with statement
     "FBT",     # Bool stuff
     "PT",
     "ARG",     # Argument related

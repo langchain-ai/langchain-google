@@ -263,12 +263,30 @@ class _VertexAICommon(_VertexAIBase):
     thinking_budget: int | None = Field(
         default=None,
     )
-    """Indicates the thinking budget in tokens."""
+    """Indicates the thinking budget in tokens.
+
+    Used to disable thinking for supported models (when set to `0`) or to constrain
+    the number of tokens used for thinking.
+
+    Dynamic thinking (allowing the model to decide how many tokens to use) is
+    enabled when set to `-1`.
+
+    More information, including per-model limits, can be found in the
+    [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking#set-budget).
+    """
 
     include_thoughts: bool | None = Field(
         default=None,
     )
-    """Indicates whether to include thoughts in the response."""
+    """Indicates whether to include thoughts in the response.
+
+    !!! note
+
+        This parameter is only applicable for models that support thinking.
+
+        This does not disable thinking; to disable thinking, set `thinking_budget` to
+        `0`. for supported models. See the `thinking_budget` parameter for more details.
+    """
 
     audio_timestamp: bool | None = Field(
         default=None,
@@ -340,6 +358,10 @@ class _BaseVertexAIModelGarden(_VertexAIBase):
     """Large language models served from Vertex AI Model Garden."""
 
     async_client: Any = Field(default=None, exclude=True)
+
+    # NOTE: we inherit the .prediction_client property from _VertexAIBase which may
+    # cause issues since Model Garden uses aiplatform.gapic.PredictionServiceClient
+    # instead of the v1/v1beta1 clients
 
     endpoint_id: str
     """A name of an endpoint where the model has been deployed."""

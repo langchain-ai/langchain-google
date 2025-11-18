@@ -41,6 +41,7 @@ from vertexai.language_models import (
 )
 
 from langchain_google_vertexai._base import _get_prediction_client
+from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
@@ -1819,3 +1820,157 @@ def test_thinking_budget_in_invocation_params() -> None:
     assert "include_thoughts" in invocation_params
     assert invocation_params["thinking_budget"] == 500
     assert invocation_params["include_thoughts"] is False
+
+
+def test_thought_signature_conversion() -> None:
+    # Test ReasoningContentBlock with signature
+    reasoning_block = {
+        "type": "reasoning",
+        "reasoning": "Let me think about this...",
+        "extras": {"signature": "signature123"},
+    }
+    result = _convert_from_v1_to_vertex(
+        [reasoning_block],  # type: ignore[list-item]
+        "google_vertexai",
+    )
+    expected = [
+        {
+            "type": "thinking",
+            "thinking": "Let me think about this...",
+            "thought_signature": "signature123",
+        }
+    ]
+    assert result == expected
+
+    # Test ReasoningContentBlock without signature (should NOT be skipped now)
+    reasoning_without_sig = {
+        "type": "reasoning",
+        "reasoning": "Thinking without signature...",
+        "extras": {},
+    }
+    result = _convert_from_v1_to_vertex(
+        [reasoning_without_sig],  # type: ignore[list-item]
+        "google_vertexai",
+    )
+    expected_no_sig = [
+        {
+            "type": "thinking",
+            "thinking": "Thinking without signature...",
+        }
+    ]
+    assert result == expected_no_sig
+
+    # Test function_call_signature block
+    sig_block = {
+        "type": "function_call_signature",
+        "signature": "sig123",
+        "index": 0,
+    }
+    result = _convert_from_v1_to_vertex(
+        [sig_block],  # type: ignore[list-item]
+        "google_vertexai",
+    )
+    expected_sig = [sig_block]
+    assert result == expected_sig
+
+    # Test TextContentBlock with signature
+    text_block = {
+        "type": "text",
+        "text": "Hello world",
+        "extras": {"signature": "text_sig_123"},
+    }
+    result = _convert_from_v1_to_vertex(
+        [text_block],  # type: ignore[list-item]
+        "google_vertexai",
+    )
+    expected_text = [
+        {
+            "type": "text",
+            "text": "Hello world",
+            "thought_signature": "text_sig_123",
+        }
+    ]
+    assert result == expected_text
+
+
+def test_parse_chat_history_uses_index_for_signature() -> None:
+    """Test _parse_chat_history uses the index field to map signatures to tool calls."""
+    sig_bytes = b"dummy_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+
+    # Content with reasoning block (index 0) and signature block (index 1)
+    # The signature block points to tool call index 0
+    content = [
+        {"type": "reasoning", "reasoning": "I should use the tool."},
+        {"type": "function_call_signature", "signature": sig_b64, "index": 0},
+    ]
+
+    tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
+
+    message = AIMessage(content=content, tool_calls=tool_calls)  # type: ignore[arg-type]
+
+    message.response_metadata["output_version"] = "v1"
+    message.response_metadata["model_provider"] = (
+        "google_genai"  # Simulate genai message
+    )
+
+    # Mock ImageBytesLoader
+    mock_loader = MagicMock(spec=ImageBytesLoader)
+
+    # Parse the history
+    _, formatted_messages = _parse_chat_history_gemini([message], mock_loader)
+
+    # Check the result
+    model_content = formatted_messages[0]
+    assert model_content.role == "model"
+    assert len(model_content.parts) == 2  # thinking + function_call
+
+    # Part 0 is thinking
+    assert model_content.parts[0].thought is True
+    assert model_content.parts[0].text == "I should use the tool."
+
+    # Part 1 is function_call
+    part = model_content.parts[1]
+
+    # Check if function_call is present
+    assert part.function_call is not None
+    assert part.function_call.name == "my_tool"
+
+    # Check if thought_signature is correctly attached
+    assert part.thought_signature == sig_bytes
+
+
+def test_parse_chat_history_with_text_signature() -> None:
+    """Test _parse_chat_history handles text blocks with signatures."""
+    sig_bytes = b"text_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+
+    # Content with reasoning block and text block with signature
+    content = [
+        {"type": "reasoning", "reasoning": "Thinking..."},
+        {"type": "text", "text": "Final answer", "extras": {"signature": sig_b64}},
+    ]
+
+    message = AIMessage(content=content)  # type: ignore[arg-type]
+
+    message.response_metadata["output_version"] = "v1"
+    message.response_metadata["model_provider"] = "google_genai"
+
+    # Mock ImageBytesLoader
+    mock_loader = MagicMock(spec=ImageBytesLoader)
+
+    # Parse the history
+    _, formatted_messages = _parse_chat_history_gemini([message], mock_loader)
+
+    # Check the result
+    model_content = formatted_messages[0]
+    assert model_content.role == "model"
+    assert len(model_content.parts) == 2
+
+    # Part 0 is thinking
+    assert model_content.parts[0].thought is True
+
+    # Part 1 is text with signature
+    part = model_content.parts[1]
+    assert part.text == "Final answer"
+    assert part.thought_signature == sig_bytes

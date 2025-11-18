@@ -9,6 +9,7 @@ from langchain_google_community.docai import DocAIParser
 
 
 @pytest.mark.extended
+@pytest.mark.xfail(reason="TEMPORARY until dependency issues are resolved.")
 def test_docai_layout_parser() -> None:
     processor_name = os.environ["PROCESSOR_NAME"]
     parser = DocAIParser(processor_name=processor_name, location="us")

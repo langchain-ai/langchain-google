@@ -10,7 +10,7 @@ from pydantic import SecretStr
 
 from langchain_google_genai.llms import GoogleGenerativeAI
 
-MODEL_NAME = "gemini-flash-lite-latest"
+MODEL_NAME = "gemini-2.5-flash"
 
 
 def test_tracing_params() -> None:
@@ -58,7 +58,7 @@ def test_tracing_params() -> None:
 
 
 def test_base_url_support() -> None:
-    """Test that base_url is properly passed through to ChatGoogleGenerativeAI."""
+    """Test that `base_url` is properly passed through to `ChatGoogleGenerativeAI`."""
     mock_client = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
