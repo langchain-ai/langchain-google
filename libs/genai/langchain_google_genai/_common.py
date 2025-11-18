@@ -214,8 +214,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
         default=None,
     )
     """
-    Optional. Seed used in decoding. If not set,
-     the request uses a randomly generated seed.
+    Seed used in decoding.
+
+    If not set, the request uses a randomly generated seed.
     """
 
     @property
