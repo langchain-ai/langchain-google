@@ -133,7 +133,6 @@ _allowed_params_prediction_service = ["request", "timeout", "metadata", "labels"
 
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
-
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
 )
@@ -154,6 +153,24 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     API usage in the `ChatGoogleGenerativeAI` class, such as unsupported message types
     or roles.
     """
+
+
+def _is_gemini_3_or_later(model_name: str) -> bool:
+    """Checks if the model is a pre-Gemini 3 model."""
+    if not model_name:
+        return False
+    model_name = model_name.lower()
+    if "gemini-3" in model_name:
+        return True
+    return False
+
+
+def _is_gemini_25_model(model_name: str) -> bool:
+    """Checks if the model is a Gemini 2.5 model."""
+    if not model_name:
+        return False
+    model_name = model_name.lower().replace("models/", "")
+    return "gemini-2.5" in model_name
 
 
 def _create_retry_decorator(
@@ -288,6 +305,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
+    model: str | None = None,
 ) -> list[Part]:
     """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
@@ -364,6 +382,19 @@ def _convert_to_parts(
                                 mime_type = kind.mime
                         if mime_type:
                             inline_data["mime_type"] = mime_type
+
+                    if "media_resolution" in part:
+                        if model and _is_gemini_25_model(model):
+                            warnings.warn(
+                                "Setting per-part media resolution requests to "
+                                "Gemini 2.5 models and older is not supported. The "
+                                "media_resolution parameter will be ignored.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
+                        elif model and _is_gemini_3_or_later(model):
+                            inline_data["media_resolution"] = part["media_resolution"]
+
                     parts.append(Part(inline_data=inline_data))
                 elif part["type"] == "image_url":
                     # Chat Completions image format
@@ -399,6 +430,26 @@ def _convert_to_parts(
                     if "video_metadata" in part:
                         metadata = VideoMetadata(part["video_metadata"])
                         media_part.video_metadata = metadata
+
+                    if "media_resolution" in part:
+                        if model and _is_gemini_25_model(model):
+                            warnings.warn(
+                                "Setting per-part media resolution requests to "
+                                "Gemini 2.5 models and older is not supported. The "
+                                "media_resolution parameter will be ignored.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
+                        elif model and _is_gemini_3_or_later(model):
+                            if media_part.inline_data:
+                                media_part.inline_data.media_resolution = part[
+                                    "media_resolution"
+                                ]
+                            elif media_part.file_data:
+                                media_part.file_data.media_resolution = part[
+                                    "media_resolution"
+                                ]
+
                     parts.append(media_part)
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format that we continue to store as
@@ -509,7 +560,9 @@ def _convert_to_parts(
 
 
 def _convert_tool_message_to_parts(
-    message: ToolMessage | FunctionMessage, name: str | None = None
+    message: ToolMessage | FunctionMessage,
+    name: str | None = None,
+    model: str | None = None,
 ) -> list[Part]:
     """Converts a tool or function message to a Google `Part`."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
@@ -526,7 +579,7 @@ def _convert_tool_message_to_parts(
                 media_blocks.append(block)
             else:
                 other_blocks.append(block)
-        parts.extend(_convert_to_parts(media_blocks))
+        parts.extend(_convert_to_parts(media_blocks, model=model))
         response = other_blocks
 
     elif not isinstance(message.content, str):
@@ -549,7 +602,9 @@ def _convert_tool_message_to_parts(
 
 
 def _get_ai_message_tool_messages_parts(
-    tool_messages: Sequence[ToolMessage], ai_message: AIMessage
+    tool_messages: Sequence[ToolMessage],
+    ai_message: AIMessage,
+    model: str | None = None,
 ) -> list[Part]:
     """Conversion.
 
@@ -565,7 +620,7 @@ def _get_ai_message_tool_messages_parts(
         if message.tool_call_id in tool_calls_ids:
             tool_call = tool_calls_ids[message.tool_call_id]
             message_parts = _convert_tool_message_to_parts(
-                message, name=tool_call.get("name")
+                message, name=tool_call.get("name"), model=model
             )
             parts.extend(message_parts)
             # remove the id from the dict, so that we do not iterate over it again
@@ -573,8 +628,34 @@ def _get_ai_message_tool_messages_parts(
     return parts
 
 
+# To generate the below thought signature:
+
+# from langchain_google_genai import ChatGoogleGenerativeAI
+#
+# def generate_placeholder_thoughts(value: int) -> str:
+#     """Placeholder tool."""
+#     pass
+#
+# model = ChatGoogleGenerativeAI(
+#     model="gemini-3-pro-preview"
+# ).bind_tools([generate_placeholder_thoughts])
+#
+# response = model.invoke("Generate a placeholder tool invocation.")
+
+DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
+    "ErQCCrECAdHtim8MtxgeMCRCiNiyoyImxtYAEDzz4NXOr/HSL3rA7rPPvHWZCm+T9VSDYh/mt9lESoH4wQh"
+    "/ca1zDtWTN6XOL1+S3krYLQeqp47RV/b1eSq5jdZF28S4Lb7w4A3/EFdybc4SFb2/YhMm+CulYLmLA4Tr4V"
+    "Su0eMWgxM3HVt6u0jECf5BbXzj0qjJ32tEQYJvKvV8H1tCHvB6J+RZhsDr+TcyOCaqxDoR4WKxXYxNRZb3h"
+    "YTuCnBEDPhn1lROumVaghi9nEIgc17z002zLoyqIptlLfIVw70FXkCLsPUSL1SjPQYtGL8PVncVajeqGogR"
+    "D/eZSVZ1Zr5tshxh3DQ+JAYNcrHaRHWC4Hg0H6oftYx+JdJD9B/81NYV9jyGxP7zHKFHOELl0IUP5GEXP9I"
+    "="
+)
+
+
 def _parse_chat_history(
-    input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
+    input_messages: Sequence[BaseMessage],
+    convert_system_message_to_human: bool = False,
+    model: str | None = None,
 ) -> tuple[Content | None, list[Content]]:
     """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
@@ -582,6 +663,7 @@ def _parse_chat_history(
         input_messages: Sequence of `BaseMessage` objects representing the chat history.
         convert_system_message_to_human: Whether to convert the first system message
             into a `HumanMessage`. Deprecated, use system instructions instead.
+        model: The model name, used for version-specific logic.
 
     Returns:
         A tuple containing:
@@ -630,7 +712,7 @@ def _parse_chat_history(
     ]
     for i, message in enumerate(messages_without_tool_messages):
         if isinstance(message, SystemMessage):
-            system_parts = _convert_to_parts(message.content)
+            system_parts = _convert_to_parts(message.content, model=model)
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
@@ -664,7 +746,7 @@ def _parse_chat_history(
                     else:
                         ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
-                    tool_messages=tool_messages, ai_message=message
+                    tool_messages=tool_messages, ai_message=message, model=model
                 )
                 formatted_messages.append(Content(role=role, parts=ai_message_parts))
                 formatted_messages.append(
@@ -684,16 +766,16 @@ def _parse_chat_history(
                 parts = message.content  # type: ignore[assignment]
             else:
                 # Prepare request content parts from message.content field
-                parts = _convert_to_parts(message.content)
+                parts = _convert_to_parts(message.content, model=model)
         elif isinstance(message, HumanMessage):
             role = "user"
-            parts = _convert_to_parts(message.content)
+            parts = _convert_to_parts(message.content, model=model)
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = list(system_instruction.parts) + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
-            parts = _convert_tool_message_to_parts(message)
+            parts = _convert_tool_message_to_parts(message, model=model)
         else:
             msg = f"Unexpected message with type {type(message)} at the position {i}."
             raise ValueError(msg)
@@ -702,6 +784,50 @@ def _parse_chat_history(
         # If version = "v1", the parts are already in v1beta format and will be
         # automatically converted using protobuf's auto-conversion
         formatted_messages.append(Content(role=role, parts=parts))
+
+    # Enforce thought signatures for new Gemini models
+    #
+    # These models require a 'thought_signature' field in function calls for the
+    # current active conversation loop. If missing (e.g., from older history or
+    # manual construction), the API may reject the request.
+    if model and _is_gemini_3_or_later(model):
+        # 1. Identify the "Active Loop":
+        # Scan backwards to find the most recent User message that initiated he current
+        # interaction (i.e., contains text/media, not just a tool response).
+        # This defines the scope where we must ensure compliance.
+        active_loop_start_idx = -1
+        for i in range(len(formatted_messages) - 1, -1, -1):
+            msg = formatted_messages[i]
+            if msg.role == "user":
+                has_function_response = False
+                has_standard_content = False
+                for part in msg.parts:
+                    if part.function_response:
+                        has_function_response = True
+                    if part.text or part.inline_data:
+                        has_standard_content = True
+
+                # Found the user message that started this turn
+                if has_standard_content and not has_function_response:
+                    active_loop_start_idx = i
+                    break
+
+        # 2. Patch Missing Signatures:
+        # Iterate through the active loop. If a model message contains a function call
+        # but lacks a thought signature, inject a dummy value. This satisfies the
+        # API's schema validation without requiring the original internal thought data.
+        start_idx = active_loop_start_idx + 1 if active_loop_start_idx != -1 else 0
+        for i in range(start_idx, len(formatted_messages)):
+            msg = formatted_messages[i]
+            if msg.role == "model":
+                first_fc_seen = False
+                for part in msg.parts:
+                    if part.function_call:
+                        if not first_fc_seen:
+                            if not part.thought_signature:
+                                part.thought_signature = DUMMY_THOUGHT_SIGNATURE
+                            first_fc_seen = True
+
     return system_instruction, formatted_messages
 
 
@@ -733,8 +859,6 @@ def _parse_response_candidate(
     content: None | str | list[str | dict] = None
     additional_kwargs: dict[str, Any] = {}
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
-    if model_name:
-        response_metadata["model_name"] = model_name
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
@@ -770,19 +894,19 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
-        elif text is not None and text:
-            # Check if this text Part has a signature attached
+        elif (
+            (text is not None and text)  # text part with non-empty string
+            or ("text" in part and thought_sig)  # text part with thought signature
+        ):
+            text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
-                # Text with signature needs structured block to preserve signature
-                # We use a v1 TextContentBlock
-                text_with_sig = {
-                    "type": "text",
-                    "text": text,
-                    "extras": {"signature": thought_sig},
-                }
-                content = _append_to_content(content, text_with_sig)
+                text_block["extras"] = {"signature": thought_sig}
+            if thought_sig or _is_gemini_3_or_later(model_name or ""):
+                # append blocks if there's a signature or new Gemini model
+                content = _append_to_content(content, text_block)
             else:
-                content = _append_to_content(content, text)
+                # otherwise, append text
+                content = _append_to_content(content, text or "")
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
@@ -907,7 +1031,10 @@ def _parse_response_candidate(
                 )
 
     if content is None:
-        content = ""
+        if _is_gemini_3_or_later(model_name or ""):
+            content = []
+        else:
+            content = ""
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
@@ -999,7 +1126,9 @@ def _response_to_result(
             proto.Message.to_dict(safety_rating, use_integers_for_enums=False)
             for safety_rating in candidate.safety_ratings
         ]
-        message = _parse_response_candidate(candidate, streaming=stream)
+        message = _parse_response_candidate(
+            candidate, streaming=stream, model_name=response.model_version
+        )
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
@@ -1701,6 +1830,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
     """
 
+    thinking_level: Literal["low", "high"] | None = Field(
+        default=None,
+    )
+    """Indicates the thinking level.
+
+    Supported values:
+        * `'low'`: Minimizes latency and cost.
+        * `'high'`: Maximizes reasoning depth.
+
+    !!! note "Replaces `thinking_budget`"
+
+        `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
+        provided, `thinking_level` takes precedence.
+
+        If left unspecified, the model's default thinking level is used. For Gemini 3+,
+        this defaults to `'high'`.
+    """
+
     client: Any = Field(default=None, exclude=True)
 
     async_client_running: Any = Field(default=None, exclude=True)
@@ -1835,6 +1982,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)
 
+        if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
+            self.model
+        ):
+            self.temperature = 1.0
+
         if self.top_p is not None and not 0 <= self.top_p <= 1:
             msg = "top_p must be in the range [0.0, 1.0]"
             raise ValueError(msg)
@@ -1931,6 +2083,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
+            "thinking_level": self.thinking_level,
         }
 
     def invoke(
@@ -1994,6 +2147,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerationConfig:
+        if self.thinking_level is not None and self.thinking_budget is not None:
+            msg = (
+                "Both 'thinking_level' and 'thinking_budget' were specified. "
+                "'thinking_level' is not yet supported by the current API version, "
+                "so 'thinking_budget' will be used instead."
+            )
+            warnings.warn(msg, UserWarning, stacklevel=2)
+
         gen_config = {
             k: v
             for k, v in {
@@ -2016,9 +2177,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                             if self.include_thoughts is not None
                             else {}
                         )
+                        | (
+                            {"thinking_level": self.thinking_level}
+                            if self.thinking_level is not None
+                            else {}
+                        )
                     )
                     if self.thinking_budget is not None
                     or self.include_thoughts is not None
+                    or self.thinking_level is not None
                     else None
                 ),
             }.items()
@@ -2199,12 +2366,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
+        index = -1
+        index_type = ""
         for chunk in response:
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
             )
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)
+
+            # populate index if missing
+            if isinstance(message.content, list):
+                for block in message.content:
+                    if isinstance(block, dict) and "type" in block:
+                        if block["type"] != index_type:
+                            index_type = block["type"]
+                            index = index + 1
+                        if "index" not in block:
+                            block["index"] = index
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -2262,6 +2441,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             if "max_retries" not in kwargs:
                 kwargs["max_retries"] = self.max_retries
             prev_usage_metadata: UsageMetadata | None = None  # cumulative usage
+
+            index = -1
+            index_type = ""
             async for chunk in await _achat_with_retry(
                 request=request,
                 generation_method=self.async_client.stream_generate_content,
@@ -2273,6 +2455,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
+
+                # populate index if missing
+                if isinstance(message.content, list):
+                    for block in message.content:
+                        if isinstance(block, dict) and "type" in block:
+                            if block["type"] != index_type:
+                                index_type = block["type"]
+                                index = index + 1
+                            if "index" not in block:
+                                block["index"] = index
 
                 prev_usage_metadata = (
                     message.usage_metadata
@@ -2328,9 +2520,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             system_instruction, history = _parse_chat_history(
                 messages,
                 convert_system_message_to_human=self.convert_system_message_to_human,
+                model=self.model,
             )
         else:
-            system_instruction, history = _parse_chat_history(messages)
+            system_instruction, history = _parse_chat_history(
+                messages,
+                model=self.model,
+            )
 
         # Validate that we have at least one content message for the API
         if not history:
