@@ -761,6 +761,8 @@ def _parse_response_candidate(
             except (AttributeError, TypeError):
                 thought_sig = None
 
+        has_function_call = hasattr(part, "function_call") and part.function_call
+
         if hasattr(part, "thought") and part.thought:
             thinking_message = {
                 "type": "thinking",
@@ -770,7 +772,7 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
-        elif text is not None and text:
+        elif text is not None and text.strip() and not has_function_call:
             # Check if this text Part has a signature attached
             if thought_sig:
                 # Text with signature needs structured block to preserve signature
@@ -896,18 +898,33 @@ def _parse_response_candidate(
 
             # If this function_call Part has a signature, track it separately
             if thought_sig:
-                if _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY not in additional_kwargs:
-                    additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY] = {}
-                additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY][
-                    tool_call_id
-                ] = (
-                    _bytes_to_base64(thought_sig)
-                    if isinstance(thought_sig, bytes)
-                    else thought_sig
-                )
+                sig_block = {
+                    "type": "function_call_signature",
+                    "signature": thought_sig,
+                }
+                function_call_signatures.append(sig_block)
+
+        # Add function call signatures to content only if there's already other content
+        # This preserves backward compatibility where content is "" for
+        # function-only responses
+        if function_call_signatures and content is not None:
+            for sig_block in function_call_signatures:
+                content = _append_to_content(content, sig_block)
 
     if content is None:
         content = ""
+
+    if (
+        hasattr(response_candidate, "logprobs_result")
+        and response_candidate.logprobs_result
+    ):
+        # Note: logprobs is flaky, sometimes available, sometimes not
+        # https://discuss.ai.google.dev/t/logprobs-is-not-enabled-for-gemini-models/107989/15
+        response_metadata["logprobs"] = MessageToDict(
+            response_candidate.logprobs_result._pb,
+            preserving_proto_field_name=True,
+        )
+
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
@@ -1764,6 +1781,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     stop: list[str] | None = None
     """Stop sequences for the model."""
 
+    logprobs: int | None = None
+    """The number of logprobs to return."""
+
     streaming: bool | None = None
     """Whether to stream responses from the model."""
 
@@ -1931,6 +1951,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
+            "logprobs": self.logprobs,
         }
 
     def invoke(
@@ -2024,6 +2045,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             }.items()
             if v is not None
         }
+        logprobs = getattr(self, "logprobs", None)
+        if logprobs:
+            gen_config["logprobs"] = logprobs
+            gen_config["response_logprobs"] = True
         if generation_config:
             gen_config = {**gen_config, **generation_config}
 
