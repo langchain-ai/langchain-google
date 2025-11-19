@@ -18,7 +18,7 @@ MODEL_NAMES = ["gemini-2.5-flash-lite"]
     "model_name",
     MODEL_NAMES,
 )
-def test_function_call(model_name: str) -> None:
+async def test_function_call(model_name: str) -> None:
     functions = [
         {
             "name": "get_weather",
@@ -37,7 +37,7 @@ def test_function_call(model_name: str) -> None:
         }
     ]
     llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=functions)
-    res = llm.invoke("what weather is today in san francisco?")
+    res = await llm.ainvoke("what weather is today in san francisco?")
     assert res
     assert res.additional_kwargs
     assert "function_call" in res.additional_kwargs
@@ -52,14 +52,14 @@ def test_function_call(model_name: str) -> None:
     "model_name",
     MODEL_NAMES,
 )
-def test_tool_call(model_name: str) -> None:
+async def test_tool_call(model_name: str) -> None:
     @tool
     def search_tool(query: str) -> str:
         """Searches the web for `query` and returns the result."""
         raise NotImplementedError
 
     llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=[search_tool])
-    response = llm.invoke("weather in san francisco")
+    response = await llm.ainvoke("weather in san francisco")
     assert isinstance(response, AIMessage)
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
@@ -79,9 +79,9 @@ class MyModel(BaseModel):
     "model_name",
     MODEL_NAMES,
 )
-def test_pydantic_call(model_name: str) -> None:
+async def test_pydantic_call(model_name: str) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=[MyModel])
-    response = llm.invoke("my name is Erick and I am 27 years old")
+    response = await llm.ainvoke("my name is Erick and I am 27 years old")
     assert isinstance(response, AIMessage)
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
