@@ -15,7 +15,7 @@ test tests:
 	uv run --group test pytest --disable-socket --allow-unix-socket --release $(TEST_FILE)
 
 integration_test integration_tests:
-	uv run --group test --group test_integration pytest --retries 3 --retry-delay 1 --release $(TEST_FILE)
+	uv run --group test --group test_integration pytest -n auto --retries 3 --retry-delay 1 --release $(TEST_FILE)
 
 test_watch:
 	uv run ptw --snapshot-update --now . -- -vv $(TEST_FILE)
