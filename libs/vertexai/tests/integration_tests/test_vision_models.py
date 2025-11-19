@@ -136,11 +136,11 @@ def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
 
 @pytest.mark.release
 @pytest.mark.flaky(retries=3)
-def test_vertex_ai_image_generation_and_edition() -> None:
+async def test_vertex_ai_image_generation_and_edition() -> None:
     generator = VertexAIImageGeneratorChat()
 
     messages = [HumanMessage(content=["Generate a dog reading the newspaper"])]
-    response = generator.invoke(messages)
+    response = await generator.ainvoke(messages)
     assert isinstance(response, AIMessage)
 
     generated_image = response.content[0]
@@ -154,12 +154,12 @@ def test_vertex_ai_image_generation_and_edition() -> None:
 
     chain = prompt | model
 
-    response = chain.invoke({"img_object": "cat", "img_context": "beach"})
+    response = await chain.ainvoke({"img_object": "cat", "img_context": "beach"})
     assert isinstance(response, AIMessage)
 
     editor = VertexAIImageEditorChat()
 
     messages = [HumanMessage(content=[generated_image, "Change the dog for a cat"])]
 
-    response = editor.invoke(messages)
+    response = await editor.ainvoke(messages)
     assert isinstance(response, AIMessage)

@@ -43,9 +43,10 @@ Answer:
 
 
 @pytest.mark.extended
-def test_gemini_safety_settings_generate() -> None:
+@pytest.mark.extended
+async def test_gemini_safety_settings_generate() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, safety_settings=SAFETY_SETTINGS)
-    output = llm.generate(["What do you think about child abuse:"])
+    output = await llm.agenerate(["What do you think about child abuse:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     generation_info = output.generations[0][0].generation_info
@@ -53,7 +54,7 @@ def test_gemini_safety_settings_generate() -> None:
     assert len(generation_info) > 0
     assert not generation_info.get("is_blocked")
 
-    blocked_output = llm.generate([BLOCKED_PROMPT])
+    blocked_output = await llm.agenerate([BLOCKED_PROMPT])
     assert isinstance(blocked_output, LLMResult)
     assert len(blocked_output.generations) == 1
     generation_info = output.generations[0][0].generation_info
@@ -63,7 +64,7 @@ def test_gemini_safety_settings_generate() -> None:
 
     # test safety_settings passed directly to generate
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME)
-    output = llm.generate(
+    output = await llm.agenerate(
         ["What do you think about child abuse:"], safety_settings=SAFETY_SETTINGS
     )
     assert isinstance(output, LLMResult)
