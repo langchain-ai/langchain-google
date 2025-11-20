@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import mimetypes
+import re
 import time
 import uuid
 import warnings
@@ -13,6 +14,7 @@ import wave
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from difflib import get_close_matches
 from operator import itemgetter
+from pathlib import Path
 from typing import (
     Any,
     Literal,
@@ -61,6 +63,10 @@ from langchain_core.language_models import (
     is_openai_data_block,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models.profile import ModelProfile, ModelProfileRegistry
+from langchain_core.language_models.profile._loader_utils import (
+    load_profiles_from_data_dir,
+)
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -136,6 +142,16 @@ _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
 )
+
+_MODEL_PROFILES = cast(
+    "ModelProfileRegistry",
+    load_profiles_from_data_dir(Path(__file__).parent / "data", "google"),
+)
+
+
+def _get_default_model_profile(model_name: str) -> ModelProfile:
+    default = _MODEL_PROFILES.get(model_name) or {}
+    return default.copy()
 
 
 def _bytes_to_base64(data: bytes) -> str:
@@ -2069,6 +2085,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 transport=transport,
             )
         return self.async_client_running
+
+    @model_validator(mode="after")
+    def _set_model_profile(self) -> Self:
+        """Set model profile if not overridden."""
+        if self.profile is None:
+            model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
+            self.profile = _get_default_model_profile(model_id)
+        return self
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
