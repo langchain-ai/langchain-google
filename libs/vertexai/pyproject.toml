@@ -75,6 +75,9 @@ test_integration = [
     "langchain-tests>=1.0.0,<2.0.0",
 ]
 
+[tool.uv.sources]
+langchain-core = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/core", branch = "cc/model_profiles_distributed" }
+
 [tool.ruff]
 fix = true
 
