@@ -1279,3 +1279,33 @@ def test_format_messages_complex_multiturn_with_tools() -> None:
     # Fourth message (AI response) should have 'index' removed
     assert "index" not in formatted[3]["content"][0]
     assert formatted[3]["content"][0]["text"] == "It's sunny and 22°C in Paris!"
+
+
+def test_tool_message_preserves_cache_control() -> None:
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="get_weather",
+                    args={"city": "Paris"},
+                    id="call_1",
+                )
+            ],
+        ),
+        ToolMessage(
+            content="Sunny, 22°C",
+            tool_call_id="call_1",
+            additional_kwargs={"cache_control": {"type": "ephemeral"}},
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    tool_result = formatted[1]["content"][0]
+
+    assert tool_result == {
+        "type": "tool_result",
+        "content": "Sunny, 22°C",
+        "tool_use_id": "call_1",
+        "cache_control": {"type": "ephemeral"},
+    }

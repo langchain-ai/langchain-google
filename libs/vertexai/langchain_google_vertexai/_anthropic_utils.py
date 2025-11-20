@@ -406,6 +406,12 @@ def _merge_messages(
                 if curr.status == "error":
                     tool_result_block["is_error"] = True
 
+                cache_control = None
+                if isinstance(curr.additional_kwargs, dict):
+                    cache_control = curr.additional_kwargs.get("cache_control")
+                if cache_control:
+                    tool_result_block["cache_control"] = cache_control
+
                 curr = HumanMessage([tool_result_block])
         elif isinstance(curr, AIMessage):
             # Clean streaming metadata from AIMessage content blocks
