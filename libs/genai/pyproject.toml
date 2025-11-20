@@ -55,6 +55,9 @@ test_integration = [
     "pytest>=8.4.0,<9.0.0",
 ]
 
+[tool.uv.sources]
+langchain-core = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/core", branch = "cc/model_profiles_distributed" }
+
 [tool.ruff]
 fix = true
 

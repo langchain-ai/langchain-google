@@ -484,8 +484,8 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.5"
-source = { registry = "https://pypi.org/simple" }
+version = "1.0.7"
+source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=cc%2Fmodel_profiles_distributed#a0beff29d2a0cb43e6f8cf5b2e635530fed6b96a" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
@@ -494,10 +494,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tenacity" },
     { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/61/c356e19525a210baf960968dbfb03ee38a05e05ddb41efeb32abfcb4e360/langchain_core-1.0.5.tar.gz", hash = "sha256:7ecbad9a60dde626252733a9c18c7377f4468cfe00465ffa99f5e9c6cb9b82d2", size = 778259, upload-time = "2025-11-14T16:59:27.277Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6e/ee/aaf2343a35080154c82ceb110e03dd00f15459bc72e518df51724cbc41a9/langchain_core-1.0.5-py3-none-any.whl", hash = "sha256:d24c0cf12cfcd96dd4bd479aa91425f3a6652226cd824228ae422a195067b74e", size = 471506, upload-time = "2025-11-14T16:59:25.629Z" },
 ]
 
 [[package]]
@@ -545,7 +541,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-ai-generativelanguage", specifier = ">=0.9.0,<1.0.0" },
-    { name = "langchain-core", specifier = ">=1.0.5,<2.0.0" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=cc%2Fmodel_profiles_distributed" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
 ]
 
