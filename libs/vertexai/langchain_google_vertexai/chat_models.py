@@ -9,6 +9,7 @@ import base64
 from functools import cached_property
 import json
 import logging
+from pathlib import Path
 import re
 from operator import itemgetter
 import uuid
@@ -34,6 +35,10 @@ from langchain_core.language_models.chat_models import (
     LangSmithParams,
     generate_from_stream,
     agenerate_from_stream,
+)
+from langchain_core.language_models.profile import ModelProfile, ModelProfileRegistry
+from langchain_core.language_models.profile._loader_utils import (
+    load_profiles_from_data_dir,
 )
 from langchain_core.messages import (
     AIMessage,
@@ -176,6 +181,17 @@ _allowed_params_prediction_service = [
     # Allow controlling GAPIC client retries from callers.
     "retry",
 ]
+
+
+_MODEL_PROFILES = cast(
+    "ModelProfileRegistry",
+    load_profiles_from_data_dir(Path(__file__).parent / "data", "google-vertex"),
+)
+
+
+def _get_default_model_profile(model_name: str) -> ModelProfile:
+    default = _MODEL_PROFILES.get(model_name) or {}
+    return default.copy()
 
 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
@@ -1865,6 +1881,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 project=cast("str", self.project),
             )
 
+        return self
+
+    @model_validator(mode="after")
+    def _set_model_profile(self) -> Self:
+        """Set model profile if not overridden."""
+        if self.profile is None:
+            model_id = re.sub(r"-\d{3}$", "", self.model_name.replace("models/", ""))
+            self.profile = _get_default_model_profile(model_id)
         return self
 
     def _prepare_params(
