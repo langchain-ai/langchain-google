@@ -355,15 +355,19 @@ def test_init_client_with_custom_model_kwargs() -> None:
 
 
 def test_profile() -> None:
-    model = ChatVertexAI(model="gemini-2.0-flash")
+    model = ChatVertexAI(
+        model="gemini-2.0-flash", project="test-project", location="moon-dark1"
+    )
     assert model.profile
     assert not model.profile["reasoning_output"]
 
-    model = ChatVertexAI(model="gemini-2.5-flash")
+    model = ChatVertexAI(
+        model="gemini-2.5-flash", project="test-project", location="moon-dark1"
+    )
     assert model.profile
     assert model.profile["reasoning_output"]
 
-    model = ChatVertexAI(model="foo")
+    model = ChatVertexAI(model="foo", project="test-project", location="moon-dark1")
     assert model.profile == {}
 
 
