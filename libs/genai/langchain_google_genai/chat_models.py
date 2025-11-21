@@ -14,7 +14,6 @@ import wave
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from difflib import get_close_matches
 from operator import itemgetter
-from pathlib import Path
 from typing import (
     Any,
     Literal,
@@ -60,13 +59,11 @@ from langchain_core.callbacks.manager import (
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
+    ModelProfile,
+    ModelProfileRegistry,
     is_openai_data_block,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.language_models.profile import ModelProfile, ModelProfileRegistry
-from langchain_core.language_models.profile._loader_utils import (
-    load_profiles_from_data_dir,
-)
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -130,6 +127,7 @@ from langchain_google_genai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
 )
+from langchain_google_genai.data.profiles import _PROFILES
 
 from . import _genai_extension as genaix
 
@@ -143,10 +141,7 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
 )
 
-_MODEL_PROFILES = cast(
-    "ModelProfileRegistry",
-    load_profiles_from_data_dir(Path(__file__).parent / "data", "google"),
-)
+_MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
