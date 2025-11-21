@@ -1006,8 +1006,8 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.7"
-source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=cc%2Fmodel_profiles_distributed#b7ec8735b2589fe1815ce3c58e41410824bf67b7" }
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
@@ -1017,10 +1017,14 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/1e/17/67c1cc2ace919e2b02dd9d783154d7fb3f1495a4ef835d9cd163b7855ac2/langchain_core-1.1.0.tar.gz", hash = "sha256:2b76a82d427922c8bc51c08404af4fc2a29e9f161dfe2297cb05091e810201e7", size = 781995, upload-time = "2025-11-21T21:01:26.958Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/1e/e129fc471a2d2a7b3804480a937b5ab9319cab9f4142624fcb115f925501/langchain_core-1.1.0-py3-none-any.whl", hash = "sha256:2c9f27dadc6d21ed4aa46506a37a56e6a7e2d2f9141922dc5c251ba921822ee6", size = 473752, upload-time = "2025-11-21T21:01:25.841Z" },
+]
 
 [[package]]
 name = "langchain-google-vertexai"
-version = "3.0.3"
+version = "3.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "bottleneck" },
@@ -1093,7 +1097,7 @@ requires-dist = [
     { name = "google-cloud-storage", specifier = ">=2.18.0,<4.0.0" },
     { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "httpx-sse", specifier = ">=0.4.0,<1.0.0" },
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=cc%2Fmodel_profiles_distributed" },
+    { name = "langchain-core", specifier = ">=1.1.0,<2.0.0" },
     { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.0,<2.0.0" },
     { name = "numexpr", specifier = ">=2.8.6,<3.0.0" },
     { name = "pyarrow", specifier = ">=19.0.1,<23.0.0" },
