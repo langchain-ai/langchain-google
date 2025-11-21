@@ -9,7 +9,6 @@ import base64
 from functools import cached_property
 import json
 import logging
-from pathlib import Path
 import re
 from operator import itemgetter
 import uuid
@@ -29,16 +28,16 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import (
+    LanguageModelInput,
+    ModelProfile,
+    ModelProfileRegistry,
+)
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     LangSmithParams,
     generate_from_stream,
     agenerate_from_stream,
-)
-from langchain_core.language_models.profile import ModelProfile, ModelProfileRegistry
-from langchain_core.language_models.profile._loader_utils import (
-    load_profiles_from_data_dir,
 )
 from langchain_core.messages import (
     AIMessage,
@@ -120,6 +119,8 @@ from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
     VideoMetadata,
 )
+
+from langchain_google_vertexai.data.profiles import _PROFILES
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import (
@@ -183,10 +184,7 @@ _allowed_params_prediction_service = [
 ]
 
 
-_MODEL_PROFILES = cast(
-    "ModelProfileRegistry",
-    load_profiles_from_data_dir(Path(__file__).parent / "data", "google-vertex"),
-)
+_MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
