@@ -120,7 +120,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     VideoMetadata,
 )
 
-from langchain_google_vertexai.data.profiles import _PROFILES
+from langchain_google_vertexai.data._profiles import _PROFILES
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import (
