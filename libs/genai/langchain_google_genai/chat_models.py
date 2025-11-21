@@ -127,7 +127,7 @@ from langchain_google_genai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
 )
-from langchain_google_genai.data.profiles import _PROFILES
+from langchain_google_genai.data._profiles import _PROFILES
 
 from . import _genai_extension as genaix
 
