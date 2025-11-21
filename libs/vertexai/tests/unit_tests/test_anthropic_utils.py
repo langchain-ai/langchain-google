@@ -1,5 +1,7 @@
 """Unit tests for _anthropic_utils.py."""
 
+import base64
+from unittest.mock import patch
 import pytest
 from anthropic.types import (
     RawContentBlockDeltaEvent,
@@ -22,6 +24,8 @@ from langchain_google_vertexai._anthropic_utils import (
     _make_message_chunk_from_anthropic_event,
     _thinking_in_params,
 )
+
+from langchain_google_vertexai._anthropic_utils import _format_image
 
 
 def test_format_message_anthropic_with_cache_control_in_kwargs() -> None:
@@ -1309,3 +1313,34 @@ def test_tool_message_preserves_cache_control() -> None:
         "tool_use_id": "call_1",
         "cache_control": {"type": "ephemeral"},
     }
+
+
+@pytest.mark.parametrize(
+    ("image_url", "expected_media_type"),
+    [
+        ("https://example.com/image.png?token=123", "image/png"),
+        ("https://example.com/image.jpg", "image/jpeg"),
+        ("https://example.com/document.pdf", "application/pdf"),
+    ],
+)
+def test_format_image(image_url: str, expected_media_type: str) -> None:
+    """Test that _format_image correctly handles various URLs."""
+    project = "test-project"
+
+    with patch(
+        "langchain_google_vertexai._anthropic_utils.ImageBytesLoader"
+    ) as MockLoader:
+        mock_loader_instance = MockLoader.return_value
+        mock_loader_instance.load_bytes.return_value = b"fake_image_data"
+
+        result = _format_image(image_url, project)
+
+        expected_data = base64.b64encode(b"fake_image_data").decode("ascii")
+
+        assert result == {
+            "type": "base64",
+            "media_type": expected_media_type,
+            "data": expected_data,
+        }
+
+        mock_loader_instance.load_bytes.assert_called_once_with(image_url)
