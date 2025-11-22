@@ -19,11 +19,11 @@ _OUTPUT_DIMENSIONALITY = 768
         " model against the pickle rick?",
     ],
 )
-def test_embed_query_different_lengths(query: str) -> None:
+async def test_embed_query_different_lengths(query: str) -> None:
     """Test embedding queries of different lengths."""
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
     # Note: embed_query() is a sync method, but initialization needs the loop
-    result = model.embed_query(query, output_dimensionality=_OUTPUT_DIMENSIONALITY)
+    result = await model.aembed_query(query, output_dimensionality=_OUTPUT_DIMENSIONALITY)
     assert len(result) == 768
     assert isinstance(result, list)
 
@@ -47,12 +47,12 @@ async def test_aembed_query_different_lengths(query: str) -> None:
     assert isinstance(result, list)
 
 
-def test_embed_documents() -> None:
+async def test_embed_documents() -> None:
     """Test embedding a query."""
     model = GoogleGenerativeAIEmbeddings(
         model=_MODEL,
     )
-    result = model.embed_documents(
+    result = await model.aembed_documents(
         ["Hello world", "Good day, world"], output_dimensionality=_OUTPUT_DIMENSIONALITY
     )
     assert len(result) == 2
@@ -94,24 +94,24 @@ def test_invalid_api_key_error_handling() -> None:
         ).embed_query("Hello world", output_dimensionality=_OUTPUT_DIMENSIONALITY)
 
 
-def test_embed_documents_consistency() -> None:
+async def test_embed_documents_consistency() -> None:
     """Test embedding consistency for the same document."""
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
     doc = "Consistent document for testing"
-    result1 = model.embed_documents([doc], output_dimensionality=_OUTPUT_DIMENSIONALITY)
-    result2 = model.embed_documents([doc], output_dimensionality=_OUTPUT_DIMENSIONALITY)
+    result1 = await model.aembed_documents([doc], output_dimensionality=_OUTPUT_DIMENSIONALITY)
+    result2 = await model.aembed_documents([doc], output_dimensionality=_OUTPUT_DIMENSIONALITY)
     assert result1 == result2
 
 
-def test_embed_documents_quality() -> None:
+async def test_embed_documents_quality() -> None:
     """Smoke test embedding quality by comparing similar and dissimilar documents."""
     model = GoogleGenerativeAIEmbeddings(model=_MODEL)
     similar_docs = ["Document A", "Similar Document A"]
     dissimilar_docs = ["Document A", "Completely Different Zebra"]
-    similar_embeddings = model.embed_documents(
+    similar_embeddings = await model.aembed_documents(
         similar_docs, output_dimensionality=_OUTPUT_DIMENSIONALITY
     )
-    dissimilar_embeddings = model.embed_documents(
+    dissimilar_embeddings = await model.aembed_documents(
         dissimilar_docs, output_dimensionality=_OUTPUT_DIMENSIONALITY
     )
     similar_distance = np.linalg.norm(
@@ -123,22 +123,22 @@ def test_embed_documents_quality() -> None:
     assert similar_distance < dissimilar_distance
 
 
-def test_embed_query_task_type() -> None:
+async def test_embed_query_task_type() -> None:
     """Test for task_type."""
     embeddings = GoogleGenerativeAIEmbeddings(model=_MODEL, task_type="clustering")
-    emb = embeddings.embed_query(
+    emb = await embeddings.aembed_query(
         "How does alphafold work?", output_dimensionality=_OUTPUT_DIMENSIONALITY
     )
 
     embeddings2 = GoogleGenerativeAIEmbeddings(model=_MODEL)
-    emb2 = embeddings2.embed_query(
+    emb2 = await embeddings2.aembed_query(
         "How does alphafold work?",
         task_type="clustering",
         output_dimensionality=_OUTPUT_DIMENSIONALITY,
     )
 
     embeddings3 = GoogleGenerativeAIEmbeddings(model=_MODEL)
-    emb3 = embeddings3.embed_query(
+    emb3 = await embeddings3.aembed_query(
         "How does alphafold work?", output_dimensionality=_OUTPUT_DIMENSIONALITY
     )
 

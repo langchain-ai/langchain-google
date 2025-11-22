@@ -28,7 +28,7 @@ _ANTHROPIC_CLAUDE_MODEL_NAME = "claude-sonnet-4-5@20250929"
     ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
-def test_model_garden(endpoint_os_variable_name: str, result_arg: str | None) -> None:
+async def test_model_garden(endpoint_os_variable_name: str, result_arg: str | None) -> None:
     """In order to run this test, you should provide endpoint names.
 
     Example:
@@ -45,7 +45,7 @@ def test_model_garden(endpoint_os_variable_name: str, result_arg: str | None) ->
         result_arg=result_arg,
         location=location,
     )
-    output = llm.invoke("What is the meaning of life?")
+    output = await llm.ainvoke("What is the meaning of life?")
     assert isinstance(output, str)
     assert llm._llm_type == "vertexai_model_garden"
 
@@ -55,7 +55,7 @@ def test_model_garden(endpoint_os_variable_name: str, result_arg: str | None) ->
     ("endpoint_os_variable_name", "result_arg"),
     [("FALCON_ENDPOINT_ID", "generated_text"), ("LLAMA_ENDPOINT_ID", None)],
 )
-def test_model_garden_generate(
+async def test_model_garden_generate(
     endpoint_os_variable_name: str, result_arg: str | None
 ) -> None:
     """In order to run this test, you should provide endpoint names.
@@ -74,7 +74,7 @@ def test_model_garden_generate(
         result_arg=result_arg,
         location=location,
     )
-    output = llm.generate(["What is the meaning of life?", "How much is 2+2"])
+    output = await llm.agenerate(["What is the meaning of life?", "How much is 2+2"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 2
 
@@ -104,7 +104,7 @@ async def test_model_garden_agenerate(
 
 
 @pytest.mark.extended
-def test_anthropic() -> None:
+async def test_anthropic() -> None:
     project = os.environ["PROJECT_ID"]
     location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
@@ -120,13 +120,13 @@ def test_anthropic() -> None:
     )
     context = SystemMessage(content=raw_context)
     message = HumanMessage(content=question)
-    response = model.invoke([context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME)
+    response = await model.ainvoke([context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME)
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
 
 @pytest.mark.extended
-def test_anthropic_stream() -> None:
+async def test_anthropic_stream() -> None:
     project = os.environ["PROJECT_ID"]
     location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
@@ -137,13 +137,13 @@ def test_anthropic_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message], model=_ANTHROPIC_CLAUDE_MODEL_NAME)
-    for chunk in sync_response:
+    sync_response = model.astream([message], model=_ANTHROPIC_CLAUDE_MODEL_NAME)
+    async for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
 
 @pytest.mark.extended
-def test_anthropic_thinking_stream() -> None:
+async def test_anthropic_thinking_stream() -> None:
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
     model = ChatAnthropicVertex(
@@ -161,8 +161,8 @@ def test_anthropic_thinking_stream() -> None:
         "Hello, could you recommend a good movie for me to watch this evening, please?"
     )
     message = HumanMessage(content=question)
-    sync_response = model.stream([message], model="claude-sonnet-4-5@20250929")
-    for chunk in sync_response:
+    sync_response = model.astream([message], model="claude-sonnet-4-5@20250929")
+    async for chunk in sync_response:
         assert isinstance(chunk, AIMessageChunk)
 
 
@@ -203,7 +203,7 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.flaky(retries=3)
-def test_anthropic_tool_calling() -> None:
+async def test_anthropic_tool_calling() -> None:
     project = os.environ["PROJECT_ID"]
     location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
@@ -220,7 +220,7 @@ def test_anthropic_tool_calling() -> None:
     model_with_tools = model.bind_tools(
         [MyModel], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
-    response = model_with_tools.invoke([message])
+    response = await model_with_tools.ainvoke([message])
     _check_tool_calls(response, "MyModel")
 
     # Test .bind_tools with function
@@ -230,7 +230,7 @@ def test_anthropic_tool_calling() -> None:
     model_with_tools = model.bind_tools(
         [my_model], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
-    response = model_with_tools.invoke([message])
+    response = await model_with_tools.ainvoke([message])
     _check_tool_calls(response, "my_model")
 
     # Test .bind_tools with tool
@@ -241,13 +241,13 @@ def test_anthropic_tool_calling() -> None:
     model_with_tools = model.bind_tools(
         [my_tool], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME
     )
-    response = model_with_tools.invoke([message])
+    response = await model_with_tools.ainvoke([message])
     _check_tool_calls(response, "my_tool")
 
     # Test streaming
-    stream = model_with_tools.stream([message])
+    stream = model_with_tools.astream([message])
     first = True
-    for chunk in stream:
+    async for chunk in stream:
         if first:
             gathered = chunk
             first = False
@@ -263,7 +263,7 @@ def test_anthropic_tool_calling() -> None:
 
 
 @pytest.mark.extended
-def test_anthropic_with_structured_output() -> None:
+async def test_anthropic_with_structured_output() -> None:
     project = os.environ["PROJECT_ID"]
     location = _ANTHROPIC_LOCATION
     model = ChatAnthropicVertex(
@@ -278,7 +278,7 @@ def test_anthropic_with_structured_output() -> None:
 
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     model_with_structured_output = model.with_structured_output(MyModel)
-    response = model_with_structured_output.invoke([message])
+    response = await model_with_structured_output.ainvoke([message])
 
     assert isinstance(response, MyModel)
     assert response.name == "Erick"
@@ -287,7 +287,7 @@ def test_anthropic_with_structured_output() -> None:
 
 @pytest.mark.extended
 @pytest.mark.flaky(retries=3)
-def test_anthropic_multiturn_tool_calling() -> None:
+async def test_anthropic_multiturn_tool_calling() -> None:
     """Test multi-turn conversation with tool calls and responses.
 
     This test ensures that ToolMessages with streaming metadata are properly
@@ -311,7 +311,7 @@ def test_anthropic_multiturn_tool_calling() -> None:
 
     # First turn - user asks question, model calls tool
     user_message = HumanMessage("What's the weather in Paris?")
-    response1 = model_with_tools.invoke([user_message])
+    response1 = await model_with_tools.ainvoke([user_message])
 
     # Verify model made a tool call
     assert isinstance(response1, AIMessage)
@@ -327,7 +327,7 @@ def test_anthropic_multiturn_tool_calling() -> None:
     )
 
     # This should NOT raise "Extra inputs are not permitted" error
-    response2 = model.invoke([user_message, response1, tool_result])
+    response2 = await model.ainvoke([user_message, response1, tool_result])
 
     # Verify model responded with final answer
     assert isinstance(response2, AIMessage)
@@ -337,7 +337,7 @@ def test_anthropic_multiturn_tool_calling() -> None:
 
 @pytest.mark.extended
 @pytest.mark.flaky(retries=3)
-def test_anthropic_tool_error_handling() -> None:
+async def test_anthropic_tool_error_handling() -> None:
     """Test that tool errors are properly communicated with is_error flag."""
     project = os.environ["PROJECT_ID"]
     location = _ANTHROPIC_LOCATION
@@ -355,7 +355,7 @@ def test_anthropic_tool_error_handling() -> None:
     model_with_tools = model.bind_tools([failing_tool])
 
     # First turn - model calls tool
-    response1 = model_with_tools.invoke([HumanMessage("Use failing_tool with x=5")])
+    response1 = await model_with_tools.ainvoke([HumanMessage("Use failing_tool with x=5")])
 
     # Verify tool call
     assert isinstance(response1, AIMessage)
@@ -370,7 +370,7 @@ def test_anthropic_tool_error_handling() -> None:
     )
 
     # Should handle error gracefully (is_error flag should be sent)
-    response2 = model.invoke(
+    response2 = await model.ainvoke(
         [HumanMessage("Use failing_tool with x=5"), response1, error_result]
     )
 

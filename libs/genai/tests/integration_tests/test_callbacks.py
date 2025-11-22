@@ -27,12 +27,12 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
     "model_name",
     MODEL_NAMES,
 )
-def test_streaming_callback(model_name: str) -> None:
+async def test_streaming_callback(model_name: str) -> None:
     prompt_template = "Tell me details about the Company {name} with 2 bullet point?"
     cb = StreamingLLMCallbackHandler()
     llm = ChatGoogleGenerativeAI(model=model_name, callbacks=[cb])
     llm_chain = PromptTemplate.from_template(prompt_template) | llm
-    for _t in llm_chain.stream({"name": "Google"}):
+    async for _t in llm_chain.astream({"name": "Google"}):
         pass
     assert len(cb.tokens) > 1
     assert len(cb.generations) == 1

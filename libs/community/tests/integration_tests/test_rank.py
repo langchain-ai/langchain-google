@@ -159,20 +159,20 @@ def ranker(
 
 
 @pytest.mark.extended
-def test_compression_retriever(
+async def test_compression_retriever(
     mock_vector_store_retriever: MockVectorStoreRetriever, ranker: VertexAIRank
 ) -> None:
     compression_retriever = CustomRankingRetriever(
         base_retriever=mock_vector_store_retriever, ranker=ranker
     )
     query = "What was the name of einstein's mother? Was she a scientist too?"
-    compressed_docs = compression_retriever.invoke(query)
+    compressed_docs = await compression_retriever.ainvoke(query)
 
     expected_docs = [
         Document(
             page_content=(
-                "Life and career\nChildhood, youth and education\n"
-                "See also: Einstein family\nEinstein in 1882, age\xa03\n"
+                "Life and career\\nChildhood, youth and education\\n"
+                "See also: Einstein family\\nEinstein in 1882, age\xa03\\n"
                 "Albert Einstein was born in Ulm,[19] in the Kingdom of "
                 "Württemberg in the German Empire, on 14 March 1879.[20][21] "
                 "His parents, secular Ashkenazi Jews, were Hermann Einstein, "
@@ -181,7 +181,7 @@ def test_compression_retriever(
                 "Isarvorstadt, where Einstein's father and his uncle Jakob "
                 "founded Elektrotechnische Fabrik J. Einstein & Cie, a "
                 "company that manufactured electrical equipment based on "
-                "direct current.[19]\nAlbert attended a Catholic elementary "
+                "direct current.[19]\\nAlbert attended a Catholic elementary "
                 "school in Munich from the age of five. When he was eight, "
                 "he was transferred to the Luitpold Gymnasium, where he "
                 "received advanced primary and then secondary school "
@@ -195,9 +195,9 @@ def test_compression_retriever(
         ),
         Document(
             page_content=(
-                "Marriages, relationships and children\n"
-                "Albert Einstein and Mileva Marić Einstein, 1912\n"
-                "Albert Einstein and Elsa Einstein, 1930\n"
+                "Marriages, relationships and children\\n"
+                "Albert Einstein and Mileva Marić Einstein, 1912\\n"
+                "Albert Einstein and Elsa Einstein, 1930\\n"
                 "Correspondence between Einstein and Marić, discovered and "
                 "published in 1987, revealed that in early 1902, while "
                 "Marić was visiting her parents in Novi Sad, she gave birth "
@@ -205,7 +205,7 @@ def test_compression_retriever(
                 "it was without the child, whose fate is uncertain. A "
                 "letter of Einstein's that he wrote in September 1903 "
                 "suggests that the girl was either given up for adoption or "
-                "died of scarlet fever in infancy.[45][46]\n"
+                "died of scarlet fever in infancy.[45][46]\\n"
                 "Einstein and Marić married in January 1903. In May 1904, "
                 "their son Hans Albert was born in Bern, Switzerland. Their "
                 "son Eduard was born in Zürich in July 1910. In letters "
@@ -237,7 +237,7 @@ def test_compression_retriever(
                 "by some to be a Russian spy; her husband, the Russian "
                 "sculptor Sergei Konenkov, created the bronze bust of "
                 "Einstein at the Institute for Advanced Study at "
-                "Princeton.[65][66][failed verification]\n"
+                "Princeton.[65][66][failed verification]\\n"
                 "Following an episode of acute mental illness at about the "
                 "age of twenty, Einstein's son Eduard was diagnosed with "
                 "schizophrenia.[67] He spent the remainder of his life "
