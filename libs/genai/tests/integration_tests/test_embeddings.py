@@ -1,3 +1,5 @@
+"""Test `GoogleGenerativeAIEmbeddings`."""
+
 import numpy as np
 import pytest
 from pydantic import SecretStr
@@ -5,7 +7,7 @@ from pydantic import SecretStr
 from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
-_MODEL = "models/gemini-embedding-001"
+_MODEL = "gemini-embedding-001"
 _OUTPUT_DIMENSIONALITY = 768
 
 
@@ -62,7 +64,7 @@ def test_embed_documents() -> None:
 
 @pytest.mark.asyncio
 async def test_aembed_documents() -> None:
-    """Test embedding a query."""
+    """Asynchronously test embedding a query."""
     model = GoogleGenerativeAIEmbeddings(
         model=_MODEL,
     )

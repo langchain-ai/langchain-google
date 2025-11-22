@@ -1,4 +1,4 @@
-"""Test ChatGoogleGenerativeAI function call."""
+"""Test `ChatGoogleGenerativeAI` function calling abilities."""
 
 import json
 
@@ -11,7 +11,7 @@ from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
 )
 
-MODEL_NAMES = ["gemini-flash-lite-latest"]
+MODEL_NAMES = ["gemini-2.5-flash-lite"]
 
 
 @pytest.mark.parametrize(
@@ -61,8 +61,6 @@ def test_tool_call(model_name: str) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=[search_tool])
     response = llm.invoke("weather in san francisco")
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content == ""
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
     assert function_call["name"] == "search_tool"
@@ -85,8 +83,6 @@ def test_pydantic_call(model_name: str) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name).bind(functions=[MyModel])
     response = llm.invoke("my name is Erick and I am 27 years old")
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content == ""
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
     assert function_call["name"] == "MyModel"

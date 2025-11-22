@@ -1,6 +1,6 @@
-"""Test Google GenerativeAI API wrapper.
+"""Test the `GoogleGenerativeAI` LLM (text completion) interface.
 
-This test must be run with the GOOGLE_API_KEY env variable set to a valid API key.
+Chat model tests are in `test_chat_models.py` and use `ChatGoogleGenerativeAI`.
 """
 
 from collections.abc import Generator
@@ -10,7 +10,7 @@ from langchain_core.outputs import LLMResult
 
 from langchain_google_genai import GoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 
-MODEL_NAMES = ["gemini-flash-lite-latest"]
+MODEL_NAMES = ["gemini-2.5-flash-lite"]
 
 
 @pytest.mark.parametrize(
@@ -102,7 +102,7 @@ def test_safety_settings_gemini(model_name: str) -> None:
     streamed_messages = list(output_stream)
     assert len(streamed_messages) > 0
 
-    # test  with safety filters on instantiation
+    # test with safety filters on instantiation
     llm = GoogleGenerativeAI(
         model=model_name,
         safety_settings=safety_settings,

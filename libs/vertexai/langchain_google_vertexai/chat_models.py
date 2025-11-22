@@ -246,6 +246,11 @@ def _parse_chat_history_gemini(
             msg = f"Message's content is expected to be a dict, got {type(part)}!"  # type: ignore[unreachable, unused-ignore]
             raise ValueError(msg)
         if part["type"] == "text":
+            if "thought_signature" in part:
+                return Part(
+                    text=part["text"],
+                    thought_signature=_base64_to_bytes(part["thought_signature"]),
+                )
             return Part(text=part["text"])
         if part["type"] == "tool_use":
             if part.get("text"):
@@ -324,6 +329,9 @@ def _parse_chat_history_gemini(
 
         if part["type"] == "thinking":
             return Part(text=part["thinking"], thought=True)
+
+        if part["type"] == "function_call_signature":
+            return None
 
         msg = "Only text, image_url, and media types are supported!"  # type: ignore[unreachable, unused-ignore]
         raise ValueError(msg)
@@ -407,11 +415,27 @@ def _parse_chat_history_gemini(
                 logger.warning("Ignoring blocked AIMessage with empty content")
                 continue
 
+            # Extract any function_call_signature blocks from content
+            function_call_sigs: dict[int, bytes] = {}
+            if isinstance(message.content, list):
+                for idx, item in enumerate(message.content):
+                    if (
+                        isinstance(item, dict)
+                        and item.get("type") == "function_call_signature"
+                    ):
+                        sig_str = item.get("signature", "")
+                        if sig_str and isinstance(sig_str, str):
+                            sig_bytes = _base64_to_bytes(sig_str)
+                            if "index" in item:
+                                function_call_sigs[item["index"]] = sig_bytes
+                            else:
+                                function_call_sigs[idx] = sig_bytes
+
             parts = []
             if message.content:
                 parts = _convert_to_parts(message)
 
-            for tc in message.tool_calls:
+            for i, tc in enumerate(message.tool_calls):
                 thought_signature: bytes | None = None
                 if tool_call_id := tc.get("id"):
                     if tool_call_id in message.additional_kwargs.get(
@@ -422,6 +446,10 @@ def _parse_chat_history_gemini(
                         ][tool_call_id]
                         if isinstance(thought_signature, str):
                             thought_signature = _base64_to_bytes(thought_signature)
+
+                if thought_signature is None:
+                    thought_signature = function_call_sigs.get(i)
+
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
                 parts.append(
                     Part(
@@ -646,7 +674,15 @@ def _parse_response_candidate(
             }
             content = _append_to_content(content, thinking_message)
         elif text is not None and text:
-            content = _append_to_content(content, text)
+            if hasattr(part, "thought_signature") and part.thought_signature:
+                text_message = {
+                    "type": "text",
+                    "text": text,
+                    "thought_signature": _bytes_to_base64(part.thought_signature),
+                }
+                content = _append_to_content(content, text_message)
+            else:
+                content = _append_to_content(content, text)
 
         if part.function_call:
             # For backward compatibility we store a function call in additional_kwargs,
@@ -905,6 +941,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             stop=None,
             # other params...
         )
+        ```
+
+    Thinking:
+        For thinking models, you have the option to adjust the number of internal
+        thinking tokens used (`thinking_budget`) or to disable thinking altogether.
+        Note that not all models allow disabling thinking.
+
+        See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
+        more details on thinking models.
+
+        To see a thinking model's thoughts, set `include_thoughts=True` to have the
+        model's reasoning summaries included in the response.
+
+        ```python
+        llm = ChatVertexAI(
+            model="gemini-2.5-flash",
+            include_thoughts=True,
+        )
+        ai_msg = llm.invoke("How many 'r's are in the word 'strawberry'?")
         ```
 
     Invoke:
@@ -2416,7 +2471,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
                 The final output is always a `dict` with keys `'raw'`, `'parsed'`, and
                 `'parsing_error'`.
-            method: If set to `'json_schema'` it will use controlled genetration to
+            method: If set to `'json_schema'` it will use controlled generation to
                 generate the response rather than function calling.
 
                 Does not work with schemas with references or Pydantic models with
@@ -2740,7 +2795,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             if finish_reason and finish_reason != "FINISH_REASON_UNSPECIFIED":
                 message.response_metadata["model_name"] = self.model_name
             # is_blocked is part of "safety_ratings" list
-            # but if it's True/False then chunks can't be marged
+            # but if it's True/False then chunks can't be merged
             generation_info.pop("is_blocked", None)
 
         message.response_metadata["model_provider"] = "google_vertexai"

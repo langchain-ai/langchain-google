@@ -73,8 +73,17 @@ def test_basic_response_json_schema() -> None:
 
     result = llm_with_schema.invoke("Respond with a message 'Hello World' and count 5")
 
-    assert isinstance(result.content, str)
-    response_data = json.loads(result.content)
+    if isinstance(result.content, list) and len(result.content) > 0:
+        # Extract text from structured content block
+        content_block = result.content[0]
+        if isinstance(content_block, dict) and "text" in content_block:
+            json_text = content_block["text"]
+        else:
+            json_text = str(content_block)
+    else:
+        json_text = str(result.content)
+
+    response_data = json.loads(json_text)
     assert "message" in response_data
     assert "count" in response_data
     assert isinstance(response_data["message"], str)
@@ -118,8 +127,17 @@ def test_response_json_schema_union() -> None:
     # Both should work with their respective schemas
     result = llm_schema.invoke(prompt)
 
-    assert isinstance(result.content, str)
-    response = json.loads(result.content)
+    if isinstance(result.content, list) and len(result.content) > 0:
+        # Extract text from structured content block
+        content_block = result.content[0]
+        if isinstance(content_block, dict) and "text" in content_block:
+            json_text = content_block["text"]
+        else:
+            json_text = str(content_block)
+    else:
+        json_text = str(result.content)
+
+    response = json.loads(json_text)
 
     assert isinstance(response, dict)
 

@@ -60,6 +60,10 @@
     "editor.tabSize": 2,
     "editor.insertSpaces": true
   },
+  "[yml]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
   "[json]": {
     "editor.tabSize": 2,
     "editor.insertSpaces": true
