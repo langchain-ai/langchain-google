@@ -83,6 +83,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             transport=self.transport,
             additional_headers=self.additional_headers,
             safety_settings=self.safety_settings,
+            seed=self.seed,
         )
 
         return self
