@@ -2147,7 +2147,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerationConfig:
-        if self.thinking_level is not None and self.thinking_budget is not None:
+        # Extract thinking parameters with kwargs override
+        thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
+        thinking_level = kwargs.get("thinking_level", self.thinking_level)
+
+        if thinking_level is not None and thinking_budget is not None:
             msg = (
                 "Both 'thinking_level' and 'thinking_budget' were specified. "
                 "'thinking_level' is not yet supported by the current API version, "
@@ -2161,15 +2165,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "candidate_count": self.n,
                 "temperature": self.temperature,
                 "stop_sequences": stop,
-                "max_output_tokens": self.max_output_tokens,
+                "max_output_tokens": kwargs.get(
+                    "max_output_tokens", self.max_output_tokens
+                ),
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
                 "thinking_config": (
                     (
                         (
-                            {"thinking_budget": self.thinking_budget}
-                            if self.thinking_budget is not None
+                            {"thinking_budget": thinking_budget}
+                            if thinking_budget is not None
                             else {}
                         )
                         | (
@@ -2178,14 +2184,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                             else {}
                         )
                         | (
-                            {"thinking_level": self.thinking_level}
-                            if self.thinking_level is not None
+                            {"thinking_level": thinking_level}
+                            if thinking_level is not None
                             else {}
                         )
                     )
-                    if self.thinking_budget is not None
+                    if thinking_budget is not None
                     or self.include_thoughts is not None
-                    or self.thinking_level is not None
+                    or thinking_level is not None
                     else None
                 ),
             }.items()
