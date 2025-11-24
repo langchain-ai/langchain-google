@@ -28,7 +28,11 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import (
+    LanguageModelInput,
+    ModelProfile,
+    ModelProfileRegistry,
+)
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     LangSmithParams,
@@ -115,6 +119,8 @@ from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
     VideoMetadata,
 )
+
+from langchain_google_vertexai.data._profiles import _PROFILES
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import (
@@ -176,6 +182,14 @@ _allowed_params_prediction_service = [
     # Allow controlling GAPIC client retries from callers.
     "retry",
 ]
+
+
+_MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
+
+
+def _get_default_model_profile(model_name: str) -> ModelProfile:
+    default = _MODEL_PROFILES.get(model_name) or {}
+    return default.copy()
 
 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
@@ -1865,6 +1879,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 project=cast("str", self.project),
             )
 
+        return self
+
+    @model_validator(mode="after")
+    def _set_model_profile(self) -> Self:
+        """Set model profile if not overridden."""
+        if self.profile is None:
+            model_id = re.sub(r"-\d{3}$", "", self.model_name.replace("models/", ""))
+            self.profile = _get_default_model_profile(model_id)
         return self
 
     def _prepare_params(
