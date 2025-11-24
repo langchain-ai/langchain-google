@@ -2614,7 +2614,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
                 else:
-                    schema_json = schema.model_json_schema()  # type: ignore[attr-defined]
+                    schema_json = schema.model_json_schema(mode="serialization")  # type: ignore[attr-defined]
                 parser = PydanticOutputParser(pydantic_object=schema)
             else:
                 if is_typeddict(schema):
