@@ -1708,6 +1708,7 @@ def test_code_execution_builtin(output_version: str) -> None:
 @pytest.mark.release
 def test_chat_vertexai_timeout_non_streaming() -> None:
     """Test that timeout parameter is accepted without raising an error."""
+    vertexai.init(api_transport="grpc")
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         timeout=0.001,
@@ -1720,6 +1721,7 @@ def test_chat_vertexai_timeout_non_streaming() -> None:
 @pytest.mark.release
 def test_chat_vertexai_timeout_streaming() -> None:
     """Test timeout in streaming mode."""
+    vertexai.init(api_transport="grpc")
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         timeout=0.001,
