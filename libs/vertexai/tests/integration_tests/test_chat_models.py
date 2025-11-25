@@ -1720,7 +1720,7 @@ def test_chat_vertexai_timeout_non_streaming() -> None:
 
 @pytest.mark.release
 def test_chat_vertexai_timeout_streaming() -> None:
-    """Test timeout in streaming mode."""
+    """Test timeout parameter in streaming mode."""
     vertexai.init(api_transport="grpc")
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
