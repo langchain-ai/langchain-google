@@ -293,6 +293,11 @@ class _VertexAICommon(_VertexAIBase):
     )
     """Enable timestamp understanding of audio-only files."""
 
+    timeout: float | None = Field(
+        default=None,
+    )
+    """The timeout for requests to the Vertex AI API, in seconds."""
+
     @property
     def _llm_type(self) -> str:
         return "vertexai"

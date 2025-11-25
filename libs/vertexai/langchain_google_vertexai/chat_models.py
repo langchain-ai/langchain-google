@@ -2283,6 +2283,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
+            timeout=self.timeout,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -2303,6 +2304,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 messages=messages, stop=stop, **kwargs
             ),
             metadata=self.default_metadata,
+            timeout=self.timeout,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -2413,6 +2415,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
+            timeout=self.timeout,
             **kwargs,
         )
         total_lc_usage = None
@@ -2441,6 +2444,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
+            timeout=self.timeout,
             **kwargs,
         )
         total_lc_usage = None
