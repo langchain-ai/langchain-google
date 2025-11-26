@@ -10,7 +10,6 @@ from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import google.ai.generativelanguage as glm
-import proto  # type: ignore[import-untyped]
 import pytest
 from google.ai.generativelanguage_v1beta.types import (
     Candidate,
@@ -2962,17 +2961,16 @@ def _convert_proto_to_dict(obj: Any) -> Any:
     """Recursively convert proto objects to dicts for comparison."""
     if isinstance(obj, dict):
         return {k: _convert_proto_to_dict(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
+    if isinstance(obj, (list, tuple)):
         return [_convert_proto_to_dict(item) for item in obj]
-    elif hasattr(obj, "__class__") and "proto" in str(type(obj)):
+    if hasattr(obj, "__class__") and "proto" in str(type(obj)):
         # Try to convert proto object to dict
         try:
             if hasattr(obj, "__iter__") and not isinstance(obj, str):
                 converted = dict(obj)
                 # Recursively convert nested proto objects
                 return {k: _convert_proto_to_dict(v) for k, v in converted.items()}
-            else:
-                return obj
+            return obj
         except (TypeError, ValueError):
             return obj
     return obj
@@ -2984,7 +2982,7 @@ def test_response_format_provider_strategy() -> None:
         model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
     )
 
-    schema_dict = {
+    schema_dict: dict[str, Any] = {
         "type": "object",
         "properties": {
             "sentiment": {
@@ -2998,7 +2996,7 @@ def test_response_format_provider_strategy() -> None:
     }
 
     # Test response_format with ProviderStrategy format (OpenAI-style)
-    response_format = {
+    response_format: dict[str, Any] = {
         "type": "json_schema",
         "json_schema": {
             "name": "response_format_test",
@@ -3008,13 +3006,14 @@ def test_response_format_provider_strategy() -> None:
 
     gen_config = llm._prepare_params(stop=None, response_format=response_format)
 
-    # response_json_schema may be converted to proto object, so convert to dict for comparison
+    # response_json_schema may be converted to proto object, so convert to
+    # dict for comparison
     schema = _convert_proto_to_dict(gen_config.response_json_schema)
     assert schema == schema_dict
     assert gen_config.response_mime_type == "application/json"
 
     # Test that response_json_schema takes precedence over response_format
-    different_schema = {
+    different_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"age": {"type": "integer"}},
         "required": ["age"],
@@ -3025,14 +3024,14 @@ def test_response_format_provider_strategy() -> None:
         response_format=response_format,
         response_json_schema=different_schema,
     )
-    
-    # response_json_schema may be converted to proto object, so convert to dict for comparison
+
+    # response_json_schema may be converted to proto object, so convert to
+    # dict for comparison
     schema_2 = _convert_proto_to_dict(gen_config_2.response_json_schema)
     assert schema_2 == different_schema
     assert gen_config_2.response_mime_type == "application/json"
 
-    
-    old_schema = {
+    old_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"old_field": {"type": "string"}},
         "required": ["old_field"],
@@ -3044,19 +3043,21 @@ def test_response_format_provider_strategy() -> None:
         response_format=response_format,
     )
 
-    # response_json_schema may be converted to proto object, so convert to dict for comparison
+    # response_json_schema may be converted to proto object, so convert to
+    # dict for comparison
     schema_3 = _convert_proto_to_dict(gen_config_3.response_json_schema)
     assert schema_3 == schema_dict
     assert gen_config_3.response_mime_type == "application/json"
 
-    invalid_response_format = {"type": "invalid_type"}
+    invalid_response_format: dict[str, Any] = {"type": "invalid_type"}
     gen_config_4 = llm._prepare_params(
         stop=None,
         response_format=invalid_response_format,
         response_schema=schema_dict,
     )
     # Should fall back to response_schema
-    # response_json_schema may be converted to proto object, so convert to dict for comparison
+    # response_json_schema may be converted to proto object, so convert to
+    # dict for comparison
     schema_4 = _convert_proto_to_dict(gen_config_4.response_json_schema)
     assert schema_4 == schema_dict
     assert gen_config_4.response_mime_type == "application/json"
