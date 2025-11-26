@@ -2220,13 +2220,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen_config = {**gen_config, **generation_config}
 
         response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
-        if response_mime_type is not None:
-            gen_config["response_mime_type"] = response_mime_type
-
         response_schema = kwargs.get("response_schema", self.response_schema)
 
         # In case passed in as a direct kwarg
         response_json_schema = kwargs.get("response_json_schema")
+
+        # Handle response_format from ProviderStrategy (OpenAI-style format)
+        # Format: {'type': 'json_schema', 'json_schema': {'schema': {...}}}
+        # Only extract from response_format if response_json_schema is not already set
+        if response_json_schema is None:
+            response_format = kwargs.get("response_format")
+            if response_format is not None and isinstance(response_format, dict):
+                if response_format.get("type") == "json_schema":
+                    json_schema_obj = response_format.get("json_schema", {})
+                    if (
+                        isinstance(json_schema_obj, dict)
+                        and "schema" in json_schema_obj
+                    ):
+                        # Extract the actual schema from the nested structure
+                        response_json_schema = json_schema_obj["schema"]
 
         # Handle both response_schema and response_json_schema
         # (Regardless, we use `response_json_schema` in the request)
@@ -2235,6 +2247,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             if response_json_schema is not None
             else response_schema
         )
+
+        # Automatically set response_mime_type to "application/json" when
+        # response_schema is provided but response_mime_type is not set. This
+        # enables seamless support for structured output strategies like
+        # ProviderStrategy.
+        if schema_to_use is not None and response_mime_type is None:
+            response_mime_type = "application/json"
+
+        if response_mime_type is not None:
+            gen_config["response_mime_type"] = response_mime_type
 
         if schema_to_use is not None:
             if response_mime_type != "application/json":
