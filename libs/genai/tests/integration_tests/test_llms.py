@@ -102,7 +102,7 @@ def test_safety_settings_gemini(model_name: str) -> None:
     streamed_messages = list(output_stream)
     assert len(streamed_messages) > 0
 
-    # test  with safety filters on instantiation
+    # test with safety filters on instantiation
     llm = GoogleGenerativeAI(
         model=model_name,
         safety_settings=safety_settings,

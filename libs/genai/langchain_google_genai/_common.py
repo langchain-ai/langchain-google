@@ -56,6 +56,12 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """Run inference with this temperature.
 
     Must be within `[0.0, 2.0]`.
+
+    !!! warning "Gemini 3.0+ models"
+
+        Setting `temperature < 1.0` for Gemini 3.0+ models can cause infinite loops,
+        degraded reasoning performance, and failure on complex tasks.
+
     """
 
     top_p: float | None = None
@@ -163,7 +169,21 @@ class _BaseGoogleGenerativeAI(BaseModel):
     media_resolution: MediaResolution | None = Field(
         default=None,
     )
-    """Media resolution for the input media."""
+    """Media resolution for the input media.
+
+    May be defined at the individual part level, allowing for mixed-resolution requests
+    (e.g., images and videos of different resolutions in the same request).
+
+    May be `'low'`, `'medium'`, or `'high'`.
+
+    Can be set either per-part or globally for all media inputs in the request. To set
+    globally, set in the `generation_config`.
+
+    !!! warning "Model compatibility"
+
+        Setting per-part media resolution requests to Gemini 2.5 models is not
+        supported.
+    """
 
     thinking_budget: int | None = Field(
         default=None,
