@@ -1842,7 +1842,8 @@ def test_thought_signature_conversion() -> None:
     ]
     assert result == expected
 
-    # Test ReasoningContentBlock without signature (should NOT be skipped now)
+    # Test ReasoningContentBlock without signature
+    # (e.g. coming from a different integration)
     reasoning_without_sig = {
         "type": "reasoning",
         "reasoning": "Thinking without signature...",
@@ -1860,7 +1861,7 @@ def test_thought_signature_conversion() -> None:
     ]
     assert result == expected_no_sig
 
-    # Test function_call_signature block
+    # Test function_call_signature block is passed through unchanged
     sig_block = {
         "type": "function_call_signature",
         "signature": "sig123",
@@ -1894,7 +1895,10 @@ def test_thought_signature_conversion() -> None:
 
 
 def test_parse_chat_history_uses_index_for_signature() -> None:
-    """Test _parse_chat_history uses the index field to map signatures to tool calls."""
+    """Test `_parse_chat_history` uses index field to map signatures to tool calls.
+
+    Also tests passing in a message from GenAI for compatibility.
+    """
     sig_bytes = b"dummy_signature"
     sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
 
@@ -1908,19 +1912,15 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
     tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
 
     message = AIMessage(content=content, tool_calls=tool_calls)  # type: ignore[arg-type]
-
     message.response_metadata["output_version"] = "v1"
     message.response_metadata["model_provider"] = (
-        "google_genai"  # Simulate genai message
+        "google_genai"  # Simulate genai message compat
     )
 
-    # Mock ImageBytesLoader
     mock_loader = MagicMock(spec=ImageBytesLoader)
 
-    # Parse the history
     _, formatted_messages = _parse_chat_history_gemini([message], mock_loader)
 
-    # Check the result
     model_content = formatted_messages[0]
     assert model_content.role == "model"
     assert len(model_content.parts) == 2  # thinking + function_call
@@ -1929,46 +1929,43 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
     assert model_content.parts[0].thought is True
     assert model_content.parts[0].text == "I should use the tool."
 
-    # Part 1 is function_call
+    # Part 1 is the function_call
     part = model_content.parts[1]
-
-    # Check if function_call is present
     assert part.function_call is not None
     assert part.function_call.name == "my_tool"
-
-    # Check if thought_signature is correctly attached
     assert part.thought_signature == sig_bytes
 
 
 def test_parse_chat_history_with_text_signature() -> None:
-    """Test _parse_chat_history handles text blocks with signatures."""
-    sig_bytes = b"text_signature"
+    """Test `_parse_chat_history` handles signatures on text blocks.
+
+    Also tests passing in a message from GenAI for compatibility.
+    """
+    sig_bytes = b"dummy_signature"
     sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
 
-    # Content with reasoning block and text block with signature
     content = [
         {"type": "reasoning", "reasoning": "Thinking..."},
         {"type": "text", "text": "Final answer", "extras": {"signature": sig_b64}},
     ]
 
     message = AIMessage(content=content)  # type: ignore[arg-type]
-
     message.response_metadata["output_version"] = "v1"
-    message.response_metadata["model_provider"] = "google_genai"
+    message.response_metadata["model_provider"] = (
+        "google_genai"  # Simulate genai message compat
+    )
 
-    # Mock ImageBytesLoader
     mock_loader = MagicMock(spec=ImageBytesLoader)
 
-    # Parse the history
     _, formatted_messages = _parse_chat_history_gemini([message], mock_loader)
 
-    # Check the result
     model_content = formatted_messages[0]
     assert model_content.role == "model"
     assert len(model_content.parts) == 2
 
     # Part 0 is thinking
     assert model_content.parts[0].thought is True
+    assert model_content.parts[0].text == "Thinking..."
 
     # Part 1 is text with signature
     part = model_content.parts[1]
