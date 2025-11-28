@@ -26,7 +26,7 @@ class RecordDog(BaseModel):
 
 
 @pytest.mark.release
-def test_create_structured_runnable() -> None:
+async def test_create_structured_runnable() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
         "You are a world class algorithm for recording entities.\nMake calls to the "
@@ -34,12 +34,12 @@ def test_create_structured_runnable() -> None:
         "Tip: Make sure to answer in the correct format"
     )
     chain = create_structured_runnable([RecordPerson, RecordDog], llm, prompt=prompt)
-    res = chain.invoke({"input": "Harry was a chubby brown beagle who loved chicken"})
+    res = await chain.ainvoke({"input": "Harry was a chubby brown beagle who loved chicken"})
     assert isinstance(res, RecordDog)
 
 
 @pytest.mark.release
-def test_create_structured_runnable_with_prompt() -> None:
+async def test_create_structured_runnable_with_prompt() -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0)
     prompt = ChatPromptTemplate.from_template(
         "Describe a random {class} and mention their name, {attr} and favorite food"
@@ -47,12 +47,12 @@ def test_create_structured_runnable_with_prompt() -> None:
     chain = create_structured_runnable(
         [RecordPerson, RecordDog], llm, prompt=prompt, use_extra_step=True
     )
-    res = chain.invoke({"class": "person", "attr": "age"})
+    res = await chain.ainvoke({"class": "person", "attr": "age"})
     assert isinstance(res, RecordPerson)
 
 
 @pytest.mark.release
-def test_reflection() -> None:
+async def test_reflection() -> None:
     class Reflection(BaseModel):
         reflections: str = Field(
             description="The critique and reflections on the sufficiency, superfluency,"
@@ -93,5 +93,5 @@ def test_reflection() -> None:
     )
 
     reflection_llm_chain = prompt | llm.with_structured_output(Reflection)
-    res = reflection_llm_chain.invoke({"input": "Mars"})
+    res = await reflection_llm_chain.ainvoke({"input": "Mars"})
     assert isinstance(res, Reflection)

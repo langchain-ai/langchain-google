@@ -33,11 +33,11 @@ model_names_with_tools_support.remove("mistral-nemo@2407")
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
-def test_generate(model_name: str) -> None:
+async def test_generate(model_name: str) -> None:
     llm = get_vertex_maas_model(
         model_name=model_name, location=model_locations.get(model_name, "us-central1")
     )
-    output = llm.invoke("What is the meaning of life?")
+    output = await llm.ainvoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
 
 
@@ -53,15 +53,15 @@ async def test_agenerate(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
-def test_stream(model_name: str) -> None:
+async def test_stream(model_name: str) -> None:
     # streaming currently fails with mistral-nemo@2407
     if "stral" in model_name:
         return
     llm = get_vertex_maas_model(
         model_name=model_name, location=model_locations.get(model_name, "us-central1")
     )
-    output = llm.stream("What is the meaning of life?")
-    for chunk in output:
+    output = llm.astream("What is the meaning of life?")
+    async for chunk in output:
         assert isinstance(chunk, AIMessageChunk)
 
 
@@ -108,13 +108,13 @@ async def test_tools(model_name: str) -> None:
     request = HumanMessage(
         content="Please tell the primary color of sparrow?",
     )
-    response = llm_with_search_force.invoke([request])
+    response = await llm_with_search_force.ainvoke([request])
 
     assert isinstance(response, AIMessage)
     tool_calls = response.tool_calls
     assert len(tool_calls) > 0
 
-    tool_response = search.invoke("sparrow")
+    tool_response = await search.ainvoke("sparrow")
     tool_messages: list[BaseMessage] = []
 
     for tool_call in tool_calls:
@@ -126,7 +126,7 @@ async def test_tools(model_name: str) -> None:
         )
         tool_messages.append(tool_message)
 
-    result = llm_with_search.invoke([request, response, *tool_messages])
+    result = await llm_with_search.ainvoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
     if model_name in _MISTRAL_MODELS:
