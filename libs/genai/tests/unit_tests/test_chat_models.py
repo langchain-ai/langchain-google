@@ -3170,3 +3170,17 @@ def test_kwargs_override_thinking_level() -> None:
     config = llm._prepare_params(stop=None, thinking_level="high")
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == "high"
+
+
+def test_seed_initialization() -> None:
+    # Test explicitly provided seed
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY), seed=42,
+    )
+    assert llm.seed == 42
+
+    # Test default seed
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.seed is None
