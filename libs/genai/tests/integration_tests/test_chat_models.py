@@ -1384,3 +1384,29 @@ def test_chat_google_genai_invoke_respects_max_tokens(max_tokens: int) -> None:
     assert output_tokens <= max_tokens, (
         f"Expected output_tokens <= {max_tokens}, got {output_tokens}"
     )
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+def test_seed_provides_reproducibility() -> None:
+    llm = ChatGoogleGenerativeAI(model=_MODEL, thinking_budget=0)
+    n_generations = 3
+
+    # Explicit seed improves reproducibility of the results (but it can't be guaranteed, so the test has retries)
+    actual_results = set()
+    for _ in range(n_generations):
+        result = llm.invoke(
+            "Provide a number between 0 and 100.",
+            generation_config={"top_p": 1, "temperature": 1.0, "max_output_tokens": 10, "seed": 42},
+        )
+        actual_results.add(result.content)
+    assert len(actual_results) == 1
+
+    # Lack of seed means it's very unlikely to get the same number 3 times in a row
+    actual_results = set()
+    for _ in range(n_generations):
+        result = llm.invoke(
+            "Provide a number between 0 and 100.",
+            generation_config={"top_p": 1, "temperature": 1.0, "max_output_tokens": 10},
+        )
+        actual_results.add(result.content)
+    assert len(actual_results) > 1
