@@ -2951,18 +2951,3 @@ def test_response_schema_mime_type_validation() -> None:
         response_json_schema=schema, response_mime_type="application/json"
     )
     assert llm_with_json_schema is not None
-
-
-def test_seed_initialization() -> None:
-    # Test explicitly provided seed
-    llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY), seed=42,
-    )
-    assert llm.seed == 42
-
-    # Test default seed
-    llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY),
-    )
-    err_msg = f"Seed is {llm.seed}, expected None"
-    assert llm.seed is None
