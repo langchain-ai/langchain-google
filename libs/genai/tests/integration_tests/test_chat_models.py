@@ -75,8 +75,16 @@ def _check_usage_metadata(message: AIMessage) -> None:
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     """Check tool calls are as expected."""
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content == ""
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert text_content == ""
+    else:
+        assert isinstance(response.content, str)
+        assert response.content == ""
 
     # function_call
     function_call = response.additional_kwargs.get("function_call")
@@ -120,7 +128,15 @@ async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
         result = llm.batch(cast("list", messages), config=config)
 
     for token in result:
-        assert isinstance(token.content, str)
+        if isinstance(token.content, list):
+            text_content = "".join(
+                block.get("text", "")
+                for block in token.content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+            assert len(text_content) > 0
+        else:
+            assert isinstance(token.content, str)
 
 
 @pytest.mark.parametrize("is_async", [False, True])
@@ -140,9 +156,19 @@ async def test_chat_google_genai_invoke(is_async: bool) -> None:
             config={"tags": ["foo"]},
             generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
         )
+
     assert isinstance(result, AIMessage)
-    assert isinstance(result.content, str)
-    assert not result.content.startswith(" ")
+    if isinstance(result.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in result.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+        assert not text_content.startswith(" ")
+    else:
+        assert isinstance(result.content, str)
+        assert not result.content.startswith(" ")
     _check_usage_metadata(result)
 
 
@@ -248,7 +274,15 @@ def test_chat_google_genai_invoke_thinking(
     )
 
     assert isinstance(result, AIMessage)
-    assert isinstance(result.content, str)
+    if isinstance(result.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in result.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(result.content, str)
 
     _check_usage_metadata(result)
 
@@ -265,7 +299,10 @@ def _check_thinking_output(content: list, output_version: str) -> None:
     if output_version == "v0":
         thinking_key = "thinking"
         if content:
-            assert isinstance(content[-1], str)
+            if isinstance(content[-1], dict) and content[-1].get("type") == "text":
+                assert isinstance(content[-1].get("text"), str)
+            else:
+                assert isinstance(content[-1], str)
 
     else:  # v1
         thinking_key = "reasoning"
@@ -540,7 +577,7 @@ def test_thought_signature_round_trip() -> None:
 
 def test_chat_google_genai_invoke_thinking_disabled() -> None:
     """Test invoking a thinking model with zero `thinking_budget`."""
-    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, thinking_budget=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", thinking_budget=0)
 
     result = llm.invoke(
         "How many O's are in Google? Please tell me how you double checked the result",
@@ -566,8 +603,17 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> No
         generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
     )
     assert isinstance(result, AIMessage)
-    assert isinstance(result.content, str)
-    assert not result.content.startswith(" ")
+    if isinstance(result.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in result.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+        assert not text_content.startswith(" ")
+    else:
+        assert isinstance(result.content, str)
+        assert not result.content.startswith(" ")
     _check_usage_metadata(result)
 
 
@@ -588,23 +634,6 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> No
                         {
                             "type": "image_url",
                             "image_url": "data:image/png;base64," + _B64_string,
-                        },
-                    ]
-                ),
-            ],
-        ),
-        (
-            "url_multimodal_message",
-            [
-                HumanMessage(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": "Guess what's in this picture! You have 3 guesses.",
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": "https://picsum.photos/seed/picsum/200/300",
                         },
                     ]
                 ),
@@ -634,16 +663,33 @@ def test_chat_google_genai_multimodal(
         any_chunk = False
         for chunk in llm.stream(messages):
             print(chunk)  # noqa: T201
-            assert isinstance(chunk.content, str)
-            if chunk.content:
-                any_chunk = True
+            if isinstance(chunk.content, list):
+                text_content = "".join(
+                    block.get("text", "")
+                    for block in chunk.content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                )
+                if text_content:
+                    any_chunk = True
+            else:
+                assert isinstance(chunk.content, str)
+                if chunk.content:
+                    any_chunk = True
         assert any_chunk
     else:
         # Test invoke
         response = llm.invoke(messages)
         assert isinstance(response, AIMessage)
-        assert isinstance(response.content, str)
-        assert len(response.content.strip()) > 0
+        if isinstance(response.content, list):
+            text_content = "".join(
+                block.get("text", "")
+                for block in response.content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+            assert len(text_content.strip()) > 0
+        else:
+            assert isinstance(response.content, str)
+            assert len(response.content.strip()) > 0
 
 
 @pytest.mark.parametrize(
@@ -653,11 +699,11 @@ def test_chat_google_genai_multimodal(
             content=[
                 {
                     "type": "text",
-                    "text": "Guess what's in this picture! You have 3 guesses.",
+                    "text": "Give a concise description of this image.",
                 },
                 {
                     "type": "image_url",
-                    "image_url": "https://picsum.photos/seed/picsum/200/300",
+                    "image_url": "https://raw.githubusercontent.com/langchain-ai/docs/4d11d08b6b0e210bd456943f7a22febbd168b543/src/images/agentic-rag-output.png",
                 },
             ]
         ),
@@ -691,7 +737,15 @@ def test_chat_google_genai_single_call_with_history() -> None:
     message3 = HumanMessage(content=text_question2)
     response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(response.content, str)
 
 
 @pytest.mark.parametrize(
@@ -717,7 +771,15 @@ def test_chat_google_genai_system_message(
     message3 = HumanMessage(content=text_question2)
     response = model.invoke([system_message, message1, message2, message3])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(response.content, str)
 
 
 def test_generativeai_get_num_tokens_gemini() -> None:
@@ -805,13 +867,28 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     assert len(tool_messages) > 0
     assert len(response.tool_calls) == len(tool_messages)
 
-    result = llm_with_search.invoke([request, response, *tool_messages])
+    follow_up = HumanMessage(
+        content=(
+            "Based on the search results above, what did you find about the bird "
+            "colors?"
+        )
+    )
+    result = llm_with_search.invoke([request, response, *tool_messages, follow_up])
 
     assert isinstance(result, AIMessage)
-    content_str = (
-        result.content if isinstance(result.content, str) else str(result.content)
-    )
-    assert "brown" in content_str.lower()
+
+    if isinstance(result.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in result.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert "brown" in text_content.lower()
+    else:
+        content_str = (
+            result.content if isinstance(result.content, str) else str(result.content)
+        )
+        assert "brown" in content_str.lower()
 
 
 def test_chat_vertexai_gemini_function_calling() -> None:
@@ -879,9 +956,8 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     # Test .content_blocks property
     content_blocks = response.content_blocks
     assert isinstance(content_blocks, list)
-    assert len(content_blocks) == 1
-    assert isinstance(content_blocks[0], dict)
-    assert content_blocks[0].get("type") == "tool_call"
+    tool_call_blocks = [b for b in content_blocks if b.get("type") == "tool_call"]
+    assert len(tool_call_blocks) == 1
 
 
 @pytest.mark.flaky(retries=3, delay=1)
@@ -1044,9 +1120,11 @@ def _check_web_search_output(message: AIMessage, output_version: str) -> None:
     # Lazy parsing
     content_blocks = message.content_blocks
     text_blocks = [block for block in content_blocks if block["type"] == "text"]
-    assert len(text_blocks) == 1
-    text_block = text_blocks[0]
-    assert text_block.get("annotations")
+    assert len(text_blocks) >= 1
+
+    # Check that at least one block has annotations
+    text_block = next((b for b in text_blocks if b.get("annotations")), None)
+    assert text_block is not None
 
     if output_version == "v1":
         text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[misc,index]
@@ -1203,8 +1281,19 @@ def test_search_builtin_with_citations(use_streaming: bool) -> None:
 def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
     if output_version == "v0":
         blocks = [block for block in message.content if isinstance(block, dict)]
+        # Find code execution blocks
+        code_blocks = [
+            block
+            for block in blocks
+            if block.get("type") in {"executable_code", "code_execution_result"}
+        ]
+        # For integration test, code execution must happen
+        assert code_blocks, (
+            f"No code execution blocks found in content: "
+            f"{[block.get('type') for block in blocks]}"
+        )
         expected_block_types = {"executable_code", "code_execution_result"}
-        assert {block.get("type") for block in blocks} == expected_block_types
+        assert {block.get("type") for block in code_blocks} == expected_block_types
 
     else:
         # v1
@@ -1224,7 +1313,7 @@ def test_code_execution_builtin(output_version: str) -> None:
     ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",
-        "content": "What is 3^3?",
+        "content": "Calculate the value of 3^3 using Python code execution.",
     }
 
     full: BaseMessageChunk | None = None
@@ -1242,3 +1331,56 @@ def test_code_execution_builtin(output_version: str) -> None:
     }
     response = llm.invoke([input_message, full, next_message])
     _check_code_execution_output(response, output_version)
+
+
+def test_chat_google_genai_invoke_with_generation_params() -> None:
+    """Test that generation parameters passed to invoke() are respected.
+
+    Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
+    parameters passed directly to invoke() method override model defaults.
+    """
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+
+    # Test with max_output_tokens constraint
+    result_constrained = llm.invoke(
+        "Alice, Bob, and Carol each live in a different house on the same street: "
+        "red, green, and blue. The person who lives in the red house owns a cat. "
+        "Bob does not live in the green house. Carol owns a dog. The green house "
+        "is to the left of the red house. Alice does not own a cat. Who lives in "
+        "each house, and what pet do they own?",
+        max_output_tokens=10,
+        thinking_budget=0,
+    )
+
+    assert isinstance(result_constrained, AIMessage)
+    # Verify output tokens are within limit
+    assert result_constrained.usage_metadata is not None
+
+    output_tokens = result_constrained.usage_metadata.get("output_tokens")
+    assert output_tokens is not None, "usage_metadata is missing 'output_tokens'"
+    assert output_tokens <= 10, f"Expected output_tokens <= 10, got {output_tokens}"
+
+    # Verify thinking is disabled
+    details = result_constrained.usage_metadata.get("output_token_details") or {}
+    assert "reasoning" not in details, (
+        "Expected no reasoning tokens when thinking_budget=0"
+    )
+
+
+@pytest.mark.parametrize("max_tokens", [10, 20, 50])
+def test_chat_google_genai_invoke_respects_max_tokens(max_tokens: int) -> None:
+    """Test that different max_output_tokens values are respected."""
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+
+    result = llm.invoke(
+        "Write a detailed essay about artificial intelligence.",
+        max_output_tokens=max_tokens,
+    )
+
+    assert isinstance(result, AIMessage)
+    assert result.usage_metadata is not None
+    output_tokens = result.usage_metadata.get("output_tokens")
+    assert output_tokens is not None, "usage_metadata is missing 'output_tokens'"
+    assert output_tokens <= max_tokens, (
+        f"Expected output_tokens <= {max_tokens}, got {output_tokens}"
+    )

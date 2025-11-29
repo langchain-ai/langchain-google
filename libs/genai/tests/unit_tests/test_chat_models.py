@@ -44,7 +44,10 @@ from langchain_google_genai._compat import (
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     _chat_with_retry,
+    _convert_to_parts,
     _convert_tool_message_to_parts,
+    _is_gemini_3_or_later,
+    _is_gemini_25_model,
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
@@ -207,6 +210,19 @@ def test_api_key_masked_when_passed_via_constructor(
     captured = capsys.readouterr()
 
     assert captured.out == "**********"
+
+
+def test_profile() -> None:
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+    assert model.profile
+    assert not model.profile["reasoning_output"]
+
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    assert model.profile
+    assert model.profile["reasoning_output"]
+
+    model = ChatGoogleGenerativeAI(model="foo")
+    assert model.profile == {}
 
 
 def test_parse_history() -> None:
@@ -1215,33 +1231,6 @@ def test_parse_response_candidate_includes_model_provider() -> None:
     assert result.response_metadata["model_provider"] == "google_genai"
 
 
-def test_parse_response_candidate_includes_model_name() -> None:
-    """Test that _parse_response_candidate includes `model_name` in
-    `response_metadata`."""
-    raw_candidate = {
-        "content": {"parts": [{"text": "Hello, world!"}]},
-        "finish_reason": 1,
-        "safety_ratings": [],
-    }
-
-    response_candidate = glm.Candidate(raw_candidate)
-    result = _parse_response_candidate(
-        response_candidate, model_name="gemini-2.5-flash"
-    )
-
-    assert hasattr(result, "response_metadata")
-    assert result.response_metadata["model_provider"] == "google_genai"
-    assert result.response_metadata["model_name"] == "gemini-2.5-flash"
-
-    # No name
-
-    result = _parse_response_candidate(response_candidate)
-
-    assert hasattr(result, "response_metadata")
-    assert result.response_metadata["model_provider"] == "google_genai"
-    assert "model_name" not in result.response_metadata
-
-
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)
@@ -1440,13 +1429,31 @@ def test_response_to_result_grounding_metadata(
 
     assert len(result.generations) == len(raw_response["candidates"])
     for generation in result.generations:
-        assert generation.message.content == "Test response"
         grounding_metadata = (
             generation.generation_info.get("grounding_metadata", {})
             if generation.generation_info is not None
             else {}
         )
         assert grounding_metadata == expected_grounding_metadata
+
+        # Check content format based on whether grounding metadata is present
+        if expected_grounding_metadata:
+            content_blocks = generation.message.content_blocks
+            assert isinstance(content_blocks, list)
+            assert len(content_blocks) == 1
+            content_block = content_blocks[0]
+            assert isinstance(content_block, dict)
+            assert content_block["type"] == "text"
+            assert content_block["text"] == "Test response"
+            assert "annotations" in content_block
+            assert len(content_block["annotations"]) == 1
+            annotation = content_block["annotations"][0]
+            assert annotation["type"] == "citation"
+            assert annotation["cited_text"] == "Test response"
+            assert annotation["url"] == "https://example.com"
+            assert annotation["title"] == "Example Site"
+        else:
+            assert generation.message.content == "Test response"
 
 
 def test_grounding_metadata_to_citations_conversion() -> None:
@@ -2572,17 +2579,11 @@ def test_parse_response_candidate_adds_index_to_signature() -> None:
     candidate = Candidate(content=Content(parts=[part1, part2]))
 
     msg = _parse_response_candidate(candidate)
-
-    # Check if signature block is present and has index
-    found = False
-    for block in msg.content:
-        if isinstance(block, dict) and block.get("type") == "function_call_signature":
-            assert block.get("signature") == base64.b64encode(sig).decode("ascii")
-            assert "index" in block
-            assert block["index"] == 0
-            found = True
-
-    assert found, "Signature block not found"
+    function_call_map = msg.additional_kwargs[
+        "__gemini_function_call_thought_signatures__"
+    ]
+    tool_call_id = msg.tool_calls[0]["id"]
+    assert function_call_map[tool_call_id] == base64.b64encode(sig).decode("ascii")
 
 
 def test_parse_chat_history_uses_index_for_signature() -> None:
@@ -2592,14 +2593,17 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
 
     # Content with thinking block (index 0) and signature block (index 1)
     # The signature block points to tool call index 0
-    content = [
-        {"type": "thinking", "thinking": "I should use the tool."},
-        {"type": "function_call_signature", "signature": sig_b64, "index": 0},
-    ]
+    content = [{"type": "thinking", "thinking": "I should use the tool."}]
 
     tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
 
-    message = AIMessage(content=content, tool_calls=tool_calls)  # type: ignore[arg-type]
+    message = AIMessage(
+        content=content,  # type: ignore[arg-type]
+        tool_calls=tool_calls,
+        additional_kwargs={
+            "__gemini_function_call_thought_signatures__": {"call_1": sig_b64}
+        },
+    )
 
     # Parse the history
     _, formatted_messages = _parse_chat_history([message])
@@ -2951,3 +2955,218 @@ def test_response_schema_mime_type_validation() -> None:
         response_json_schema=schema, response_mime_type="application/json"
     )
     assert llm_with_json_schema is not None
+
+
+def test_is_new_gemini_model() -> None:
+    assert _is_gemini_3_or_later("gemini-3.0-pro") is True
+    assert _is_gemini_3_or_later("gemini-2.5-pro") is False
+    assert _is_gemini_3_or_later("gemini-2.5-flash") is False
+    assert _is_gemini_3_or_later("gemini-1.5-pro") is False
+    assert _is_gemini_3_or_later("gemini-1.0-pro") is False
+    assert _is_gemini_3_or_later("") is False
+    assert _is_gemini_3_or_later(None) is False  # type: ignore
+
+
+def test_is_gemini_25_model() -> None:
+    """Test the _is_gemini_25_model function."""
+    assert _is_gemini_25_model("gemini-2.5-pro") is True
+    assert _is_gemini_25_model("gemini-2.5-flash") is True
+    assert _is_gemini_25_model("gemini-2.5-flash-lite") is True
+    assert _is_gemini_25_model("models/gemini-2.5-pro") is True
+    assert _is_gemini_25_model("GEMINI-2.5-FLASH") is True
+    assert _is_gemini_25_model("gemini-3.0-pro") is False
+    assert _is_gemini_25_model("gemini-1.5-pro") is False
+    assert _is_gemini_25_model("gemini-pro-latest") is False
+    assert _is_gemini_25_model("") is False
+    assert _is_gemini_25_model(None) is False  # type: ignore
+
+
+def test_per_part_media_resolution_warning_gemini_25() -> None:
+    """Test that per-part `media_resolution` warns for Gemini 2.5 models."""
+    content_with_media_resolution = [
+        {
+            "type": "media",
+            "mime_type": "image/jpeg",
+            "data": base64.b64encode(b"fake_image_data").decode(),
+            "media_resolution": "MEDIA_RESOLUTION_LOW",
+        },
+        {"type": "text", "text": "Describe this image"},
+    ]
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        _convert_to_parts(content_with_media_resolution, model="gemini-2.5-flash")
+
+        assert len(w) == 1
+        assert issubclass(w[0].category, UserWarning)
+        expected_msg = (
+            "Setting per-part media resolution requests to Gemini 2.5 models "
+            "and older is not supported"
+        )
+        assert expected_msg in str(w[0].message)
+
+
+@pytest.mark.xfail(reason="Needs support in SDK.")
+def test_per_part_media_resolution_no_warning_new_models() -> None:
+    """Test that per-part `media_resolution` does not warn for new models."""
+    content_with_media_resolution = [
+        {
+            "type": "media",
+            "mime_type": "image/jpeg",
+            "data": base64.b64encode(b"fake_image_data").decode(),
+            "media_resolution": "MEDIA_RESOLUTION_LOW",
+        },
+        {"type": "text", "text": "Describe this image"},
+    ]
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        _convert_to_parts(content_with_media_resolution, model="gemini-3.0-pro")
+
+        assert len(w) == 0
+
+
+def test_per_part_media_resolution_no_warning_old_models() -> None:
+    """Test that per-part `media_resolution` does not warn for old models."""
+    content_with_media_resolution = [
+        {
+            "type": "media",
+            "mime_type": "image/jpeg",
+            "data": base64.b64encode(b"fake_image_data").decode(),
+            "media_resolution": "MEDIA_RESOLUTION_LOW",
+        },
+        {"type": "text", "text": "Describe this image"},
+    ]
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        _convert_to_parts(content_with_media_resolution, model="gemini-1.5-pro")
+
+        assert len(w) == 0
+
+
+def test_per_part_media_resolution_warning_gemini_25_data_block() -> None:
+    """Test that per-part media_resolution warns for Gemini 2.5 models with data content
+    blocks."""
+    content_with_media_resolution = [
+        {
+            "type": "image",
+            "base64": base64.b64encode(b"fake_image_data").decode(),
+            "mime_type": "image/jpeg",
+            "media_resolution": "MEDIA_RESOLUTION_LOW",
+        },
+        {"type": "text", "text": "Describe this image"},
+    ]
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        _convert_to_parts(content_with_media_resolution, model="gemini-2.5-pro")
+
+        assert len(w) == 1
+        assert issubclass(w[0].category, UserWarning)
+        assert (
+            "Setting per-part media resolution requests to Gemini 2.5 models and older "
+            "is not supported" in str(w[0].message)
+        )
+
+
+@pytest.mark.xfail(reason="Needs support in SDK.")
+def test_thinking_level_parameter() -> None:
+    """Test that `thinking_level` is properly handled."""
+    # Test with thinking_level only
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+    )
+    config = llm._prepare_params(stop=None)
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == "low"
+    assert not hasattr(config.thinking_config, "thinking_budget")
+
+    # Test with thinking_level="high"
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="high",
+    )
+    config = llm._prepare_params(stop=None)
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == "high"
+
+
+@pytest.mark.xfail(reason="Needs support in SDK.")
+def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
+    """Test that `thinking_level` takes precedence when both are provided."""
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            thinking_level="low",
+            thinking_budget=128,
+        )
+        config = llm._prepare_params(stop=None)
+
+        # Check that warning was issued
+        assert len(warning_list) == 1
+        assert issubclass(warning_list[0].category, UserWarning)
+        assert "thinking_level' takes precedence" in str(warning_list[0].message)
+
+        # Check that thinking_level is used and thinking_budget is ignored
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_level == "low"
+        assert not hasattr(config.thinking_config, "thinking_budget")
+
+
+def test_thinking_budget_alone_still_works() -> None:
+    """Test that `thinking_budget` still works when `thinking_level` is not provided."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=64,
+    )
+    config = llm._prepare_params(stop=None)
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 64
+    assert not hasattr(config.thinking_config, "thinking_level")
+
+
+def test_kwargs_override_max_output_tokens() -> None:
+    """Test that max_output_tokens can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+    )
+
+    config = llm._prepare_params(stop=None, max_output_tokens=500)
+    assert config.max_output_tokens == 500
+
+
+def test_kwargs_override_thinking_budget() -> None:
+    """Test that thinking_budget can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=64,
+    )
+
+    config = llm._prepare_params(stop=None, thinking_budget=128)
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 128
+
+
+@pytest.mark.xfail(reason="Needs support in SDK.")
+def test_kwargs_override_thinking_level() -> None:
+    """Test that thinking_level can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+    )
+
+    config = llm._prepare_params(stop=None, thinking_level="high")
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == "high"

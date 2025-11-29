@@ -1,5 +1,6 @@
 import base64
 import re
+import urllib
 import warnings
 from collections.abc import Callable, Sequence
 from typing import (
@@ -90,7 +91,8 @@ def _format_image(image_url: str, project: str | None) -> dict:
     if validators.url(image_url):
         loader = ImageBytesLoader(project=project)
         image_bytes = loader.load_bytes(image_url)
-        raw_mime_type = image_url.split(".")[-1].lower()
+        path = urllib.parse.urlparse(image_url).path
+        raw_mime_type = path.split(".")[-1].lower()
         doc_type = "application" if raw_mime_type == "pdf" else "image"
         mime_type = (
             f"{doc_type}/jpeg"
@@ -405,6 +407,12 @@ def _merge_messages(
                 # Add error flag if present
                 if curr.status == "error":
                     tool_result_block["is_error"] = True
+
+                cache_control = None
+                if isinstance(curr.additional_kwargs, dict):
+                    cache_control = curr.additional_kwargs.get("cache_control")
+                if cache_control:
+                    tool_result_block["cache_control"] = cache_control
 
                 curr = HumanMessage([tool_result_block])
         elif isinstance(curr, AIMessage):
