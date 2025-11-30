@@ -259,16 +259,20 @@ def _format_base_tool_to_function_declaration(
             ),
         )
 
-    if isinstance(tool.args_schema, dict):
-        schema = tool.args_schema
-    elif issubclass(tool.args_schema, BaseModel):
-        schema = tool.args_schema.model_json_schema()
-    elif issubclass(tool.args_schema, BaseModelV1):
-        schema = tool.args_schema.schema()
+    # Use tool_call_schema instead of args_schema to properly exclude
+    # injected arguments (e.g., ToolRuntime, InjectedState, InjectedStore)
+    # that should not be exposed to the model.
+    tool_schema = tool.tool_call_schema
+    if isinstance(tool_schema, dict):
+        schema = tool_schema
+    elif issubclass(tool_schema, BaseModel):
+        schema = tool_schema.model_json_schema()
+    elif issubclass(tool_schema, BaseModelV1):
+        schema = tool_schema.schema()
     else:
         msg = (
-            "args_schema must be a Pydantic BaseModel or JSON schema, "
-            f"got {tool.args_schema}."
+            "tool_call_schema must be a Pydantic BaseModel or JSON schema, "
+            f"got {tool_schema}."
         )
         raise NotImplementedError(msg)
     parameters = _dict_to_gapic_schema(schema)
