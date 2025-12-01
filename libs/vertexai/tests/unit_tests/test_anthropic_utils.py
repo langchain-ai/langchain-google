@@ -2,6 +2,7 @@
 
 import base64
 from unittest.mock import patch
+
 import pytest
 from anthropic.types import (
     RawContentBlockDeltaEvent,
@@ -19,13 +20,12 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 
 from langchain_google_vertexai._anthropic_utils import (
     _documents_in_params,
+    _format_image,
     _format_message_anthropic,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
     _thinking_in_params,
 )
-
-from langchain_google_vertexai._anthropic_utils import _format_image
 
 
 def test_format_message_anthropic_with_cache_control_in_kwargs() -> None:
