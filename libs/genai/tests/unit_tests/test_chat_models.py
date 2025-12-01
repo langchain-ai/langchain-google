@@ -3175,12 +3175,15 @@ def test_kwargs_override_thinking_level() -> None:
 def test_seed_initialization() -> None:
     # Test explicitly provided seed
     llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY), seed=42,
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        seed=42,
     )
     assert llm.seed == 42
 
     # Test default seed
     llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY),
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm.seed is None
