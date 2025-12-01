@@ -119,6 +119,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
             seed=self.seed,
             response_schema=self.response_schema,
             response_mime_type=self.response_mime_type,
+            timeout=self.timeout,
         )
         return self
 

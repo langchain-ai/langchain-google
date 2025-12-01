@@ -212,6 +212,19 @@ def test_api_key_masked_when_passed_via_constructor(
     assert captured.out == "**********"
 
 
+def test_profile() -> None:
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+    assert model.profile
+    assert not model.profile["reasoning_output"]
+
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    assert model.profile
+    assert model.profile["reasoning_output"]
+
+    model = ChatGoogleGenerativeAI(model="foo")
+    assert model.profile == {}
+
+
 def test_parse_history() -> None:
     convert_system_message_to_human = False
     system_input = "You're supposed to answer math questions."

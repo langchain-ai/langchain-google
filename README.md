@@ -1,18 +1,20 @@
 # 🦜️🔗 LangChain Google
 
+This repository centralizes Google integrations for [LangChain](https://github.com/langchain-ai/langchain) projects.
+
 ## Packages
 
-This repository contains three packages with Google integrations with LangChain:
+- [`langchain-google-genai`](https://pypi.org/project/langchain-google-genai/) implements integrations of Google [Generative AI](https://ai.google.dev/) (Gemini API) models.
+- [`langchain-google-vertexai`](https://pypi.org/project/langchain-google-vertexai/) implements integrations of Google Cloud [Generative AI on Vertex AI](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/overview)
+- [`langchain-google-community`](https://pypi.org/project/langchain-google-community/) implements integrations for Google products that are not part of the above two packages
 
-- [langchain-google-genai](https://pypi.org/project/langchain-google-genai/) implements integrations of Google [Generative AI](https://ai.google.dev/) models.
-- [langchain-google-vertexai](https://pypi.org/project/langchain-google-vertexai/) implements integrations of Google Cloud [Generative AI on Vertex AI](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/overview)
-- [langchain-google-community](https://pypi.org/project/langchain-google-community/) implements integrations for Google products that are not part of `langchain-google-vertexai` or `langchain-google-genai` packages
-
-Each of these has its own development environment.
+See the [Google provider page](https://docs.langchain.com/oss/python/integrations/providers/google) in the LangChain Docs for more details.
 
 ## 📖 Documentation
 
-For full documentation, see the [API reference](https://reference.langchain.com/python/integrations/langchain_google/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google).
+For full documentation, see the [API reference](https://reference.langchain.com/python/integrations/langchain_google/).
+
+For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Google Docs](https://docs.langchain.com/oss/python/integrations/providers/google).
 
 ## 📕 Releases & Versioning
 
