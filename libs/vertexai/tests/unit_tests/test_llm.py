@@ -199,7 +199,7 @@ def test_tracing_params() -> None:
 
 
 def test_timeout_parameter() -> None:
-    """Test that timeout parameter is passed to underlying ChatVertexAI client."""
+    # Test that timeout parameter is passed to underlying ChatVertexAI client.
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, project="test-project", timeout=30.0)
     assert llm.timeout == 30.0
     assert llm.client.timeout == 30.0
