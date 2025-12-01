@@ -1,5 +1,8 @@
 """Unit tests for _anthropic_utils.py."""
 
+import base64
+from unittest.mock import patch
+
 import pytest
 from anthropic.types import (
     RawContentBlockDeltaEvent,
@@ -17,6 +20,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 
 from langchain_google_vertexai._anthropic_utils import (
     _documents_in_params,
+    _format_image,
     _format_message_anthropic,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
@@ -1279,3 +1283,64 @@ def test_format_messages_complex_multiturn_with_tools() -> None:
     # Fourth message (AI response) should have 'index' removed
     assert "index" not in formatted[3]["content"][0]
     assert formatted[3]["content"][0]["text"] == "It's sunny and 22°C in Paris!"
+
+
+def test_tool_message_preserves_cache_control() -> None:
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="get_weather",
+                    args={"city": "Paris"},
+                    id="call_1",
+                )
+            ],
+        ),
+        ToolMessage(
+            content="Sunny, 22°C",
+            tool_call_id="call_1",
+            additional_kwargs={"cache_control": {"type": "ephemeral"}},
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    tool_result = formatted[1]["content"][0]
+
+    assert tool_result == {
+        "type": "tool_result",
+        "content": "Sunny, 22°C",
+        "tool_use_id": "call_1",
+        "cache_control": {"type": "ephemeral"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("image_url", "expected_media_type"),
+    [
+        ("https://example.com/image.png?token=123", "image/png"),
+        ("https://example.com/image.jpg", "image/jpeg"),
+        ("https://example.com/document.pdf", "application/pdf"),
+    ],
+)
+def test_format_image(image_url: str, expected_media_type: str) -> None:
+    """Test that _format_image correctly handles various URLs."""
+    project = "test-project"
+
+    with patch(
+        "langchain_google_vertexai._anthropic_utils.ImageBytesLoader"
+    ) as MockLoader:
+        mock_loader_instance = MockLoader.return_value
+        mock_loader_instance.load_bytes.return_value = b"fake_image_data"
+
+        result = _format_image(image_url, project)
+
+        expected_data = base64.b64encode(b"fake_image_data").decode("ascii")
+
+        assert result == {
+            "type": "base64",
+            "media_type": expected_media_type,
+            "data": expected_data,
+        }
+
+        mock_loader_instance.load_bytes.assert_called_once_with(image_url)

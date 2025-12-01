@@ -10,6 +10,7 @@ from typing import (
     cast,
 )
 
+import httpx
 import vertexai
 from google.api_core.client_options import ClientOptions
 from google.cloud.aiplatform import initializer
@@ -292,6 +293,12 @@ class _VertexAICommon(_VertexAIBase):
         default=None,
     )
     """Enable timestamp understanding of audio-only files."""
+
+    timeout: float | httpx.Timeout | None = Field(
+        default=None,
+        description="Timeout for API requests.",
+    )
+    """The timeout for requests to the Vertex AI API, in seconds."""
 
     @property
     def _llm_type(self) -> str:
