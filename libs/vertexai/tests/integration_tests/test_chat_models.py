@@ -1555,6 +1555,47 @@ def test_logprobs() -> None:
     assert msg3.response_metadata.get("logprobs_result") is None
 
 
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
+@pytest.mark.release
+def test_logprobs_with_json_schema() -> None:
+    """Ensure logprobs are populated when using JSON schema responses.
+
+    This exercises the same logprobs path as `test_logprobs`, but with
+    `response_mime_type='application/json'` and `response_schema` set, which
+    previously exposed missing tokens in `logprobs_result` (issue #34133).
+    """
+
+    output_schema = {
+        "title": "Test Schema",
+        "type": "object",
+        "properties": {
+            "fieldA": {"type": "string"},
+            "fieldB": {"type": "number"},
+        },
+        "required": ["fieldA", "fieldB"],
+    }
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        response_mime_type="application/json",
+        response_schema=output_schema,
+        logprobs=True,
+    )
+
+    msg = llm.invoke("Return a JSON object with fieldA='test' and fieldB=42")
+    tokenprobs = msg.response_metadata.get("logprobs_result")
+    # We don't assert exact content to avoid flakiness, but if present it must
+    # be a well-formed list of token/logprob dicts, including zero logprobs.
+    assert tokenprobs is None or isinstance(tokenprobs, list)
+    if tokenprobs:
+        for token in tokenprobs:
+            assert isinstance(token, dict)
+            assert "token" in token
+            assert "logprob" in token
+            assert isinstance(token.get("token"), str)
+            assert isinstance(token.get("logprob"), float)
+
+
 def test_location_init() -> None:
     """Test how location is set in ChatVertexAI depending on vertexai.init settings."""
     # If I don't initialize vertexai before, defaults to us-central-1

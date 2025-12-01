@@ -231,7 +231,10 @@ def get_generation_info(
     ):
 
         def is_valid_logprob(prob):
-            return isinstance(prob, float) and not math.isnan(prob) and prob < 0
+            # Logprobs can be 0.0 (probability=1.0, fully certain) or negative
+            # (probability < 1.0). We should include all valid logprobs, not just
+            # strictly negative ones.
+            return isinstance(prob, (float, int)) and not math.isnan(prob) and prob <= 0
 
         chosen_candidates = candidate.logprobs_result.chosen_candidates
         top_candidates_list = candidate.logprobs_result.top_candidates
