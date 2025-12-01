@@ -196,3 +196,10 @@ def test_tracing_params() -> None:
             "ls_temperature": 0.1,
             "ls_max_tokens": 10,
         }
+
+
+def test_timeout_parameter() -> None:
+    # Test that timeout parameter is passed to ChatVertexAI client.
+    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, project="test-project", timeout=30.0)
+    assert llm.timeout == 30.0
+    assert llm.client.timeout == 30.0
