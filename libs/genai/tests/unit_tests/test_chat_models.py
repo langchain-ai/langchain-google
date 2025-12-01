@@ -212,6 +212,19 @@ def test_api_key_masked_when_passed_via_constructor(
     assert captured.out == "**********"
 
 
+def test_profile() -> None:
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+    assert model.profile
+    assert not model.profile["reasoning_output"]
+
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    assert model.profile
+    assert model.profile["reasoning_output"]
+
+    model = ChatGoogleGenerativeAI(model="foo")
+    assert model.profile == {}
+
+
 def test_parse_history() -> None:
     convert_system_message_to_human = False
     system_input = "You're supposed to answer math questions."
@@ -3118,3 +3131,42 @@ def test_thinking_budget_alone_still_works() -> None:
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_budget == 64
     assert not hasattr(config.thinking_config, "thinking_level")
+
+
+def test_kwargs_override_max_output_tokens() -> None:
+    """Test that max_output_tokens can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+    )
+
+    config = llm._prepare_params(stop=None, max_output_tokens=500)
+    assert config.max_output_tokens == 500
+
+
+def test_kwargs_override_thinking_budget() -> None:
+    """Test that thinking_budget can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=64,
+    )
+
+    config = llm._prepare_params(stop=None, thinking_budget=128)
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 128
+
+
+@pytest.mark.xfail(reason="Needs support in SDK.")
+def test_kwargs_override_thinking_level() -> None:
+    """Test that thinking_level can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+    )
+
+    config = llm._prepare_params(stop=None, thinking_level="high")
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == "high"

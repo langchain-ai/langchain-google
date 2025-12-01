@@ -7,6 +7,8 @@ import os
 import re
 from typing import Any, Literal, cast
 
+from google.api_core.exceptions import DeadlineExceeded
+
 try:
     from langgraph.graph.state import CompiledStateGraph
 except ImportError:
@@ -1744,3 +1746,30 @@ async def test_code_execution_builtin(output_version: str) -> None:
     }
     response = await llm.ainvoke([input_message, full, next_message])
     _check_code_execution_output(response, output_version)
+
+
+@pytest.mark.release
+def test_chat_vertexai_timeout_non_streaming() -> None:
+    """Test timeout parameter in non-streaming mode."""
+    vertexai.init(api_transport="grpc")
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME,
+        timeout=0.001,
+        rate_limiter=RATE_LIMITER,
+    )
+    with pytest.raises(DeadlineExceeded):
+        model.invoke([HumanMessage(content="Hello")])
+
+
+@pytest.mark.release
+def test_chat_vertexai_timeout_streaming() -> None:
+    """Test timeout parameter in streaming mode."""
+    vertexai.init(api_transport="grpc")
+    model = ChatVertexAI(
+        model_name=_DEFAULT_MODEL_NAME,
+        timeout=0.001,
+        streaming=True,
+        rate_limiter=RATE_LIMITER,
+    )
+    with pytest.raises(DeadlineExceeded):
+        model.invoke([HumanMessage(content="Hello")])

@@ -55,6 +55,7 @@ _GoogleSearchRetrievalLike = gapic.GoogleSearchRetrieval | dict[str, Any]
 
 _GoogleSearchLike = gapic.Tool.GoogleSearch | dict[str, Any]
 _CodeExecutionLike = gapic.CodeExecution | dict[str, Any]
+_UrlContextLike = gapic.UrlContext | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
@@ -62,6 +63,7 @@ class _ToolDict(TypedDict):
     google_search_retrieval: _GoogleSearchRetrievalLike | None
     google_search: NotRequired[_GoogleSearchLike]
     code_execution: NotRequired[_CodeExecutionLike]
+    url_context: NotRequired[_UrlContextLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -153,6 +155,7 @@ def convert_to_genai_function_declarations(
                     "google_search_retrieval",
                     "google_search",
                     "code_execution",
+                    "url_context",
                 ]
             ):
                 fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
@@ -186,6 +189,8 @@ def convert_to_genai_function_declarations(
                 )
             if "code_execution" in tool:
                 gapic_tool.code_execution = gapic.CodeExecution(tool["code_execution"])
+            if "url_context" in tool:
+                gapic_tool.url_context = gapic.UrlContext(tool["url_context"])
         else:
             fd = _format_to_gapic_function_declaration(tool)
             gapic_tool.function_declarations.append(fd)

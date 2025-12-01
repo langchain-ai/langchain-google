@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import mimetypes
+import re
 import time
 import uuid
 import warnings
@@ -58,6 +59,8 @@ from langchain_core.callbacks.manager import (
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
+    ModelProfile,
+    ModelProfileRegistry,
     is_openai_data_block,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -124,6 +127,7 @@ from langchain_google_genai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
 )
+from langchain_google_genai.data._profiles import _PROFILES
 
 from . import _genai_extension as genaix
 
@@ -136,6 +140,13 @@ _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
 )
+
+_MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
+
+
+def _get_default_model_profile(model_name: str) -> ModelProfile:
+    default = _MODEL_PROFILES.get(model_name) or {}
+    return default.copy()
 
 
 def _bytes_to_base64(data: bytes) -> str:
@@ -2070,6 +2081,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         return self.async_client_running
 
+    @model_validator(mode="after")
+    def _set_model_profile(self) -> Self:
+        """Set model profile if not overridden."""
+        if self.profile is None:
+            model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
+            self.profile = _get_default_model_profile(model_id)
+        return self
+
     @property
     def _identifying_params(self) -> dict[str, Any]:
         """Get the identifying parameters."""
@@ -2147,7 +2166,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         generation_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerationConfig:
-        if self.thinking_level is not None and self.thinking_budget is not None:
+        # Extract thinking parameters with kwargs override
+        thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
+        thinking_level = kwargs.get("thinking_level", self.thinking_level)
+
+        if thinking_level is not None and thinking_budget is not None:
             msg = (
                 "Both 'thinking_level' and 'thinking_budget' were specified. "
                 "'thinking_level' is not yet supported by the current API version, "
@@ -2161,15 +2184,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "candidate_count": self.n,
                 "temperature": self.temperature,
                 "stop_sequences": stop,
-                "max_output_tokens": self.max_output_tokens,
+                "max_output_tokens": kwargs.get(
+                    "max_output_tokens", self.max_output_tokens
+                ),
                 "top_k": self.top_k,
                 "top_p": self.top_p,
                 "response_modalities": self.response_modalities,
                 "thinking_config": (
                     (
                         (
-                            {"thinking_budget": self.thinking_budget}
-                            if self.thinking_budget is not None
+                            {"thinking_budget": thinking_budget}
+                            if thinking_budget is not None
                             else {}
                         )
                         | (
@@ -2178,14 +2203,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                             else {}
                         )
                         | (
-                            {"thinking_level": self.thinking_level}
-                            if self.thinking_level is not None
+                            {"thinking_level": thinking_level}
+                            if thinking_level is not None
                             else {}
                         )
                     )
-                    if self.thinking_budget is not None
+                    if thinking_budget is not None
                     or self.include_thoughts is not None
-                    or self.thinking_level is not None
+                    or thinking_level is not None
                     else None
                 ),
             }.items()

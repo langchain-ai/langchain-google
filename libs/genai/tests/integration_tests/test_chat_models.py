@@ -1331,3 +1331,56 @@ def test_code_execution_builtin(output_version: str) -> None:
     }
     response = llm.invoke([input_message, full, next_message])
     _check_code_execution_output(response, output_version)
+
+
+def test_chat_google_genai_invoke_with_generation_params() -> None:
+    """Test that generation parameters passed to invoke() are respected.
+
+    Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
+    parameters passed directly to invoke() method override model defaults.
+    """
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+
+    # Test with max_output_tokens constraint
+    result_constrained = llm.invoke(
+        "Alice, Bob, and Carol each live in a different house on the same street: "
+        "red, green, and blue. The person who lives in the red house owns a cat. "
+        "Bob does not live in the green house. Carol owns a dog. The green house "
+        "is to the left of the red house. Alice does not own a cat. Who lives in "
+        "each house, and what pet do they own?",
+        max_output_tokens=10,
+        thinking_budget=0,
+    )
+
+    assert isinstance(result_constrained, AIMessage)
+    # Verify output tokens are within limit
+    assert result_constrained.usage_metadata is not None
+
+    output_tokens = result_constrained.usage_metadata.get("output_tokens")
+    assert output_tokens is not None, "usage_metadata is missing 'output_tokens'"
+    assert output_tokens <= 10, f"Expected output_tokens <= 10, got {output_tokens}"
+
+    # Verify thinking is disabled
+    details = result_constrained.usage_metadata.get("output_token_details") or {}
+    assert "reasoning" not in details, (
+        "Expected no reasoning tokens when thinking_budget=0"
+    )
+
+
+@pytest.mark.parametrize("max_tokens", [10, 20, 50])
+def test_chat_google_genai_invoke_respects_max_tokens(max_tokens: int) -> None:
+    """Test that different max_output_tokens values are respected."""
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+
+    result = llm.invoke(
+        "Write a detailed essay about artificial intelligence.",
+        max_output_tokens=max_tokens,
+    )
+
+    assert isinstance(result, AIMessage)
+    assert result.usage_metadata is not None
+    output_tokens = result.usage_metadata.get("output_tokens")
+    assert output_tokens is not None, "usage_metadata is missing 'output_tokens'"
+    assert output_tokens <= max_tokens, (
+        f"Expected output_tokens <= {max_tokens}, got {output_tokens}"
+    )
