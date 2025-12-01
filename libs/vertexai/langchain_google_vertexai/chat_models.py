@@ -2276,6 +2276,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        timeout = kwargs.pop("timeout", self.timeout)
         response = _completion_with_retry(
             self.prediction_client.generate_content,
             max_retries=self.max_retries,
@@ -2283,7 +2284,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
-            timeout=self.timeout,
+            timeout=timeout,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -2295,6 +2296,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        timeout = kwargs.pop("timeout", self.timeout)
         response = await _acompletion_with_retry(
             self.async_prediction_client.generate_content,
             max_retries=self.max_retries,
@@ -2304,7 +2306,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 messages=messages, stop=stop, **kwargs
             ),
             metadata=self.default_metadata,
-            timeout=self.timeout,
+            timeout=timeout,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -2408,6 +2410,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        timeout = kwargs.pop("timeout", self.timeout)
         response_iter = _completion_with_retry(
             self.prediction_client.stream_generate_content,
             max_retries=self.max_retries,
@@ -2415,7 +2418,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
-            timeout=self.timeout,
+            timeout=timeout,
             **kwargs,
         )
         total_lc_usage = None
@@ -2436,6 +2439,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         # TODO: Update to properly support async streaming from gemini.
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        timeout = kwargs.pop("timeout", self.timeout)
 
         response_iter = _acompletion_with_retry(
             self.async_prediction_client.stream_generate_content,
@@ -2444,7 +2448,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
-            timeout=self.timeout,
+            timeout=timeout,
             **kwargs,
         )
         total_lc_usage = None
