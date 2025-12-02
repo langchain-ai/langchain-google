@@ -20,6 +20,7 @@ from google.genai.types import (
     HttpOptions,
     Language,
     Part,
+    ThinkingLevel,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -2121,6 +2122,7 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
     # Check the result
     model_content = formatted_messages[0]
     assert model_content.role == "model"
+    assert model_content.parts is not None
     assert len(model_content.parts) == 1
     part = model_content.parts[0]
 
@@ -3135,7 +3137,6 @@ def test_per_part_media_resolution_warning_gemini_25_data_block() -> None:
         )
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_thinking_level_parameter() -> None:
     """Test that `thinking_level` is properly handled."""
     # Test with thinking_level only
@@ -3146,8 +3147,9 @@ def test_thinking_level_parameter() -> None:
     )
     config = llm._prepare_params(stop=None)
     assert config.thinking_config is not None
-    assert config.thinking_config.thinking_level == "low"
-    assert not hasattr(config.thinking_config, "thinking_budget")
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    # Pydantic models define all fields; check value is None rather than hasattr
+    assert config.thinking_config.thinking_budget is None
 
     # Test with thinking_level="high"
     llm = ChatGoogleGenerativeAI(
@@ -3157,10 +3159,9 @@ def test_thinking_level_parameter() -> None:
     )
     config = llm._prepare_params(stop=None)
     assert config.thinking_config is not None
-    assert config.thinking_config.thinking_level == "high"
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
     """Test that `thinking_level` takes precedence when both are provided."""
     with warnings.catch_warnings(record=True) as warning_list:
@@ -3181,8 +3182,9 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
 
         # Check that thinking_level is used and thinking_budget is ignored
         assert config.thinking_config is not None
-        assert config.thinking_config.thinking_level == "low"
-        assert not hasattr(config.thinking_config, "thinking_budget")
+        assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+        # Pydantic models define all fields; check value is None rather than hasattr
+        assert config.thinking_config.thinking_budget is None
 
 
 def test_thinking_budget_alone_still_works() -> None:
@@ -3195,7 +3197,8 @@ def test_thinking_budget_alone_still_works() -> None:
     config = llm._prepare_params(stop=None)
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_budget == 64
-    assert not hasattr(config.thinking_config, "thinking_level")
+    # Pydantic models define all fields; check value is None rather than hasattr
+    assert config.thinking_config.thinking_level is None
 
 
 def test_kwargs_override_max_output_tokens() -> None:
@@ -3223,7 +3226,6 @@ def test_kwargs_override_thinking_budget() -> None:
     assert config.thinking_config.thinking_budget == 128
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_kwargs_override_thinking_level() -> None:
     """Test that thinking_level can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
@@ -3234,4 +3236,4 @@ def test_kwargs_override_thinking_level() -> None:
 
     config = llm._prepare_params(stop=None, thinking_level="high")
     assert config.thinking_config is not None
-    assert config.thinking_config.thinking_level == "high"
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH

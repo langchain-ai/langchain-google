@@ -454,6 +454,9 @@ def _convert_to_parts(
                     if mime_type:
                         blob_kwargs["mime_type"] = mime_type
 
+                    part_kwargs: dict[str, Any] = {
+                        "inline_data": Blob(**blob_kwargs),
+                    }
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
                             warnings.warn(
@@ -464,9 +467,11 @@ def _convert_to_parts(
                                 stacklevel=2,
                             )
                         elif model and _is_gemini_3_or_later(model):
-                            blob_kwargs["media_resolution"] = part["media_resolution"]
+                            part_kwargs["media_resolution"] = {
+                                "level": part["media_resolution"]
+                            }
 
-                    parts.append(Part(inline_data=Blob(**blob_kwargs)))
+                    parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
                     # Chat Completions image format
                     img_url = part["image_url"]
@@ -483,16 +488,16 @@ def _convert_to_parts(
                         msg = f"Missing mime_type in media part: {part}"
                         raise ValueError(msg)
                     mime_type = part["mime_type"]
-                    media_part = Part()
+                    media_part_kwargs: dict[str, Any] = {}
 
                     if "data" in part:
                         # Embedded media
-                        media_part.inline_data = Blob(
+                        media_part_kwargs["inline_data"] = Blob(
                             data=part["data"], mime_type=mime_type
                         )
                     elif "file_uri" in part:
                         # Referenced files (e.g. stored in GCS)
-                        media_part.file_data = FileData(
+                        media_part_kwargs["file_data"] = FileData(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
                     else:
@@ -500,7 +505,7 @@ def _convert_to_parts(
                         raise ValueError(msg)
                     if "video_metadata" in part:
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
-                        media_part.video_metadata = metadata
+                        media_part_kwargs["video_metadata"] = metadata
 
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
@@ -512,16 +517,11 @@ def _convert_to_parts(
                                 stacklevel=2,
                             )
                         elif model and _is_gemini_3_or_later(model):
-                            if media_part.inline_data:
-                                media_part.inline_data.media_resolution = part[
-                                    "media_resolution"
-                                ]
-                            elif media_part.file_data:
-                                media_part.file_data.media_resolution = part[
-                                    "media_resolution"
-                                ]
+                            media_part_kwargs["media_resolution"] = {
+                                "level": part["media_resolution"]
+                            }
 
-                    parts.append(media_part)
+                    parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format that we continue to store as
                     thought_sig = None
@@ -874,11 +874,11 @@ def _parse_chat_history(
         # This defines the scope where we must ensure compliance.
         active_loop_start_idx = -1
         for i in range(len(formatted_messages) - 1, -1, -1):
-            msg = formatted_messages[i]
-            if msg.role == "user":
+            content_msg = formatted_messages[i]
+            if content_msg.role == "user":
                 has_function_response = False
                 has_standard_content = False
-                for part in msg.parts:
+                for part in content_msg.parts or []:
                     if part.function_response:
                         has_function_response = True
                     if part.text or part.inline_data:
@@ -895,10 +895,10 @@ def _parse_chat_history(
         # API's schema validation without requiring the original internal thought data.
         start_idx = active_loop_start_idx + 1 if active_loop_start_idx != -1 else 0
         for i in range(start_idx, len(formatted_messages)):
-            msg = formatted_messages[i]
-            if msg.role == "model":
+            content_msg = formatted_messages[i]
+            if content_msg.role == "model":
                 first_fc_seen = False
-                for part in msg.parts:
+                for part in content_msg.parts or []:
                     if part.function_call:
                         if not first_fc_seen:
                             if not part.thought_signature:
@@ -957,11 +957,11 @@ def _parse_response_candidate(
     content: None | str | list[str | dict] = None
     additional_kwargs: dict[str, Any] = {}
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
+    if model_name:
+        response_metadata["model_name"] = model_name
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
-    # Track function call signatures separately to handle them conditionally
-    function_call_signatures: list[dict] = []
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
     for part in parts:
@@ -998,7 +998,7 @@ def _parse_response_candidate(
             content = _append_to_content(content, thinking_message)
         elif (
             (text is not None and text)  # text part with non-empty string
-            or ("text" in part and thought_sig)  # text part with thought signature
+            or (part.text is not None and thought_sig)  # text part w/ thought sig
         ):
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
@@ -1770,9 +1770,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#thinking-support)
         for more info.
 
-        For thinking models, you have the option to adjust the number of internal
-        thinking tokens used (`thinking_budget`) or to disable thinking altogether.
-        Note that not all models allow disabling thinking.
+        Gemini 3+ models use `thinking_level` (`'low'` or `'high'`) to control
+        reasoning depth. If not specified, defaults to `'high'`.
+
+        ```python
+        model = ChatGoogleGenerativeAI(
+            model="gemini-3-pro-preview",
+            thinking_level="low",  # For faster, lower-latency responses
+        )
+        ```
+
+        Gemini 2.5 models use `thinking_budget` (an integer token count) to control
+        reasoning. Set to `0` to disable thinking (where supported), or `-1` for
+        dynamic thinking.
 
         See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
         more details on thinking models.
@@ -2356,29 +2366,55 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Build the base generation configuration from instance attributes."""
         config: dict[str, Any] = {
             "candidate_count": self.n,
-            "temperature": self.temperature,
+            "temperature": kwargs.get("temperature", self.temperature),
             "stop_sequences": stop,
-            "max_output_tokens": self.max_output_tokens,
-            "top_k": self.top_k,
-            "top_p": self.top_p,
+            "max_output_tokens": kwargs.get(
+                "max_output_tokens", self.max_output_tokens
+            ),
+            "top_k": kwargs.get("top_k", self.top_k),
+            "top_p": kwargs.get("top_p", self.top_p),
             "response_modalities": self.response_modalities,
         }
-        thinking_config = self._build_thinking_config()
+        thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
             config["thinking_config"] = thinking_config
         return {k: v for k, v in config.items() if v is not None}
 
-    def _build_thinking_config(self) -> dict[str, Any] | None:
+    def _build_thinking_config(self, **kwargs: Any) -> dict[str, Any] | None:
         """Build thinking configuration if supported by the model."""
-        if not (self.thinking_budget is not None or self.include_thoughts is not None):
+        thinking_level = kwargs.get("thinking_level", self.thinking_level)
+        thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
+        include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
+
+        has_thinking_params = (
+            thinking_level is not None
+            or thinking_budget is not None
+            or include_thoughts is not None
+        )
+        if not has_thinking_params:
             return None
         if not self._supports_thinking():
             return None
-        config = {}
-        if self.thinking_budget is not None:
-            config["thinking_budget"] = self.thinking_budget
-        if self.include_thoughts is not None:
-            config["include_thoughts"] = self.include_thoughts
+
+        config: dict[str, Any] = {}
+
+        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        if thinking_level is not None:
+            if thinking_budget is not None:
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were provided. "
+                    "'thinking_level' takes precedence for Gemini 3+ models; "
+                    "'thinking_budget' will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            config["thinking_level"] = thinking_level
+        elif thinking_budget is not None:
+            config["thinking_budget"] = thinking_budget
+
+        if include_thoughts is not None:
+            config["include_thoughts"] = include_thoughts
+
         return config
 
     def _merge_generation_config(
@@ -2500,9 +2536,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         formatted_safety_settings = self._format_safety_settings(safety_settings)
 
         # Get generation parameters
+        # (consumes thinking kwargs into params.thinking_config)
         params: GenerationConfig = self._prepare_params(
             stop, generation_config=generation_config, **kwargs
         )
+
+        _thinking_kwargs = {"thinking_budget", "thinking_level", "include_thoughts"}
+        # Filter out thinking kwargs already consumed by _prepare_params.
+        # These are handled via params.thinking_config and aren't direct fields
+        # on GenerateContentConfig.
+        remaining_kwargs = {
+            k: v for k, v in kwargs.items() if k not in _thinking_kwargs
+        }
 
         # Build request configuration
         request = self._build_request_config(
@@ -2513,7 +2558,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             cached_content,
             system_instruction,
             stop,
-            **kwargs,
+            **remaining_kwargs,
         )
 
         # Return config and additional params needed for API call
@@ -2627,6 +2672,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             thinking_config = ThinkingConfig(
                 include_thoughts=params.thinking_config.include_thoughts,
                 thinking_budget=params.thinking_config.thinking_budget,
+                thinking_level=params.thinking_config.thinking_level,
             )
 
         return GenerateContentConfig(

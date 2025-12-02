@@ -300,9 +300,7 @@ def convert_to_genai_function_declarations(
                     tool_dict["code_execution"] = tool["code_execution"]
             if "url_context" in tool:
                 if isinstance(tool["url_context"], dict):
-                    tool_dict["url_context"] = types.UrlContext(
-                        **tool["url_context"]
-                    )
+                    tool_dict["url_context"] = types.UrlContext(**tool["url_context"])
                 else:
                     tool_dict["url_context"] = tool["url_context"]
         else:
