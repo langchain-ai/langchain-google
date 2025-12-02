@@ -160,13 +160,13 @@ def send_email(to: str, msg: str, *, priority: str = "normal") -> bool:
 You can find the official SDK documentation and code samples here:
 <https://ai.google.dev/gemini-api/docs>
 
-## Golden Rule: Use the Correct and Current SDK
+## Golden rule: use the current SDK
 
-- **Library Name:** Google GenAI SDK
-- **Python Package:** `google-genai`
-- **Legacy Libraries**: (`google-generativeai` and `google-ai-generativelanguage`) are deprecated.
+- **Library:** Google GenAI SDK
+- **Python package:** `google-genai`
+- **Legacy libraries**: (`google-generativeai` and `google-ai-generativelanguage`) are deprecated.
 
-**APIs and Usage:**
+**APIs and usage:**
 
 - **Incorrect:** `import google.generativeai as genai` -> **Correct:** `from google import genai`
 - **Incorrect:** `from google.ai import generativelanguage_v1`  -> **Correct:** `from google import genai`
@@ -205,7 +205,7 @@ The `google-genai` library requires creating a client object for all API calls.
   - **Prohibited:** `gemini-1.5-pro`
   - **Prohibited:** `gemini-pro`
 
-## Basic Inference (Text Generation)
+## Basic inference
 
 Here's how to generate a response from a text prompt.
 
@@ -281,15 +281,13 @@ myfile = client.files.upload(file='path/to/sample.mp3')
 client.files.delete(name=myfile.name)
 ```
 
-## Additional Capabilities and Configurations
+## Additional capabilities and configurations
 
 Below are examples of advanced configurations.
 
 ### Thinking
 
-Gemini 2.5 series models and above support thinking, which is on by default for
-`gemini-2.5-flash`. It can be adjusted by using `thinking_budget` setting.
-Setting it to zero turns thinking off, and will reduce latency.
+Gemini 2.5 series models and above support thinking, which is on by default for `gemini-2.5-flash`. It can be adjusted by using `thinking_budget` setting. Setting it to zero turns thinking off, and will reduce latency.
 
 ```python
 from google import genai
@@ -310,12 +308,8 @@ client.models.generate_content(
 
 IMPORTANT NOTES:
 
-- Minimum thinking budget for `gemini-2.5-pro` is `128` and thinking can not
-    be turned off for that model.
-- No models (apart from Gemini 2.5 series) support thinking or thinking
-    budgets APIs. Do not try to adjust thinking budgets other models (such as
-    `gemini-2.0-flash` or `gemini-2.0-pro`) otherwise it will cause syntax
-    errors.
+- Minimum thinking budget for `gemini-2.5-pro` is `128` and thinking can not be turned off for that model.
+- No models (apart from Gemini 2.5 series) support thinking or thinking budgets APIs. Do not try to adjust thinking budgets other models (such as `gemini-2.0-flash` or `gemini-2.0-pro`) otherwise it will cause syntax errors.
 
 ### System instructions
 
@@ -341,15 +335,13 @@ print(response.text)
 
 ### Hyperparameters
 
-You can also set `temperature` or `max_output_tokens` within
-`types.GenerateContentConfig`
-**Avoid** setting `max_output_tokens`, `topP`, `topK` unless explicitly
-requested by the user.
+You can also set `temperature` or `max_output_tokens` within `types.GenerateContentConfig`
+
+**Avoid** setting `max_output_tokens`, `topP`, `topK` unless explicitly requested by the user.
 
 ### Safety configurations
 
-Avoid setting safety configurations unless explicitly requested by the user. If
-explicitly asked for by the user, here is a sample API:
+Avoid setting safety configurations unless explicitly requested by the user. If explicitly asked for by the user, here is a sample API:
 
 ```python
 from google import genai
@@ -394,8 +386,7 @@ for chunk in response:
 
 ### Chat
 
-For multi-turn conversations, use the `chats` service to maintain conversation
-history.
+For multi-turn conversations, use the `chats` service to maintain conversation history.
 
 ```python
 from google import genai
@@ -416,8 +407,7 @@ for message in chat.get_history():
 
 ### Structured outputs
 
-Use structured outputs to force the model to return a response that conforms to
-a specific Pydantic schema.
+Use structured outputs to force the model to return a response that conforms to a specific Pydantic schema.
 
 ```python
 from google import genai
@@ -447,10 +437,9 @@ response = client.models.generate_content(
 print(response.text)
 ```
 
-#### Function Calling (Tools)
+#### Function calling (Tools)
 
-You can provide the model with tools (functions) it can use to bring in external
-information to answer a question or act on a request outside the model.
+You can provide the model with tools (functions) it can use to bring in external information to answer a question or act on a request outside the model.
 
 ```python
 from google import genai
@@ -485,11 +474,9 @@ else:
     print(response.text)
 ```
 
-### Generate Images
+### Generate images
 
-Here's how to generate images using the Imagen models. Start with the fast model
-as it should cover most use-cases, and move to the more standard or the ultra
-models for advanced use-cases.
+Here's how to generate images using the Imagen models. Start with the fast model as it should cover most use-cases, and move to the more standard or the ultra models for advanced use-cases.
 
 ```python
 from google import genai
@@ -516,9 +503,7 @@ for generated_image in result.generated_images:
 
 ### Edit images
 
-Editing images is better done using the Gemini native image generation model,
-and it is recommended to use chat mode. Configs are not supported in this model
-(except modality).
+Editing images is better done using the Gemini native image generation model, and it is recommended to use chat mode. Configs are not supported in this model (except modality).
 
 ```python
 from google import genai
@@ -549,12 +534,9 @@ for i, part in enumerate(response.candidates[0].content.parts):
 chat.send_message('Can you make it a bananas foster?')
 ```
 
-### Generate Videos
+### Generate videos
 
-Here's how to generate videos using the Veo models. Usage of Veo can be costly,
-so after generating code for it, give user a heads up to check pricing for Veo.
-Start with the fast model since the result quality is usually sufficient, and
-swap to the larger model if needed.
+Here's how to generate videos using the Veo models. Usage of Veo can be costly, so after generating code for it, give user a heads up to check pricing for Veo. Start with the fast model since the result quality is usually sufficient, and swap to the larger model if needed.
 
 ```python
 import time
@@ -587,12 +569,9 @@ for n, generated_video in enumerate(operation.response.generated_videos):
     generated_video.video.save(f'video{n}.mp4')  # saves the video
 ```
 
-### Search Grounding
+### Search grounding
 
-Google Search can be used as a tool for grounding queries that with up to date
-information from the web.
-
-**Correct**
+Google Search can be used as a tool for grounding queries that with up to date information from the web.
 
 ```python
 from google import genai
@@ -618,15 +597,11 @@ print(f'Search Query: {response.candidates[0].grounding_metadata.web_search_quer
 print(f"Search Pages: {', '.join([site.web.title for site in response.candidates[0].grounding_metadata.grounding_chunks])}")
 ```
 
-The output `response.text` will likely not be in JSON format, do not attempt to
-parse it as JSON.
+The output `response.text` will likely not be in JSON format, do not attempt to parse it as JSON.
 
-### Content and Part Hierarchy
+### Content and part hierarchy
 
-While the simpler API call is often sufficient, you may run into scenarios where
-you need to work directly with the underlying `Content` and `Part` objects for
-more explicit control. These are the fundamental building blocks of the
-`generate_content` API.
+While the simpler API call is often sufficient, you may run into scenarios where you need to work directly with the underlying `Content` and `Part` objects for more explicit control. These are the fundamental building blocks of the `generate_content` API.
 
 For instance, the following simple API call:
 
@@ -661,11 +636,13 @@ print(response.text)
 
 ## Other APIs
 
-The list of APIs and capabilities above are not comprehensive. If users ask you
-to generate code for a capability not provided above, refer them to
-ai.google.dev/gemini-api/docs.
+The list of APIs and capabilities above are not comprehensive. If users ask you to generate code for a capability not provided above, refer them to ai.google.dev/gemini-api/docs.
 
-## Useful Links
+## Running tests
+
+If Vertex tests fail due to expired GCP credentials, remind the tester to re-authenticate: `gcloud auth application-default login`
+
+## Useful links
 
 - Documentation: ai.google.dev/gemini-api/docs
 - API Keys and Authentication: ai.google.dev/gemini-api/docs/api-key
