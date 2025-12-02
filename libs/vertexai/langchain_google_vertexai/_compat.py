@@ -24,26 +24,30 @@ def _convert_from_v1_to_vertex(
         # TextContentBlock
         if block_dict["type"] == "text":
             new_block = {"type": "text", "text": block_dict.get("text", "")}
+            if "extras" in block_dict and isinstance(block_dict["extras"], dict):
+                extras = block_dict["extras"]
+                if "signature" in extras:
+                    new_block["thought_signature"] = extras["signature"]
             new_content.append(new_block)
             # Citations are only handled on output. Can't pass them back :/
 
         # ReasoningContentBlock -> thinking
-        elif block_dict["type"] == "reasoning" and model_provider == "google_vertexai":
+        elif block_dict["type"] == "reasoning" and model_provider in (
+            "google_vertexai",
+            "google_genai",
+        ):
             # Google requires passing back the thought_signature when available.
             # Signatures are only provided when function calling is enabled.
+            new_block = {
+                "type": "thinking",
+                "thinking": block_dict.get("reasoning", ""),
+            }
             if "extras" in block_dict and isinstance(block_dict["extras"], dict):
                 extras = block_dict["extras"]
                 if "signature" in extras:
-                    new_block = {
-                        "thought": True,
-                        "text": block_dict.get("reasoning", ""),
-                        "thought_signature": extras["signature"],
-                    }
-                    new_content.append(new_block)
-                # else: skip reasoning blocks without signatures
-                # TODO: log a warning?
-            # else: skip reasoning blocks without extras
-            # TODO: log a warning?
+                    new_block["thought_signature"] = extras["signature"]
+
+            new_content.append(new_block)
 
         # ToolCall -> FunctionCall
         elif block_dict["type"] == "tool_call":
@@ -75,6 +79,9 @@ def _convert_from_v1_to_vertex(
                 }
                 # Google generativelanguage format
                 new_content.append(code_execution_result)
+
+        elif block_dict["type"] == "function_call_signature":
+            new_content.append(block_dict)
 
         elif block_dict["type"] == "non_standard":
             new_content.append(block_dict["value"])

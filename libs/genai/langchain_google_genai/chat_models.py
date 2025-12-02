@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import mimetypes
+import re
 import time
 import uuid
 import warnings
@@ -62,6 +63,8 @@ from langchain_core.callbacks.manager import (
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
+    ModelProfile,
+    ModelProfileRegistry,
     is_openai_data_block,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -126,6 +129,7 @@ from langchain_google_genai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
 )
+from langchain_google_genai.data._profiles import _PROFILES
 
 # Migration notes:
 # - Dropping `async_client` property; need to reconcile for backward compat
@@ -148,6 +152,25 @@ _allowed_params_prediction_service_genai = [
 
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
+_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
+    "__gemini_function_call_thought_signatures__"
+)
+
+_MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
+
+
+def _get_default_model_profile(model_name: str) -> ModelProfile:
+    default = _MODEL_PROFILES.get(model_name) or {}
+    return default.copy()
+
+
+def _bytes_to_base64(data: bytes) -> str:
+    return base64.b64encode(data).decode("utf-8")
+
+
+def _base64_to_bytes(input_str: str) -> bytes:
+    return base64.b64decode(input_str.encode("utf-8"))
+
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Custom exception class for errors associated with the `Google GenAI` API.
@@ -156,6 +179,24 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     API usage in the `ChatGoogleGenerativeAI` class, such as unsupported message types
     or roles.
     """
+
+
+def _is_gemini_3_or_later(model_name: str) -> bool:
+    """Checks if the model is a pre-Gemini 3 model."""
+    if not model_name:
+        return False
+    model_name = model_name.lower()
+    if "gemini-3" in model_name:
+        return True
+    return False
+
+
+def _is_gemini_25_model(model_name: str) -> bool:
+    """Checks if the model is a Gemini 2.5 model."""
+    if not model_name:
+        return False
+    model_name = model_name.lower().replace("models/", "")
+    return "gemini-2.5" in model_name
 
 
 def _create_retry_decorator(
@@ -333,6 +374,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
 
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
+    model: str | None = None,
 ) -> list[Part]:
     """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
@@ -406,15 +448,25 @@ def _convert_to_parts(
                             kind = filetype.guess(bytes_)
                             if kind:
                                 mime_type = kind.mime
-                    parts.append(
-                        Part(
-                            inline_data=Blob(
-                                data=bytes_,
-                                mime_type=mime_type,
-                            )
-                        )
-                    )
+                    blob_kwargs: dict[str, Any] = {
+                        "data": bytes_,
+                    }
+                    if mime_type:
+                        blob_kwargs["mime_type"] = mime_type
 
+                    if "media_resolution" in part:
+                        if model and _is_gemini_25_model(model):
+                            warnings.warn(
+                                "Setting per-part media resolution requests to "
+                                "Gemini 2.5 models and older is not supported. The "
+                                "media_resolution parameter will be ignored.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
+                        elif model and _is_gemini_3_or_later(model):
+                            blob_kwargs["media_resolution"] = part["media_resolution"]
+
+                    parts.append(Part(inline_data=Blob(**blob_kwargs)))
                 elif part["type"] == "image_url":
                     # Chat Completions image format
                     img_url = part["image_url"]
@@ -449,12 +501,27 @@ def _convert_to_parts(
                     if "video_metadata" in part:
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part.video_metadata = metadata
+
+                    if "media_resolution" in part:
+                        if model and _is_gemini_25_model(model):
+                            warnings.warn(
+                                "Setting per-part media resolution requests to "
+                                "Gemini 2.5 models and older is not supported. The "
+                                "media_resolution parameter will be ignored.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
+                        elif model and _is_gemini_3_or_later(model):
+                            if media_part.inline_data:
+                                media_part.inline_data.media_resolution = part[
+                                    "media_resolution"
+                                ]
+                            elif media_part.file_data:
+                                media_part.file_data.media_resolution = part[
+                                    "media_resolution"
+                                ]
+
                     parts.append(media_part)
-                elif part["type"] == "function_call_signature":
-                    # Signature for function_call Part - skip it here as it should be
-                    # attached to the actual function_call Part
-                    # This is handled separately in the history parsing logic
-                    pass
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format that we continue to store as
                     thought_sig = None
@@ -571,7 +638,9 @@ def _convert_to_parts(
 
 
 def _convert_tool_message_to_parts(
-    message: ToolMessage | FunctionMessage, name: str | None = None
+    message: ToolMessage | FunctionMessage,
+    name: str | None = None,
+    model: str | None = None,
 ) -> list[Part]:
     """Converts a tool or function message to a Google `Part`."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
@@ -588,7 +657,7 @@ def _convert_tool_message_to_parts(
                 media_blocks.append(block)
             else:
                 other_blocks.append(block)
-        parts.extend(_convert_to_parts(media_blocks))
+        parts.extend(_convert_to_parts(media_blocks, model=model))
         response = other_blocks
 
     elif not isinstance(message.content, str):
@@ -611,7 +680,9 @@ def _convert_tool_message_to_parts(
 
 
 def _get_ai_message_tool_messages_parts(
-    tool_messages: Sequence[ToolMessage], ai_message: AIMessage
+    tool_messages: Sequence[ToolMessage],
+    ai_message: AIMessage,
+    model: str | None = None,
 ) -> list[Part]:
     """Conversion.
 
@@ -627,7 +698,7 @@ def _get_ai_message_tool_messages_parts(
         if message.tool_call_id in tool_calls_ids:
             tool_call = tool_calls_ids[message.tool_call_id]
             message_parts = _convert_tool_message_to_parts(
-                message, name=tool_call.get("name")
+                message, name=tool_call.get("name"), model=model
             )
             parts.extend(message_parts)
             # remove the id from the dict, so that we do not iterate over it again
@@ -635,8 +706,34 @@ def _get_ai_message_tool_messages_parts(
     return parts
 
 
+# To generate the below thought signature:
+
+# from langchain_google_genai import ChatGoogleGenerativeAI
+#
+# def generate_placeholder_thoughts(value: int) -> str:
+#     """Placeholder tool."""
+#     pass
+#
+# model = ChatGoogleGenerativeAI(
+#     model="gemini-3-pro-preview"
+# ).bind_tools([generate_placeholder_thoughts])
+#
+# response = model.invoke("Generate a placeholder tool invocation.")
+
+DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
+    "ErQCCrECAdHtim8MtxgeMCRCiNiyoyImxtYAEDzz4NXOr/HSL3rA7rPPvHWZCm+T9VSDYh/mt9lESoH4wQh"
+    "/ca1zDtWTN6XOL1+S3krYLQeqp47RV/b1eSq5jdZF28S4Lb7w4A3/EFdybc4SFb2/YhMm+CulYLmLA4Tr4V"
+    "Su0eMWgxM3HVt6u0jECf5BbXzj0qjJ32tEQYJvKvV8H1tCHvB6J+RZhsDr+TcyOCaqxDoR4WKxXYxNRZb3h"
+    "YTuCnBEDPhn1lROumVaghi9nEIgc17z002zLoyqIptlLfIVw70FXkCLsPUSL1SjPQYtGL8PVncVajeqGogR"
+    "D/eZSVZ1Zr5tshxh3DQ+JAYNcrHaRHWC4Hg0H6oftYx+JdJD9B/81NYV9jyGxP7zHKFHOELl0IUP5GEXP9I"
+    "="
+)
+
+
 def _parse_chat_history(
-    input_messages: Sequence[BaseMessage], convert_system_message_to_human: bool = False
+    input_messages: Sequence[BaseMessage],
+    convert_system_message_to_human: bool = False,
+    model: str | None = None,
 ) -> tuple[Content | None, list[Content]]:
     """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
@@ -644,6 +741,7 @@ def _parse_chat_history(
         input_messages: Sequence of `BaseMessage` objects representing the chat history.
         convert_system_message_to_human: Whether to convert the first system message
             into a `HumanMessage`. Deprecated, use system instructions instead.
+        model: The model name, used for version-specific logic.
 
     Returns:
         A tuple containing:
@@ -692,7 +790,7 @@ def _parse_chat_history(
     ]
     for i, message in enumerate(messages_without_tool_messages):
         if isinstance(message, SystemMessage):
-            system_parts = _convert_to_parts(message.content)
+            system_parts = _convert_to_parts(message.content, model=model)
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
@@ -707,36 +805,27 @@ def _parse_chat_history(
             role = "model"
             if message.tool_calls:
                 ai_message_parts = []
-                # Extract any function_call_signature blocks from content
-                function_call_sigs: dict[int, bytes] = {}
-                if isinstance(message.content, list):
-                    for idx, item in enumerate(message.content):
-                        if (
-                            isinstance(item, dict)
-                            and item.get("type") == "function_call_signature"
-                        ):
-                            sig_str = item.get("signature", "")
-                            if sig_str and isinstance(sig_str, str):
-                                # Decode base64-encoded signature back to bytes
-                                sig_bytes = base64.b64decode(sig_str)
-                                function_call_sigs[idx] = sig_bytes
-
+                function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
+                    _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                )
                 for tool_call_idx, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         name=tool_call["name"],
                         args=tool_call["args"],
                     )
                     # Check if there's a signature for this function call
-                    # (We use the index to match signature to function call)
-                    sig = function_call_sigs.get(tool_call_idx)
+                    sig = function_call_sigs.get(tool_call.get("id"))
                     if sig:
                         ai_message_parts.append(
-                            Part(function_call=function_call, thought_signature=sig)
+                            Part(
+                                function_call=function_call,
+                                thought_signature=_base64_to_bytes(sig),
+                            )
                         )
                     else:
                         ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
-                    tool_messages=tool_messages, ai_message=message
+                    tool_messages=tool_messages, ai_message=message, model=model
                 )
                 formatted_messages.append(Content(role=role, parts=ai_message_parts))
                 formatted_messages.append(
@@ -754,16 +843,16 @@ def _parse_chat_history(
                 parts = message.content  # type: ignore[assignment]
             else:
                 # Prepare request content parts from message.content field
-                parts = _convert_to_parts(message.content)
+                parts = _convert_to_parts(message.content, model=model)
         elif isinstance(message, HumanMessage):
             role = "user"
-            parts = _convert_to_parts(message.content)
+            parts = _convert_to_parts(message.content, model=model)
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = list(system_instruction.parts or []) + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
-            parts = _convert_tool_message_to_parts(message)
+            parts = _convert_tool_message_to_parts(message, model=model)
         else:
             msg = f"Unexpected message with type {type(message)} at the position {i}."
             raise ValueError(msg)
@@ -772,6 +861,50 @@ def _parse_chat_history(
         # If version = "v1", the parts are already in v1beta format and will be
         # automatically converted using protobuf's auto-conversion
         formatted_messages.append(Content(role=role, parts=parts))
+
+    # Enforce thought signatures for new Gemini models
+    #
+    # These models require a 'thought_signature' field in function calls for the
+    # current active conversation loop. If missing (e.g., from older history or
+    # manual construction), the API may reject the request.
+    if model and _is_gemini_3_or_later(model):
+        # 1. Identify the "Active Loop":
+        # Scan backwards to find the most recent User message that initiated he current
+        # interaction (i.e., contains text/media, not just a tool response).
+        # This defines the scope where we must ensure compliance.
+        active_loop_start_idx = -1
+        for i in range(len(formatted_messages) - 1, -1, -1):
+            msg = formatted_messages[i]
+            if msg.role == "user":
+                has_function_response = False
+                has_standard_content = False
+                for part in msg.parts:
+                    if part.function_response:
+                        has_function_response = True
+                    if part.text or part.inline_data:
+                        has_standard_content = True
+
+                # Found the user message that started this turn
+                if has_standard_content and not has_function_response:
+                    active_loop_start_idx = i
+                    break
+
+        # 2. Patch Missing Signatures:
+        # Iterate through the active loop. If a model message contains a function call
+        # but lacks a thought signature, inject a dummy value. This satisfies the
+        # API's schema validation without requiring the original internal thought data.
+        start_idx = active_loop_start_idx + 1 if active_loop_start_idx != -1 else 0
+        for i in range(start_idx, len(formatted_messages)):
+            msg = formatted_messages[i]
+            if msg.role == "model":
+                first_fc_seen = False
+                for part in msg.parts:
+                    if part.function_call:
+                        if not first_fc_seen:
+                            if not part.thought_signature:
+                                part.thought_signature = DUMMY_THOUGHT_SIGNATURE
+                            first_fc_seen = True
+
     return system_instruction, formatted_messages
 
 
@@ -824,8 +957,6 @@ def _parse_response_candidate(
     content: None | str | list[str | dict] = None
     additional_kwargs: dict[str, Any] = {}
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
-    if model_name:
-        response_metadata["model_name"] = model_name
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
@@ -865,19 +996,19 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
-        elif text is not None and text:
-            # Check if this text Part has a signature attached
+        elif (
+            (text is not None and text)  # text part with non-empty string
+            or ("text" in part and thought_sig)  # text part with thought signature
+        ):
+            text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
-                # Text with signature needs structured block to preserve signature
-                # We use a v1 TextContentBlock
-                text_with_sig = {
-                    "type": "text",
-                    "text": text,
-                    "extras": {"signature": thought_sig},
-                }
-                content = _append_to_content(content, text_with_sig)
+                text_block["extras"] = {"signature": thought_sig}
+            if thought_sig or _is_gemini_3_or_later(model_name or ""):
+                # append blocks if there's a signature or new Gemini model
+                content = _append_to_content(content, text_block)
             else:
-                content = _append_to_content(content, text)
+                # otherwise, append text
+                content = _append_to_content(content, text or "")
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
@@ -945,12 +1076,13 @@ def _parse_response_candidate(
             )
             additional_kwargs["function_call"] = function_call
 
+            tool_call_id = function_call.get("id", str(uuid.uuid4()))
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=function_call.get("id", str(uuid.uuid4())),
+                        id=tool_call_id,
                         index=function_call.get("index"),  # type: ignore
                     )
                 )
@@ -965,7 +1097,7 @@ def _parse_response_candidate(
                         invalid_tool_call(
                             name=function_call.get("name"),
                             args=function_call.get("arguments"),
-                            id=function_call.get("id", str(uuid.uuid4())),
+                            id=tool_call_id,
                             error=str(e),
                         )
                     )
@@ -974,28 +1106,27 @@ def _parse_response_candidate(
                         tool_call(
                             name=tool_call_dict["name"],
                             args=tool_call_dict["args"],
-                            id=tool_call_dict.get("id", str(uuid.uuid4())),
+                            id=tool_call_id,
                         )
                     )
 
             # If this function_call Part has a signature, track it separately
-            # We'll add it to content only if there's other content present
             if thought_sig:
-                sig_block = {
-                    "type": "function_call_signature",
-                    "signature": thought_sig,
-                }
-                function_call_signatures.append(sig_block)
-
-    # Add function call signatures to content only if there's already other content
-    # This preserves backward compatibility where content is "" for
-    # function-only responses
-    if function_call_signatures and content is not None:
-        for sig_block in function_call_signatures:
-            content = _append_to_content(content, sig_block)
+                if _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY not in additional_kwargs:
+                    additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY] = {}
+                additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY][
+                    tool_call_id
+                ] = (
+                    _bytes_to_base64(thought_sig)
+                    if isinstance(thought_sig, bytes)
+                    else thought_sig
+                )
 
     if content is None:
-        content = ""
+        if _is_gemini_3_or_later(model_name or ""):
+            content = []
+        else:
+            content = ""
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
@@ -1097,7 +1228,9 @@ def _response_to_result(
             if candidate.safety_ratings
             else []
         )
-        message = _parse_response_candidate(candidate, streaming=stream)
+        message = _parse_response_candidate(
+            candidate, streaming=stream, model_name=response.model_version
+        )
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
@@ -1188,60 +1321,57 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        llm.invoke("Write me a ballad about LangChain")
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model.invoke("Write me a ballad about LangChain")
         ```
 
     Invoke:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
+        for more info.
+
         ```python
         messages = [
             ("system", "Translate the user sentence to French."),
             ("human", "I love programming."),
         ]
-        llm.invoke(messages)
+        model.invoke(messages)
         ```
 
         ```python
         AIMessage(
-            content="J'adore programmer. \\n",
+            content=[
+                {
+                    "type": "text",
+                    "text": "**J'adore la programmation.**\n\nYou can also say:...",
+                    "extras": {"signature": "Eq0W..."},
+                }
+            ],
+            additional_kwargs={},
             response_metadata={
                 "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
                 "finish_reason": "STOP",
-                "safety_ratings": [
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                ],
+                "model_name": "gemini-3-pro-preview",
+                "safety_ratings": [],
+                "model_provider": "google_genai",
             },
-            id="run-56cecc34-2e54-4b52-a974-337e47008ad2-0",
+            id="lc_run--63a04ced-6b63-4cf6-86a1-c32fa565938e-0",
             usage_metadata={
-                "input_tokens": 18,
-                "output_tokens": 5,
-                "total_tokens": 23,
+                "input_tokens": 12,
+                "output_tokens": 826,
+                "total_tokens": 838,
+                "input_token_details": {"cache_read": 0},
+                "output_token_details": {"reasoning": 777},
             },
         )
         ```
 
     Stream:
         ```python
-        for chunk in llm.stream(messages):
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+
+        for chunk in model.stream(messages):
             print(chunk)
         ```
 
@@ -1293,7 +1423,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         ```python
-        stream = llm.stream(messages)
+        stream = model.stream(messages)
         full = next(stream)
         for chunk in stream:
             full += chunk
@@ -1339,126 +1469,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     Async:
         ```python
-        await llm.ainvoke(messages)
+        await model.ainvoke(messages)
 
         # stream:
-        async for chunk in (await llm.astream(messages))
+        async for chunk in (await model.astream(messages))
 
         # batch:
-        await llm.abatch([messages])
+        await model.abatch([messages])
         ```
 
-    Context caching:
-        Context caching allows you to store and reuse content (e.g., PDFs, images) for
-        faster processing. The `cached_content` parameter accepts a cache name created
-        via the Google Generative AI API.
-
-        Below are two examples: caching a single file directly and caching multiple
-        files using `Part`.
-
-        !!! example "Single file example"
-
-            This caches a single file and queries it.
-
-            ```python
-            from google import genai
-            from google.genai import types
-            import time
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage
-
-            client = genai.Client()
-
-            # Upload file
-            file = client.files.upload(file="./example_file")
-            while file.state.name == "PROCESSING":
-                time.sleep(2)
-                file = client.files.get(name=file.name)
-
-            # Create cache
-            model = "models/gemini-2.5-flash"
-            cache = client.caches.create(
-                model=model,
-                config=types.CreateCachedContentConfig(
-                    display_name="Cached Content",
-                    system_instruction=(
-                        "You are an expert content analyzer, and your job is to answer "
-                        "the user's query based on the file you have access to."
-                    ),
-                    contents=[file],
-                    ttl="300s",
-                ),
-            )
-
-            # Query with LangChain
-            llm = ChatGoogleGenerativeAI(
-                model=model,
-                cached_content=cache.name,
-            )
-            message = HumanMessage(content="Summarize the main points of the content.")
-            llm.invoke([message])
-            ```
-
-        !!! example "Multiple files example"
-
-            This caches two files using `Part` and queries them together.
-
-            ```python
-            from google import genai
-            from google.genai.types import CreateCachedContentConfig, Content, Part
-            import time
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage
-
-            client = genai.Client()
-
-            # Upload files
-            file_1 = client.files.upload(file="./file1")
-            while file_1.state.name == "PROCESSING":
-                time.sleep(2)
-                file_1 = client.files.get(name=file_1.name)
-
-            file_2 = client.files.upload(file="./file2")
-            while file_2.state.name == "PROCESSING":
-                time.sleep(2)
-                file_2 = client.files.get(name=file_2.name)
-
-            # Create cache with multiple files
-            contents = [
-                Content(
-                    role="user",
-                    parts=[
-                        Part.from_uri(file_uri=file_1.uri, mime_type=file_1.mime_type),
-                        Part.from_uri(file_uri=file_2.uri, mime_type=file_2.mime_type),
-                    ],
-                )
-            ]
-            model = "gemini-2.5-flash"
-            cache = client.caches.create(
-                model=model,
-                config=CreateCachedContentConfig(
-                    display_name="Cached Contents",
-                    system_instruction=(
-                        "You are an expert content analyzer, and your job is to answer "
-                        "the user's query based on the files you have access to."
-                    ),
-                    contents=contents,
-                    ttl="300s",
-                ),
-            )
-
-            # Query with LangChain
-            llm = ChatGoogleGenerativeAI(
-                model=model,
-                cached_content=cache.name,
-            )
-            message = HumanMessage(
-                content="Provide a summary of the key information across both files."
-            )
-            llm.invoke([message])
-            ```
-
     Tool calling:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#tool-calling)
+        for more info.
+
         ```python
         from pydantic import BaseModel, Field
 
@@ -1523,6 +1546,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
     Structured output:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#structured-output)
+        for more info.
+
         ```python
         from typing import Optional
 
@@ -1540,11 +1566,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
 
         # Default method uses function calling
-        structured_llm = llm.with_structured_output(Joke)
+        structured_model = model.with_structured_output(Joke)
 
         # For more reliable output, use json_schema with native responseSchema
-        structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
-        structured_llm_json.invoke("Tell me a joke about cats")
+        structured_model_json = model.with_structured_output(Joke, method="json_schema")
+        structured_model_json.invoke("Tell me a joke about cats")
         ```
 
         ```python
@@ -1573,10 +1599,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         post-processing tool calls.
 
     Image input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#image-input)
+        for more info.
+
         ```python
         import base64
         import httpx
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
         image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
@@ -1589,7 +1618,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
+        ai_msg = model.invoke([message])
         ai_msg.content
         ```
 
@@ -1600,9 +1629,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
     PDF input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#pdf-input)
+        for more info.
+
         ```python
         import base64
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         pdf_bytes = open("/path/to/your/test.pdf", "rb").read()
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
@@ -1618,20 +1650,41 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
+        ai_msg = model.invoke([message])
         ```
 
-        ```txt
-        This research paper describes a system developed for SemEval-2025 Task 9, which
-        aims to automate the detection of food hazards from recall reports, addressing
-        the class imbalance problem by leveraging LLM-based data augmentation...
+    Audio input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-input)
+        for more info.
+
+        ```python
+        import base64
+        from langchain.messages import HumanMessage
+
+        audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "summarize this audio in a sentence"},
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "audio/mp3",
+                    "data": audio_base64,
+                },
+            ]
+        )
+        ai_msg = model.invoke([message])
         ```
 
     Video input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#video-input)
+        for more info.
+
         ```python
         import base64
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         video_bytes = open("/path/to/your/video.mp4", "rb").read()
         video_base64 = base64.b64encode(video_bytes).decode("utf-8")
@@ -1650,69 +1703,38 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
-        ```
-
-        ```txt
-        Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
-        adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
-        attempt to prepare a turkey dinner.
+        ai_msg = model.invoke([message])
         ```
 
         You can also pass YouTube URLs directly:
 
         ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage
+
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
 
         message = HumanMessage(
             content=[
-                {"type": "text", "text": "summarize the video in 3 sentences."},
+                {"type": "text", "text": "Summarize the video in 3 sentences."},
                 {
                     "type": "media",
-                    "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                    "file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                     "mime_type": "video/mp4",
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
+        response = model.invoke([message])
+        print(response.text)
         ```
 
-        ```txt
-        The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is
-        sharing his screen in AI Studio and asks if the AI can see it. The AI then reads
-        text that is highlighted on the screen, defines the word...
-        ```
+    Image generation:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#image-generation)
+        for more info.
 
-    Audio input:
-        ```python
-        import base64
-        from langchain_core.messages import HumanMessage
-
-        audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
-        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-
-        message = HumanMessage(
-            content=[
-                {"type": "text", "text": "summarize this audio in a sentence"},
-                {
-                    "type": "file",
-                    "source_type": "base64",
-                    "mime_type": "audio/mp3",
-                    "data": audio_base64,
-                },
-            ]
-        )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
-        ```
-
-        ```txt
-        In this episode of the Made by Google podcast, Stephen Johnson and Simon
-        Tokumine discuss NotebookLM, a tool designed to help users understand complex
-        material in various modalities, with a focus on its unexpected uses, the...
-        ```
+    Audio generation:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-generation)
+        for more info.
 
     File upload:
         You can also upload files to Google's servers and reference them by URI.
@@ -1722,7 +1744,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         import time
         from google import genai
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         client = genai.Client()
 
@@ -1741,19 +1763,83 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
+        ai_msg = model.invoke([message])
         ```
 
-        ```txt
-        This research paper assesses and mitigates multi-turn jailbreak vulnerabilities
-        in large language models using the Crescendo attack study, evaluating attack
-        success rates and mitigation strategies like prompt...
+    Thinking:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#thinking-support)
+        for more info.
+
+        For thinking models, you have the option to adjust the number of internal
+        thinking tokens used (`thinking_budget`) or to disable thinking altogether.
+        Note that not all models allow disabling thinking.
+
+        See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
+        more details on thinking models.
+
+        To see a thinking model's thoughts, set `include_thoughts=True` to have the
+        model's reasoning summaries included in the response.
+
+        ```python
+        model = ChatGoogleGenerativeAI(
+            model="gemini-3-pro-preview",
+            include_thoughts=True,
+        )
+        ai_msg = model.invoke("How many 'r's are in the word 'strawberry'?")
+        ```
+
+    Google search:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#google-search)
+        for more info.
+
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+
+        model_with_search = model.bind_tools([{"google_search": {}}])
+        response = model_with_search.invoke(
+            "When is the next total solar eclipse in US?"
+        )
+
+        response.content_blocks
+        ```
+
+    Code execution:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#code-execution)
+        for more info.
+
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+
+        model_with_code_interpreter = model.bind_tools([{"code_execution": {}}])
+        response = model_with_code_interpreter.invoke("Use Python to calculate 3^3.")
+
+        response.content_blocks
+        ```
+
+        ```output
+        [{'type': 'server_tool_call',
+          'name': 'code_interpreter',
+          'args': {'code': 'print(3**3)', 'language': <Language.PYTHON: 1>},
+          'id': '...'},
+         {'type': 'server_tool_result',
+          'tool_call_id': '',
+          'status': 'success',
+          'output': '27\n',
+          'extras': {'block_type': 'code_execution_result',
+           'outcome': <Outcome.OUTCOME_OK: 1>}},
+         {'type': 'text', 'text': 'The calculation of 3 to the power of 3 is 27.'}]
         ```
 
     Token usage:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#token-usage-tracking)
+        for more info.
+
         ```python
-        ai_msg = llm.invoke(messages)
+        ai_msg = model.invoke(messages)
         ai_msg.usage_metadata
         ```
 
@@ -1761,9 +1847,149 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
         ```
 
+    Safety settings:
+        Gemini models have default safety settings that can be overridden. If you
+        are receiving lots of "Safety Warnings" from your models, you can try
+        tweaking the `safety_settings` attribute of the model. For example, to
+        turn off safety blocking for dangerous content, you can construct your
+        LLM as follows:
+
+        ```python
+        from langchain_google_genai import (
+            ChatGoogleGenerativeAI,
+            HarmBlockThreshold,
+            HarmCategory,
+        )
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-pro-preview",
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
+        )
+        ```
+
+        For an enumeration of the categories and thresholds available, see Google's
+        [safety setting types](https://ai.google.dev/api/python/google/generativeai/types/SafetySettingDict).
+
+    Context caching:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#context-caching)
+        for more info.
+
+        Context caching allows you to store and reuse content (e.g., PDFs, images) for
+        faster processing. The `cached_content` parameter accepts a cache name created
+        via the Google Generative AI API.
+
+        See the Gemini docs for more details on [cached content](https://ai.google.dev/gemini-api/docs/caching?lang=python).
+
+        Below are two examples: caching a single file directly and caching multiple
+        files using `Part`.
+
+        !!! example "Single file example"
+
+            This caches a single file and queries it.
+
+            ```python
+            from google import genai
+            from google.genai import types
+            import time
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain.messages import HumanMessage
+
+            client = genai.Client()
+
+            # Upload file
+            file = client.files.upload(file="path/to/your/file")
+            while file.state.name == "PROCESSING":
+                time.sleep(2)
+                file = client.files.get(name=file.name)
+
+            # Create cache
+            model = "gemini-3-pro-preview"
+            cache = client.caches.create(
+                model=model,
+                config=types.CreateCachedContentConfig(
+                    display_name="Cached Content",
+                    system_instruction=(
+                        "You are an expert content analyzer, and your job is to answer "
+                        "the user's query based on the file you have access to."
+                    ),
+                    contents=[file],
+                    ttl="300s",
+                ),
+            )
+
+            # Query with LangChain
+            llm = ChatGoogleGenerativeAI(
+                model=model,
+                cached_content=cache.name,
+            )
+            message = HumanMessage(content="Summarize the main points of the content.")
+            llm.invoke([message])
+            ```
+
+        !!! example "Multiple files example"
+
+            This caches two files using `Part` and queries them together.
+
+            ```python
+            from google import genai
+            from google.genai.types import CreateCachedContentConfig, Content, Part
+            import time
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain.messages import HumanMessage
+
+            client = genai.Client()
+
+            # Upload files
+            file_1 = client.files.upload(file="./file1")
+            while file_1.state.name == "PROCESSING":
+                time.sleep(2)
+                file_1 = client.files.get(name=file_1.name)
+
+            file_2 = client.files.upload(file="./file2")
+            while file_2.state.name == "PROCESSING":
+                time.sleep(2)
+                file_2 = client.files.get(name=file_2.name)
+
+            # Create cache with multiple files
+            contents = [
+                Content(
+                    role="user",
+                    parts=[
+                        Part.from_uri(file_uri=file_1.uri, mime_type=file_1.mime_type),
+                        Part.from_uri(file_uri=file_2.uri, mime_type=file_2.mime_type),
+                    ],
+                )
+            ]
+            model = "gemini-3-pro-preview"
+            cache = client.caches.create(
+                model=model,
+                config=CreateCachedContentConfig(
+                    display_name="Cached Contents",
+                    system_instruction=(
+                        "You are an expert content analyzer, and your job is to answer "
+                        "the user's query based on the files you have access to."
+                    ),
+                    contents=contents,
+                    ttl="300s",
+                ),
+            )
+
+            # Query with LangChain
+            llm = ChatGoogleGenerativeAI(
+                model=model,
+                cached_content=cache.name,
+            )
+            message = HumanMessage(
+                content="Provide a summary of the key information across both files."
+            )
+            llm.invoke([message])
+            ```
+
     Response metadata:
         ```python
-        ai_msg = llm.invoke(messages)
+        ai_msg = model.invoke(messages)
         ai_msg.response_metadata
         ```
 
@@ -1795,6 +2021,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ],
         }
         ```
+    """  # noqa: E501
+
+    thinking_level: Literal["low", "high"] | None = Field(
+        default=None,
+    )
+    """Indicates the thinking level.
+
+    Supported values:
+        * `'low'`: Minimizes latency and cost.
+        * `'high'`: Maximizes reasoning depth.
+
+    !!! note "Replaces `thinking_budget`"
+
+        `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
+        provided, `thinking_level` takes precedence.
+
+        If left unspecified, the model's default thinking level is used. For Gemini 3+,
+        this defaults to `'high'`.
     """
 
     client: Client | None = Field(
@@ -1930,6 +2174,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)
 
+        if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
+            self.model
+        ):
+            self.temperature = 1.0
+
         if self.top_p is not None and not 0 <= self.top_p <= 1:
             msg = "top_p must be in the range [0.0, 1.0]"
             raise ValueError(msg)
@@ -1992,6 +2241,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _set_model_profile(self) -> Self:
+        """Set model profile if not overridden."""
+        if self.profile is None:
+            model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
+            self.profile = _get_default_model_profile(model_id)
+        return self
+
     @property
     def _identifying_params(self) -> dict[str, Any]:
         """Get the identifying parameters."""
@@ -2005,6 +2262,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
+            "thinking_level": self.thinking_level,
         }
 
     def invoke(
@@ -2514,6 +2772,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
+        index = -1
+        index_type = ""
         for chunk in response:
             if chunk:
                 _chat_result = _response_to_result(
@@ -2521,6 +2781,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
+
+            # populate index if missing
+            if isinstance(message.content, list):
+                for block in message.content:
+                    if isinstance(block, dict) and "type" in block:
+                        if block["type"] != index_type:
+                            index_type = block["type"]
+                            index = index + 1
+                        if "index" not in block:
+                            block["index"] = index
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -2563,6 +2833,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
         )
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
+        index = -1
+        index_type = ""
         async for chunk in await _achat_with_retry(
             **request,
             generation_method=self.client.aio.models.generate_content_stream,
@@ -2576,6 +2848,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)
+
+            # populate index if missing
+            if isinstance(message.content, list):
+                for block in message.content:
+                    if isinstance(block, dict) and "type" in block:
+                        if block["type"] != index_type:
+                            index_type = block["type"]
+                            index = index + 1
+                        if "index" not in block:
+                            block["index"] = index
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -2600,10 +2882,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Example:
             ```python
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+            llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
             num_tokens = llm.get_num_tokens("Hello, world!")
             print(num_tokens)
-            # 4
+            # -> 4
             ```
         """
         if self.client is None:

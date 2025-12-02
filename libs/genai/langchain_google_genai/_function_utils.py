@@ -70,6 +70,7 @@ _GoogleSearchRetrievalLike = types.GoogleSearchRetrieval | dict[str, Any]
 
 _GoogleSearchLike = types.GoogleSearch | dict[str, Any]
 _CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
+_UrlContextLike = types.UrlContext | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
@@ -77,6 +78,7 @@ class _ToolDict(TypedDict):
     google_search_retrieval: _GoogleSearchRetrievalLike | None
     google_search: NotRequired[_GoogleSearchLike]
     code_execution: NotRequired[_CodeExecutionLike]
+    url_context: NotRequired[_UrlContextLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -232,6 +234,8 @@ def convert_to_genai_function_declarations(
                 tool_dict["google_search"] = tool.google_search
             if hasattr(tool, "code_execution") and tool.code_execution:
                 tool_dict["code_execution"] = tool.code_execution
+            if hasattr(tool, "url_context") and tool.url_context:
+                tool_dict["url_context"] = tool.url_context
         elif isinstance(tool, dict):
             # not _ToolDictLike
             if not any(
@@ -241,6 +245,7 @@ def convert_to_genai_function_declarations(
                     "google_search_retrieval",
                     "google_search",
                     "code_execution",
+                    "url_context",
                 ]
             ):
                 fd = _format_to_genai_function_declaration(tool)  # type: ignore[arg-type]
@@ -293,6 +298,13 @@ def convert_to_genai_function_declarations(
                     )
                 else:
                     tool_dict["code_execution"] = tool["code_execution"]
+            if "url_context" in tool:
+                if isinstance(tool["url_context"], dict):
+                    tool_dict["url_context"] = types.UrlContext(
+                        **tool["url_context"]
+                    )
+                else:
+                    tool_dict["url_context"] = tool["url_context"]
         else:
             fd = _format_to_genai_function_declaration(tool)
             function_declarations.append(fd)

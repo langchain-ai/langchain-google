@@ -123,7 +123,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             generations.append(
                 [
                     Generation(
-                        text=g.message.content,
+                        text=g.message.text,
                         generation_info={
                             **g.generation_info,
                             "usage_metadata": g.message.usage_metadata,
@@ -147,7 +147,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             run_manager=run_manager,
             **kwargs,
         ):
-            chunk = GenerationChunk(text=stream_chunk.message.content)
+            chunk = GenerationChunk(text=stream_chunk.message.text)
             yield chunk
             if run_manager:
                 run_manager.on_llm_new_token(

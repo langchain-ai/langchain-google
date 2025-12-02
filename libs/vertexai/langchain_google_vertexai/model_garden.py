@@ -8,7 +8,6 @@ from typing import (
     Literal,
 )
 
-import httpx
 from google.auth.credentials import Credentials
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -179,11 +178,6 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     - `max`: Maximum wait time in seconds (Default: `10.0`)
     - `exp_base`: Exponent base to use (Default: `2.0`)
     """
-
-    timeout: float | httpx.Timeout | None = Field(
-        default=None,
-        description="Timeout for API requests.",
-    )
 
     http_client: Any = Field(default=None, exclude=True)
 
@@ -366,6 +360,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
+            has_betas = True if params.get("betas") else False
+            if has_betas:
+                return await self.async_client.beta.messages.create(**params)
             return await self.async_client.messages.create(**params)
 
         data = await _acompletion_with_retry_inner(**params)
@@ -441,6 +438,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
+            has_betas = True if params.get("betas") else False
+            if has_betas:
+                return await self.async_client.beta.messages.create(
+                    stream=True, **params
+                )
             return await self.async_client.messages.create(**params, stream=True)
 
         stream = await _astream_with_retry(**params)

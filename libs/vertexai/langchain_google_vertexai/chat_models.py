@@ -28,7 +28,11 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import (
+    LanguageModelInput,
+    ModelProfile,
+    ModelProfileRegistry,
+)
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     LangSmithParams,
@@ -115,6 +119,8 @@ from google.cloud.aiplatform_v1beta1.types import (
     ToolConfig as GapicToolConfig,
     VideoMetadata,
 )
+
+from langchain_google_vertexai.data._profiles import _PROFILES
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import (
@@ -176,6 +182,14 @@ _allowed_params_prediction_service = [
     # Allow controlling GAPIC client retries from callers.
     "retry",
 ]
+
+
+_MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
+
+
+def _get_default_model_profile(model_name: str) -> ModelProfile:
+    default = _MODEL_PROFILES.get(model_name) or {}
+    return default.copy()
 
 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
@@ -246,6 +260,11 @@ def _parse_chat_history_gemini(
             msg = f"Message's content is expected to be a dict, got {type(part)}!"  # type: ignore[unreachable, unused-ignore]
             raise ValueError(msg)
         if part["type"] == "text":
+            if "thought_signature" in part:
+                return Part(
+                    text=part["text"],
+                    thought_signature=_base64_to_bytes(part["thought_signature"]),
+                )
             return Part(text=part["text"])
         if part["type"] == "tool_use":
             if part.get("text"):
@@ -324,6 +343,9 @@ def _parse_chat_history_gemini(
 
         if part["type"] == "thinking":
             return Part(text=part["thinking"], thought=True)
+
+        if part["type"] == "function_call_signature":
+            return None
 
         msg = "Only text, image_url, and media types are supported!"  # type: ignore[unreachable, unused-ignore]
         raise ValueError(msg)
@@ -407,11 +429,27 @@ def _parse_chat_history_gemini(
                 logger.warning("Ignoring blocked AIMessage with empty content")
                 continue
 
+            # Extract any function_call_signature blocks from content
+            function_call_sigs: dict[int, bytes] = {}
+            if isinstance(message.content, list):
+                for idx, item in enumerate(message.content):
+                    if (
+                        isinstance(item, dict)
+                        and item.get("type") == "function_call_signature"
+                    ):
+                        sig_str = item.get("signature", "")
+                        if sig_str and isinstance(sig_str, str):
+                            sig_bytes = _base64_to_bytes(sig_str)
+                            if "index" in item:
+                                function_call_sigs[item["index"]] = sig_bytes
+                            else:
+                                function_call_sigs[idx] = sig_bytes
+
             parts = []
             if message.content:
                 parts = _convert_to_parts(message)
 
-            for tc in message.tool_calls:
+            for i, tc in enumerate(message.tool_calls):
                 thought_signature: bytes | None = None
                 if tool_call_id := tc.get("id"):
                     if tool_call_id in message.additional_kwargs.get(
@@ -422,6 +460,10 @@ def _parse_chat_history_gemini(
                         ][tool_call_id]
                         if isinstance(thought_signature, str):
                             thought_signature = _base64_to_bytes(thought_signature)
+
+                if thought_signature is None:
+                    thought_signature = function_call_sigs.get(i)
+
                 function_call = FunctionCall({"name": tc["name"], "args": tc["args"]})
                 parts.append(
                     Part(
@@ -646,7 +688,15 @@ def _parse_response_candidate(
             }
             content = _append_to_content(content, thinking_message)
         elif text is not None and text:
-            content = _append_to_content(content, text)
+            if hasattr(part, "thought_signature") and part.thought_signature:
+                text_message = {
+                    "type": "text",
+                    "text": text,
+                    "thought_signature": _bytes_to_base64(part.thought_signature),
+                }
+                content = _append_to_content(content, text_message)
+            else:
+                content = _append_to_content(content, text)
 
         if part.function_call:
             # For backward compatibility we store a function call in additional_kwargs,
@@ -905,6 +955,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             stop=None,
             # other params...
         )
+        ```
+
+    Thinking:
+        For thinking models, you have the option to adjust the number of internal
+        thinking tokens used (`thinking_budget`) or to disable thinking altogether.
+        Note that not all models allow disabling thinking.
+
+        See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
+        more details on thinking models.
+
+        To see a thinking model's thoughts, set `include_thoughts=True` to have the
+        model's reasoning summaries included in the response.
+
+        ```python
+        llm = ChatVertexAI(
+            model="gemini-2.5-flash",
+            include_thoughts=True,
+        )
+        ai_msg = llm.invoke("How many 'r's are in the word 'strawberry'?")
         ```
 
     Invoke:
@@ -1812,6 +1881,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         return self
 
+    @model_validator(mode="after")
+    def _set_model_profile(self) -> Self:
+        """Set model profile if not overridden."""
+        if self.profile is None:
+            model_id = re.sub(r"-\d{3}$", "", self.model_name.replace("models/", ""))
+            self.profile = _get_default_model_profile(model_id)
+        return self
+
     def _prepare_params(
         self,
         stop: list[str] | None = None,
@@ -2199,6 +2276,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        timeout = kwargs.pop("timeout", self.timeout)
         response = _completion_with_retry(
             self.prediction_client.generate_content,
             max_retries=self.max_retries,
@@ -2206,6 +2284,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
+            timeout=timeout,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -2217,6 +2296,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        timeout = kwargs.pop("timeout", self.timeout)
         response = await _acompletion_with_retry(
             self.async_prediction_client.generate_content,
             max_retries=self.max_retries,
@@ -2226,6 +2306,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 messages=messages, stop=stop, **kwargs
             ),
             metadata=self.default_metadata,
+            timeout=timeout,
             **kwargs,
         )
         return self._gemini_response_to_chat_result(response)
@@ -2329,6 +2410,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        timeout = kwargs.pop("timeout", self.timeout)
         response_iter = _completion_with_retry(
             self.prediction_client.stream_generate_content,
             max_retries=self.max_retries,
@@ -2336,6 +2418,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
+            timeout=timeout,
             **kwargs,
         )
         total_lc_usage = None
@@ -2356,6 +2439,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         # TODO: Update to properly support async streaming from gemini.
         request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
+        timeout = kwargs.pop("timeout", self.timeout)
 
         response_iter = _acompletion_with_retry(
             self.async_prediction_client.stream_generate_content,
@@ -2364,6 +2448,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             wait_exponential_kwargs=self.wait_exponential_kwargs,
             request=request,
             metadata=self.default_metadata,
+            timeout=timeout,
             **kwargs,
         )
         total_lc_usage = None
@@ -2559,7 +2644,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
                 else:
-                    schema_json = schema.model_json_schema()  # type: ignore[attr-defined]
+                    schema_json = schema.model_json_schema(mode="serialization")  # type: ignore[attr-defined]
                 parser = PydanticOutputParser(pydantic_object=schema)
             else:
                 if is_typeddict(schema):
