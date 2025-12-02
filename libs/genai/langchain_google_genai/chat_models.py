@@ -1213,60 +1213,57 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        llm.invoke("Write me a ballad about LangChain")
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model.invoke("Write me a ballad about LangChain")
         ```
 
     Invoke:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
+        for more info.
+
         ```python
         messages = [
             ("system", "Translate the user sentence to French."),
             ("human", "I love programming."),
         ]
-        llm.invoke(messages)
+        model.invoke(messages)
         ```
 
         ```python
         AIMessage(
-            content="J'adore programmer. \\n",
+            content=[
+                {
+                    "type": "text",
+                    "text": "**J'adore la programmation.**\n\nYou can also say:...",
+                    "extras": {"signature": "Eq0W..."},
+                }
+            ],
+            additional_kwargs={},
             response_metadata={
                 "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
                 "finish_reason": "STOP",
-                "safety_ratings": [
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "probability": "NEGLIGIBLE",
-                        "blocked": False,
-                    },
-                ],
+                "model_name": "gemini-3-pro-preview",
+                "safety_ratings": [],
+                "model_provider": "google_genai",
             },
-            id="run-56cecc34-2e54-4b52-a974-337e47008ad2-0",
+            id="lc_run--63a04ced-6b63-4cf6-86a1-c32fa565938e-0",
             usage_metadata={
-                "input_tokens": 18,
-                "output_tokens": 5,
-                "total_tokens": 23,
+                "input_tokens": 12,
+                "output_tokens": 826,
+                "total_tokens": 838,
+                "input_token_details": {"cache_read": 0},
+                "output_token_details": {"reasoning": 777},
             },
         )
         ```
 
     Stream:
         ```python
-        for chunk in llm.stream(messages):
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+
+        for chunk in model.stream(messages):
             print(chunk)
         ```
 
@@ -1318,7 +1315,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         ```python
-        stream = llm.stream(messages)
+        stream = model.stream(messages)
         full = next(stream)
         for chunk in stream:
             full += chunk
@@ -1364,126 +1361,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     Async:
         ```python
-        await llm.ainvoke(messages)
+        await model.ainvoke(messages)
 
         # stream:
-        async for chunk in (await llm.astream(messages))
+        async for chunk in (await model.astream(messages))
 
         # batch:
-        await llm.abatch([messages])
+        await model.abatch([messages])
         ```
 
-    Context caching:
-        Context caching allows you to store and reuse content (e.g., PDFs, images) for
-        faster processing. The `cached_content` parameter accepts a cache name created
-        via the Google Generative AI API.
-
-        Below are two examples: caching a single file directly and caching multiple
-        files using `Part`.
-
-        !!! example "Single file example"
-
-            This caches a single file and queries it.
-
-            ```python
-            from google import genai
-            from google.genai import types
-            import time
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage
-
-            client = genai.Client()
-
-            # Upload file
-            file = client.files.upload(file="./example_file")
-            while file.state.name == "PROCESSING":
-                time.sleep(2)
-                file = client.files.get(name=file.name)
-
-            # Create cache
-            model = "models/gemini-2.5-flash"
-            cache = client.caches.create(
-                model=model,
-                config=types.CreateCachedContentConfig(
-                    display_name="Cached Content",
-                    system_instruction=(
-                        "You are an expert content analyzer, and your job is to answer "
-                        "the user's query based on the file you have access to."
-                    ),
-                    contents=[file],
-                    ttl="300s",
-                ),
-            )
-
-            # Query with LangChain
-            llm = ChatGoogleGenerativeAI(
-                model=model,
-                cached_content=cache.name,
-            )
-            message = HumanMessage(content="Summarize the main points of the content.")
-            llm.invoke([message])
-            ```
-
-        !!! example "Multiple files example"
-
-            This caches two files using `Part` and queries them together.
-
-            ```python
-            from google import genai
-            from google.genai.types import CreateCachedContentConfig, Content, Part
-            import time
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage
-
-            client = genai.Client()
-
-            # Upload files
-            file_1 = client.files.upload(file="./file1")
-            while file_1.state.name == "PROCESSING":
-                time.sleep(2)
-                file_1 = client.files.get(name=file_1.name)
-
-            file_2 = client.files.upload(file="./file2")
-            while file_2.state.name == "PROCESSING":
-                time.sleep(2)
-                file_2 = client.files.get(name=file_2.name)
-
-            # Create cache with multiple files
-            contents = [
-                Content(
-                    role="user",
-                    parts=[
-                        Part.from_uri(file_uri=file_1.uri, mime_type=file_1.mime_type),
-                        Part.from_uri(file_uri=file_2.uri, mime_type=file_2.mime_type),
-                    ],
-                )
-            ]
-            model = "gemini-2.5-flash"
-            cache = client.caches.create(
-                model=model,
-                config=CreateCachedContentConfig(
-                    display_name="Cached Contents",
-                    system_instruction=(
-                        "You are an expert content analyzer, and your job is to answer "
-                        "the user's query based on the files you have access to."
-                    ),
-                    contents=contents,
-                    ttl="300s",
-                ),
-            )
-
-            # Query with LangChain
-            llm = ChatGoogleGenerativeAI(
-                model=model,
-                cached_content=cache.name,
-            )
-            message = HumanMessage(
-                content="Provide a summary of the key information across both files."
-            )
-            llm.invoke([message])
-            ```
-
     Tool calling:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#tool-calling)
+        for more info.
+
         ```python
         from pydantic import BaseModel, Field
 
@@ -1536,18 +1426,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ]
         ```
 
-    Search:
-        ```python
-        from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
-
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        resp = llm.invoke(
-            "When is the next total solar eclipse in US?",
-            tools=[GenAITool(google_search={})],
-        )
-        ```
-
     Structured output:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#structured-output)
+        for more info.
+
         ```python
         from typing import Optional
 
@@ -1565,11 +1447,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
 
         # Default method uses function calling
-        structured_llm = llm.with_structured_output(Joke)
+        structured_model = model.with_structured_output(Joke)
 
         # For more reliable output, use json_schema with native responseSchema
-        structured_llm_json = llm.with_structured_output(Joke, method="json_schema")
-        structured_llm_json.invoke("Tell me a joke about cats")
+        structured_model_json = model.with_structured_output(Joke, method="json_schema")
+        structured_model_json.invoke("Tell me a joke about cats")
         ```
 
         ```python
@@ -1598,10 +1480,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         post-processing tool calls.
 
     Image input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#image-input)
+        for more info.
+
         ```python
         import base64
         import httpx
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
         image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
@@ -1614,7 +1499,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
+        ai_msg = model.invoke([message])
         ai_msg.content
         ```
 
@@ -1625,9 +1510,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
     PDF input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#pdf-input)
+        for more info.
+
         ```python
         import base64
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         pdf_bytes = open("/path/to/your/test.pdf", "rb").read()
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
@@ -1643,20 +1531,41 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
+        ai_msg = model.invoke([message])
         ```
 
-        ```txt
-        This research paper describes a system developed for SemEval-2025 Task 9, which
-        aims to automate the detection of food hazards from recall reports, addressing
-        the class imbalance problem by leveraging LLM-based data augmentation...
+    Audio input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-input)
+        for more info.
+
+        ```python
+        import base64
+        from langchain.messages import HumanMessage
+
+        audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "summarize this audio in a sentence"},
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "mime_type": "audio/mp3",
+                    "data": audio_base64,
+                },
+            ]
+        )
+        ai_msg = model.invoke([message])
         ```
 
     Video input:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#video-input)
+        for more info.
+
         ```python
         import base64
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         video_bytes = open("/path/to/your/video.mp4", "rb").read()
         video_base64 = base64.b64encode(video_bytes).decode("utf-8")
@@ -1675,69 +1584,38 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
-        ```
-
-        ```txt
-        Tom and Jerry, along with a turkey, engage in a chaotic Thanksgiving-themed
-        adventure involving a corn-on-the-cob chase, maze antics, and a disastrous
-        attempt to prepare a turkey dinner.
+        ai_msg = model.invoke([message])
         ```
 
         You can also pass YouTube URLs directly:
 
         ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage
+
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
 
         message = HumanMessage(
             content=[
-                {"type": "text", "text": "summarize the video in 3 sentences."},
+                {"type": "text", "text": "Summarize the video in 3 sentences."},
                 {
                     "type": "media",
-                    "file_uri": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+                    "file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                     "mime_type": "video/mp4",
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
+        response = model.invoke([message])
+        print(response.text)
         ```
 
-        ```txt
-        The video is a demo of multimodal live streaming in Gemini 2.0. The narrator is
-        sharing his screen in AI Studio and asks if the AI can see it. The AI then reads
-        text that is highlighted on the screen, defines the word...
-        ```
+    Image generation:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#image-generation)
+        for more info.
 
-    Audio input:
-        ```python
-        import base64
-        from langchain_core.messages import HumanMessage
-
-        audio_bytes = open("/path/to/your/audio.mp3", "rb").read()
-        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-
-        message = HumanMessage(
-            content=[
-                {"type": "text", "text": "summarize this audio in a sentence"},
-                {
-                    "type": "file",
-                    "source_type": "base64",
-                    "mime_type": "audio/mp3",
-                    "data": audio_base64,
-                },
-            ]
-        )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
-        ```
-
-        ```txt
-        In this episode of the Made by Google podcast, Stephen Johnson and Simon
-        Tokumine discuss NotebookLM, a tool designed to help users understand complex
-        material in various modalities, with a focus on its unexpected uses, the...
-        ```
+    Audio generation:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-generation)
+        for more info.
 
     File upload:
         You can also upload files to Google's servers and reference them by URI.
@@ -1747,7 +1625,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         import time
         from google import genai
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         client = genai.Client()
 
@@ -1766,17 +1644,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 },
             ]
         )
-        ai_msg = llm.invoke([message])
-        ai_msg.content
-        ```
-
-        ```txt
-        This research paper assesses and mitigates multi-turn jailbreak vulnerabilities
-        in large language models using the Crescendo attack study, evaluating attack
-        success rates and mitigation strategies like prompt...
+        ai_msg = model.invoke([message])
         ```
 
     Thinking:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#thinking-support)
+        for more info.
+
         For thinking models, you have the option to adjust the number of internal
         thinking tokens used (`thinking_budget`) or to disable thinking altogether.
         Note that not all models allow disabling thinking.
@@ -1788,16 +1662,65 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         model's reasoning summaries included in the response.
 
         ```python
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+        model = ChatGoogleGenerativeAI(
+            model="gemini-3-pro-preview",
             include_thoughts=True,
         )
-        ai_msg = llm.invoke("How many 'r's are in the word 'strawberry'?")
+        ai_msg = model.invoke("How many 'r's are in the word 'strawberry'?")
+        ```
+
+    Google search:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#google-search)
+        for more info.
+
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+
+        model_with_search = model.bind_tools([{"google_search": {}}])
+        response = model_with_search.invoke(
+            "When is the next total solar eclipse in US?"
+        )
+
+        response.content_blocks
+        ```
+
+    Code execution:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#code-execution)
+        for more info.
+
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+
+        model_with_code_interpreter = model.bind_tools([{"code_execution": {}}])
+        response = model_with_code_interpreter.invoke("Use Python to calculate 3^3.")
+
+        response.content_blocks
+        ```
+
+        ```output
+        [{'type': 'server_tool_call',
+          'name': 'code_interpreter',
+          'args': {'code': 'print(3**3)', 'language': <Language.PYTHON: 1>},
+          'id': '...'},
+         {'type': 'server_tool_result',
+          'tool_call_id': '',
+          'status': 'success',
+          'output': '27\n',
+          'extras': {'block_type': 'code_execution_result',
+           'outcome': <Outcome.OUTCOME_OK: 1>}},
+         {'type': 'text', 'text': 'The calculation of 3 to the power of 3 is 27.'}]
         ```
 
     Token usage:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#token-usage-tracking)
+        for more info.
+
         ```python
-        ai_msg = llm.invoke(messages)
+        ai_msg = model.invoke(messages)
         ai_msg.usage_metadata
         ```
 
@@ -1805,9 +1728,149 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
         ```
 
+    Safety settings:
+        Gemini models have default safety settings that can be overridden. If you
+        are receiving lots of "Safety Warnings" from your models, you can try
+        tweaking the `safety_settings` attribute of the model. For example, to
+        turn off safety blocking for dangerous content, you can construct your
+        LLM as follows:
+
+        ```python
+        from langchain_google_genai import (
+            ChatGoogleGenerativeAI,
+            HarmBlockThreshold,
+            HarmCategory,
+        )
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-pro-preview",
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
+        )
+        ```
+
+        For an enumeration of the categories and thresholds available, see Google's
+        [safety setting types](https://ai.google.dev/api/python/google/generativeai/types/SafetySettingDict).
+
+    Context caching:
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#context-caching)
+        for more info.
+
+        Context caching allows you to store and reuse content (e.g., PDFs, images) for
+        faster processing. The `cached_content` parameter accepts a cache name created
+        via the Google Generative AI API.
+
+        See the Gemini docs for more details on [cached content](https://ai.google.dev/gemini-api/docs/caching?lang=python).
+
+        Below are two examples: caching a single file directly and caching multiple
+        files using `Part`.
+
+        !!! example "Single file example"
+
+            This caches a single file and queries it.
+
+            ```python
+            from google import genai
+            from google.genai import types
+            import time
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain.messages import HumanMessage
+
+            client = genai.Client()
+
+            # Upload file
+            file = client.files.upload(file="path/to/your/file")
+            while file.state.name == "PROCESSING":
+                time.sleep(2)
+                file = client.files.get(name=file.name)
+
+            # Create cache
+            model = "gemini-3-pro-preview"
+            cache = client.caches.create(
+                model=model,
+                config=types.CreateCachedContentConfig(
+                    display_name="Cached Content",
+                    system_instruction=(
+                        "You are an expert content analyzer, and your job is to answer "
+                        "the user's query based on the file you have access to."
+                    ),
+                    contents=[file],
+                    ttl="300s",
+                ),
+            )
+
+            # Query with LangChain
+            llm = ChatGoogleGenerativeAI(
+                model=model,
+                cached_content=cache.name,
+            )
+            message = HumanMessage(content="Summarize the main points of the content.")
+            llm.invoke([message])
+            ```
+
+        !!! example "Multiple files example"
+
+            This caches two files using `Part` and queries them together.
+
+            ```python
+            from google import genai
+            from google.genai.types import CreateCachedContentConfig, Content, Part
+            import time
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain.messages import HumanMessage
+
+            client = genai.Client()
+
+            # Upload files
+            file_1 = client.files.upload(file="./file1")
+            while file_1.state.name == "PROCESSING":
+                time.sleep(2)
+                file_1 = client.files.get(name=file_1.name)
+
+            file_2 = client.files.upload(file="./file2")
+            while file_2.state.name == "PROCESSING":
+                time.sleep(2)
+                file_2 = client.files.get(name=file_2.name)
+
+            # Create cache with multiple files
+            contents = [
+                Content(
+                    role="user",
+                    parts=[
+                        Part.from_uri(file_uri=file_1.uri, mime_type=file_1.mime_type),
+                        Part.from_uri(file_uri=file_2.uri, mime_type=file_2.mime_type),
+                    ],
+                )
+            ]
+            model = "gemini-3-pro-preview"
+            cache = client.caches.create(
+                model=model,
+                config=CreateCachedContentConfig(
+                    display_name="Cached Contents",
+                    system_instruction=(
+                        "You are an expert content analyzer, and your job is to answer "
+                        "the user's query based on the files you have access to."
+                    ),
+                    contents=contents,
+                    ttl="300s",
+                ),
+            )
+
+            # Query with LangChain
+            llm = ChatGoogleGenerativeAI(
+                model=model,
+                cached_content=cache.name,
+            )
+            message = HumanMessage(
+                content="Provide a summary of the key information across both files."
+            )
+            llm.invoke([message])
+            ```
+
     Response metadata:
         ```python
-        ai_msg = llm.invoke(messages)
+        ai_msg = model.invoke(messages)
         ai_msg.response_metadata
         ```
 
@@ -1839,7 +1902,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ],
         }
         ```
-    """
+    """  # noqa: E501
 
     thinking_level: Literal["low", "high"] | None = Field(
         default=None,
@@ -2626,10 +2689,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Example:
             ```python
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+            llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
             num_tokens = llm.get_num_tokens("Hello, world!")
             print(num_tokens)
-            # 4
+            # -> 4
             ```
         """
         result = self.client.count_tokens(
