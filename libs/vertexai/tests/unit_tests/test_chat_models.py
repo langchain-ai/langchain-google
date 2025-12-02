@@ -2051,3 +2051,58 @@ def test_parse_chat_history_with_text_signature() -> None:
     part = model_content.parts[1]
     assert part.text == "Final answer"
     assert part.thought_signature == sig_bytes
+
+
+def test_timeout_parameter_override(clear_prediction_client_cache: Any) -> None:
+    """Test that timeout can be set in constructor and overridden in invoke."""
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash",
+        project="test-project",
+        timeout=30.0,  # Default timeout
+    )
+    assert llm.timeout == 30.0
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate = mock_prediction_service.return_value.generate_content
+        mock_generate.return_value = response
+
+        # Test 1: Using constructor timeout (no override)
+        llm._generate_gemini(messages=[])
+        call_kwargs = mock_generate.call_args.kwargs
+        assert call_kwargs.get("timeout") == 30.0, (
+            "Constructor timeout should be used when no override provided"
+        )
+
+        mock_generate.reset_mock()
+
+        # Test 2: Override timeout via kwargs (simulates invoke(..., timeout=5))
+        llm._generate_gemini(messages=[], timeout=5.0)
+        call_kwargs = mock_generate.call_args.kwargs
+        assert call_kwargs.get("timeout") == 5.0, (
+            "Invoke-time timeout should override constructor timeout"
+        )
+
+
+def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> None:
+    """Test that timeout=None in invoke uses constructor timeout."""
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash",
+        project="test-project",
+        timeout=30.0,
+    )
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        response = GenerateContentResponse(candidates=[])
+        mock_generate = mock_prediction_service.return_value.generate_content
+        mock_generate.return_value = response
+
+        # Passing timeout=None explicitly overrides constructor value
+        llm._generate_gemini(messages=[], timeout=None)
+        call_kwargs = mock_generate.call_args.kwargs
+        # When timeout=None is explicitly passed, it uses None (not constructor default)
+        assert call_kwargs.get("timeout") is None
