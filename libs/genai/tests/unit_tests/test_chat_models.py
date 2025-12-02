@@ -178,15 +178,24 @@ def test_api_key_masked_when_passed_via_constructor(
 
 
 def test_profile() -> None:
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
     assert model.profile
     assert not model.profile["reasoning_output"]
 
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
     assert model.profile
     assert model.profile["reasoning_output"]
 
-    model = ChatGoogleGenerativeAI(model="foo")
+    model = ChatGoogleGenerativeAI(
+        model="foo",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
     assert model.profile == {}
 
 
@@ -3073,7 +3082,6 @@ def test_per_part_media_resolution_warning_gemini_25() -> None:
         assert expected_msg in str(w[0].message)
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_per_part_media_resolution_no_warning_new_models() -> None:
     """Test that per-part `media_resolution` does not warn for new models."""
     content_with_media_resolution = [
