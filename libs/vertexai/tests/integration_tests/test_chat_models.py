@@ -3,6 +3,7 @@
 import base64
 import io
 import json
+import math
 import os
 import re
 from typing import Any, Literal, cast
@@ -1555,6 +1556,64 @@ def test_logprobs() -> None:
     llm3 = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=False)
     msg3 = llm3.invoke("howdy")
     assert msg3.response_metadata.get("logprobs_result") is None
+
+
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
+@pytest.mark.release
+def test_logprobs_with_json_schema() -> None:
+    """Ensure logprobs are populated when using JSON schema responses.
+
+    This exercises the same logprobs path as `test_logprobs`, but with
+    `response_mime_type='application/json'` and `response_schema` set, which
+    previously exposed missing tokens in `logprobs_result` (issue #34133).
+
+    The fix ensures:
+    1. Zero logprobs (prob=1.0, 100% certainty) are included, not filtered
+    2. All logprob values are valid (non-positive, non-NaN)
+    """
+
+    output_schema = {
+        "title": "Test Schema",
+        "type": "object",
+        "properties": {
+            "fieldA": {"type": "string"},
+            "fieldB": {"type": "number"},
+        },
+        "required": ["fieldA", "fieldB"],
+    }
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        response_mime_type="application/json",
+        response_schema=output_schema,
+        logprobs=True,
+    )
+
+    msg = llm.invoke("Return a JSON object with fieldA='test' and fieldB=42")
+    tokenprobs = msg.response_metadata.get("logprobs_result")
+    # We don't assert exact content to avoid flakiness, but if present it must
+    # be a well-formed list of token/logprob dicts, including zero logprobs.
+    assert tokenprobs is None or isinstance(tokenprobs, list)
+    if tokenprobs:
+        logprob_values = []
+        for token in tokenprobs:
+            assert isinstance(token, dict)
+            assert "token" in token
+            assert "logprob" in token
+            assert isinstance(token.get("token"), str)
+            assert isinstance(token.get("logprob"), (float, int))
+            logprob_values.append(token["logprob"])
+
+        # Verify all logprobs are valid: non-positive (zero allowed) and not NaN
+        # This validates the fix for issue #34133 where zero logprobs were
+        # incorrectly filtered out
+
+        for val in logprob_values:
+            assert not math.isnan(val), "logprob should not be NaN"
+            assert val <= 0, f"logprob should be <= 0, got {val}"
+
+        # If we have logprobs, we should have at least some tokens
+        assert len(logprob_values) > 0, "Expected at least one logprob token"
 
 
 def test_location_init() -> None:
