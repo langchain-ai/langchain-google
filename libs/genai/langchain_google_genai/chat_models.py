@@ -1627,6 +1627,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg = model.invoke("How many 'r's are in the word 'strawberry'?")
         ```
 
+    Thought signatures:
+        Gemini 3+ models return *thought signatures*—encrypted representations of
+        the model's internal reasoning. For multi-turn conversations involving tool
+        calls, you must pass the full `AIMessage` back to the model so that these
+        signatures are preserved. This happens automatically when you append the
+        `AIMessage` to your message list.
+
+        See the [LangChain docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#thought-signatures) for more info as well as a code example.
+
+        See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking)
+        for more details on thought signatures.
+
     Google search:
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#google-search)
         for more info.
