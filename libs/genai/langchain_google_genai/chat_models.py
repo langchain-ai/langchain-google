@@ -113,6 +113,7 @@ from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
+    get_user_agent,
 )
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
@@ -2200,6 +2201,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
 
+        _, user_agent = get_user_agent("ChatGoogleGenerativeAI")
+        headers = {"User-Agent": user_agent, **additional_headers}
+
         google_api_key = None
         if not self.credentials:
             if isinstance(self.google_api_key, SecretStr):
@@ -2236,7 +2240,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
-            headers=additional_headers,
+            headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
         )

@@ -18,7 +18,6 @@ from google.genai.types import (
     FunctionResponse,
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
-    HttpOptions,
     Language,
     Part,
     ThinkingLevel,
@@ -407,10 +406,16 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     )
     call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
     assert call_http_options.base_url == api_endpoint
+
+    # Verify user-agent header is set
+    assert "User-Agent" in call_http_options.headers
+    assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+    assert "ChatGoogleGenerativeAI" in call_http_options.headers["User-Agent"]
+
+    # Verify user-provided headers are included
     if headers:
-        assert call_http_options.headers == headers
-    else:
-        assert call_http_options.headers == {}
+        for key, value in headers.items():
+            assert call_http_options.headers[key] == value
 
 
 def test_base_url_set_in_constructor() -> None:
@@ -431,8 +436,11 @@ def test_base_url_passed_to_client() -> None:
         )
         mock_client.assert_called_once_with(
             api_key=FAKE_API_KEY,
-            http_options=HttpOptions(base_url="http://localhost:8000", headers={}),
+            http_options=ANY,
         )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.base_url == "http://localhost:8000"
+        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
 
 
 def test_api_endpoint_via_client_options() -> None:
@@ -461,8 +469,11 @@ def test_api_endpoint_via_client_options() -> None:
         assert response.content == "test response"
         mock_client_class.assert_called_once_with(
             api_key=param_api_key,
-            http_options=HttpOptions(base_url=api_endpoint, headers={}),
+            http_options=ANY,
         )
+        call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.base_url == api_endpoint
+        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
 
 
 async def test_async_api_endpoint_via_client_options() -> None:
@@ -502,8 +513,11 @@ async def test_async_api_endpoint_via_client_options() -> None:
         assert response.content == "async custom endpoint response"
         mock_client_class.assert_called_once_with(
             api_key=param_api_key,
-            http_options=HttpOptions(base_url=api_endpoint, headers={}),
+            http_options=ANY,
         )
+        call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.base_url == api_endpoint
+        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
 
 
 def test_default_metadata_field_alias() -> None:
