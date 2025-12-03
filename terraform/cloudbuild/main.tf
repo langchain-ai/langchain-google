@@ -19,11 +19,10 @@ locals {
       "_${upper(key)}" => value
     },
     { _LIB = var.library },
-    { _POETRY_VERSION = var.poetry_version },
     { _PYTHON_VERSION = var.python_version },
   )
   #TODO: multiline
-  cloudbuild_config = "python -m pip install -q uv --verbose && cd libs/$${_LIB} && uv sync --group test --group test_integration --all-extras && uv run pytest --extended --release tests/integration_tests/"
+  cloudbuild_config = "python -m pip install -q uv --verbose && cd libs/$${_LIB} && uv sync --group test --group test_integration --all-extras && uv run pytest --retries 3 --retry-delay 1 --extended --release tests/integration_tests/"
 }
 
 resource "google_project_service" "model_armor_service" {

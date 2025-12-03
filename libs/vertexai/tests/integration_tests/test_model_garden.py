@@ -377,3 +377,48 @@ async def test_anthropic_tool_error_handling() -> None:
     # Verify model acknowledged the error
     assert isinstance(response2, AIMessage)
     assert isinstance(response2.content, str)
+
+
+@pytest.mark.extended
+async def test_anthropic_async_invoke_with_betas() -> None:
+    """Test that async invoke method handles betas parameter correctly."""
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+    )
+    message = HumanMessage(content="What is 2+2?")
+
+    # This should work but currently fails because _agenerate doesn't handle betas
+    response = await model.ainvoke(
+        [message],
+        model_name=_ANTHROPIC_CLAUDE_MODEL_NAME,
+        betas=["context-1m-2025-08-07"],
+    )
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+
+
+@pytest.mark.extended
+async def test_anthropic_async_stream_with_betas() -> None:
+    """Test that async streaming handles betas parameter correctly."""
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+    model = ChatAnthropicVertex(
+        project=project,
+        location=location,
+    )
+    message = HumanMessage(content="Say hello")
+
+    # This should work but currently fails because _astream doesn't handle betas
+    chunks = []
+    async for chunk in model.astream(
+        [message],
+        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
+        betas=["context-1m-2025-08-07"],
+    ):
+        chunks.append(chunk)
+        assert isinstance(chunk, AIMessageChunk)
+
+    assert len(chunks) > 0

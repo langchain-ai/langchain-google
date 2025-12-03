@@ -327,3 +327,129 @@ async def test_get_user_agent_no_blocking_in_async_context() -> None:
 def test_async_context_execution() -> None:
     """Run the async test to ensure it works in event loop."""
     asyncio.run(test_get_user_agent_no_blocking_in_async_context())
+
+
+def test_get_generation_info_logprobs_with_zero_values() -> None:
+    """Test that zero logprobs are included, not filtered out."""
+    mock_chosen_zero = MagicMock()
+    mock_chosen_zero.token = "certain_token"
+    mock_chosen_zero.log_probability = 0.0
+
+    mock_chosen_negative = MagicMock()
+    mock_chosen_negative.token = "probable_token"
+    mock_chosen_negative.log_probability = -0.5
+
+    mock_chosen_int = MagicMock()
+    mock_chosen_int.token = "int_token"
+    mock_chosen_int.log_probability = 0  # Integer zero (also valid)
+
+    # Create mock top candidates for each chosen candidate
+    mock_top_zero = MagicMock()
+    mock_top_zero.token = "top_certain"
+    mock_top_zero.log_probability = 0.0
+
+    mock_top_negative = MagicMock()
+    mock_top_negative.token = "top_probable"
+    mock_top_negative.log_probability = -1.2
+
+    # Create top_candidates structure
+    mock_top_candidates_0 = MagicMock()
+    mock_top_candidates_0.candidates = [mock_top_zero, mock_top_negative]
+
+    mock_top_candidates_1 = MagicMock()
+    mock_top_candidates_1.candidates = [mock_top_negative]
+
+    mock_top_candidates_2 = MagicMock()
+    mock_top_candidates_2.candidates = [mock_top_zero]
+
+    # Create mock logprobs_result
+    mock_logprobs_result = MagicMock()
+    mock_logprobs_result.chosen_candidates = [
+        mock_chosen_zero,
+        mock_chosen_negative,
+        mock_chosen_int,
+    ]
+    mock_logprobs_result.top_candidates = [
+        mock_top_candidates_0,
+        mock_top_candidates_1,
+        mock_top_candidates_2,
+    ]
+
+    # Create mock candidate
+    mock_candidate = MagicMock()
+    mock_candidate.finish_reason = None
+    mock_candidate.finish_message = None
+    mock_candidate.safety_ratings = []
+    mock_candidate.citation_metadata = None
+    mock_candidate.grounding_metadata = None
+    mock_candidate.logprobs_result = mock_logprobs_result
+
+    # Call get_generation_info with logprobs=2 to also get top_logprobs
+    result = get_generation_info(mock_candidate, logprobs=2)
+
+    assert "logprobs_result" in result
+    logprobs_result = result["logprobs_result"]
+
+    # Should have all 3 tokens (including zero logprobs)
+    assert len(logprobs_result) == 3
+
+    assert logprobs_result[0]["token"] == "certain_token"
+    assert logprobs_result[0]["logprob"] == 0.0
+
+    assert logprobs_result[1]["token"] == "probable_token"
+    assert logprobs_result[1]["logprob"] == -0.5
+
+    assert logprobs_result[2]["token"] == "int_token"
+    assert logprobs_result[2]["logprob"] == 0
+
+    assert len(logprobs_result[0]["top_logprobs"]) == 2
+    assert logprobs_result[0]["top_logprobs"][0]["logprob"] == 0.0
+
+
+def test_get_generation_info_logprobs_filters_invalid_values() -> None:
+    """Test that invalid logprob values (positive, NaN) are filtered out."""
+
+    # Create mock chosen candidates with invalid values
+    mock_chosen_positive = MagicMock()
+    mock_chosen_positive.token = "invalid_positive"
+    mock_chosen_positive.log_probability = 0.5  # Invalid: positive
+
+    mock_chosen_nan = MagicMock()
+    mock_chosen_nan.token = "invalid_nan"
+    mock_chosen_nan.log_probability = float("nan")  # Invalid: NaN
+
+    mock_chosen_valid = MagicMock()
+    mock_chosen_valid.token = "valid"
+    mock_chosen_valid.log_probability = -0.3
+
+    # Create mock top_candidates structure
+    mock_top_candidates = MagicMock()
+    mock_top_candidates.candidates = []
+
+    mock_logprobs_result = MagicMock()
+    mock_logprobs_result.chosen_candidates = [
+        mock_chosen_positive,
+        mock_chosen_nan,
+        mock_chosen_valid,
+    ]
+    mock_logprobs_result.top_candidates = [
+        mock_top_candidates,
+        mock_top_candidates,
+        mock_top_candidates,
+    ]
+
+    mock_candidate = MagicMock()
+    mock_candidate.finish_reason = None
+    mock_candidate.finish_message = None
+    mock_candidate.safety_ratings = []
+    mock_candidate.citation_metadata = None
+    mock_candidate.grounding_metadata = None
+    mock_candidate.logprobs_result = mock_logprobs_result
+
+    result = get_generation_info(mock_candidate, logprobs=True)
+
+    # Should only have 1 valid token (positive and NaN filtered out)
+    assert "logprobs_result" in result
+    assert len(result["logprobs_result"]) == 1
+    assert result["logprobs_result"][0]["token"] == "valid"
+    assert result["logprobs_result"][0]["logprob"] == -0.3

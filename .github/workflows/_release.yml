@@ -1,5 +1,5 @@
-name: '🚀 Package Release'
-run-name: 'Release ${{ inputs.working-directory }} ${{ inputs.release-version }}'
+name: "🚀 Package Release"
+run-name: "Release ${{ inputs.working-directory }} ${{ inputs.release-version }}"
 
 on:
   workflow_call:
@@ -14,11 +14,11 @@ on:
         required: true
         type: string
         description: "From which folder this pipeline executes"
-        default: 'libs/vertexai'
+        default: "libs/vertexai"
       release-version:
         required: true
         type: string
-        default: '0.1.0'
+        default: "0.1.0"
         description: "New version of package being released"
       dangerous-nonmaster-release:
         required: false
@@ -133,7 +133,7 @@ jobs:
               # Try to find the previous patch version
               PREV_VERSION="${VERSION%.*}.$(( PATCH_VERSION - 1 ))"
               PREV_TAG="$WORKING_DIR/v$PREV_VERSION"
-              
+
               # Check if the calculated previous tag exists
               if ! git tag -l "$PREV_TAG" | grep -q "$PREV_TAG"; then
                 PREV_TAG=""
@@ -267,7 +267,7 @@ jobs:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
         # Here we use:
-        # - The default regular PyPI index as the *primary* index, meaning 
+        # - The default regular PyPI index as the *primary* index, meaning
         #   that it takes priority (https://pypi.org/simple)
         # - The test PyPI index as an extra index, so that any dependencies that
         #   are not found on test PyPI can be resolved and installed anyway.
@@ -303,11 +303,11 @@ jobs:
         run: make tests
         working-directory: ${{ inputs.working-directory }}
 
-      - name: 'Authenticate to Google Cloud'
-        id: 'auth'
+      - name: "Authenticate to Google Cloud"
+        id: "auth"
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+          credentials_json: "${{ secrets.GOOGLE_CREDENTIALS }}"
 
       - name: Run integration tests
         env:
@@ -420,6 +420,6 @@ jobs:
           draft: false
           generateReleaseNotes: false
           tag: ${{ inputs.working-directory }}/v${{ needs.build.outputs.version }}
-          name: Release - ${{ needs.build.outputs.pkg-name }}==${{ needs.build.outputs.version }}
+          name: ${{ needs.build.outputs.pkg-name }}==${{ needs.build.outputs.version }}
           body: ${{ needs.release-notes.outputs.release-body }}
           commit: ${{ github.sha }}
