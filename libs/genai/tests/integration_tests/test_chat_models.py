@@ -1366,7 +1366,8 @@ def test_chat_google_genai_invoke_with_generation_params() -> None:
     Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
     parameters passed directly to invoke() method override model defaults.
     """
-    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    # Use gemini-2.5-flash because it supports thinking_budget=0
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
     # Test with max_output_tokens constraint
     result_constrained = llm.invoke(
