@@ -379,9 +379,11 @@ def _format_base_tool_to_function_declaration(
 
     if isinstance(tool.args_schema, dict):
         schema = tool.args_schema
-    elif issubclass(tool.args_schema, BaseModel):
+    elif isinstance(tool.args_schema, type) and issubclass(tool.args_schema, BaseModel):
         schema = tool.args_schema.model_json_schema()
-    elif issubclass(tool.args_schema, BaseModelV1):
+    elif isinstance(tool.args_schema, type) and issubclass(
+        tool.args_schema, BaseModelV1
+    ):
         schema = tool.args_schema.schema()
     else:
         msg = (

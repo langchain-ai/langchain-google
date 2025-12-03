@@ -1291,3 +1291,36 @@ def test_tool_field_enum_array() -> None:
     # '_value_' field
     assert items_property["type"]["_value_"] == "STRING"
     assert items_property["enum"] == ["foo", "bar"]
+
+
+def test_tool_with_non_class_args_schema() -> None:
+    """Test that tools with non-class `args_schema` are handled gracefully.
+
+    This test reproduces the issue from GitHub issue #1360 where tools with
+    invalid `args_schema` (not a class, not a dict) would cause a TypeError
+    when issubclass() was called on a non-class object.
+    """
+
+    class ToolWithInvalidArgsSchema(BaseTool):
+        """A tool with an invalid args_schema for testing."""
+
+        name: str = "test_tool"
+        description: str = "A test tool with invalid args_schema"
+
+        def _run(self, *args: Any, **kwargs: Any) -> str:
+            return "result"
+
+    # Create a tool instance and set args_schema to a non-class object
+    tool = ToolWithInvalidArgsSchema()
+    # Simulate MCP tools with empty/invalid args_schema by setting it to a
+    # truthy non-class value (like a string, list, or other object)
+    tool.args_schema = "not_a_class"  # type: ignore[assignment]
+
+    # This should raise NotImplementedError with a clear message
+    # rather than TypeError from issubclass()
+    with pytest.raises(NotImplementedError) as exc_info:
+        _format_base_tool_to_function_declaration(tool)
+
+    assert "args_schema must be a Pydantic BaseModel or JSON schema" in str(
+        exc_info.value
+    )
