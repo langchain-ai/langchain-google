@@ -1344,6 +1344,22 @@ def test_code_execution_builtin(output_version: str) -> None:
     _check_code_execution_output(response, output_version)
 
 
+def test_url_context_tool() -> None:
+    model = ChatGoogleGenerativeAI(model=_MODEL)
+    model_with_search = model.bind_tools([{"url_context": {}}])
+
+    input = "What is this page's contents about? https://docs.langchain.com"
+    response = model_with_search.invoke(input)
+    assert isinstance(response, AIMessage)
+
+    assert (
+        response.response_metadata["grounding_metadata"]["grounding_chunks"][0]["web"][
+            "uri"
+        ]
+        is not None
+    )
+
+
 def test_chat_google_genai_invoke_with_generation_params() -> None:
     """Test that generation parameters passed to invoke() are respected.
 
