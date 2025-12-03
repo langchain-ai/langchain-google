@@ -1,10 +1,11 @@
 import os
 from importlib import metadata
-from typing import Any, Self
+from typing import Any
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
 from pydantic import BaseModel, Field, SecretStr, model_validator
+from typing_extensions import Self
 
 from langchain_google_genai._enums import (
     HarmBlockThreshold,
