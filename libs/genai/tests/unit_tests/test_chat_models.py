@@ -3281,3 +3281,65 @@ def test_client_error_raises_descriptive_error() -> None:
             match=rf"Error calling model '{invalid_model_name}' \(NOT_FOUND\)",
         ):
             chat.invoke("test")
+
+
+def test_kwargs_override_response_modalities() -> None:
+    """Test that `response_modalities` can be overridden via kwargs."""
+    from langchain_core.messages import HumanMessage
+
+    from langchain_google_genai import Modality
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    # Test passing response_modalities as kwarg to _prepare_request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request(
+        [msg],
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+
+    # Verify response_modalities is set correctly in the config
+    assert request["config"].response_modalities == ["TEXT", "IMAGE"]
+
+
+def test_response_modalities_set_on_instance() -> None:
+    """Test that `response_modalities` can be set on the instance."""
+    from langchain_core.messages import HumanMessage
+
+    from langchain_google_genai import Modality
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        response_modalities=[Modality.TEXT],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+
+    assert request["config"].response_modalities == ["TEXT"]
+
+
+def test_kwargs_response_modalities_overrides_instance() -> None:
+    """Test that kwarg `response_modalities` overrides instance value."""
+    from langchain_core.messages import HumanMessage
+
+    from langchain_google_genai import Modality
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        response_modalities=[Modality.TEXT],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request(
+        [msg],
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+
+    # Kwarg should override instance value
+    assert request["config"].response_modalities == ["TEXT", "IMAGE"]

@@ -2375,7 +2375,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ),
             "top_k": kwargs.get("top_k", self.top_k),
             "top_p": kwargs.get("top_p", self.top_p),
-            "response_modalities": self.response_modalities,
+            "response_modalities": kwargs.get(
+                "response_modalities", self.response_modalities
+            ),
         }
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
@@ -2544,12 +2546,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             stop, generation_config=generation_config, **kwargs
         )
 
-        _thinking_kwargs = {"thinking_budget", "thinking_level", "include_thoughts"}
-        # Filter out thinking kwargs already consumed by _prepare_params.
-        # These are handled via params.thinking_config and aren't direct fields
-        # on GenerateContentConfig.
+        _consumed_kwargs = {
+            "thinking_budget",
+            "thinking_level",
+            "include_thoughts",
+            "response_modalities",
+        }
+        # Filter out kwargs already consumed by _prepare_params.
+        # These are handled via params and aren't direct fields
+        # on GenerateContentConfig or would cause duplicate argument errors.
         remaining_kwargs = {
-            k: v for k, v in kwargs.items() if k not in _thinking_kwargs
+            k: v for k, v in kwargs.items() if k not in _consumed_kwargs
         }
 
         # Build request configuration
