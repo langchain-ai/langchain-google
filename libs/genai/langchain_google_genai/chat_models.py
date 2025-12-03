@@ -124,19 +124,6 @@ from langchain_google_genai.data._profiles import _PROFILES
 
 logger = logging.getLogger(__name__)
 
-_allowed_params_prediction_service_gapi = [
-    "request",
-    "timeout",
-    "metadata",
-    "labels",
-]
-
-_allowed_params_prediction_service_genai = [
-    "model",
-    "contents",
-    "config",
-]
-
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
@@ -575,10 +562,10 @@ def _parse_chat_history(
     Returns:
         A tuple containing:
 
-            - An optional `google.ai.generativelanguage_v1beta.types.Content`
-                representing the system instruction (if any).
-            - A list of `google.ai.generativelanguage_v1beta.types.Content` representing
-                the formatted messages.
+            - An optional `generativelanguage_v1beta` `Content` representing the system
+                instruction (if any).
+            - A list of `generativelanguage_v1beta` `Content` representing the formatted
+                messages.
     """
     if convert_system_message_to_human:
         warnings.warn(

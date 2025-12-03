@@ -20,20 +20,24 @@ def translate_citations_to_grounding_metadata(
         Google AI grounding metadata dictionary.
 
     Example:
-        >>> citations = [
-        ...     create_citation(
-        ...         url="https://uefa.com/euro2024",
-        ...         title="UEFA Euro 2024 Results",
-        ...         start_index=0,
-        ...         end_index=47,
-        ...         cited_text="Spain won the UEFA Euro 2024 championship",
-        ...     )
-        ... ]
-        >>> metadata = translate_citations_to_grounding_metadata(citations)
-        >>> len(metadata["groundingChunks"])
-        1
-        >>> metadata["groundingChunks"][0]["web"]["uri"]
-        'https://uefa.com/euro2024'
+        ```python
+        citations = [
+            create_citation(
+                url="https://uefa.com/euro2024",
+                title="UEFA Euro 2024 Results",
+                start_index=0,
+                end_index=47,
+                cited_text="Spain won the UEFA Euro 2024 championship",
+            )
+        ]
+
+        metadata = translate_citations_to_grounding_metadata(citations)
+        len(metadata["groundingChunks"])
+        # -> 1
+
+        metadata["groundingChunks"][0]["web"]["uri"]
+        # -> 'https://uefa.com/euro2024'
+        ```
     """
     if not citations:
         return {}
@@ -123,15 +127,15 @@ def translate_citations_to_grounding_metadata(
 def _convert_from_v1_to_generativelanguage_v1beta(
     content: list[types.ContentBlock], model_provider: str | None
 ) -> list[dict[str, Any]]:
-    """Convert v1 content blocks to `google.ai.generativelanguage_v1beta.types.Content`.
+    """Convert v1 content blocks to `generativelanguage_v1beta` `Content`.
 
     Args:
         content: List of v1 `ContentBlock` objects.
         model_provider: The model provider name that generated the v1 content.
 
     Returns:
-        List of dictionaries in `google.ai.generativelanguage_v1beta.types.Content`
-            format, ready to be sent to the API.
+        List of dictionaries in `generativelanguage_v1beta` `Content` format, ready to
+            be sent to the API.
     """
     new_content: list = []
     for block in content:

@@ -1,7 +1,6 @@
 """Temporary high-level library of the Google GenerativeAI API.
 
-The content of this file should eventually go into the Python package
-google.generativeai.
+Mostly utils for Google Vector Store and embeddings.
 """
 
 import datetime
@@ -243,6 +242,7 @@ def build_semantic_retriever() -> RetrieverServiceClient:
     )
 
 
+# Used by embeddings.py
 def _prepare_config(
     credentials: credentials.Credentials | None = None,
     api_key: str | None = None,
@@ -286,6 +286,7 @@ def _prepare_config(
     return {k: v for k, v in config.items() if v is not None}
 
 
+# Used by embeddings.py
 def _validate_grpc_endpoint(endpoint: str, transport: str) -> None:
     """Validate that an endpoint is compatible with gRPC transports.
 
@@ -317,6 +318,7 @@ def _validate_grpc_endpoint(endpoint: str, transport: str) -> None:
         raise ValueError(msg)
 
 
+# Used by embeddings.py
 def _format_grpc_endpoint(endpoint: str) -> str:
     """Format an endpoint for gRPC compatibility.
 
@@ -345,6 +347,7 @@ def _format_grpc_endpoint(endpoint: str) -> str:
     return endpoint
 
 
+# Used by embeddings.py
 def build_generative_service(
     credentials: credentials.Credentials | None = None,
     api_key: str | None = None,
@@ -362,6 +365,7 @@ def build_generative_service(
     return v1betaGenerativeServiceClient(**config)
 
 
+# Used by embeddings.py
 def build_generative_async_service(
     credentials: credentials.Credentials | None,
     api_key: str | None = None,
@@ -379,6 +383,7 @@ def build_generative_async_service(
     return v1betaGenerativeServiceAsyncClient(**config)
 
 
+# Used by google_vector_store.py
 def get_corpus(
     *,
     corpus_id: str,
@@ -397,6 +402,7 @@ def get_corpus(
         return None
 
 
+# Used by google_vector_store.py
 def create_corpus(
     *,
     corpus_id: str | None = None,
@@ -420,6 +426,7 @@ def create_corpus(
     return Corpus.from_corpus(new_corpus)
 
 
+# Used by google_vector_store.py
 def delete_corpus(
     *,
     corpus_id: str,
@@ -432,6 +439,7 @@ def delete_corpus(
     )
 
 
+# Used by google_vector_store.py
 def get_document(
     *,
     corpus_id: str,
@@ -452,6 +460,7 @@ def get_document(
         return None
 
 
+# Used by google_vector_store.py
 def create_document(
     *,
     corpus_id: str,
@@ -481,6 +490,7 @@ def create_document(
     return Document.from_document(new_document)
 
 
+# Used by google_vector_store.py
 def delete_document(
     *,
     corpus_id: str,
@@ -495,6 +505,7 @@ def delete_document(
     )
 
 
+# Used by google_vector_store.py
 def batch_create_chunk(
     *,
     corpus_id: str,
@@ -548,6 +559,7 @@ def batch_create_chunk(
     return created_chunks
 
 
+# Used by google_vector_store.py
 def delete_chunk(
     *,
     corpus_id: str,
@@ -566,6 +578,7 @@ def delete_chunk(
     )
 
 
+# Used by google_vector_store.py
 def query_corpus(
     *,
     corpus_id: str,
@@ -585,6 +598,7 @@ def query_corpus(
     return list(response.relevant_chunks)
 
 
+# Used by google_vector_store.py
 def query_document(
     *,
     corpus_id: str,
@@ -605,6 +619,7 @@ def query_document(
     return list(response.relevant_chunks)
 
 
+# Used by google_vector_store.py
 def _convert_to_metadata(metadata: dict[str, Any]) -> list[old_genai.CustomMetadata]:
     cs: list[old_genai.CustomMetadata] = []
     for key, value in metadata.items():
@@ -620,6 +635,7 @@ def _convert_to_metadata(metadata: dict[str, Any]) -> list[old_genai.CustomMetad
     return cs
 
 
+# Used by google_vector_store.py
 def _convert_filter(fs: dict[str, Any] | None) -> list[old_genai.MetadataFilter]:
     if fs is None:
         return []
