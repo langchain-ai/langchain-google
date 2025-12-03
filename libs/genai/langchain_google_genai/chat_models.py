@@ -2105,6 +2105,48 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             self.profile = _get_default_model_profile(model_id)
         return self
 
+    def __del__(self) -> None:
+        """Clean up the client on deletion."""
+        if not hasattr(self, "client") or self.client is None:
+            return
+
+        try:
+            # Close the sync client
+            self.client.close()
+
+            # Attempt to close the async client
+            # Note: The SDK's close() doesn't close the async client automatically
+            if hasattr(self.client, "aio") and self.client.aio is not None:
+                try:
+                    # Check if there's a running event loop
+                    loop = asyncio.get_running_loop()
+                    if not loop.is_closed():
+                        # Schedule the close
+                        # Wrap in ensure_future to avoid "coroutine never awaited"
+                        task = asyncio.ensure_future(
+                            self.client.aio.aclose(), loop=loop
+                        )
+                        # Add a done callback to suppress any exceptions
+                        task.add_done_callback(
+                            lambda t: t.exception() if not t.cancelled() else None
+                        )
+                except RuntimeError:
+                    # No running loop - create a new one for cleanup
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(self.client.aio.aclose())
+                        finally:
+                            loop.close()
+                            asyncio.set_event_loop(None)
+                    except Exception:
+                        # Suppress errors during shutdown
+                        pass
+        except Exception:
+            # Suppress all errors during cleanup
+            pass
+
     @property
     def _identifying_params(self) -> dict[str, Any]:
         """Get the identifying parameters."""
