@@ -31,8 +31,7 @@ class GoogleGenerativeAIError(Exception):
 class _BaseGoogleGenerativeAI(BaseModel):
     """Base class for Google Generative AI LLMs."""
 
-    model: str = Field(...)
-    """Model name to use."""
+    # --- Client params ---
 
     google_api_key: SecretStr | None = Field(
         alias="api_key",
@@ -40,69 +39,109 @@ class _BaseGoogleGenerativeAI(BaseModel):
             ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
         ),
     )
-    """Google AI API key. Used for Gemini API.
+    """Google AI API key for the Gemini Developer API.
 
     If not specified, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY` with
     precedence given to `GOOGLE_API_KEY`.
 
-    !!! warning "Vertex AI"
+    !!! note "Vertex AI"
 
-        To use `langchain-google-genai` with Vertex AI, you must provide a `credentials`
-        object instead of an API key.
+        To use Vertex AI instead, either provide explicit `credentials` or ensure
+        [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
+        are configured on your system.
+
+        When no API key is found, the SDK automatically uses Vertex AI with ADC (unless)
+        custom `credentials` are provided.
     """
 
     credentials: Any = None
-    """The default custom credentials to use when making API calls. Used for Vertex AI.
+    """Custom credentials for Vertex AI authentication.
 
-    If not provided, credentials will be ascertained from the `GOOGLE_API_KEY`
-    or `GEMINI_API_KEY` env vars with precedence given to `GOOGLE_API_KEY`.
+    Accepts a `google.auth.credentials.Credentials` object.
+
+    By providing custom credentials, we skip extracting API keys and go directly to
+    using Vertex AI.
+
+    If neither `credentials` nor an API key is provided (as `api_key`/`google_api_key`),
+    the SDK will attempt to use [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials).
+
+    !!! example "Using service account credentials"
+
+        ```python
+        from google.oauth2 import service_account
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        credentials = service_account.Credentials.from_service_account_file(
+            "path/to/service-account.json",
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            credentials=credentials,
+            project="my-project-id",  # Required for Vertex AI
+            location="us-central1",   # Optional, defaults to us-central1
+        )
+        ```
+
+    See the [Google Auth documentation](https://googleapis.dev/python/google-auth/latest/user-guide.html)
+    for more information on obtaining credentials.
     """
 
     base_url: str | dict | None = Field(default=None, alias="client_options")
-    """Base URL to use for the API client.
+    """Custom base URL for the API client.
 
-    If not provided, will default to the public API at
-    `https://generativelanguage.googleapis.com`.
+    If not provided, defaults depend on the API being used:
 
-
-    - **REST transport** (`transport="rest"`): Accepts full URLs with paths
-
-        - `https://api.example.com/v1/path`
-        - `https://webhook.site/unique-path`
-
-    - **gRPC transports** (`transport="grpc"` or `transport="grpc_asyncio"`): Only
-        accepts `hostname:port` format
-
-        - `api.example.com:443`
-        - `custom.googleapis.com:443`
-        - `https://api.example.com` (auto-formatted to `api.example.com:443`)
-        - NOT `https://webhook.site/path` (paths are not supported in gRPC)
-        - NOT `api.example.com/path` (paths are not supported in gRPC)
+    - **Gemini Developer API** (`api_key`/`google_api_key`): `https://generativelanguage.googleapis.com/`
+    - **Vertex AI** (`credentials`): `https://{location}-aiplatform.googleapis.com/`
 
     !!! note
 
-        Typed to accept `dict` to support backwards compatiblity for the (now removed)
+        Typed to accept `dict` to support backwards compatibility for the (now removed)
         `client_options` param.
 
         If a `dict` is passed in, it will only extract the `'api_endpoint'` key.
+    """
+
+    additional_headers: dict[str, str] | None = Field(
+        default=None,
+    )
+    """Additional HTTP headers to include in API requests.
+
+    Passed as `headers` to `HttpOptions` when creating the client.
+
+    !!! example
+
+        ```python
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            additional_headers={
+                "X-Custom-Header": "value",
+            },
+        )
+        ```
     """
 
     transport: str | None = Field(
         default=None,
         alias="api_transport",
     )
-    """A string, one of: `['rest', 'grpc', 'grpc_asyncio']`.
+    """Transport protocol for API calls. One of: `'rest'`, `'grpc'`, `'grpc_asyncio'`.
 
-    The Google client library defaults to `'grpc'` for sync clients.
+    !!! warning "Legacy parameter"
 
-    For async clients, `'rest'` is converted to `'grpc_asyncio'` unless
-    a custom endpoint is specified.
+        This parameter is only used by `GoogleGenerativeAIEmbeddings` (which uses the
+        legacy client).
+
+        `ChatGoogleGenerativeAI` uses the new `google-genai` SDK which uses `httpx` for
+        requests and does not support this parameter.
     """
 
-    additional_headers: dict[str, str] | None = Field(
-        default=None,
-    )
-    """Key-value dictionary representing additional headers for the model call"""
+    # --- Model / invocation params ---
+
+    model: str = Field(...)
+    """Model name to use."""
 
     temperature: float = 0.7
     """Run inference with this temperature.
