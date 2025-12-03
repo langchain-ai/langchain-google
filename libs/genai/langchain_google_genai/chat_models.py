@@ -554,7 +554,9 @@ def _parse_chat_history(
     Args:
         input_messages: Sequence of `BaseMessage` objects representing the chat history.
         convert_system_message_to_human: Whether to convert the first system message
-            into a `HumanMessage`. Deprecated, use system instructions instead.
+            into a `HumanMessage`.
+
+            Deprecated, use system instructions instead.
         model: The model name, used for version-specific logic.
 
     Returns:
@@ -1112,14 +1114,6 @@ def _response_to_result(
         else:
             generations = [ChatGeneration(message=AIMessage(""), generation_info={})]
     return ChatResult(generations=generations, llm_output=llm_output)
-
-
-def _is_event_loop_running() -> bool:
-    try:
-        asyncio.get_running_loop()
-        return True
-    except RuntimeError:
-        return False
 
 
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
@@ -1859,24 +1853,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
     """  # noqa: E501
 
-    thinking_level: Literal["low", "high"] | None = Field(
-        default=None,
-    )
-    """Indicates the thinking level.
-
-    Supported values:
-        * `'low'`: Minimizes latency and cost.
-        * `'high'`: Maximizes reasoning depth.
-
-    !!! note "Replaces `thinking_budget`"
-
-        `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
-        provided, `thinking_level` takes precedence.
-
-        If left unspecified, the model's default thinking level is used. For Gemini 3+,
-        this defaults to `'high'`.
-    """
-
     client: Client | None = Field(
         default=None,
         exclude=True,  # Excluded from serialization
@@ -1887,12 +1863,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         alias="default_metadata_input",
     )
 
+    model_kwargs: dict[str, Any] = Field(default_factory=dict)
+    """Holds any unexpected initialization parameters."""
+
+    streaming: bool | None = None
+    """Whether to stream responses from the model."""
+
     convert_system_message_to_human: bool = False
     """Whether to merge any leading `SystemMessage` into the following `HumanMessage`.
 
     Gemini does not support system messages; any unsupported messages will raise an
     error.
     """
+
+    stop: list[str] | None = None
+    """Stop sequences for the model."""
 
     response_mime_type: str | None = None
     """Output response MIME type of the generated candidate text.
@@ -1929,6 +1914,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details.
     """
 
+    thinking_level: Literal["low", "high"] | None = Field(
+        default=None,
+    )
+    """Indicates the thinking level.
+
+    Supported values:
+        * `'low'`: Minimizes latency and cost.
+        * `'high'`: Maximizes reasoning depth.
+
+    !!! note "Replaces `thinking_budget`"
+
+        `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
+        provided, `thinking_level` takes precedence.
+
+        If left unspecified, the model's default thinking level is used. For Gemini 3+,
+        this defaults to `'high'`.
+    """
+
     cached_content: str | None = None
     """The name of the cached content used as context to serve the prediction.
 
@@ -1938,15 +1941,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         what content to cache) and enjoy guaranteed cost savings. Format:
         `cachedContents/{cachedContent}`.
     """
-
-    stop: list[str] | None = None
-    """Stop sequences for the model."""
-
-    streaming: bool | None = None
-    """Whether to stream responses from the model."""
-
-    model_kwargs: dict[str, Any] = Field(default_factory=dict)
-    """Holds any unexpected initialization parameters."""
 
     def __init__(self, **kwargs: Any) -> None:
         """Needed for arg validation."""
@@ -1984,7 +1978,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         See [Gemini models](https://ai.google.dev/gemini-api/docs/models) for a list.
         """
-        # TODO: Refactor to use `capabilities` property
+        # TODO: Refactor to use `capabilities` property when supported upstream
+        # (or done via augmentation)
         return "gemini-2" in self.model or "gemini-3" in self.model
 
     @classmethod
@@ -2166,8 +2161,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if code_execution is not None:
             if not self._supports_code_execution:
                 msg = (
-                    "Code execution is only supported on Gemini 1.5, 2.0, and 2.5 "
-                    f"models. Current model: {self.model}"
+                    "Code execution is only supported on Gemini 2.0, and 2.5 models. "
+                    f"Current model: {self.model}"
                 )
                 raise ValueError(msg)
             if "tools" not in kwargs:
