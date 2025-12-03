@@ -80,16 +80,9 @@ def test_base_url_support() -> None:
     param_secret_api_key = SecretStr(param_api_key)
     param_transport = "rest"
 
-    # Also mock the _chat_with_retry function to ensure it returns our mock response
-    with (
-        patch(
-            "langchain_google_genai.chat_models.Client",
-            mock_client_class,
-        ),
-        patch(
-            "langchain_google_genai.chat_models._chat_with_retry",
-            return_value=mock_response,
-        ),
+    with patch(
+        "langchain_google_genai.chat_models.Client",
+        mock_client_class,
     ):
         llm = GoogleGenerativeAI(
             model=MODEL_NAME,

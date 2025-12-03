@@ -3,12 +3,12 @@
 import base64
 import json
 import warnings
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from google.api_core.exceptions import ResourceExhausted
 from google.genai.errors import ClientError
 from google.genai.types import (
     Blob,
@@ -28,6 +28,7 @@ from google.genai.types import (
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
@@ -49,7 +50,6 @@ from langchain_google_genai._compat import (
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
-    _chat_with_retry,
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
@@ -1019,24 +1019,173 @@ def test_model_kwargs(mock_client: Mock) -> None:
         assert llm.model_kwargs == {"foo": "bar"}
 
 
-def test_retry_decorator_with_custom_parameters() -> None:
-    # Mock the generation method
-    mock_generation_method = Mock()
-    # TODO: remove ignore once google-auth has types.
-    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")  # type: ignore[no-untyped-call]
+@pytest.mark.parametrize(
+    "is_async,method_name,client_method",
+    [
+        (False, "_generate", "models.generate_content"),  # Sync
+        (True, "_agenerate", "aio.models.generate_content"),  # Async
+    ],
+)
+@pytest.mark.parametrize(
+    "instance_timeout,call_timeout,expected_timeout_ms,should_have_timeout",
+    [
+        (5.0, None, 5000, True),  # Instance-level timeout (converted to ms)
+        (5.0, 10.0, 10000, True),  # Call-level overrides instance (in ms)
+        (None, None, None, False),  # No timeout anywhere
+    ],
+)
+async def test_timeout_parameter_handling(
+    is_async: bool,
+    method_name: str,
+    client_method: str,
+    instance_timeout: float | None,
+    call_timeout: float | None,
+    expected_timeout_ms: int | None,
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for sync and async methods."""
+    with patch(
+        "langchain_google_genai.chat_models.ChatGoogleGenerativeAI.client", create=True
+    ):
+        # Create LLM with optional instance-level timeout
+        llm_kwargs: dict[str, Any] = {
+            "model": MODEL_NAME,
+            "google_api_key": SecretStr(FAKE_API_KEY),
+        }
+        if instance_timeout is not None:
+            llm_kwargs["timeout"] = instance_timeout
 
-    # Call the function with custom retry parameters
-    with pytest.raises(ResourceExhausted):
-        _chat_with_retry(
-            generation_method=mock_generation_method,
-            max_retries=3,
-            wait_exponential_multiplier=1.5,
-            wait_exponential_min=2.0,
-            wait_exponential_max=30.0,
+        llm = ChatGoogleGenerativeAI(**llm_kwargs)
+
+        # Mock the client method
+        mock_response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Test response")]))]
         )
 
-    # Verify that the retry mechanism used the custom parameters
-    assert mock_generation_method.call_count == 3
+        if is_async:
+            mock_method = AsyncMock(return_value=mock_response)
+        else:
+            mock_method = Mock(return_value=mock_response)
+
+        # Set up the mock on the client
+        client_parts = client_method.split(".")
+        mock_client = llm.client
+        for part in client_parts[:-1]:
+            mock_client = getattr(mock_client, part)
+        setattr(mock_client, client_parts[-1], mock_method)
+
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+        # Call the appropriate method with optional call-level timeout
+        method = getattr(llm, method_name)
+        call_kwargs: dict[str, Any] = {}
+        if call_timeout is not None:
+            call_kwargs["timeout"] = call_timeout
+
+        if is_async:
+            await method(messages, **call_kwargs)
+        else:
+            method(messages, **call_kwargs)
+
+        # Verify http_options were set correctly in config
+        mock_method.assert_called_once()
+        call_args = mock_method.call_args
+        config = call_args.kwargs.get("config") or call_args[0][0].kwargs.get("config")
+
+        if should_have_timeout:
+            assert config.http_options is not None
+            assert config.http_options.timeout == expected_timeout_ms
+        else:
+            assert config.http_options is None or config.http_options.timeout is None
+
+
+@pytest.mark.parametrize(
+    "instance_timeout,expected_timeout_ms,should_have_timeout",
+    [
+        (5.0, 5000, True),  # Instance-level timeout (converted to ms)
+        (None, None, False),  # No timeout
+    ],
+)
+def test_timeout_streaming_parameter_handling(
+    instance_timeout: float | None,
+    expected_timeout_ms: int | None,
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for streaming methods."""
+    # Create LLM with optional instance-level timeout
+    llm_kwargs: dict[str, Any] = {
+        "model": MODEL_NAME,
+        "google_api_key": SecretStr(FAKE_API_KEY),
+    }
+    if instance_timeout is not None:
+        llm_kwargs["timeout"] = instance_timeout
+
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+    assert llm.client is not None
+
+    # Mock the client method
+    def mock_stream() -> Iterator[GenerateContentResponse]:
+        yield GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="chunk1")]))]
+        )
+
+    with patch.object(
+        llm.client.models, "generate_content_stream", return_value=mock_stream()
+    ):
+        # Call _stream (which should include timeout in config)
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+        request = llm._prepare_request(messages)
+
+        # Verify timeout was set correctly in config
+        config = request["config"]
+        if should_have_timeout:
+            assert config.http_options is not None
+            assert config.http_options.timeout == expected_timeout_ms
+        else:
+            assert config.http_options is None or config.http_options.timeout is None
+
+
+@pytest.mark.parametrize(
+    "instance_max_retries,call_max_retries,expected_max_retries,should_have_max_retries",
+    [
+        (1, None, 1, True),  # Instance-level max_retries
+        (3, 5, 5, True),  # Call-level overrides instance
+        (6, None, 6, True),  # Default instance value
+    ],
+)
+def test_max_retries_parameter_handling(
+    instance_max_retries: int,
+    call_max_retries: int | None,
+    expected_max_retries: int,
+    should_have_max_retries: bool,
+) -> None:
+    """Test `max_retries` handling for sync and async methods."""
+    # Instance-level max_retries
+    llm_kwargs: dict[str, Any] = {
+        "model": MODEL_NAME,
+        "google_api_key": SecretStr(FAKE_API_KEY),
+        "max_retries": instance_max_retries,
+    }
+
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    # Prepare request with optional call-level max_retries
+    call_kwargs: dict[str, Any] = {}
+    if call_max_retries is not None:
+        call_kwargs["max_retries"] = call_max_retries
+
+    request = llm._prepare_request(messages, **call_kwargs)
+
+    # Verify max_retries was set correctly in http_options.retry_options
+    config = request["config"]
+    if should_have_max_retries:
+        assert config.http_options is not None
+        assert config.http_options.retry_options is not None
+        assert config.http_options.retry_options.attempts == expected_max_retries
+    else:
+        assert config.http_options is None or config.http_options.retry_options is None
 
 
 @pytest.mark.parametrize(
@@ -1452,45 +1601,54 @@ def test_grounding_metadata_multiple_parts() -> None:
 def test_thinking_config_merging_with_generation_config() -> None:
     """Test that `thinking_config` is properly merged when passed in
     `generation_config`."""
-    with patch("langchain_google_genai.chat_models._chat_with_retry") as mock_retry:
-        # Mock response with thinking content followed by regular text
-        mock_response = GenerateContentResponse(
-            candidates=[
-                Candidate(
-                    content=Content(
-                        parts=[
-                            Part(text="Let me think about this...", thought=True),
-                            Part(text="There are 2 O's in Google."),
-                        ]
-                    ),
-                    finish_reason="STOP",
-                )
-            ],
-            usage_metadata=GenerateContentResponseUsageMetadata(
-                prompt_token_count=20,
-                candidates_token_count=15,
-                total_token_count=35,
-                cached_content_token_count=0,
-            ),
-        )
-        mock_retry.return_value = mock_response
+    # Mock response with thinking content followed by regular text
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(text="Let me think about this...", thought=True),
+                        Part(text="There are 2 O's in Google."),
+                    ]
+                ),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=20,
+            candidates_token_count=15,
+            total_token_count=35,
+            cached_content_token_count=0,
+        ),
+    )
 
-        llm = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=SecretStr(FAKE_API_KEY),
-        )
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.client is not None
 
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
         result = llm.invoke(
             "How many O's are in Google?",
             generation_config={"thinking_config": {"include_thoughts": True}},
         )
 
         # Verify the call was made with merged config
-        mock_retry.assert_called_once()
-        call_args = mock_retry.call_args
-        kwargs = call_args.kwargs
-        assert "config" in kwargs
-        config = kwargs["config"]
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+        # Extract config from kwargs or positional args
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            # Config might be in positional args as well
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None
         assert hasattr(config, "thinking_config")
         assert config.thinking_config.include_thoughts is True
 
@@ -2015,16 +2173,17 @@ def test_signature_round_trip_conversion() -> None:
         ]
     )
 
-    with patch("langchain_google_genai.chat_models._chat_with_retry") as mock_chat:
-        mock_chat.return_value = mock_response
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        output_version="v1",
+        include_thoughts=True,
+    )
+    assert llm.client is not None
 
-        llm = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=SecretStr(FAKE_API_KEY),
-            output_version="v1",
-            include_thoughts=True,
-        )
-
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ):
         # First call - get response with signatures
         result = llm.invoke("Test message")
 
@@ -2061,14 +2220,17 @@ def test_signature_round_trip_conversion() -> None:
                 HumanMessage(content="Follow up"),
             ]
 
-            # This should trigger signature conversion
-            mock_chat.return_value = GenerateContentResponse(
+            # Set up mock for the follow-up response
+            follow_up_response = GenerateContentResponse(
                 candidates=[
                     Candidate(content=Content(parts=[Part(text="Follow up response")]))
                 ]
             )
 
-            follow_up = llm.invoke(conversation)
+            with patch.object(
+                llm.client.models, "generate_content", return_value=follow_up_response
+            ):
+                follow_up = llm.invoke(conversation)
 
             # Verify conversion was called
             assert mock_convert.call_count >= 1

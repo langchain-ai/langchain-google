@@ -7,7 +7,6 @@ import json
 import logging
 import mimetypes
 import re
-import time
 import uuid
 import warnings
 import wave
@@ -22,15 +21,8 @@ from typing import (
 
 import filetype  # type: ignore[import-untyped]
 import proto  # type: ignore[import-untyped]
-from google.api_core.exceptions import (
-    FailedPrecondition,
-    GoogleAPIError,
-    InvalidArgument,
-    ResourceExhausted,
-    ServiceUnavailable,
-)
 from google.genai.client import Client
-from google.genai.errors import ClientError, ServerError
+from google.genai.errors import ClientError
 from google.genai.types import (
     Blob,
     Candidate,
@@ -45,6 +37,7 @@ from google.genai.types import (
     GenerateContentResponse,
     GenerationConfig,
     HttpOptions,
+    HttpRetryOptions,
     Part,
     SafetySetting,
     ThinkingConfig,
@@ -100,13 +93,6 @@ from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic.v1 import BaseModel as BaseModelV1
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 from typing_extensions import Self, is_typeddict
 
 from langchain_google_genai._common import (
@@ -160,6 +146,21 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
+    """Convert ClientError to `ChatGoogleGenerativeAIError` with descriptive message.
+
+    Args:
+        e: The ClientError exception to handle.
+        request: The request dict containing model info.
+
+    Raises:
+        ChatGoogleGenerativeAIError: Always raised with formatted error message.
+    """
+    model_name = request.get("model", "unknown")
+    msg = f"Error calling model '{model_name}' ({e.status}): {e}"
+    raise ChatGoogleGenerativeAIError(msg) from e
+
+
 def _get_default_model_profile(model_name: str) -> ModelProfile:
     default = _MODEL_PROFILES.get(model_name) or {}
     return default.copy()
@@ -198,179 +199,6 @@ def _is_gemini_25_model(model_name: str) -> bool:
         return False
     model_name = model_name.lower().replace("models/", "")
     return "gemini-2.5" in model_name
-
-
-def _create_retry_decorator(
-    max_retries: int = 6,
-    wait_exponential_multiplier: float = 2.0,
-    wait_exponential_min: float = 1.0,
-    wait_exponential_max: float = 60.0,
-) -> Callable[[Any], Any]:
-    """Create and return a preconfigured tenacity retry decorator.
-
-    The decorator is configured to handle specific Google API exceptions.
-
-    Uses an exponential backoff strategy for retries.
-
-    Returns:
-        A retry decorator configured for handling specific Google API exceptions.
-    """
-    return retry(
-        reraise=True,
-        stop=stop_after_attempt(max_retries),
-        wait=wait_exponential(
-            multiplier=wait_exponential_multiplier,
-            min=wait_exponential_min,
-            max=wait_exponential_max,
-        ),
-        retry=(
-            retry_if_exception_type(
-                (
-                    ServerError,
-                    ResourceExhausted,
-                    ServiceUnavailable,
-                    GoogleAPIError,
-                )
-            )
-        ),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-    )
-
-
-def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
-    """Execute a chat generation method with retry logic.
-
-    Wrapper that applies a retry mechanism to a provided `generation_method` function.
-
-    Useful for handling intermittent issues like network errors or temporary service
-    unavailability.
-
-    Args:
-        generation_method: The chat generation method to be executed.
-        **kwargs: Additional keyword arguments to pass to the generation method.
-
-    Returns:
-        Any: The result from the chat generation method.
-    """
-    retry_decorator = _create_retry_decorator(
-        max_retries=kwargs.get("max_retries", 6),
-        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
-        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
-        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
-    )
-
-    allowed_params = kwargs.get(
-        "allowed_params", _allowed_params_prediction_service_gapi
-    )
-
-    @retry_decorator
-    def _chat_with_retry(**kwargs: Any) -> Any:
-        try:
-            return generation_method(**kwargs)
-
-        except ClientError as e:
-            model_name = kwargs.get("model", "unknown")
-            msg = f"Error calling model '{model_name}' ({e.status}): {e}"
-            raise ChatGoogleGenerativeAIError(msg) from e
-
-        except FailedPrecondition as exc:
-            if "location is not supported" in exc.message:
-                msg = (
-                    "Your location is not supported by google-generativeai "
-                    "at the moment. Try to use ChatVertexAI from "
-                    "langchain_google_vertexai."
-                )
-                raise ValueError(msg)
-            raise
-
-        except InvalidArgument as e:
-            msg = f"Invalid argument provided to Gemini: {e}"
-            raise ChatGoogleGenerativeAIError(msg) from e
-
-        except ResourceExhausted as e:
-            # Handle quota-exceeded error with recommended retry delay
-            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
-                "wait_exponential_max", 60.0
-            ):
-                time.sleep(e.retry_after)
-            raise
-        except Exception:
-            raise
-
-    params = (
-        {k: v for k, v in kwargs.items() if k in allowed_params}
-        if (model := kwargs.get("model")) and "gemini" in model
-        else kwargs
-    )
-    return _chat_with_retry(**params)
-
-
-async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
-    """Asynchronously execute a chat generation method with retry logic.
-
-    Wrapper that applies a retry mechanism to a provided `generation_method` function.
-
-    Useful for handling intermittent issues like network errors or temporary service
-    unavailability.
-
-    Args:
-        generation_method: The chat generation method to be executed.
-        **kwargs: Additional keyword arguments to pass to the generation method.
-
-    Returns:
-        Any: The result from the chat generation method.
-    """
-    retry_decorator = _create_retry_decorator(
-        max_retries=kwargs.get("max_retries", 6),
-        wait_exponential_multiplier=kwargs.get("wait_exponential_multiplier", 2.0),
-        wait_exponential_min=kwargs.get("wait_exponential_min", 1.0),
-        wait_exponential_max=kwargs.get("wait_exponential_max", 60.0),
-    )
-
-    allowed_params = kwargs.get(
-        "allowed_params", _allowed_params_prediction_service_gapi
-    )
-
-    @retry_decorator
-    async def _achat_with_retry(**kwargs: Any) -> Any:
-        try:
-            return await generation_method(**kwargs)
-
-        except ClientError as e:
-            model_name = kwargs.get("model", "unknown")
-            msg = f"Error calling model '{model_name}' ({e.status}): {e}"
-            raise ChatGoogleGenerativeAIError(msg) from e
-
-        except FailedPrecondition as exc:
-            if "location is not supported" in exc.message:
-                msg = (
-                    "Your location is not supported by google-generativeai "
-                    "at the moment. Try to use ChatVertexAI from "
-                    "langchain_google_vertexai."
-                )
-                raise ValueError(msg)
-            raise
-
-        except InvalidArgument as e:
-            msg = f"Invalid argument provided to Gemini: {e}"
-            raise ChatGoogleGenerativeAIError(msg) from e
-
-        except ResourceExhausted as e:
-            # Handle quota-exceeded error with recommended retry delay
-            if hasattr(e, "retry_after") and getattr(e, "retry_after", 0) < kwargs.get(
-                "wait_exponential_max", 60.0
-            ):
-                time.sleep(e.retry_after)
-            raise
-        except Exception:
-            raise
-
-    params = (
-        {k: v for k, v in kwargs.items() if k in allowed_params}
-        if (model := kwargs.get("model")) and "gemini" in model
-        else kwargs
-    )
-    return await _achat_with_retry(**params)
 
 
 def _convert_to_parts(
@@ -2544,6 +2372,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # Process safety settings
         formatted_safety_settings = self._format_safety_settings(safety_settings)
 
+        timeout = kwargs.pop("timeout", None)
+        if timeout is not None:
+            timeout = int(timeout * 1000)
+        elif self.timeout is not None:
+            timeout = int(self.timeout * 1000)
+
+        max_retries = kwargs.pop("max_retries", None)
+        if max_retries is None:
+            max_retries = self.max_retries
+
         # Get generation parameters
         # (consumes thinking kwargs into params.thinking_config)
         params: GenerationConfig = self._prepare_params(
@@ -2572,6 +2410,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             cached_content,
             system_instruction,
             stop,
+            timeout=timeout,
+            max_retries=max_retries,
             **remaining_kwargs,
         )
 
@@ -2671,6 +2511,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         cached_content: str | None,
         system_instruction: Content | None,
         stop: list[str] | None,
+        timeout: int | None = None,
+        max_retries: int | None = None,
         **kwargs: Any,
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
@@ -2689,6 +2531,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 thinking_level=params.thinking_config.thinking_level,
             )
 
+        retry_options = None
+        if max_retries is not None:
+            retry_options = HttpRetryOptions(attempts=max_retries)
+
+        http_options = None
+        if timeout is not None or retry_options is not None:
+            http_options = HttpOptions(
+                timeout=timeout,
+                retry_options=retry_options,
+            )
+
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
@@ -2698,6 +2551,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             cached_content=cached_content,
             system_instruction=system_instruction,
             stop_sequences=stop,
+            http_options=http_options,
             **kwargs,
         )
 
@@ -2731,17 +2585,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        if self.timeout is not None and "timeout" not in kwargs:
-            kwargs["timeout"] = self.timeout
-        if "max_retries" not in kwargs:
-            kwargs["max_retries"] = self.max_retries
-        response: GenerateContentResponse = _chat_with_retry(
-            **request,
-            **kwargs,
-            generation_method=self.client.models.generate_content,
-            allowed_params=_allowed_params_prediction_service_genai,
-            metadata=self.default_metadata,
-        )
+        try:
+            response: GenerateContentResponse = self.client.models.generate_content(
+                **request,
+            )
+        except ClientError as e:
+            _handle_client_error(e, request)
+
         return _response_to_result(response)
 
     async def _agenerate(
@@ -2775,17 +2625,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        if self.timeout is not None and "timeout" not in kwargs:
-            kwargs["timeout"] = self.timeout
-        if "max_retries" not in kwargs:
-            kwargs["max_retries"] = self.max_retries
-        response: GenerateContentResponse = await _achat_with_retry(
-            **request,
-            **kwargs,
-            generation_method=self.client.aio.models.generate_content,
-            allowed_params=_allowed_params_prediction_service_genai,
-            metadata=self.default_metadata,
-        )
+        try:
+            response: GenerateContentResponse = (
+                await self.client.aio.models.generate_content(
+                    **request,
+                )
+            )
+        except ClientError as e:
+            _handle_client_error(e, request)
+
         return _response_to_result(response)
 
     def _stream(
@@ -2818,18 +2666,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        # TODO: double check that this can be removed? And add back to astream if need
-        # if self.timeout is not None and "timeout" not in kwargs:
-        #     kwargs["timeout"] = self.timeout
-        # if "max_retries" not in kwargs:
-        #     kwargs["max_retries"] = self.max_retries
-        response: Iterator[GenerateContentResponse] = _chat_with_retry(
-            **request,
-            generation_method=self.client.models.generate_content_stream,
-            allowed_params=_allowed_params_prediction_service_genai,
-            **kwargs,
-            metadata=self.default_metadata,
-        )
+        try:
+            response: Iterator[GenerateContentResponse] = (
+                self.client.models.generate_content_stream(
+                    **request,
+                )
+            )
+        except ClientError as e:
+            _handle_client_error(e, request)
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
@@ -2895,14 +2739,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        async for chunk in await _achat_with_retry(
-            **request,
-            generation_method=self.client.aio.models.generate_content_stream,
-            allowed_params=_allowed_params_prediction_service_genai,
-            **kwargs,
-            metadata=self.default_metadata,
-        ):
-            chunk = cast("GenerateContentResponse", chunk)
+        try:
+            stream = await self.client.aio.models.generate_content_stream(
+                **request,
+            )
+        except ClientError as e:
+            _handle_client_error(e, request)
+
+        async for chunk in stream:
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
             )
