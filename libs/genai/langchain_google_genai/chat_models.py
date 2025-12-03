@@ -2203,7 +2203,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _supports_thinking(self) -> bool:
         """Check if the current model supports thinking capabilities."""
-        return self.profile.get("reasoning_output", False)
+        return self.profile.get("reasoning_output", False) if self.profile else False
 
     def _prepare_params(
         self,
@@ -2957,7 +2957,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
         full list. Gemini calls this "function calling".
         """
-        return self.profile.get("tool_choice", True)
+        return self.profile.get("tool_choice", True) if self.profile else True
 
 
 def _get_tool_name(
