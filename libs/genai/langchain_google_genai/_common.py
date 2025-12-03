@@ -1,10 +1,10 @@
 import os
 from importlib import metadata
-from typing import Any
+from typing import Any, Self
 
 from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import secret_from_env
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from langchain_google_genai._enums import (
     HarmBlockThreshold,
@@ -29,7 +29,73 @@ class GoogleGenerativeAIError(Exception):
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
-    """Base class for Google Generative AI LLMs."""
+    """Base class for Google Generative AI LLMs.
+
+    ## Backend Selection
+
+    This class supports both the Gemini Developer API and Google Cloud's Vertex AI
+    Platform as backends. The backend used is selected **automatically** based on your
+    authentication method:
+
+    | Condition | Backend | Authentication |
+    |-----------|---------|----------------|
+    | API key provided | **Gemini Developer API** | `google_api_key`/`api_key` param or `GOOGLE_API_KEY`/`GEMINI_API_KEY` env var |
+    | No API key | **Vertex AI** | `credentials` param or [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) |
+
+    !!! tip "Quick Start"
+
+        **Gemini Developer API** (simplest):
+
+        ```python
+        # Either set GOOGLE_API_KEY env var or pass api_key directly
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", api_key="MY_API_KEY")
+        ```
+
+        **Vertex AI** (enterprise):
+
+        ```python
+        # Ensure ADC is configured: gcloud auth application-default login
+        # Either set GOOGLE_CLOUD_PROJECT env var or pass project directly
+        # Location defaults to us-central1 or can be set via GOOGLE_CLOUD_LOCATION
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            project="my-project",
+            # location="us-central1",
+        )
+        ```
+
+    ## Environment Variables
+
+    | Variable | Purpose | Backend |
+    |----------|---------|---------|
+    | `GOOGLE_API_KEY` | API key (primary) | Gemini Developer API |
+    | `GEMINI_API_KEY` | API key (fallback) | Gemini Developer API |
+    | `GOOGLE_CLOUD_PROJECT` | GCP project ID | Vertex AI |
+    | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `us-central1`) | Vertex AI |
+    | `HTTPS_PROXY` | HTTP/HTTPS proxy URL | Both |
+    | `SSL_CERT_FILE` | Custom SSL certificate file | Both |
+
+    `GOOGLE_API_KEY` is checked first for backwards compatibility. (`GEMINI_API_KEY` was
+    introduced later to better reflect the API's branding.)
+
+    ## Proxy Configuration
+
+    Set these before initializing:
+
+    ```bash
+    export HTTPS_PROXY='http://username:password@proxy_uri:port'
+    export SSL_CERT_FILE='path/to/cert.pem'  # Optional: custom SSL certificate
+    ```
+
+    For SOCKS5 proxies or advanced proxy configuration, use the `client_args` parameter:
+
+    ```python
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        client_args={"proxy": "socks5://user:pass@host:port"},
+    )
+    ```
+    """  # noqa: E501
 
     # --- Client params ---
 
@@ -39,7 +105,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
             ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
         ),
     )
-    """Google AI API key for the Gemini Developer API.
+    """API key for the Gemini Developer API.
 
     If not specified, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY` with
     precedence given to `GOOGLE_API_KEY`.
@@ -57,19 +123,18 @@ class _BaseGoogleGenerativeAI(BaseModel):
     credentials: Any = None
     """Custom credentials for Vertex AI authentication.
 
+    When provided, forces Vertex AI backend (regardless of API key presence in
+    `google_api_key`/`api_key`).
+
     Accepts a `google.auth.credentials.Credentials` object.
 
-    By providing custom credentials, we skip extracting API keys and go directly to
-    using Vertex AI.
+    If omitted and no API key is found, the SDK uses
+    [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials).
 
-    If neither `credentials` nor an API key is provided (as `api_key`/`google_api_key`),
-    the SDK will attempt to use [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials).
-
-    !!! example "Using service account credentials"
+    !!! example "Service account credentials"
 
         ```python
         from google.oauth2 import service_account
-        from langchain_google_genai import ChatGoogleGenerativeAI
 
         credentials = service_account.Credentials.from_service_account_file(
             "path/to/service-account.json",
@@ -79,13 +144,24 @@ class _BaseGoogleGenerativeAI(BaseModel):
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             credentials=credentials,
-            project="my-project-id",  # Required for Vertex AI
-            location="us-central1",   # Optional, defaults to us-central1
+            project="my-project-id",
         )
         ```
+    """
 
-    See the [Google Auth documentation](https://googleapis.dev/python/google-auth/latest/user-guide.html)
-    for more information on obtaining credentials.
+    project: str | None = Field(default=None)
+    """Google Cloud project ID (**Vertex AI only**).
+
+    Required when using Vertex AI.
+
+    Falls back to `GOOGLE_CLOUD_PROJECT` env var if not provided.
+    """
+
+    location: str | None = Field(default=None)
+    """Google Cloud region (**Vertex AI only**).
+
+    If not provided, falls back to the `GOOGLE_CLOUD_LOCATION` env var, then
+    `'us-central1'`.
     """
 
     base_url: str | dict | None = Field(default=None, alias="client_options")
@@ -119,6 +195,21 @@ class _BaseGoogleGenerativeAI(BaseModel):
             additional_headers={
                 "X-Custom-Header": "value",
             },
+        )
+        ```
+    """
+
+    client_args: dict[str, Any] | None = Field(default=None)
+    """Additional arguments to pass to the underlying HTTP client.
+
+    Applied to both sync and async clients.
+
+    !!! example "SOCKS5 proxy"
+
+        ```python
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
     """
@@ -263,6 +354,18 @@ class _BaseGoogleGenerativeAI(BaseModel):
             }
             ```
     """  # noqa: E501
+
+    @model_validator(mode="after")
+    def _resolve_project_from_credentials(self) -> Self:
+        """Extract project from credentials if not explicitly set.
+
+        For backward compatibility with `langchain-google-vertexai`, which extracts
+        `project_id` from credentials when not explicitly provided.
+        """
+        if self.project is None:
+            if self.credentials and hasattr(self.credentials, "project_id"):
+                self.project = self.credentials.project_id
+        return self
 
     @property
     def lc_secrets(self) -> dict[str, str]:

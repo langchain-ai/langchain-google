@@ -2235,18 +2235,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 raise ValueError(msg)
 
         http_options = HttpOptions(
-            base_url=cast("str", base_url), headers=additional_headers
+            base_url=cast("str", base_url),
+            headers=additional_headers,
+            client_args=self.client_args,
+            async_client_args=self.client_args,
         )
 
         if google_api_key:
             self.client = Client(api_key=google_api_key, http_options=http_options)
         else:
-            project_id = getattr(self.credentials, "project_id", None)
-            location = getattr(self.credentials, "location", "us-central1")
             self.client = Client(
                 vertexai=True,
-                project=project_id,
-                location=location,
+                project=self.project,
+                location=self.location,
+                credentials=self.credentials,
                 http_options=http_options,
             )
         return self
