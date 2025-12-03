@@ -123,21 +123,28 @@ async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
     ]
     config: RunnableConfig | None = {"tags": ["foo"]} if with_tags else None
 
-    if is_async:
-        result = await llm.abatch(cast("list", messages), config=config)
-    else:
-        result = llm.batch(cast("list", messages), config=config)
-
-    for token in result:
-        if isinstance(token.content, list):
-            text_content = "".join(
-                block.get("text", "")
-                for block in token.content
-                if isinstance(block, dict) and block.get("type") == "text"
-            )
-            assert len(text_content) > 0
+    try:
+        if is_async:
+            result = await llm.abatch(cast("list", messages), config=config)
         else:
-            assert isinstance(token.content, str)
+            result = llm.batch(cast("list", messages), config=config)
+
+        for token in result:
+            if isinstance(token.content, list):
+                text_content = "".join(
+                    block.get("text", "")
+                    for block in token.content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                )
+                assert len(text_content) > 0
+            else:
+                assert isinstance(token.content, str)
+    finally:
+        # Explicitly close the client to avoid resource warnings
+        if llm.client:
+            llm.client.close()
+            if llm.client.aio:
+                await llm.client.aio.aclose()
 
 
 @pytest.mark.parametrize("is_async", [False, True])

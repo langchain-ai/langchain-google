@@ -960,11 +960,17 @@ def test_supports_thinking() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_normal._supports_thinking()
-    llm_15 = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash-latest",
+    llm_pro = ChatGoogleGenerativeAI(
+        model="gemini-2.5-pro",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
-    assert llm_15._supports_thinking()
+    assert llm_pro._supports_thinking()
+    # Test that gemini-1.5 models don't support thinking
+    llm_15 = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert not llm_15._supports_thinking()
 
 
 def test_temperature_range_pydantic_validation() -> None:

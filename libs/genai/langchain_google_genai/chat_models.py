@@ -2005,6 +2005,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)
 
+        # Override temperature to 1.0 for Gemini 3.0+ models if not explicitly set.
+        # This prevents infinite loops and degraded performance that can occur
+        # with temperature < 1.0 on these models.
         if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
             self.model
         ):

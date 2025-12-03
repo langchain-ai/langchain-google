@@ -240,10 +240,12 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     Must be within `[0.0, 2.0]`.
 
-    !!! warning "Gemini 3.0+ models"
+    !!! note "Automatic override for Gemini 3.0+ models"
 
-        Setting `temperature < 1.0` for Gemini 3.0+ models can cause infinite loops,
-        degraded reasoning performance, and failure on complex tasks.
+        If `temperature` is not explicitly set and the model is Gemini 3.0 or later,
+        it will be automatically set to `1.0` instead of the default `0.7` per the
+        Google GenAI API best practices, as it can cause infinite loops, degraded
+        reasoning performance, and failure on complex tasks.
 
     """
 
