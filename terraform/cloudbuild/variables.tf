@@ -20,12 +20,6 @@ variable "cloudbuildv2_repository_id" {
   description = ""
 }
 
-variable "poetry_version" {
-  type        = string
-  default     = "1.7.1"
-  description = ""
-}
-
 variable "python_version" {
   type        = string
   default     = "3.11"
