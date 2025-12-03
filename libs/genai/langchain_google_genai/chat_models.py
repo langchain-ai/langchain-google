@@ -2525,6 +2525,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         system_instruction, history = _parse_chat_history(
             filtered_messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
+            model=self.model,
         )
 
         # Process tool configuration

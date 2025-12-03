@@ -6,7 +6,6 @@ from typing import Literal
 import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.tools import BaseTool
 from langchain_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -14,7 +13,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
 _FLASH_MODEL = "gemini-2.5-flash"
-_PRO_MODEL = "gemini-2.5-pro"
+_PRO_MODEL = "gemini-3-pro-preview"
 
 
 def _has_multimodal_secrets() -> bool:
@@ -57,6 +56,10 @@ class TestGeminiFlashStandard(ChatModelIntegrationTests):
     def supports_audio_inputs(self) -> bool:
         return True
 
+    @property
+    def supports_json_mode(self) -> bool:
+        return True
+
     @pytest.mark.xfail(
         not _has_multimodal_secrets(),
         reason=(
@@ -96,17 +99,33 @@ class TestGeminiProStandard(ChatModelIntegrationTests):
             "rate_limiter": rate_limiter,
         }
 
-    @pytest.mark.xfail(reason="Not yet supported")
-    def test_tool_message_histories_list_content(
-        self, model: BaseChatModel, my_adder_tool: BaseTool
-    ) -> None:
-        super().test_tool_message_histories_list_content(model, my_adder_tool)
+    @property
+    def supports_image_inputs(self) -> bool:
+        return True
 
-    @pytest.mark.xfail(
-        reason="Investigate: prompt_token_count inconsistent in final chunk."
-    )
-    def test_usage_metadata_streaming(self, model: BaseChatModel) -> None:
-        super().test_usage_metadata_streaming(model)
+    @property
+    def supports_image_urls(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_audio_inputs(self) -> bool:
+        return True
+
+    @property
+    def supports_json_mode(self) -> bool:
+        return True
+
+    @property
+    def supports_image_tool_message(self) -> bool:
+        return True
+
+    @property
+    def supports_pdf_tool_message(self) -> bool:
+        return True
 
     @property
     def supported_usage_metadata_details(
