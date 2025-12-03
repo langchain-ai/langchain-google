@@ -268,10 +268,9 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             return generation_method(**kwargs)
 
         except ClientError as e:
-            if e.status == "INVALID_ARGUMENT":
-                msg = f"Invalid argument provided to Gemini: {e}"
-
-                raise ChatGoogleGenerativeAIError(msg) from e
+            model_name = kwargs.get("model", "unknown")
+            msg = f"Error calling model '{model_name}' ({e.status}): {e}"
+            raise ChatGoogleGenerativeAIError(msg) from e
 
         except FailedPrecondition as exc:
             if "location is not supported" in exc.message:
@@ -281,6 +280,7 @@ def _chat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                     "langchain_google_vertexai."
                 )
                 raise ValueError(msg)
+            raise
 
         except InvalidArgument as e:
             msg = f"Invalid argument provided to Gemini: {e}"
@@ -336,10 +336,9 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
             return await generation_method(**kwargs)
 
         except ClientError as e:
-            if e.status == "INVALID_ARGUMENT":
-                msg = f"Invalid argument provided to Gemini: {e}"
-
-                raise ChatGoogleGenerativeAIError(msg) from e
+            model_name = kwargs.get("model", "unknown")
+            msg = f"Error calling model '{model_name}' ({e.status}): {e}"
+            raise ChatGoogleGenerativeAIError(msg) from e
 
         except FailedPrecondition as exc:
             if "location is not supported" in exc.message:
@@ -349,6 +348,7 @@ async def _achat_with_retry(generation_method: Callable, **kwargs: Any) -> Any:
                     "langchain_google_vertexai."
                 )
                 raise ValueError(msg)
+            raise
 
         except InvalidArgument as e:
             msg = f"Invalid argument provided to Gemini: {e}"

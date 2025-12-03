@@ -9,6 +9,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 from google.api_core.exceptions import ResourceExhausted
+from google.genai.errors import ClientError
 from google.genai.types import (
     Blob,
     Candidate,
@@ -3245,3 +3246,38 @@ def test_kwargs_override_thinking_level() -> None:
     config = llm._prepare_params(stop=None, thinking_level="high")
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_client_error_raises_descriptive_error() -> None:
+    """Test that ClientError from the API is properly converted to a descriptive error."""
+    invalid_model_name = "gemini-invalid-model-name"
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    # Simulate a NOT_FOUND error from the API (what happens with invalid model names)
+    mock_generate_content.side_effect = ClientError(
+        code=404,
+        response_json={
+            "error": {
+                "message": f"models/{invalid_model_name} is not found",
+                "status": "NOT_FOUND",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=invalid_model_name,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ChatGoogleGenerativeAIError,
+            match=rf"Error calling model '{invalid_model_name}' \(NOT_FOUND\)",
+        ):
+            chat.invoke("test")
