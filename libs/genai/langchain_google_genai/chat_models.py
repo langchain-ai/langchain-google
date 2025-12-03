@@ -175,9 +175,7 @@ def _is_gemini_3_or_later(model_name: str) -> bool:
     if not model_name:
         return False
     model_name = model_name.lower().replace("models/", "")
-    if "gemini-3" in model_name:
-        return True
-    return False
+    return "gemini-3" in model_name
 
 
 def _is_gemini_25_model(model_name: str) -> bool:
