@@ -2200,15 +2200,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _supports_thinking(self) -> bool:
         """Check if the current model supports thinking capabilities."""
-        # TODO: replace with `capabilities` property when available
-
-        # Models that don't support thinking based on known patterns
-        non_thinking_models = [
-            "image-generation",  # Image generation models don't support thinking
-            "tts",  # Text-to-speech models don't support thinking
-        ]
-        model_name = self.model.lower()
-        return not any(pattern in model_name for pattern in non_thinking_models)
+        return self.profile.get("reasoning_output", False)
 
     def _prepare_params(
         self,
@@ -2962,11 +2954,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See the [Gemini models docs](https://ai.google.dev/gemini-api/docs/models) for a
         full list. Gemini calls this "function calling".
         """
-        return (
-            "gemini-1.5-pro" in self.model
-            or "gemini-1.5-flash" in self.model
-            or "gemini-2" in self.model
-        )
+        return self.profile.get("tool_choice", True)
 
 
 def _get_tool_name(
