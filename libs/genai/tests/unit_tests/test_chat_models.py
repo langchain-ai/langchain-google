@@ -3249,7 +3249,7 @@ def test_kwargs_override_thinking_level() -> None:
 
 
 def test_client_error_raises_descriptive_error() -> None:
-    """Test that ClientError from the API is properly converted to a descriptive error."""
+    """Test `ClientError` from the API is properly converted to a descriptive error."""
     invalid_model_name = "gemini-invalid-model-name"
     mock_client = Mock()
     mock_models = Mock()
