@@ -174,7 +174,7 @@ def _is_gemini_3_or_later(model_name: str) -> bool:
     """Checks if the model is a pre-Gemini 3 model."""
     if not model_name:
         return False
-    model_name = model_name.lower()
+    model_name = model_name.lower().replace("models/", "")
     if "gemini-3" in model_name:
         return True
     return False
