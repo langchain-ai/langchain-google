@@ -51,8 +51,15 @@ def test_google_generativeai_generate(model_name: str) -> None:
 )
 async def test_google_generativeai_agenerate(model_name: str) -> None:
     llm = GoogleGenerativeAI(temperature=0, model=model_name)
-    output = await llm.agenerate(["Please say foo:"])
-    assert isinstance(output, LLMResult)
+    try:
+        output = await llm.agenerate(["Please say foo:"])
+        assert isinstance(output, LLMResult)
+    finally:
+        # Explicitly close the client to avoid resource warnings
+        if llm.client and hasattr(llm.client, "client") and llm.client.client:
+            llm.client.client.close()
+            if llm.client.client.aio:
+                await llm.client.client.aio.aclose()
 
 
 @pytest.mark.parametrize(
