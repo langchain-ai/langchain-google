@@ -32,7 +32,7 @@ def _get_backend_configs() -> list[tuple[str, dict]]:
     """
     vertexai_setting = os.environ.get("TEST_VERTEXAI", "").lower()
 
-    configs = []
+    configs: list = []
 
     # Add Google AI config
     if vertexai_setting != "only":
