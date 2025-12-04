@@ -622,6 +622,44 @@ def _parse_chat_history(
             role = "model"
             if message.tool_calls:
                 ai_message_parts = []
+
+                # First, include thinking blocks from content if present.
+                # When include_thoughts=True, thinking blocks need to be preserved
+                # when passing messages back to the API.
+                if isinstance(message.content, list):
+                    for content_block in message.content:
+                        if isinstance(content_block, dict):
+                            block_type = content_block.get("type")
+                            if block_type == "thinking":
+                                # Convert v0 thinking block to Part
+                                thought_sig = None
+                                if "signature" in content_block:
+                                    sig = content_block["signature"]
+                                    if sig and isinstance(sig, str):
+                                        thought_sig = base64.b64decode(sig)
+                                ai_message_parts.append(
+                                    Part(
+                                        text=content_block["thinking"],
+                                        thought=True,
+                                        thought_signature=thought_sig,
+                                    )
+                                )
+                            elif block_type == "reasoning":
+                                # Convert v1 reasoning block to Part
+                                extras = content_block.get("extras", {}) or {}
+                                sig = extras.get("signature")
+                                thought_sig = None
+                                if sig and isinstance(sig, str):
+                                    thought_sig = base64.b64decode(sig)
+                                ai_message_parts.append(
+                                    Part(
+                                        text=content_block["reasoning"],
+                                        thought=True,
+                                        thought_signature=thought_sig,
+                                    )
+                                )
+
+                # Then, add function call parts
                 function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
                     _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
                 )
@@ -645,9 +683,15 @@ def _parse_chat_history(
                     tool_messages=tool_messages, ai_message=message, model=model
                 )
                 formatted_messages.append(Content(role=role, parts=ai_message_parts))
-                formatted_messages.append(
-                    Content(role="user", parts=tool_messages_parts)
-                )
+                # Only append tool response message if there are actual tool responses.
+                # The Gemini API requires every Content message to have at least one
+                # Part. If there are no ToolMessages in the conversation history for
+                # this AI message's tool_calls, tool_messages_parts will be empty, and
+                # we must not create an empty Content message.
+                if tool_messages_parts:
+                    formatted_messages.append(
+                        Content(role="user", parts=tool_messages_parts)
+                    )
                 continue
             if raw_function_call := message.additional_kwargs.get("function_call"):
                 function_call = FunctionCall(
@@ -1582,6 +1626,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-generation)
         for more info.
 
+        !!! note
+
+            Audio generation models (TTS) are currently in preview on Vertex AI
+            and may require allowlist access. If you receive an `INVALID_ARGUMENT`
+            error when using TTS models with `vertexai=True`, your project may need to
+            be allowlisted. See this post on the [Google AI forum](https://discuss.ai.google.dev/t/request-allowlist-access-for-audio-output-in-gemini-2-5-pro-flash-tts-vertex-ai/108067)
+            for more details.
+
     File upload:
         You can also upload files to Google's servers and reference them by URI.
 
@@ -2112,6 +2164,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # variables when using Vertex AI, not via the api_key parameter.
             # If an API key is provided programmatically, we set it in the environment
             # temporarily for the Client initialization.
+
+            # Normalize model name for Vertex AI - strip 'models/' prefix
+            # Vertex AI expects model names without the prefix
+            # (e.g., "gemini-2.5-flash") while Google AI accepts both formats
+            if self.model.startswith("models/"):
+                object.__setattr__(self, "model", self.model.replace("models/", "", 1))
 
             api_key_env_set = False
 

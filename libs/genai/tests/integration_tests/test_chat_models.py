@@ -271,6 +271,12 @@ def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
 
 def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
     """Test generating audio."""
+    # Skip on Vertex AI - having some issues possibly upstream
+    # TODO: look later
+    # https://discuss.ai.google.dev/t/request-allowlist-access-for-audio-output-in-gemini-2-5-pro-flash-tts-vertex-ai/108067
+    if backend_config.get("vertexai"):
+        pytest.skip("Gemini TTS on Vertex AI requires allowlist access")
+
     llm = ChatGoogleGenerativeAI(
         model=_AUDIO_OUTPUT_MODEL,
         response_modalities=[Modality.AUDIO],

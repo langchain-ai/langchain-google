@@ -4044,3 +4044,40 @@ def test_backend_detection_priority_explicit_over_env() -> None:
     finally:
         os.environ.clear()
         os.environ.update(original_env)
+
+
+def test_model_name_normalization_for_vertexai() -> None:
+    """Test that model names with 'models/' prefix are normalized for Vertex AI."""
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        # Test with models/ prefix for Vertex AI - should be stripped
+        llm_vertex = ChatGoogleGenerativeAI(
+            model="models/gemini-2.5-flash",
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm_vertex.model == "gemini-2.5-flash"
+        assert llm_vertex._use_vertexai is True  # type: ignore[attr-defined]
+
+        # Test with models/ prefix for Google AI - should remain unchanged
+        llm_google_ai = ChatGoogleGenerativeAI(
+            model="models/gemini-2.5-flash",
+            api_key=FAKE_API_KEY,
+            vertexai=False,
+        )
+        assert llm_google_ai.model == "models/gemini-2.5-flash"
+        assert llm_google_ai._use_vertexai is False  # type: ignore[attr-defined]
+
+        # Test without models/ prefix for Vertex AI - should remain unchanged
+        llm_vertex_no_prefix = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm_vertex_no_prefix.model == "gemini-2.5-flash"
+        assert llm_vertex_no_prefix._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
