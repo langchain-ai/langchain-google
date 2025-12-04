@@ -2320,15 +2320,18 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
     model_content = formatted_messages[0]
     assert model_content.role == "model"
     assert model_content.parts is not None
-    assert len(model_content.parts) == 1
-    part = model_content.parts[0]
+    assert len(model_content.parts) == 2
 
-    # Check if function_call is present
-    assert part.function_call is not None
-    assert part.function_call.name == "my_tool"
+    # First part should be the thinking text (thinking blocks come first)
+    thinking_part = model_content.parts[0]
+    assert thinking_part.thought is True
+    assert thinking_part.text == "I should use the tool."
 
-    # Check if thought_signature is correctly attached
-    assert part.thought_signature == sig_bytes
+    # Second part should be the function call with signature
+    function_part = model_content.parts[1]
+    assert function_part.function_call is not None
+    assert function_part.function_call.name == "my_tool"
+    assert function_part.thought_signature == sig_bytes
 
 
 def test_system_message_only_raises_error() -> None:
