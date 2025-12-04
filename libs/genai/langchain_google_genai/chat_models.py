@@ -119,10 +119,6 @@ from langchain_google_genai._image_utils import (
 )
 from langchain_google_genai.data._profiles import _PROFILES
 
-# Migration notes:
-# - Dropping `async_client` property; need to reconcile for backward compat
-#   - Consequently, no more `async_client_running`
-
 logger = logging.getLogger(__name__)
 
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
@@ -135,10 +131,10 @@ _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
-    """Convert ClientError to `ChatGoogleGenerativeAIError` with descriptive message.
+    """Convert `ClientError` to `ChatGoogleGenerativeAIError` with descriptive message.
 
     Args:
-        e: The ClientError exception to handle.
+        e: The `ClientError` exception to handle.
         request: The request dict containing model info.
 
     Raises:
@@ -163,11 +159,10 @@ def _base64_to_bytes(input_str: str) -> bytes:
 
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
-    """Custom exception class for errors associated with the `Google GenAI` API.
+    """Wrapper exception class for errors associated with the `Google GenAI` API.
 
-    This exception is raised when there are specific issues related to the Google GenAI
-    API usage in the `ChatGoogleGenerativeAI` class, such as unsupported message types
-    or roles.
+    Raised when there are specific issues related to the Google GenAI API usage in the
+    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
     """
 
 
@@ -400,9 +395,6 @@ def _convert_to_parts(
                 elif part["type"] == "server_tool_result":
                     output = part.get("output", "")
                     status = part.get("status", "success")
-                    # Map status to outcome:
-                    # success -> OUTCOME_OK,
-                    # error -> OUTCOME_FAILED
                     outcome = (
                         CodeExecutionResultOutcome.OUTCOME_OK
                         if status == "success"
@@ -554,10 +546,9 @@ def _parse_chat_history(
 
     Args:
         input_messages: Sequence of `BaseMessage` objects representing the chat history.
-        convert_system_message_to_human: Whether to convert the first system message
-            into a `HumanMessage`.
+        convert_system_message_to_human: Deprecated, use system instructions instead.
 
-            Deprecated, use system instructions instead.
+            Whether to convert the first system message into a `HumanMessage`.
         model: The model name, used for version-specific logic.
 
     Returns:
@@ -631,7 +622,7 @@ def _parse_chat_history(
                         if isinstance(content_block, dict):
                             block_type = content_block.get("type")
                             if block_type == "thinking":
-                                # Convert v0 thinking block to Part
+                                # v0 output_format thinking block
                                 thought_sig = None
                                 if "signature" in content_block:
                                     sig = content_block["signature"]
@@ -645,7 +636,8 @@ def _parse_chat_history(
                                     )
                                 )
                             elif block_type == "reasoning":
-                                # Convert v1 reasoning block to Part
+                                # v1 output_format reasoning block
+                                # (Stored in extras, and different type key)
                                 extras = content_block.get("extras", {}) or {}
                                 sig = extras.get("signature")
                                 thought_sig = None
@@ -2081,23 +2073,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def build_extra(cls, values: dict[str, Any]) -> Any:
         """Build extra kwargs from additional params that were passed in.
 
-        In other words, handle additional params that aren't explicitly defined as model
+        (In other words, handle additional params that aren't explicitly defined as model
         fields. Used to pass extra config to underlying APIs without defining them all
-        here.
+        here.)
         """
         all_required_field_names = get_pydantic_field_names(cls)
         return _build_model_kwargs(values, all_required_field_names)
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        """Validates params and builds client."""
+        """Validates params and builds client.
+
+        We override `temperature` to `1.0` for Gemini 3+ models if not explicitly set.
+        This is to prevent infinite loops and degraded performance that can occur with
+        `temperature < 1.0` on these models.
+        """
         if self.temperature is not None and not 0 <= self.temperature <= 2.0:
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)
 
-        # Override temperature to 1.0 for Gemini 3.0+ models if not explicitly set.
-        # This prevents infinite loops and degraded performance that can occur
-        # with temperature < 1.0 on these models.
         if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
             self.model
         ):
@@ -2257,6 +2251,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             pass
 
     @property
+    def async_client(self) -> Any:
+        """Async client for Google GenAI operations..
+
+        Returns:
+            The async client interface that exposes async versions of all client
+                methods.
+
+        Raises:
+            ValueError: If the client has not been initialized.
+        """
+        if self.client is None:
+            msg = "Client not initialized. Initialize the model first."
+            raise ValueError(msg)
+        return self.client.aio
+
+    @property
     def _identifying_params(self) -> dict[str, Any]:
         """Get the identifying parameters."""
         return {
@@ -2344,8 +2354,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         # Handle response-specific kwargs (MIME type and structured output)
         gen_config = self._add_response_parameters(gen_config, **kwargs)
-
-        # TODO: check that we're not dropping any unintended keys (e.g. speech_config)
 
         return GenerationConfig.model_validate(gen_config)
 
@@ -2728,6 +2736,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -2809,6 +2818,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -2841,7 +2851,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
 
-            # populate index if missing
+            # Populate index if missing
             if isinstance(message.content, list):
                 for block in message.content:
                     if isinstance(block, dict) and "type" in block:
@@ -2879,6 +2889,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
         request = self._prepare_request(
             messages,
             stop=stop,

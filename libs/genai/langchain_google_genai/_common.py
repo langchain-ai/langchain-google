@@ -253,7 +253,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         Typed to accept `dict` to support backwards compatibility for the (now removed)
         `client_options` param.
 
-        If a `dict` is passed in, it will only extract the `'api_endpoint'` key.
+        If a `dict` is passed in, it will **only** extract the `'api_endpoint'` key.
     """
 
     additional_headers: dict[str, str] | None = Field(

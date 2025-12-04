@@ -446,6 +446,30 @@ def test_base_url_passed_to_client() -> None:
         assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
 
 
+def test_async_client_property() -> None:
+    """Test that async_client property exposes `client.aio`."""
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    # Verify async_client returns client.aio
+    assert chat.async_client is chat.client.aio
+    # Verify async_client has the expected async methods
+    assert hasattr(chat.async_client, "models")
+
+
+def test_async_client_raises_when_client_not_initialized() -> None:
+    """Test that async_client raises `ValueError` if client is `None`."""
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    # Force client to None to test error handling
+    chat.client = None
+    with pytest.raises(ValueError, match="Client not initialized"):
+        _ = chat.async_client
+
+
 def test_api_endpoint_via_client_options() -> None:
     """Test that `api_endpoint` via `client_options` is used in API calls."""
     mock_generate_content = Mock()
@@ -524,7 +548,7 @@ async def test_async_api_endpoint_via_client_options() -> None:
 
 
 def test_default_metadata_field_alias() -> None:
-    """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
+    """Test `default_metadata` and `default_metadata_input` fields work correctly."""
     # Test with default_metadata_input field name (alias) - should accept None without
     # error
     # This is the main issue: LangSmith Playground passes None to default_metadata_input
@@ -879,7 +903,7 @@ def test_parse_response_candidate_includes_model_provider() -> None:
 
 
 def test_parse_response_candidate_includes_model_name() -> None:
-    """Test that _parse_response_candidate includes `model_name` in
+    """Test that `_parse_response_candidate` includes `model_name` in
     `response_metadata`."""
     raw_candidate = {
         "content": {"parts": [{"text": "Hello, world!"}]},
@@ -944,8 +968,7 @@ def test__convert_tool_message_to_parts__sets_tool_name(
 
 
 def test_supports_thinking() -> None:
-    """Test that _supports_thinking correctly identifies model capabilities."""
-    # Test models that don't support thinking
+    """Test that `_supports_thinking` correctly identifies model capabilities."""
     llm_image_gen = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash-preview-image-generation",
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -956,7 +979,6 @@ def test_supports_thinking() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert not llm_tts._supports_thinking()
-    # Test models that do support thinking
     llm_normal = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -967,7 +989,6 @@ def test_supports_thinking() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_pro._supports_thinking()
-    # Test that gemini-1.5 models don't support thinking
     llm_15 = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -1008,7 +1029,7 @@ def test_temperature_range_model_validation() -> None:
 
 @patch("langchain_google_genai.chat_models.Client")
 def test_model_kwargs(mock_client: Mock) -> None:
-    """Test we can transfer unknown params to model_kwargs."""
+    """Test we can transfer unknown params to `model_kwargs`."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -1300,7 +1321,7 @@ def test_max_retries_parameter_handling(
 def test_response_to_result_grounding_metadata(
     raw_response: dict, expected_grounding_metadata: dict
 ) -> None:
-    """Test that `_response_to_result` includes grounding_metadata in the response."""
+    """Test that `_response_to_result` includes `grounding_metadata` in the response."""
     response = GenerateContentResponse.model_validate(raw_response)
     result = _response_to_result(response, stream=False)
 
@@ -2350,7 +2371,7 @@ def test_system_message_only_raises_error() -> None:
 
 
 def test_convert_to_parts_text_only() -> None:
-    """Test _convert_to_parts with text content."""
+    """Test `_convert_to_parts` with text content."""
     # Test single string
     result = _convert_to_parts("Hello, world!")
     assert len(result) == 1
@@ -2365,7 +2386,7 @@ def test_convert_to_parts_text_only() -> None:
 
 
 def test_convert_to_parts_text_content_block() -> None:
-    """Test _convert_to_parts with text content blocks."""
+    """Test `_convert_to_parts` with text content blocks."""
     content = [{"type": "text", "text": "Hello, world!"}]
     result = _convert_to_parts(content)
     assert len(result) == 1
@@ -2373,7 +2394,7 @@ def test_convert_to_parts_text_content_block() -> None:
 
 
 def test_convert_to_parts_image_url() -> None:
-    """Test _convert_to_parts with image_url content blocks."""
+    """Test `_convert_to_parts` with `image_url` content blocks."""
     content = [{"type": "image_url", "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE}}]
     result = _convert_to_parts(content)
     assert len(result) == 1
@@ -2382,7 +2403,7 @@ def test_convert_to_parts_image_url() -> None:
 
 
 def test_convert_to_parts_image_url_string() -> None:
-    """Test _convert_to_parts with image_url as string."""
+    """Test `_convert_to_parts` with `image_url` as string."""
     content = [{"type": "image_url", "image_url": SMALL_VIEWABLE_BASE64_IMAGE}]
     result = _convert_to_parts(content)
     assert len(result) == 1
@@ -2391,7 +2412,7 @@ def test_convert_to_parts_image_url_string() -> None:
 
 
 def test_convert_to_parts_file_data_url() -> None:
-    """Test _convert_to_parts with file data URL."""
+    """Test `_convert_to_parts` with file data URL."""
     content = [
         {
             "type": "file",
@@ -2412,7 +2433,7 @@ def test_convert_to_parts_file_data_url() -> None:
 
 
 def test_convert_to_parts_file_data_base64() -> None:
-    """Test _convert_to_parts with file data base64."""
+    """Test `_convert_to_parts` with file data base64."""
     content = [
         {
             "type": "file",
@@ -2429,7 +2450,7 @@ def test_convert_to_parts_file_data_base64() -> None:
 
 
 def test_convert_to_parts_file_data_auto_mime_type() -> None:
-    """Test _convert_to_parts with auto-detected mime type."""
+    """Test `_convert_to_parts` with auto-detected mime type."""
     content = [
         {
             "type": "file",
@@ -2447,7 +2468,7 @@ def test_convert_to_parts_file_data_auto_mime_type() -> None:
 
 
 def test_convert_to_parts_media_with_data() -> None:
-    """Test _convert_to_parts with media type containing data."""
+    """Test `_convert_to_parts` with media type containing data."""
     content = [{"type": "media", "mime_type": "video/mp4", "data": b"fake_video_data"}]
     result = _convert_to_parts(content)
     assert len(result) == 1
@@ -2457,7 +2478,7 @@ def test_convert_to_parts_media_with_data() -> None:
 
 
 def test_convert_to_parts_media_with_file_uri() -> None:
-    """Test _convert_to_parts with media type containing file_uri."""
+    """Test `_convert_to_parts` with media type containing file_uri."""
     content = [
         {
             "type": "media",
@@ -2473,7 +2494,7 @@ def test_convert_to_parts_media_with_file_uri() -> None:
 
 
 def test_convert_to_parts_media_with_video_metadata() -> None:
-    """Test _convert_to_parts with media type containing video metadata."""
+    """Test `_convert_to_parts` with media type containing video metadata."""
     content = [
         {
             "type": "media",
@@ -2491,7 +2512,7 @@ def test_convert_to_parts_media_with_video_metadata() -> None:
 
 
 def test_convert_to_parts_executable_code() -> None:
-    """Test _convert_to_parts with executable code."""
+    """Test `_convert_to_parts` with executable code."""
     content = [
         {
             "type": "executable_code",
@@ -2507,7 +2528,7 @@ def test_convert_to_parts_executable_code() -> None:
 
 
 def test_convert_to_parts_code_execution_result() -> None:
-    """Test _convert_to_parts with code execution result."""
+    """Test `_convert_to_parts` with code execution result."""
     content = [
         {
             "type": "code_execution_result",
@@ -2525,7 +2546,7 @@ def test_convert_to_parts_code_execution_result() -> None:
 
 
 def test_convert_to_parts_code_execution_result_backward_compatibility() -> None:
-    """Test _convert_to_parts with code execution result without outcome (compat)."""
+    """Test `_convert_to_parts` with code execution result without outcome (compat)."""
     content = [
         {
             "type": "code_execution_result",
@@ -2542,7 +2563,7 @@ def test_convert_to_parts_code_execution_result_backward_compatibility() -> None
 
 
 def test_convert_to_parts_thinking() -> None:
-    """Test _convert_to_parts with thinking content."""
+    """Test `_convert_to_parts` with thinking content."""
     content = [{"type": "thinking", "thinking": "I need to think about this..."}]
     result = _convert_to_parts(content)
     assert len(result) == 1
@@ -2551,7 +2572,7 @@ def test_convert_to_parts_thinking() -> None:
 
 
 def test_convert_to_parts_mixed_content() -> None:
-    """Test _convert_to_parts with mixed content types."""
+    """Test `_convert_to_parts` with mixed content types."""
     content: list[dict[str, Any]] = [
         {"type": "text", "text": "Hello"},
         {"type": "text", "text": "World"},
@@ -2565,7 +2586,7 @@ def test_convert_to_parts_mixed_content() -> None:
 
 
 def test_convert_to_parts_invalid_type() -> None:
-    """Test _convert_to_parts with invalid source_type."""
+    """Test `_convert_to_parts` with invalid source_type."""
     content = [
         {
             "type": "file",
@@ -2578,7 +2599,7 @@ def test_convert_to_parts_invalid_type() -> None:
 
 
 def test_convert_to_parts_invalid_source_type() -> None:
-    """Test _convert_to_parts with invalid source_type."""
+    """Test `_convert_to_parts` with invalid source_type."""
     content = [
         {
             "type": "media",
@@ -2592,14 +2613,14 @@ def test_convert_to_parts_invalid_source_type() -> None:
 
 
 def test_convert_to_parts_invalid_image_url_format() -> None:
-    """Test _convert_to_parts with invalid image_url format."""
+    """Test `_convert_to_parts` with invalid `image_url` format."""
     content = [{"type": "image_url", "image_url": {"invalid_key": "value"}}]
     with pytest.raises(ValueError, match="Unrecognized message image format"):
         _convert_to_parts(content)
 
 
 def test_convert_to_parts_missing_mime_type_in_media() -> None:
-    """Test _convert_to_parts with missing mime_type in media."""
+    """Test `_convert_to_parts` with missing `mime_type` in media."""
     content = [
         {
             "type": "media",
@@ -2612,7 +2633,7 @@ def test_convert_to_parts_missing_mime_type_in_media() -> None:
 
 
 def test_convert_to_parts_media_missing_data_and_file_uri() -> None:
-    """Test _convert_to_parts with media missing both data and file_uri."""
+    """Test `_convert_to_parts` with media missing both data and `file_uri`."""
     content = [
         {
             "type": "media",
@@ -2627,7 +2648,7 @@ def test_convert_to_parts_media_missing_data_and_file_uri() -> None:
 
 
 def test_convert_to_parts_missing_executable_code_keys() -> None:
-    """Test _convert_to_parts with missing keys in executable_code."""
+    """Test `_convert_to_parts` with missing keys in `executable_code`."""
     content = [
         {
             "type": "executable_code",
@@ -2642,7 +2663,7 @@ def test_convert_to_parts_missing_executable_code_keys() -> None:
 
 
 def test_convert_to_parts_missing_code_execution_result_key() -> None:
-    """Test _convert_to_parts with missing code_execution_result key."""
+    """Test `_convert_to_parts` with missing `code_execution_result` key."""
     content = [
         {
             "type": "code_execution_result"
@@ -2656,14 +2677,14 @@ def test_convert_to_parts_missing_code_execution_result_key() -> None:
 
 
 def test_convert_to_parts_unrecognized_type() -> None:
-    """Test _convert_to_parts with unrecognized type."""
+    """Test `_convert_to_parts` with unrecognized type."""
     content = [{"type": "unrecognized_type", "data": "some_data"}]
     with pytest.raises(ValueError, match="Unrecognized message part type"):
         _convert_to_parts(content)
 
 
 def test_convert_to_parts_non_dict_mapping() -> None:
-    """Test _convert_to_parts with non-dict mapping."""
+    """Test `_convert_to_parts` with non-dict mapping."""
     content = [123]  # Not a string or dict
     with pytest.raises(
         ChatGoogleGenerativeAIError,
@@ -2673,7 +2694,7 @@ def test_convert_to_parts_non_dict_mapping() -> None:
 
 
 def test_convert_to_parts_unrecognized_format_warning() -> None:
-    """Test _convert_to_parts with unrecognized format triggers warning."""
+    """Test `_convert_to_parts` with unrecognized format triggers warning."""
     content = [{"some_key": "some_value"}]  # Not a recognized format
     with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
         result = _convert_to_parts(content)
@@ -2684,7 +2705,7 @@ def test_convert_to_parts_unrecognized_format_warning() -> None:
 
 
 def test_convert_tool_message_to_parts_string_content() -> None:
-    """Test _convert_tool_message_to_parts with string content."""
+    """Test `_convert_tool_message_to_parts` with string content."""
     message = ToolMessage(name="test_tool", content="test_result", tool_call_id="123")
     result = _convert_tool_message_to_parts(message)
     assert len(result) == 1
@@ -2694,7 +2715,7 @@ def test_convert_tool_message_to_parts_string_content() -> None:
 
 
 def test_convert_tool_message_to_parts_json_content() -> None:
-    """Test _convert_tool_message_to_parts with JSON string content."""
+    """Test `_convert_tool_message_to_parts` with JSON string content."""
     message = ToolMessage(
         name="test_tool",
         content='{"result": "success", "data": [1, 2, 3]}',
@@ -2711,7 +2732,7 @@ def test_convert_tool_message_to_parts_json_content() -> None:
 
 
 def test_convert_tool_message_to_parts_dict_content() -> None:
-    """Test _convert_tool_message_to_parts with dict content."""
+    """Test `_convert_tool_message_to_parts` with `dict` content."""
     message = ToolMessage(  # type: ignore[call-overload]
         name="test_tool",
         content={"result": "success", "data": [1, 2, 3]},
@@ -2727,7 +2748,7 @@ def test_convert_tool_message_to_parts_dict_content() -> None:
 
 
 def test_convert_tool_message_to_parts_list_content_with_media() -> None:
-    """Test _convert_tool_message_to_parts with list content containing media."""
+    """Test `_convert_tool_message_to_parts` with `list` content containing media."""
     message = ToolMessage(
         name="test_tool",
         content=[
@@ -2747,7 +2768,7 @@ def test_convert_tool_message_to_parts_list_content_with_media() -> None:
 
 
 def test_convert_tool_message_to_parts_with_name_parameter() -> None:
-    """Test _convert_tool_message_to_parts with explicit name parameter."""
+    """Test `_convert_tool_message_to_parts` with explicit name parameter."""
     message = ToolMessage(
         content="test_result",
         tool_call_id="123",
@@ -2760,7 +2781,7 @@ def test_convert_tool_message_to_parts_with_name_parameter() -> None:
 
 
 def test_convert_tool_message_to_parts_legacy_name_in_kwargs() -> None:
-    """Test _convert_tool_message_to_parts with legacy name in additional_kwargs."""
+    """Test `_convert_tool_message_to_parts` with legacy name in `additional_kwargs`."""
     message = ToolMessage(
         content="test_result",
         tool_call_id="123",
@@ -2773,7 +2794,7 @@ def test_convert_tool_message_to_parts_legacy_name_in_kwargs() -> None:
 
 
 def test_convert_tool_message_to_parts_function_message() -> None:
-    """Test _convert_tool_message_to_parts with FunctionMessage."""
+    """Test `_convert_tool_message_to_parts` with `FunctionMessage`."""
     message = FunctionMessage(name="test_function", content="function_result")
     result = _convert_tool_message_to_parts(message)
     assert len(result) == 1
@@ -2783,7 +2804,7 @@ def test_convert_tool_message_to_parts_function_message() -> None:
 
 
 def test_convert_tool_message_to_parts_invalid_json_fallback() -> None:
-    """Test _convert_tool_message_to_parts with invalid JSON falls back to string."""
+    """Test `_convert_tool_message_to_parts` with invalid JSON falls back to string."""
     message = ToolMessage(
         name="test_tool",
         content='{"invalid": json}',  # Invalid JSON
@@ -2796,7 +2817,7 @@ def test_convert_tool_message_to_parts_invalid_json_fallback() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_basic() -> None:
-    """Test _get_ai_message_tool_messages_parts with basic tool messages."""
+    """Test `_get_ai_message_tool_messages_parts` with basic tool messages."""
     ai_message = AIMessage(
         content="",
         tool_calls=[
@@ -2821,7 +2842,7 @@ def test_get_ai_message_tool_messages_parts_basic() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_partial_matches() -> None:
-    """Test _get_ai_message_tool_messages_parts with partial tool message matches."""
+    """Test `_get_ai_message_tool_messages_parts` with partial tool message matches."""
     ai_message = AIMessage(
         content="",
         tool_calls=[
@@ -2842,7 +2863,7 @@ def test_get_ai_message_tool_messages_parts_partial_matches() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_no_matches() -> None:
-    """Test _get_ai_message_tool_messages_parts with no matching tool messages."""
+    """Test `_get_ai_message_tool_messages_parts` with no matching tool messages."""
     ai_message = AIMessage(
         content="",
         tool_calls=[{"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}}],
@@ -2856,7 +2877,7 @@ def test_get_ai_message_tool_messages_parts_no_matches() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_empty_tool_calls() -> None:
-    """Test _get_ai_message_tool_messages_parts with empty tool calls."""
+    """Test `_get_ai_message_tool_messages_parts` with empty tool calls."""
     ai_message = AIMessage(content="No tool calls")
     tool_messages = [
         ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1")
@@ -2866,7 +2887,7 @@ def test_get_ai_message_tool_messages_parts_empty_tool_calls() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_empty_tool_messages() -> None:
-    """Test _get_ai_message_tool_messages_parts with empty tool messages."""
+    """Test `_get_ai_message_tool_messages_parts` with empty tool messages."""
     ai_message = AIMessage(
         content="",
         tool_calls=[{"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}}],
@@ -2876,7 +2897,7 @@ def test_get_ai_message_tool_messages_parts_empty_tool_messages() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_duplicate_tool_calls() -> None:
-    """Test _get_ai_message_tool_messages_parts handles duplicate tool call IDs."""
+    """Test `_get_ai_message_tool_messages_parts` handles duplicate tool call IDs."""
     ai_message = AIMessage(
         content="",
         tool_calls=[
@@ -2898,7 +2919,7 @@ def test_get_ai_message_tool_messages_parts_duplicate_tool_calls() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_order_preserved() -> None:
-    """Test _get_ai_message_tool_messages_parts preserves order of tool messages."""
+    """Test `_get_ai_message_tool_messages_parts` preserves order of tool messages."""
     ai_message = AIMessage(
         content="",
         tool_calls=[
@@ -2920,7 +2941,7 @@ def test_get_ai_message_tool_messages_parts_order_preserved() -> None:
 
 
 def test_get_ai_message_tool_messages_parts_with_name_from_tool_call() -> None:
-    """Test _get_ai_message_tool_messages_parts uses name from tool call"""
+    """Test `_get_ai_message_tool_messages_parts` uses name from tool call"""
     ai_message = AIMessage(
         content="",
         tool_calls=[
@@ -4050,7 +4071,7 @@ def test_backend_detection_priority_explicit_over_env() -> None:
 
 
 def test_model_name_normalization_for_vertexai() -> None:
-    """Test that model names with 'models/' prefix are normalized for Vertex AI."""
+    """Test that model names with `'models/'` prefix are normalized for Vertex AI."""
     original_env = os.environ.copy()
     try:
         os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"

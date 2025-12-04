@@ -576,6 +576,7 @@ def test_chat_google_genai_invoke_thinking_with_tools(
 @pytest.mark.flaky(retries=3, delay=1)
 def test_thought_signature_round_trip(backend_config: dict) -> None:
     """Test thought signatures are properly preserved in round-trip conversations."""
+    # TODO: could paramaterize over output_version too
 
     @tool
     def simple_tool(query: str) -> str:
@@ -638,6 +639,7 @@ def test_thought_signature_round_trip(backend_config: dict) -> None:
 
 def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> None:
     """Test invoking a thinking model with zero `thinking_budget`."""
+    # Note certain models may not allow `thinking_budget=0`
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash", thinking_budget=0, **backend_config
     )
@@ -761,9 +763,11 @@ def test_chat_google_genai_multimodal(
 def test_multimodal_pdf_input_url(backend_config: dict) -> None:
     """Test multimodal PDF input from a public URL.
 
-    Note: Unlike Vertex AI which supports gs:// URIs natively, the unified
-    Gemini API requires files to be uploaded via client.files.upload() first
-    for gs:// URIs. This test uses a public HTTP URL instead.
+    Note: This test uses the `image_url` format which downloads the content.
+    For gs:// URIs:
+    - Google AI backend: Must upload via client.files.upload() and use `media` format
+    - Vertex AI backend: Can use `media` format with `file_uri` directly
+    This test uses a public HTTP URL which works with both backends.
     """
     llm = ChatGoogleGenerativeAI(model=_VISION_MODEL, **backend_config)
     pdf_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
@@ -1037,11 +1041,7 @@ def test_nested_bind_tools(backend_config: dict) -> None:
 
 
 def test_timeout_non_streaming(backend_config: dict) -> None:
-    """Test timeout parameter in non-streaming mode.
-
-    Note: Unlike Vertex AI which uses gRPC and raises `DeadlineExceeded`,
-    the unified Gemini API uses REST (httpx) and raises httpx timeout exceptions.
-    """
+    """Test timeout parameter in non-streaming mode."""
     model = ChatGoogleGenerativeAI(
         model=_MODEL,
         timeout=0.001,  # 1ms - too short to complete
@@ -1052,11 +1052,7 @@ def test_timeout_non_streaming(backend_config: dict) -> None:
 
 
 def test_timeout_streaming(backend_config: dict) -> None:
-    """Test timeout parameter in streaming mode.
-
-    Note: Unlike Vertex AI which uses gRPC and raises `DeadlineExceeded`,
-    the unified Gemini API uses REST (httpx) and raises httpx timeout exceptions.
-    """
+    """Test timeout parameter in streaming mode."""
     model = ChatGoogleGenerativeAI(
         model=_MODEL,
         timeout=0.001,  # 1ms - too short to complete
@@ -1472,6 +1468,7 @@ def test_thinking_params_preserved_with_structured_output(backend_config: dict) 
         answer: str
 
     # Initialize with thinking disabled
+    # Only certain models support disabling thinking
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         thinking_budget=0,
@@ -1689,6 +1686,115 @@ def test_search_builtin_with_citations(
                         assert isinstance(google_metadata, dict)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.parametrize("use_streaming", [False, True])
+def test_structured_output_with_google_search(
+    use_streaming: bool, backend_config: dict
+) -> None:
+    """Test structured outputs combined with Google Search tool.
+
+    Tests that the model can:
+    1. Use Google Search to find information
+    2. Return a response that conforms to a structured schema
+    3. Include grounding metadata from the search
+    """
+
+    class MatchResult(BaseModel):
+        winner: str
+        final_match_score: str
+        scorers: list[str]
+
+    llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", **backend_config)
+
+    # Bind tools and configure for structured output
+    llm_with_search = llm.bind(
+        tools=[{"google_search": {}}, {"url_context": {}}],
+        response_mime_type="application/json",
+        response_schema=MatchResult.model_json_schema(),
+    )
+
+    if use_streaming:
+        # Test streaming
+        chunks: list[BaseMessageChunk] = []
+        for chunk in llm_with_search.stream(
+            "Search for all details for the latest Euro championship final match."
+        ):
+            assert isinstance(chunk, AIMessageChunk)
+            chunks.append(chunk)
+
+        assert len(chunks) > 0
+
+        # Reconstruct full message
+        response = chunks[0]
+        for chunk in chunks[1:]:  # type: ignore[assignment]
+            response = response + chunk
+
+        response = cast("AIMessageChunk", response)
+        assert isinstance(response, AIMessageChunk)
+    else:
+        # Test invoke
+        response = llm_with_search.invoke(  # type: ignore[assignment]
+            "Search for all details for the latest Euro championship final match."
+        )
+        assert isinstance(response, AIMessage)
+
+    # Extract JSON from response content
+    assert isinstance(response.content, list)
+    text_content = "".join(
+        block.get("text", "")
+        for block in response.content
+        if isinstance(block, dict) and block.get("type") == "text"
+    )
+
+    # Verify structured output can be parsed
+    result = MatchResult.model_validate_json(text_content)
+    assert isinstance(result, MatchResult)
+    assert isinstance(result.winner, str)
+    assert len(result.winner) > 0
+    assert isinstance(result.final_match_score, str)
+    assert len(result.final_match_score) > 0
+    assert isinstance(result.scorers, list)
+
+    # Verify grounding metadata is present (indicating search was used)
+    assert "grounding_metadata" in response.response_metadata
+    grounding = response.response_metadata["grounding_metadata"]
+    assert "grounding_chunks" in grounding or "grounding_supports" in grounding
+
+    # Verify usage metadata
+    # TODO: Investigate streaming usage metadata accumulation issue
+    # When streaming, total_tokens doesn't match input_tokens + output_tokens
+    # This appears to be a chunk accumulation bug where total_tokens is summed
+    # across chunks but input/output tokens only keep final values
+    if not use_streaming:
+        _check_usage_metadata(response)
+
+
+def test_search_with_googletool(backend_config: dict) -> None:
+    """Test using `GoogleTool` with Google Search."""
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", **backend_config)
+    resp = llm.invoke(
+        "When is the next total solar eclipse in US?",
+        tools=[GoogleTool(google_search={})],
+    )
+    assert "grounding_metadata" in resp.response_metadata
+
+
+def test_url_context_tool(backend_config: dict) -> None:
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    model_with_search = model.bind_tools([{"url_context": {}}])
+
+    input = "What is this page's contents about? https://docs.langchain.com"
+    response = model_with_search.invoke(input)
+    assert isinstance(response, AIMessage)
+
+    assert (
+        response.response_metadata["grounding_metadata"]["grounding_chunks"][0]["web"][
+            "uri"
+        ]
+        is not None
+    )
+
+
 def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
     if output_version == "v0":
         blocks = [block for block in message.content if isinstance(block, dict)]
@@ -1714,16 +1820,6 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
     # Lazy parsing
     expected_block_types = {"server_tool_call", "server_tool_result", "text"}
     assert {block["type"] for block in message.content_blocks} == expected_block_types
-
-
-def test_search_with_googletool(backend_config: dict) -> None:
-    """Test using `GoogleTool` with Google Search."""
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", **backend_config)
-    resp = llm.invoke(
-        "When is the next total solar eclipse in US?",
-        tools=[GoogleTool(google_search={})],
-    )
-    assert "grounding_metadata" in resp.response_metadata
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")
@@ -1752,22 +1848,6 @@ def test_code_execution_builtin(output_version: str, backend_config: dict) -> No
     }
     response = llm.invoke([input_message, full, next_message])
     _check_code_execution_output(response, output_version)
-
-
-def test_url_context_tool(backend_config: dict) -> None:
-    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
-    model_with_search = model.bind_tools([{"url_context": {}}])
-
-    input = "What is this page's contents about? https://docs.langchain.com"
-    response = model_with_search.invoke(input)
-    assert isinstance(response, AIMessage)
-
-    assert (
-        response.response_metadata["grounding_metadata"]["grounding_chunks"][0]["web"][
-            "uri"
-        ]
-        is not None
-    )
 
 
 def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -> None:
@@ -1809,7 +1889,7 @@ def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -
 def test_chat_google_genai_invoke_respects_max_tokens(
     max_tokens: int, backend_config: dict
 ) -> None:
-    """Test that different max_output_tokens values are respected."""
+    """Test that different `max_output_tokens` values are respected."""
     llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     result = llm.invoke(
@@ -1934,18 +2014,7 @@ def test_agent_loop_streaming(
 
     response = cast("AIMessageChunk", response)
     assert isinstance(response, AIMessageChunk)
-    # Response should have content
-    if isinstance(response.content, list):
-        text_content = "".join(
-            block.get("text", "")
-            for block in response.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-        assert len(text_content) > 0
-    else:
-        # v0 output for 2.5 models and lower
-        assert isinstance(response.content, str)
-        assert len(response.content) > 0
+    assert len(response.text) > 0
 
 
 @pytest.mark.parametrize("use_stream_method", [False, True])
@@ -2261,96 +2330,13 @@ def test_streaming_with_multiple_tool_calls(
     assert len(response_chunks) > 0
 
 
-@pytest.mark.flaky(retries=3, delay=1)
-@pytest.mark.parametrize("use_streaming", [False, True])
-def test_structured_output_with_google_search(
-    use_streaming: bool, backend_config: dict
-) -> None:
-    """Test structured outputs combined with Google Search tool.
-
-    Tests that the model can:
-    1. Use Google Search to find information
-    2. Return a response that conforms to a structured schema
-    3. Include grounding metadata from the search
-    """
-
-    class MatchResult(BaseModel):
-        winner: str
-        final_match_score: str
-        scorers: list[str]
-
-    llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", **backend_config)
-
-    # Bind tools and configure for structured output
-    llm_with_search = llm.bind(
-        tools=[{"google_search": {}}, {"url_context": {}}],
-        response_mime_type="application/json",
-        response_schema=MatchResult.model_json_schema(),
-    )
-
-    if use_streaming:
-        # Test streaming
-        chunks: list[BaseMessageChunk] = []
-        for chunk in llm_with_search.stream(
-            "Search for all details for the latest Euro championship final match."
-        ):
-            assert isinstance(chunk, AIMessageChunk)
-            chunks.append(chunk)
-
-        assert len(chunks) > 0
-
-        # Reconstruct full message
-        response = chunks[0]
-        for chunk in chunks[1:]:  # type: ignore[assignment]
-            response = response + chunk
-
-        response = cast("AIMessageChunk", response)
-        assert isinstance(response, AIMessageChunk)
-    else:
-        # Test invoke
-        response = llm_with_search.invoke(  # type: ignore[assignment]
-            "Search for all details for the latest Euro championship final match."
-        )
-        assert isinstance(response, AIMessage)
-
-    # Extract JSON from response content
-    assert isinstance(response.content, list)
-    text_content = "".join(
-        block.get("text", "")
-        for block in response.content
-        if isinstance(block, dict) and block.get("type") == "text"
-    )
-
-    # Verify structured output can be parsed
-    result = MatchResult.model_validate_json(text_content)
-    assert isinstance(result, MatchResult)
-    assert isinstance(result.winner, str)
-    assert len(result.winner) > 0
-    assert isinstance(result.final_match_score, str)
-    assert len(result.final_match_score) > 0
-    assert isinstance(result.scorers, list)
-
-    # Verify grounding metadata is present (indicating search was used)
-    assert "grounding_metadata" in response.response_metadata
-    grounding = response.response_metadata["grounding_metadata"]
-    assert "grounding_chunks" in grounding or "grounding_supports" in grounding
-
-    # Verify usage metadata
-    # TODO: Investigate streaming usage metadata accumulation issue
-    # When streaming, total_tokens doesn't match input_tokens + output_tokens
-    # This appears to be a chunk accumulation bug where total_tokens is summed
-    # across chunks but input/output tokens only keep final values
-    if not use_streaming:
-        _check_usage_metadata(response)
-
-
 @pytest.mark.extended
 def test_context_caching(backend_config: dict) -> None:
     """Test context caching with large text content.
 
-    Note: For Gemini API, gs:// URIs are not supported directly.
-    Files must be uploaded via client.files.upload() first.
-    For simplicity, this test uses large text content instead.
+    Note: For Google AI backend, `gs://` URIs require client.files.upload() first,
+    then using `media` format. Vertex AI backend supports `gs://` URIs directly
+    with `media` format. For simplicity, this test uses large text content instead.
     """
     # Create a large context document (needs to be large enough to trigger caching)
     large_document = (
@@ -2420,9 +2406,9 @@ def test_context_caching(backend_config: dict) -> None:
 def test_context_caching_tools(backend_config: dict) -> None:
     """Test context caching with tools and large text content.
 
-    Note: For Gemini API, gs:// URIs are not supported directly.
-    Files must be uploaded via client.files.upload() first.
-    For simplicity, this test uses large text content instead.
+    Note: For Google AI backend, `gs://` URIs require client.files.upload() first,
+    then using `media` format. Vertex AI backend supports `gs://` URIs directly
+    with `media` format. For simplicity, this test uses large text content instead.
     """
 
     @tool
@@ -2479,15 +2465,15 @@ def test_context_caching_tools(backend_config: dict) -> None:
 
 
 @pytest.mark.skip(
-    reason="Gemini API does not support gs:// URIs. "
-    "Files must be uploaded via client.files.upload() first. "
-    "This test would require uploading an audio file which adds complexity."
+    reason="Google AI backend requires client.files.upload() for audio files. "
+    "This test would require uploading an audio file which adds complexity. "
+    "(Vertex AI backend supports gs:// URIs directly with media format.)"
 )
 def test_audio_timestamp(backend_config: dict) -> None:
     """Test audio transcription with timestamps.
 
-    Note: This test is skipped because the Gemini API does not support gs:// URIs
-    directly. To test audio timestamps, you would need to:
+    Note: This test is skipped because the Google AI backend requires uploading
+    files first. To test audio timestamps, you would need to:
     1. Upload a file: file = client.files.upload(file='audio.mp3')
     2. Use file.uri in the message content
     3. Pass generation_config={"audio_timestamp": True}
@@ -2569,7 +2555,7 @@ def test_langgraph_example(backend_config: dict) -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 def test_streaming_function_call_arguments() -> None:
-    """Test streaming function calling with stream_function_call_arguments=True.
+    """Test streaming function calling with `stream_function_call_arguments=True`.
 
     Note: This feature is only available on Vertex AI with Gemini 3 Pro (Preview).
     This test verifies that function call arguments are streamed incrementally
@@ -2596,8 +2582,6 @@ def test_streaming_function_call_arguments() -> None:
 
     # Use Vertex AI as stream_function_call_arguments is only supported there
     # Pass api_key=None to force use of application default credentials
-    import os
-
     project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
     if not project:
         pytest.skip("Vertex AI tests require GOOGLE_CLOUD_PROJECT env var to be set")
@@ -2670,8 +2654,6 @@ def test_streaming_function_call_arguments() -> None:
         f"Expected multiple tool calls indicating argument streaming, "
         f"got {len(tool_calls)}"
     )
-
-    # Test successful - streaming function calling is working
 
 
 @pytest.mark.flaky(retries=3, delay=1)
