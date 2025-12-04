@@ -15,6 +15,7 @@ from google.genai.types import (
     Blob,
     Candidate,
     Content,
+    FinishReason,
     FunctionCall,
     FunctionResponse,
     GenerateContentResponse,
@@ -3218,6 +3219,233 @@ def test_response_schema_mime_type_validation() -> None:
         response_json_schema=schema, response_mime_type="application/json"
     )
     assert llm_with_json_schema is not None
+
+
+def test_thinking_budget_preserved_with_structured_output() -> None:
+    """Test that `thinking_budget` is preserved when using `with_structured_output`."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text='{"name": "test", "value": 42}')]),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=0,
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+
+        call_args = mock_client_method.call_args
+        config = call_args.kwargs.get("config")
+
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        assert config.thinking_config.thinking_budget == 0, (
+            f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        )
+
+
+def test_thinking_level_preserved_with_structured_output() -> None:
+    """Test that `thinking_level` is preserved when using `with_structured_output`."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text='{"name": "test", "value": 42}')]),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        # Verify thinking_level is in the config
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        assert config.thinking_config.thinking_level == ThinkingLevel.LOW, (
+            f"thinking_level should be LOW, got {config.thinking_config.thinking_level}"
+        )
+
+
+def test_include_thoughts_preserved_with_structured_output() -> None:
+    """Test that `include_thoughts` is preserved when using `with_structured_output`."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(text="Let me think...", thought=True),
+                        Part(text='{"name": "test", "value": 42}'),
+                    ]
+                ),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        include_thoughts=True,
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        msg = (
+            f"include_thoughts should be True, "
+            f"got {config.thinking_config.include_thoughts}"
+        )
+        assert config.thinking_config.include_thoughts is True, msg
+
+
+def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
+    """Test that both `thinking_budget` and `include_thoughts` are preserved."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text='{"name": "test", "value": 42}')]),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=0,
+        include_thoughts=False,
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        assert config.thinking_config.thinking_budget == 0, (
+            f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        )
+        msg = (
+            f"include_thoughts should be False, "
+            f"got {config.thinking_config.include_thoughts}"
+        )
+        assert config.thinking_config.include_thoughts is False, msg
 
 
 def test_is_new_gemini_model() -> None:

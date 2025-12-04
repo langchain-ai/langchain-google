@@ -39,6 +39,19 @@ _THINKING_MODEL = "gemini-2.5-flash"
 _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV8/xCIVQTuIKGSoTi2IijhqFYpQIdQKrTqYXPoFTRqSFBdHwbXg4Mdi1cHFWVcHV0EQ/ABxdXFSdJES/5cUWsR4cNyPd/ced+8Af6PCVDM4DqiaZaSTCSGbWxW6XxHECPoRQ0hipj4niil4jq97+Ph6F+dZ3uf+HL1K3mSATyCeZbphEW8QT29aOud94ggrSQrxOXHMoAsSP3JddvmNc9FhP8+MGJn0PHGEWCh2sNzBrGSoxFPEUUXVKN+fdVnhvMVZrdRY6578heG8trLMdZrDSGIRSxAhQEYNZVRgIU6rRoqJNO0nPPxDjl8kl0yuMhg5FlCFCsnxg//B727NwuSEmxROAF0vtv0xCnTvAs26bX8f23bzBAg8A1da219tADOfpNfbWvQI6NsGLq7bmrwHXO4Ag0+6ZEiOFKDpLxSA9zP6phwwcAv0rLm9tfZx+gBkqKvUDXBwCIwVKXvd492hzt7+PdPq7wdzbXKn5swsVgAAA8lJREFUeJx90dtPHHUUB/Dz+81vZhb2wrDI3soUKBSRcisF21iqqCRNY01NTE0k8aHpi0k18VJfjOFvUF9M44MmGrHFQqSQiKSmFloL5c4CXW6Fhb0vO3ufvczMzweiBGI9+eW8ffI95/yQqqrwv4UxBgCfJ9w/2NfSVB+Nyn6/r+vdLo7H6FkYY6yoABR2PJujj34MSo/d/nHeVLYbydmIp/bEO0fEy/+NMcbTU4/j4Vs6Lr0ccKeYuUKWS4ABVCVHmRdszbfvTgfjR8kz5Jjs+9RREl9Zy2lbVK9wU3/kWLJLCXnqza1bfVe7b9jLbIeTMcYu13Jg/aMiPrCwVFcgtDiMhnxwJ/zXVDwSdVCVMRV7nqzl2i9e/fKrw8mqSp84e2sFj3Oj8/SrF/MaicmyYhAaXu58NPAbeAeyzY0NLecmh2+ODN3BewYBAkAY43giI3kebrnsRmvV9z2D4ciOa3EBAf31Tp9sMgdxMTFm6j74/Ogb70VCYQKAAIDCXkOAIC6pkYBWdwwnpHEdf6L9dJtJKPh95DZhzFKMEWRAGL927XpWTmMA+s8DAOBYAoR483l/iHZ/8bXoODl8b9UfyH72SXepzbyRJNvjFGHKMlhvMBze+cH9+4lEuOOlU2X1tVkFTU7Om03q080NDGXV1cflRpHwaaoiiiildB8jhDLZ7HDfz2Yidba6Vn2L4fhzFrNRKy5OZ2QOZ1U5W8VtqlVH/iUHcM933zZYWS7Wtj66zZr65bzGJQt0glHgudi9XVzEl4vKw2kUPhO020oPYI1qYc+2Xc0bRXFwTLY0VXa2VibD/lBaIXm1UChN5JSRUcQQ1Tk/47Cf3x8bY7y17Y17PVYTG1UkLPBFcqik7Zoa9JcLYoHBqHhXNgd6gS1k9EJ1TQ2l9EDy1saErmQ2kGpwGC2MLOtCM8nZEV1K0tKJtEksSm26J/rHg2zzmabKisq939nHzqUH7efzd4f/nPGW6NP8ybNFrOsWQhpoCuuhnJ4hAnPhFam01K4oQMjBg/mzBjVhuvw2O++KKT+BIVxJKzQECBDLF2qu2WTMmCovtDQ1f8iyoGkUADBCCGPsdnvTW2OtFm01VeB06msvdWlpPZU0wJRG85ns84umU3k+VyxeEcWqvYUBAGsUrbvme4be99HFeisP/pwUOIZaOqQX31ISgrKmZhLHtXNXuJq68orrr5/9mBCglCLAGGPyy81votEbcjlKLrC9E8mhH3wdHRdcyyvjidSlxjftPJpD+o25JYvRHGFoZDdks1mBQhxJu9uxvwEiXuHnHbLd1AAAAABJRU5ErkJggg=="""  # noqa: E501
 
 
+@tool
+def get_weather(location: str) -> str:
+    """Get the weather for a location.
+
+    Args:
+        location: The city/location to get weather for.
+
+    Returns:
+        Weather information for the location.
+    """
+    return "It's sunny and 72°F."
+
+
 def get_wav_type_from_bytes(file_bytes: bytes) -> bool:
     """Determine if the given bytes represent a WAV file by inspecting the header.
 
@@ -1091,6 +1104,31 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
             assert isinstance(argument.description, str)
 
 
+def test_thinking_params_preserved_with_structured_output() -> None:
+    """Test that `thinking_budget=0` and `include_thoughts=False` are preserved.
+
+    Verifies that thinking configuration persists through `with_structured_output()`.
+    """
+
+    class SimpleModel(BaseModel):
+        answer: str
+
+    # Initialize with thinking disabled
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        thinking_budget=0,
+        include_thoughts=False,
+    )
+
+    # Apply structured output - params should be preserved
+    structured_llm = llm.with_structured_output(SimpleModel, method="json_schema")
+
+    result = structured_llm.invoke("What is 2+2? Just give a brief answer.")
+
+    assert isinstance(result, SimpleModel)
+    assert isinstance(result.answer, str)
+
+
 @pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) -> None:
@@ -1419,3 +1457,411 @@ def test_chat_google_genai_invoke_respects_max_tokens(max_tokens: int) -> None:
     assert output_tokens <= max_tokens, (
         f"Expected output_tokens <= {max_tokens}, got {output_tokens}"
     )
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_agent_loop(output_version: Literal["v0", "v1"]) -> None:
+    """Test agent loop with tool calling (non-streaming).
+
+    Ensures that the model can:
+    1. Make a tool call in response to a user query
+    2. Accept the tool result
+    3. Generate a final response incorporating the tool result
+    """
+
+    llm = ChatGoogleGenerativeAI(model=_MODEL, output_version=output_version)
+    llm_with_tools = llm.bind_tools([get_weather])
+    input_message = HumanMessage("What is the weather in San Francisco, CA?")
+
+    # First call - should make a tool call
+    tool_call_message = llm_with_tools.invoke([input_message])
+    assert isinstance(tool_call_message, AIMessage)
+    tool_calls = tool_call_message.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == "get_weather"
+    assert "location" in tool_call["args"]
+
+    # Execute the tool
+    tool_message = get_weather.invoke(tool_call)
+    assert isinstance(tool_message, ToolMessage)
+
+    # Second call - should incorporate tool result
+    response = llm_with_tools.invoke(
+        [
+            input_message,
+            tool_call_message,
+            tool_message,
+        ]
+    )
+    assert isinstance(response, AIMessage)
+    # Response should mention weather information
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        # v0 output for 2.5 models and lower
+        assert isinstance(response.content, str)
+        assert len(response.content) > 0
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_agent_loop_streaming(output_version: Literal["v0", "v1"]) -> None:
+    """Test agent loop with tool calling (streaming)."""
+
+    llm = ChatGoogleGenerativeAI(model=_MODEL, output_version=output_version)
+    llm_with_tools = llm.bind_tools([get_weather])
+    input_message = HumanMessage("What is the weather in San Francisco, CA?")
+
+    # First call - stream tool call chunks
+    chunks: list[BaseMessageChunk] = []
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        chunks.append(chunk)
+
+    assert len(chunks) > 0
+
+    # Reconstruct the full message
+    tool_call_message = chunks[0]
+    for chunk in chunks[1:]:
+        tool_call_message = tool_call_message + chunk  # type: ignore[operator]
+
+    assert isinstance(tool_call_message, AIMessageChunk)
+    tool_calls = tool_call_message.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == "get_weather"
+
+    # Execute the tool
+    tool_message = get_weather.invoke(tool_call)
+    assert isinstance(tool_message, ToolMessage)
+
+    # Second call - stream final response
+    response_chunks: list[BaseMessageChunk] = []
+    for chunk in llm_with_tools.stream(
+        [
+            input_message,
+            tool_call_message,
+            tool_message,
+        ]
+    ):
+        assert isinstance(chunk, AIMessageChunk)
+        response_chunks.append(chunk)
+
+    assert len(response_chunks) > 0
+    # Reconstruct full response
+    response = response_chunks[0]
+    for chunk in response_chunks[1:]:
+        response = response + chunk  # type: ignore[operator]
+
+    assert isinstance(response, AIMessageChunk)
+    # Response should have content
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        # v0 output for 2.5 models and lower
+        assert isinstance(response.content, str)
+        assert len(response.content) > 0
+
+
+@pytest.mark.parametrize("use_stream_method", [False, True])
+@pytest.mark.parametrize("is_async", [False, True])
+async def test_basic_streaming(use_stream_method: bool, is_async: bool) -> None:
+    """Test basic streaming functionality.
+
+    Args:
+        use_stream_method: If `True`, use `stream()`, otherwise set `streaming=True`
+        is_async: Test async vs sync streaming
+    """
+    if use_stream_method:
+        llm = ChatGoogleGenerativeAI(model=_MODEL)
+    else:
+        llm = ChatGoogleGenerativeAI(model=_MODEL, streaming=True)
+
+    message = HumanMessage("Count from 1 to 5")
+
+    chunks: list[BaseMessageChunk] = []
+    if is_async:
+        if use_stream_method:
+            async for chunk in llm.astream([message]):
+                assert isinstance(chunk, AIMessageChunk)
+                chunks.append(chunk)
+        else:
+            result = await llm.ainvoke([message])
+            # When streaming=True, ainvoke still returns full message
+            assert isinstance(result, AIMessage)
+            return
+    elif use_stream_method:
+        for chunk in llm.stream([message]):
+            assert isinstance(chunk, AIMessageChunk)
+            chunks.append(chunk)
+    else:
+        result = llm.invoke([message])
+        # When streaming=True, invoke still returns full message
+        assert isinstance(result, AIMessage)
+        return
+
+    # Verify we got chunks
+    assert len(chunks) > 0
+
+    # Verify we can reconstruct the message
+    full_message = chunks[0]
+    for chunk in chunks[1:]:
+        full_message = full_message + chunk  # type: ignore[operator]
+
+    assert isinstance(full_message, AIMessageChunk)
+    if isinstance(full_message.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in full_message.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(full_message.content, str)
+        assert len(full_message.content) > 0
+
+    # Verify usage metadata is present in the final message
+    _check_usage_metadata(cast("AIMessage", full_message))
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_gemini_3_pro_streaming_with_thinking(
+    output_version: Literal["v0", "v1"],
+) -> None:
+    """Test `gemini-3-pro-preview` streaming with thinking capabilities.
+
+    `gemini-3-pro-preview` uses `thinking_level` instead of `thinking_budget`.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        thinking_level="high",
+        include_thoughts=True,
+        output_version=output_version,
+    )
+
+    input_message = HumanMessage(
+        "How many r's are in the word 'strawberry'? Think through this carefully."
+    )
+
+    chunks: list[BaseMessageChunk] = []
+    for chunk in llm.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        chunks.append(chunk)
+
+    assert len(chunks) > 0
+
+    # Reconstruct full message
+    full_message = chunks[0]
+    for chunk in chunks[1:]:
+        full_message = full_message + chunk  # type: ignore[operator]
+
+    assert isinstance(full_message, AIMessageChunk)
+    assert isinstance(full_message.content, list), (
+        f"Expected list content, got {type(full_message.content)}"
+    )
+
+    # Check for thinking/reasoning blocks based on output_version
+    if output_version == "v0":
+        # v0 uses "thinking" blocks
+        thought_blocks = [
+            block
+            for block in full_message.content
+            if isinstance(block, dict) and block.get("type") == "thinking"
+        ]
+        assert thought_blocks, (
+            "Expected thinking blocks when include_thoughts=True for gemini-3 with v0"
+        )
+    else:
+        # v1 uses "reasoning" blocks
+        reasoning_blocks = [
+            block
+            for block in full_message.content
+            if isinstance(block, dict) and block.get("type") == "reasoning"
+        ]
+        assert reasoning_blocks, (
+            "Expected reasoning blocks when include_thoughts=True for gemini-3 with v1"
+        )
+
+    # Verify usage metadata includes reasoning tokens
+    _check_usage_metadata(cast("AIMessage", full_message))
+    assert full_message.usage_metadata is not None
+    if (
+        "output_token_details" in full_message.usage_metadata
+        and "reasoning" in full_message.usage_metadata["output_token_details"]
+    ):
+        assert full_message.usage_metadata["output_token_details"]["reasoning"] > 0
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_gemini_3_pro_agent_loop_streaming(output_version: Literal["v0", "v1"]) -> None:
+    """Test `gemini-3-pro-preview` agent loop with streaming and thinking."""
+
+    @tool
+    def calculate_sum(a: int, b: int) -> int:
+        """Calculate the sum of two numbers.
+
+        Args:
+            a: First number.
+            b: Second number.
+
+        Returns:
+            The sum of a and b.
+        """
+        return a + b
+
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        thinking_level="high",
+        include_thoughts=True,
+        output_version=output_version,
+    )
+    llm_with_tools = llm.bind_tools([calculate_sum])
+
+    input_message = HumanMessage("What is 123 + 456? Use the calculator tool.")
+
+    # First call - stream tool call
+    chunks: list[BaseMessageChunk] = []
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        chunks.append(chunk)
+
+    assert len(chunks) > 0
+
+    # Reconstruct message
+    tool_call_message = chunks[0]
+    for chunk in chunks[1:]:
+        tool_call_message = tool_call_message + chunk  # type: ignore[operator]
+
+    assert isinstance(tool_call_message, AIMessageChunk)
+    tool_calls = tool_call_message.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == "calculate_sum"
+
+    # Execute tool
+    tool_message = calculate_sum.invoke(tool_call)
+    assert isinstance(tool_message, ToolMessage)
+
+    # Second call - stream final response with reasoning
+    response_chunks: list[BaseMessageChunk] = []
+    for chunk in llm_with_tools.stream(
+        [
+            input_message,
+            tool_call_message,
+            tool_message,
+        ]
+    ):
+        assert isinstance(chunk, AIMessageChunk)
+        response_chunks.append(chunk)
+
+    assert len(response_chunks) > 0
+
+    # Reconstruct response
+    response = response_chunks[0]
+    for chunk in response_chunks[1:]:
+        response = response + chunk  # type: ignore[operator]
+
+    assert isinstance(response, AIMessageChunk)
+    assert isinstance(response.content, list)
+
+    # Verify response has text blocks
+    text_blocks = [
+        block
+        for block in response.content
+        if isinstance(block, dict) and block.get("type") == "text"
+    ]
+    assert len(text_blocks) > 0
+
+
+@pytest.mark.parametrize("model_name", [_MODEL, "gemini-3-pro-preview"])
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_streaming_with_multiple_tool_calls(
+    model_name: str, output_version: Literal["v0", "v1"]
+) -> None:
+    """Test streaming with multiple tool calls in a single response."""
+
+    @tool
+    def get_temperature(city: str) -> str:
+        """Get temperature for a city.
+
+        Args:
+            city: The city name.
+
+        Returns:
+            Temperature information.
+        """
+        return f"Temperature in {city}: 72°F"
+
+    @tool
+    def get_humidity(city: str) -> str:
+        """Get humidity for a city.
+
+        Args:
+            city: The city name.
+
+        Returns:
+            Humidity information.
+        """
+        return f"Humidity in {city}: 65%"
+
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
+        streaming=True,
+        output_version=output_version,
+    )
+    llm_with_tools = llm.bind_tools([get_temperature, get_humidity])
+
+    input_message = HumanMessage(
+        "Get both temperature and humidity for San Francisco. Use both tools."
+    )
+
+    # Stream tool calls
+    chunks: list[BaseMessageChunk] = []
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        chunks.append(chunk)
+
+    assert len(chunks) > 0
+
+    # Reconstruct message
+    tool_call_message = chunks[0]
+    for chunk in chunks[1:]:
+        tool_call_message = tool_call_message + chunk  # type: ignore[operator]
+
+    assert isinstance(tool_call_message, AIMessageChunk)
+    tool_calls = tool_call_message.tool_calls
+
+    # Model may make 1 or 2 tool calls depending on its decision
+    assert len(tool_calls) >= 1
+    assert len(tool_calls) <= 2
+
+    # Execute tools
+    tool_messages = []
+    for tool_call in tool_calls:
+        if tool_call["name"] == "get_temperature":
+            tool_message = get_temperature.invoke(tool_call)
+        elif tool_call["name"] == "get_humidity":
+            tool_message = get_humidity.invoke(tool_call)
+        else:
+            continue
+        tool_messages.append(tool_message)
+
+    # Stream final response
+    response_chunks: list[BaseMessageChunk] = []
+    for chunk in llm_with_tools.stream(
+        [input_message, tool_call_message, *tool_messages]
+    ):
+        assert isinstance(chunk, AIMessageChunk)
+        response_chunks.append(chunk)
+
+    assert len(response_chunks) > 0
