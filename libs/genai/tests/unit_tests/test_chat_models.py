@@ -452,8 +452,11 @@ def test_async_client_property() -> None:
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
+    # Verify client is initialized
+    client = chat.client
+    assert client is not None
     # Verify async_client returns client.aio
-    assert chat.async_client is chat.client.aio
+    assert chat.async_client is client.aio
     # Verify async_client has the expected async methods
     assert hasattr(chat.async_client, "models")
 
