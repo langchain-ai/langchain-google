@@ -799,19 +799,14 @@ def test_multimodal_pdf_input_url(backend_config: dict) -> None:
         assert len(response.content.strip()) > 0
 
 
-@pytest.mark.skip(
-    reason="Base64 PDF encoding not currently supported. "
-    "The _image_utils.ImageBytesLoader only accepts 'data:image/...' URIs, "
-    "not 'data:application/pdf;base64,...'. "
-    "To support this, would need to upload PDF via client.files.upload() "
-    "or extend _image_utils to support PDF mime types."
-)
 def test_multimodal_pdf_input_base64(backend_config: dict) -> None:
     """Test multimodal PDF input from base64 encoded data.
 
-    Note: This test is currently skipped because base64 PDFs require using
-    Part.from_bytes() or client.files.upload(), which aren't yet integrated
-    into the message content format handling.
+    Verifies that PDFs can be passed as base64 encoded data URIs
+    (`data:application/pdf;base64,...`) using the `image_url` format.
+
+    `ImageBytesLoader` handles decoding and sends the PDF as inline bytes to
+    the API, which works for both Google AI and Vertex AI backends.
     """
     llm = ChatGoogleGenerativeAI(model=_VISION_MODEL, **backend_config)
     pdf_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
@@ -2464,36 +2459,62 @@ def test_context_caching_tools(backend_config: dict) -> None:
     assert response.tool_calls[0]["name"] == "get_secret_number"
 
 
-@pytest.mark.skip(
-    reason="Google AI backend requires client.files.upload() for audio files. "
-    "This test would require uploading an audio file which adds complexity. "
-    "(Vertex AI backend supports gs:// URIs directly with media format.)"
-)
 def test_audio_timestamp(backend_config: dict) -> None:
     """Test audio transcription with timestamps.
 
-    Note: This test is skipped because the Google AI backend requires uploading
-    files first. To test audio timestamps, you would need to:
-    1. Upload a file: file = client.files.upload(file='audio.mp3')
-    2. Use file.uri in the message content
-    3. Pass generation_config={"audio_timestamp": True}
+    This test verifies that audio files can be transcribed with timestamps using
+    the `audio_timestamp` generation config parameter. Similar to PDF support, we
+    use the `image_url` format with an HTTP URL to download audio and send as
+    inline bytes, which works for both Google AI and Vertex AI backends.
 
-    Example:
-        ```python
-        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        file = model.client.files.upload(file="audio.mp3")
-
-        message = HumanMessage(
-            content=[
-                {"type": "media", "file_uri": file.uri, "mime_type": "audio/mp3"},
-                {"type": "text", "text": "Transcribe with timestamps."},
-            ]
-        )
-
-        output = model.invoke([message], generation_config={"audio_timestamp": True})
-        # Output will contain timestamps like [00:00:15] or 00:15:
-        ```
+    The `audio_timestamp` parameter enables timestamp generation in the format
+    `[HH:MM:SS]` within the transcribed output.
     """
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    audio_url = (
+        "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3"
+    )
+
+    message = HumanMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "Transcribe this audio with timestamps.",
+            },
+            {
+                "type": "image_url",  # image_url format works for audio too
+                "image_url": {"url": audio_url},
+            },
+        ]
+    )
+
+    response = llm.invoke([message], generation_config={"audio_timestamp": True})
+
+    assert isinstance(response, AIMessage)
+
+    # Extract text content (handle both string and list formats)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    else:
+        text_content = response.content
+
+    assert len(text_content.strip()) > 0
+
+    # Check that the response contains timestamp markers
+    # Timestamps appear in formats like **[00:00]**, **0:00**, or [HH:MM:SS]
+    # Check for common timestamp patterns
+    has_timestamps = (
+        "**[" in text_content  # Format: **[00:00]**
+        or "**0:" in text_content  # Format: **0:00**
+        or "[00:" in text_content  # Format: [00:00:00]
+    )
+    assert has_timestamps, (
+        f"No timestamp markers found in response: {text_content[:200]}"
+    )
 
 
 def test_langgraph_example(backend_config: dict) -> None:
