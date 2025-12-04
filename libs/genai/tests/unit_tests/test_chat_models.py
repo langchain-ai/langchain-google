@@ -1010,6 +1010,7 @@ def test_model_kwargs(mock_client: Mock) -> None:
     """Test we can transfer unknown params to model_kwargs."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
         convert_system_message_to_human=True,
         model_kwargs={"foo": "bar"},
     )
@@ -1019,6 +1020,7 @@ def test_model_kwargs(mock_client: Mock) -> None:
     with pytest.warns(match="transferred to model_kwargs"):
         llm = ChatGoogleGenerativeAI(
             model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
             convert_system_message_to_human=True,
             foo="bar",
         )
