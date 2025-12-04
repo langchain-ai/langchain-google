@@ -41,6 +41,7 @@ from langchain_google_genai.google_vector_store import (
     GoogleVectorStore,
 )
 from langchain_google_genai.llms import GoogleGenerativeAI
+from langchain_google_genai.utils import create_context_cache
 
 __all__ = [
     "ChatGoogleGenerativeAI",
@@ -52,4 +53,5 @@ __all__ = [
     "HarmCategory",
     "MediaResolution",
     "Modality",
+    "create_context_cache",
 ]

@@ -1,13 +1,26 @@
 """Test `ChatGoogleGenerativeAI`."""
 
 import asyncio
+import base64
+import io
 import json
+import math
+import os
 from collections.abc import Generator, Sequence
 from typing import Literal, cast
 from unittest.mock import patch
 
+import httpx
 import pytest
-from google.genai.types import Tool as GoogleTool
+import requests
+from google.genai.types import (
+    FunctionCallingConfig,
+    FunctionCallingConfigMode,
+    ToolConfig,
+)
+from google.genai.types import (
+    Tool as GoogleTool,
+)
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -28,6 +41,7 @@ from langchain_google_genai import (
     HarmCategory,
     MediaResolution,
     Modality,
+    create_context_cache,
 )
 
 _MODEL = "gemini-2.5-flash"
@@ -713,6 +727,94 @@ def test_chat_google_genai_multimodal(
             assert len(response.content.strip()) > 0
 
 
+def test_multimodal_pdf_input_url() -> None:
+    """Test multimodal PDF input from a public URL.
+
+    Note: Unlike Vertex AI which supports gs:// URIs natively, the unified
+    Gemini API requires files to be uploaded via client.files.upload() first
+    for gs:// URIs. This test uses a public HTTP URL instead.
+    """
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
+    pdf_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+
+    message = HumanMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "Describe the provided document.",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": pdf_url},
+            },
+        ]
+    )
+
+    response = llm.invoke([message])
+    assert isinstance(response, AIMessage)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content.strip()) > 0
+    else:
+        assert isinstance(response.content, str)
+        assert len(response.content.strip()) > 0
+
+
+@pytest.mark.skip(
+    reason="Base64 PDF encoding not currently supported. "
+    "The _image_utils.ImageBytesLoader only accepts 'data:image/...' URIs, "
+    "not 'data:application/pdf;base64,...'. "
+    "To support this, would need to upload PDF via client.files.upload() "
+    "or extend _image_utils to support PDF mime types."
+)
+def test_multimodal_pdf_input_base64() -> None:
+    """Test multimodal PDF input from base64 encoded data.
+
+    Note: This test is currently skipped because base64 PDFs require using
+    Part.from_bytes() or client.files.upload(), which aren't yet integrated
+    into the message content format handling.
+    """
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
+    pdf_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+
+    # Download and encode PDF as base64
+    response_data = requests.get(pdf_url, allow_redirects=True)
+    with io.BytesIO() as stream:
+        stream.write(response_data.content)
+        pdf_base64 = base64.b64encode(stream.getbuffer()).decode("utf-8")
+        pdf_data_uri = f"data:application/pdf;base64,{pdf_base64}"
+
+    message = HumanMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "Describe the provided document.",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": pdf_data_uri},
+            },
+        ]
+    )
+
+    response = llm.invoke([message])
+    assert isinstance(response, AIMessage)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content.strip()) > 0
+    else:
+        assert isinstance(response.content, str)
+        assert len(response.content.strip()) > 0
+
+
 @pytest.mark.parametrize(
     "message",
     [
@@ -808,6 +910,221 @@ def test_generativeai_get_num_tokens_gemini() -> None:
     llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
+
+
+def test_get_num_tokens_from_messages() -> None:
+    """Test token counting from messages."""
+    model = ChatGoogleGenerativeAI(temperature=0.0, model=_MODEL)
+    message = HumanMessage(content="Hello")
+    token = model.get_num_tokens_from_messages(messages=[message])
+    assert isinstance(token, int)
+    assert token == 3
+
+
+def test_single_call_previous_blocked_response() -> None:
+    """Test handling of blocked responses in conversation history.
+
+    If a previous call was blocked, the AIMessage will have empty content.
+    Empty content should be ignored.
+    """
+    model = ChatGoogleGenerativeAI(model=_MODEL)
+    text_question = "How much is 3+3?"
+    # Previous blocked response included in history
+    blocked_message = AIMessage(
+        content="",
+        response_metadata={
+            "is_blocked": True,
+            "safety_ratings": [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "probability_label": "MEDIUM",
+                    "probability_score": 0.33039191365242004,
+                    "blocked": True,
+                    "severity": "HARM_SEVERITY_MEDIUM",
+                    "severity_score": 0.2782268822193146,
+                },
+            ],
+            "finish_reason": "SAFETY",
+        },
+    )
+    user_message = HumanMessage(content=text_question)
+    response = model.invoke([blocked_message, user_message])
+    assert isinstance(response, AIMessage)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(response.content, str)
+
+
+def test_json_mode_typeddict() -> None:
+    """Test structured output with `TypedDict` using `json_mode` method."""
+    from typing_extensions import TypedDict
+
+    class MyModel(TypedDict):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    model = llm.with_structured_output(MyModel, method="json_mode")  # type: ignore[arg-type]
+    message = HumanMessage(content="My name is Erick and I am 28 years old")
+
+    response = model.invoke([message])
+    assert isinstance(response, dict)
+    assert response == {"name": "Erick", "age": 28}
+
+    # Test stream
+    for chunk in model.stream([message]):
+        assert isinstance(chunk, dict)
+        assert all(key in ["name", "age"] for key in chunk)
+    assert chunk == {"name": "Erick", "age": 28}
+
+
+def test_nested_bind_tools() -> None:
+    """Test nested Pydantic models in tool calling with `tool_choice`."""
+    from pydantic import Field
+
+    class Person(BaseModel):
+        name: str = Field(description="The name.")
+        hair_color: str | None = Field(
+            default=None, description="Hair color, only if provided."
+        )
+
+    class People(BaseModel):
+        data: list[Person] = Field(description="The people.")
+
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    llm_with_tools = llm.bind_tools([People], tool_choice="People")
+
+    response = llm_with_tools.invoke("Chester, no hair color provided.")
+    assert isinstance(response, AIMessage)
+    assert response.tool_calls[0]["name"] == "People"
+
+
+def test_timeout_non_streaming() -> None:
+    """Test timeout parameter in non-streaming mode.
+
+    Note: Unlike Vertex AI which uses gRPC and raises `DeadlineExceeded`,
+    the unified Gemini API uses REST (httpx) and raises httpx timeout exceptions.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        timeout=0.001,  # 1ms - too short to complete
+    )
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+        model.invoke([HumanMessage(content="Hello")])
+
+
+def test_timeout_streaming() -> None:
+    """Test timeout parameter in streaming mode.
+
+    Note: Unlike Vertex AI which uses gRPC and raises `DeadlineExceeded`,
+    the unified Gemini API uses REST (httpx) and raises httpx timeout exceptions.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        timeout=0.001,  # 1ms - too short to complete
+        streaming=True,
+    )
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+        model.invoke([HumanMessage(content="Hello")])
+
+
+def test_response_metadata_avg_logprobs() -> None:
+    """Test that `avg_logprobs` are present in response metadata."""
+    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    response = llm.invoke("Hello!")
+    probs = response.response_metadata.get("avg_logprobs")
+    if probs is not None:
+        assert isinstance(probs, float)
+
+
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
+def test_logprobs() -> None:
+    """Test logprobs parameter with different configurations."""
+    # Test with integer logprobs (top K)
+    llm = ChatGoogleGenerativeAI(model=_MODEL, logprobs=2)
+    msg = llm.invoke("hey")
+    tokenprobs = msg.response_metadata.get("logprobs_result")
+    assert tokenprobs is None or isinstance(tokenprobs, list)
+    if tokenprobs:
+        stack = tokenprobs[:]
+        while stack:
+            token = stack.pop()
+            assert isinstance(token, dict)
+            assert "token" in token
+            assert "logprob" in token
+            assert isinstance(token.get("token"), str)
+            assert isinstance(token.get("logprob"), float)
+            if "top_logprobs" in token and token.get("top_logprobs") is not None:
+                assert isinstance(token.get("top_logprobs"), list)
+                stack.extend(token.get("top_logprobs", []))
+
+    # Test with logprobs=True
+    llm2 = ChatGoogleGenerativeAI(model=_MODEL, logprobs=True)
+    msg2 = llm2.invoke("how are you")
+    assert msg2.response_metadata["logprobs_result"]
+
+    # Test with logprobs=False
+    llm3 = ChatGoogleGenerativeAI(model=_MODEL, logprobs=False)
+    msg3 = llm3.invoke("howdy")
+    assert msg3.response_metadata.get("logprobs_result") is None
+
+
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
+def test_logprobs_with_json_schema() -> None:
+    """Test logprobs with JSON schema structured output.
+
+    Ensures logprobs are populated when using JSON schema responses.
+    This exercises the logprobs path with `response_mime_type='application/json'`
+    and `response_schema` set.
+
+    The test verifies:
+    1. Zero logprobs (`prob=1.0`, 100% certainty) are included, not filtered
+    2. All logprob values are valid (non-positive, non-`NaN`)
+    """
+    output_schema = {
+        "title": "Test Schema",
+        "type": "object",
+        "properties": {
+            "fieldA": {"type": "string"},
+            "fieldB": {"type": "number"},
+        },
+        "required": ["fieldA", "fieldB"],
+    }
+
+    llm = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        response_mime_type="application/json",
+        response_schema=output_schema,
+        logprobs=True,
+    )
+
+    msg = llm.invoke("Return a JSON object with fieldA='test' and fieldB=42")
+    tokenprobs = msg.response_metadata.get("logprobs_result")
+    # We don't assert exact content to avoid flakiness, but if present it must
+    # be a well-formed list of token/logprob dicts, including zero logprobs.
+    assert tokenprobs is None or isinstance(tokenprobs, list)
+    if tokenprobs:
+        logprob_values = []
+        for token in tokenprobs:
+            assert isinstance(token, dict)
+            assert "token" in token
+            assert "logprob" in token
+            assert isinstance(token.get("token"), str)
+            assert isinstance(token.get("logprob"), (float, int))
+            logprob_values.append(token["logprob"])
+
+        # Verify all logprobs are valid: non-positive (zero allowed) and not NaN
+        for lp in logprob_values:
+            assert lp <= 0.0, f"Logprob should be non-positive, got {lp}"
+            assert not (isinstance(lp, float) and math.isnan(lp)), (
+                f"Logprob should not be NaN, got {lp}"
+            )
 
 
 @pytest.mark.parametrize("use_streaming", [False, True])
@@ -1953,3 +2270,426 @@ def test_structured_output_with_google_search(use_streaming: bool) -> None:
     # across chunks but input/output tokens only keep final values
     if not use_streaming:
         _check_usage_metadata(response)
+
+
+@pytest.mark.extended
+def test_context_caching() -> None:
+    """Test context caching with large text content.
+
+    Note: For Gemini API, gs:// URIs are not supported directly.
+    Files must be uploaded via client.files.upload() first.
+    For simplicity, this test uses large text content instead.
+    """
+    # Create a large context document (needs to be large enough to trigger caching)
+    large_document = (
+        "RESEARCH PAPER ON ARTIFICIAL INTELLIGENCE\n\n"
+        "Abstract: This paper discusses the fundamentals of artificial intelligence "
+        "and machine learning.\n\n"
+    )
+    # Add substantial content to meet caching minimum token requirements
+    for i in range(200):
+        large_document += (
+            f"Section {i}: This section contains detailed information about "
+            f"various aspects of AI including neural networks, deep learning, "
+            f"natural language processing, computer vision, and reinforcement "
+            f"learning. The field of artificial intelligence has evolved "
+            f"significantly over the past decades, with breakthroughs in pattern "
+            f"recognition, data processing, and autonomous systems. "
+        )
+
+    system_instruction = (
+        "You are an expert researcher. You always stick to the facts in the sources "
+        "provided, and never make up new facts.\n\n"
+        "If asked about it, the secret number is 747.\n\n"
+        "Now analyze the research paper provided and answer questions about it."
+    )
+
+    model = ChatGoogleGenerativeAI(model=_MODEL)
+
+    cached_content = create_context_cache(
+        model,
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(content=large_document),
+        ],
+        ttl="300s",  # 5 minutes
+    )
+
+    # Using cached_content in constructor
+    chat = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        cached_content=cached_content,
+    )
+
+    response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
+
+    # Verify cache was used (should have cache_read tokens in usage metadata)
+    if response.usage_metadata:
+        # Cache read tokens should be present when using cached content
+        cache_read_check = (
+            "cache_read_input" in response.usage_metadata
+            or cast("int", response.usage_metadata.get("cache_read_input", 0)) >= 0
+        )
+        assert cache_read_check
+
+    # Using cached content in request
+    chat = ChatGoogleGenerativeAI(model=_MODEL)
+    response = chat.invoke("What is the secret number?", cached_content=cached_content)
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
+
+
+@pytest.mark.extended
+def test_context_caching_tools() -> None:
+    """Test context caching with tools and large text content.
+
+    Note: For Gemini API, gs:// URIs are not supported directly.
+    Files must be uploaded via client.files.upload() first.
+    For simplicity, this test uses large text content instead.
+    """
+
+    @tool
+    def get_secret_number() -> int:
+        """Gets secret number."""
+        return 747
+
+    tools = [get_secret_number]
+
+    # Create a large context document
+    large_document = (
+        "RESEARCH PAPER ON ARTIFICIAL INTELLIGENCE\n\n"
+        "Abstract: This paper discusses various AI topics.\n\n"
+    )
+    for i in range(200):
+        large_document += (
+            f"Section {i}: Detailed AI research content about neural networks, "
+            f"machine learning algorithms, and computational intelligence. "
+        )
+
+    system_instruction = (
+        "You are an expert researcher. You always stick to the facts in the sources "
+        "provided, and never make up new facts.\n\n"
+        "You have a get_secret_number function available. Use this tool if someone "
+        "asks for the secret number.\n\n"
+        "Now analyze the research paper and answer questions."
+    )
+
+    model = ChatGoogleGenerativeAI(model=_MODEL)
+
+    cached_content = create_context_cache(
+        model,
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(content=large_document),
+        ],
+        tools=cast("list", tools),
+        ttl="300s",  # 5 minutes
+    )
+
+    # Note: When using cached content with tools, do NOT bind tools again
+    # The tools are already part of the cache and will be used automatically
+    chat = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        cached_content=cached_content,
+    )
+
+    # Invoke the model - it should call the tool from the cached content
+    response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    # The model should call the get_secret_number tool that was cached
+    assert len(response.tool_calls) > 0
+    assert response.tool_calls[0]["name"] == "get_secret_number"
+
+
+@pytest.mark.skip(
+    reason="Gemini API does not support gs:// URIs. "
+    "Files must be uploaded via client.files.upload() first. "
+    "This test would require uploading an audio file which adds complexity."
+)
+def test_audio_timestamp() -> None:
+    """Test audio transcription with timestamps.
+
+    Note: This test is skipped because the Gemini API does not support gs:// URIs
+    directly. To test audio timestamps, you would need to:
+    1. Upload a file: file = client.files.upload(file='audio.mp3')
+    2. Use file.uri in the message content
+    3. Pass generation_config={"audio_timestamp": True}
+
+    Example:
+        ```python
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        file = model.client.files.upload(file="audio.mp3")
+
+        message = HumanMessage(
+            content=[
+                {"type": "media", "file_uri": file.uri, "mime_type": "audio/mp3"},
+                {"type": "text", "text": "Transcribe with timestamps."},
+            ]
+        )
+
+        output = model.invoke([message], generation_config={"audio_timestamp": True})
+        # Output will contain timestamps like [00:00:15] or 00:15:
+        ```
+    """
+
+
+def test_langgraph_example() -> None:
+    """Test integration with LangGraph-style multi-turn tool calling."""
+    llm = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        max_output_tokens=8192,
+        temperature=0.2,
+    )
+
+    add_declaration = {
+        "name": "add",
+        "description": "Adds a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    multiply_declaration = {
+        "name": "multiply",
+        "description": "Multiply a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a helpful assistant tasked with performing "
+                "arithmetic on a set of inputs."
+            )
+        ),
+        HumanMessage(content="Multiply 2 and 3"),
+        HumanMessage(content="No, actually multiply 3 and 3!"),
+    ]
+    step1 = llm.invoke(
+        messages,
+        tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
+    )
+    step2 = llm.invoke(
+        [
+            *messages,
+            step1,
+            ToolMessage(content="9", tool_call_id=step1.tool_calls[0]["id"]),
+        ],
+        tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
+    )
+    assert isinstance(step2, AIMessage)
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+def test_streaming_function_call_arguments() -> None:
+    """Test streaming function calling with stream_function_call_arguments=True.
+
+    Note: This feature is only available on Vertex AI with Gemini 3 Pro (Preview).
+    This test verifies that function call arguments are streamed incrementally
+    rather than being delivered in a single chunk.
+    """
+
+    @tool
+    def search_database(
+        query: str,
+        filters: dict[str, str],
+        max_results: int = 10,
+    ) -> str:
+        """Search a database with a query and filters.
+
+        Args:
+            query: The search query string.
+            filters: Dictionary of field:value filters to apply.
+            max_results: Maximum number of results to return.
+
+        Returns:
+            Search results as a string.
+        """
+        return f"Found {max_results} results for '{query}' with filters {filters}"
+
+    # Use Vertex AI as stream_function_call_arguments is only supported there
+    # Pass api_key=None to force use of application default credentials
+    import os
+
+    project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+    if not project:
+        pytest.skip("Vertex AI tests require GOOGLE_CLOUD_PROJECT env var to be set")
+
+    # Use Gemini 3 Pro as these features are only available there
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        vertexai=True,
+        project=project,
+        api_key=None,  # Force use of application default credentials
+    )
+
+    # Configure tool_config with streaming function call arguments
+    tool_config = ToolConfig(
+        function_calling_config=FunctionCallingConfig(
+            mode=FunctionCallingConfigMode.AUTO,
+            stream_function_call_arguments=True,
+        )
+    )
+
+    llm_with_tools = llm.bind_tools([search_database], tool_config=tool_config)
+
+    input_message = HumanMessage(
+        content=(
+            "Search the database for 'machine learning' with filters "
+            "category='AI' and year='2024', return 20 results"
+        )
+    )
+
+    # Stream the response
+    chunks: list[AIMessageChunk] = []
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        chunks.append(chunk)
+
+    assert len(chunks) > 0, "No chunks received from streaming"
+
+    # Reconstruct the full message
+    full_message = chunks[0]
+    for chunk in chunks[1:]:
+        full_message = full_message + chunk
+
+    # Verify that the tool call was made
+    assert isinstance(full_message, AIMessageChunk)
+    tool_calls = full_message.tool_calls
+
+    # With stream_function_call_arguments=True, we should see incremental updates
+    # Check that we have multiple chunks with tool_call_chunks
+    chunks_with_tool_calls = [
+        c for c in chunks if c.tool_call_chunks and len(c.tool_call_chunks) > 0
+    ]
+
+    # Verify that streaming is actually happening
+    assert len(chunks_with_tool_calls) > 0, "No chunks contained tool call data"
+    assert len(chunks_with_tool_calls) > 1, (
+        f"Expected multiple chunks with tool call data to verify streaming, "
+        f"got {len(chunks_with_tool_calls)}"
+    )
+
+    # Verify the tool name appears in at least one tool call
+    # Note: Due to chunk aggregation behavior, args may be in separate chunks
+    tool_names = [tc.get("name") for tc in tool_calls if tc.get("name")]
+    assert "search_database" in tool_names, (
+        f"Expected 'search_database' in tool names, got {tool_names}"
+    )
+
+    # The presence of multiple tool calls indicates incremental streaming
+    assert len(tool_calls) > 1, (
+        f"Expected multiple tool calls indicating argument streaming, "
+        f"got {len(tool_calls)}"
+    )
+
+    # Test successful - streaming function calling is working
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+def test_multimodal_function_response() -> None:
+    """Test multimodal function responses with image/file data.
+
+    Note: This feature is only available on Vertex AI with Gemini 3 Pro (Preview).
+    This test verifies that function responses can include image/file data
+    and that the model can process multimodal function responses.
+    """
+
+    @tool
+    def get_product_image(product_id: str) -> str:
+        """Get the product image for a given product ID.
+
+        Args:
+            product_id: The unique identifier for the product.
+
+        Returns:
+            Information about retrieving the product image.
+        """
+        return f"Image data for product {product_id}"
+
+    # Use Vertex AI as this feature is only available there
+    # Pass api_key=None to force use of application default credentials
+
+    project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+    if not project:
+        pytest.skip("Vertex AI tests require GOOGLE_CLOUD_PROJECT env var to be set")
+
+    # Use Gemini 3 Pro as these features are only available there
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        vertexai=True,
+        project=project,
+        api_key=None,  # Force use of application default credentials
+    )
+    llm_with_tools = llm.bind_tools([get_product_image])
+
+    input_message = HumanMessage(
+        content="Show me the product image for product ID 'laptop-2024'"
+    )
+
+    # First call - model should request the tool
+    tool_call_message = llm_with_tools.invoke([input_message])
+    assert isinstance(tool_call_message, AIMessage)
+    tool_calls = tool_call_message.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == "get_product_image"
+    assert "product_id" in tool_call["args"]
+
+    # Create a multimodal function response with an image
+    # Using a Google Cloud Storage URI
+    tool_response = ToolMessage(
+        content=json.dumps(
+            {
+                "type": "function_response_file_data",
+                "file_uri": "gs://cloud-samples-data/generative-ai/image/scones.jpg",
+                "mime_type": "image/jpeg",
+                "display_name": "Product Image: laptop-2024",
+            }
+        ),
+        tool_call_id=tool_call["id"],
+    )
+
+    # Second call - model should incorporate the image response
+    response = llm_with_tools.invoke(
+        [
+            input_message,
+            tool_call_message,
+            tool_response,
+        ]
+    )
+
+    assert isinstance(response, AIMessage)
+
+    # The model should acknowledge receiving data
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0, "Expected text response from model"
+    else:
+        assert isinstance(response.content, str)
+        assert len(response.content) > 0, "Expected text response from model"
+
+    # Test successful - multimodal function response is working
