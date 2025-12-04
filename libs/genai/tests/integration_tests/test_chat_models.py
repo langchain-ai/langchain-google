@@ -1,13 +1,26 @@
 """Test `ChatGoogleGenerativeAI`."""
 
 import asyncio
+import base64
+import io
 import json
+import math
+import os
 from collections.abc import Generator, Sequence
 from typing import Literal, cast
 from unittest.mock import patch
 
+import httpx
 import pytest
-from google.genai.types import Tool as GoogleTool
+import requests
+from google.genai.types import (
+    FunctionCallingConfig,
+    FunctionCallingConfigMode,
+    ToolConfig,
+)
+from google.genai.types import (
+    Tool as GoogleTool,
+)
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -28,6 +41,7 @@ from langchain_google_genai import (
     HarmCategory,
     MediaResolution,
     Modality,
+    create_context_cache,
 )
 
 _MODEL = "gemini-2.5-flash"
@@ -127,9 +141,11 @@ def _check_tool_call_args(tool_call_args: dict) -> None:
 
 @pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize("with_tags", [False, True])
-async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
+async def test_chat_google_genai_batch(
+    is_async: bool, with_tags: bool, backend_config: dict
+) -> None:
     """Test batch tokens."""
-    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     messages: Sequence[str] = [
         "This is a test. Say 'foo'",
         "This is a test, say 'bar'",
@@ -161,47 +177,54 @@ async def test_chat_google_genai_batch(is_async: bool, with_tags: bool) -> None:
 
 
 @pytest.mark.parametrize("is_async", [False, True])
-async def test_chat_google_genai_invoke(is_async: bool) -> None:
+async def test_chat_google_genai_invoke(is_async: bool, backend_config: dict) -> None:
     """Test invoke tokens."""
-    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
-    if is_async:
-        result = await llm.ainvoke(
-            "This is a test. Say 'foo'",
-            config={"tags": ["foo"]},
-            generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
-        )
-    else:
-        result = llm.invoke(
-            "This is a test. Say 'foo'",
-            config={"tags": ["foo"]},
-            generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
-        )
+    try:
+        if is_async:
+            result = await llm.ainvoke(
+                "This is a test. Say 'foo'",
+                config={"tags": ["foo"]},
+                generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
+            )
+        else:
+            result = llm.invoke(
+                "This is a test. Say 'foo'",
+                config={"tags": ["foo"]},
+                generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
+            )
 
-    assert isinstance(result, AIMessage)
-    if isinstance(result.content, list):
-        text_content = "".join(
-            block.get("text", "")
-            for block in result.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-        assert len(text_content) > 0
-        assert not text_content.startswith(" ")
-    else:
-        assert isinstance(result.content, str)
-        assert not result.content.startswith(" ")
-    _check_usage_metadata(result)
+        assert isinstance(result, AIMessage)
+        if isinstance(result.content, list):
+            text_content = "".join(
+                block.get("text", "")
+                for block in result.content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+            assert len(text_content) > 0
+            assert not text_content.startswith(" ")
+        else:
+            assert isinstance(result.content, str)
+            assert not result.content.startswith(" ")
+        _check_usage_metadata(result)
+    finally:
+        # Explicitly close the client to avoid resource warnings
+        if llm.client:
+            llm.client.close()
+            if llm.client.aio:
+                await llm.client.aio.aclose()
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_chat_google_genai_invoke_with_image() -> None:
+def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
     """Test generating an image and then text.
 
     Using `generation_config` to specify response modalities.
 
     Up to `9` retries possible due to inner loop and Pytest retries.
     """
-    llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL)
+    llm = ChatGoogleGenerativeAI(model=_IMAGE_OUTPUT_MODEL, **backend_config)
 
     for _ in range(3):
         # We break as soon as we get an image back, as it's not guaranteed
@@ -246,10 +269,12 @@ def test_chat_google_genai_invoke_with_image() -> None:
     _ = llm.invoke(["What's this?", {"role": "assistant", "content": content_blocks}])
 
 
-def test_chat_google_genai_invoke_with_audio() -> None:
+def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
     """Test generating audio."""
     llm = ChatGoogleGenerativeAI(
-        model=_AUDIO_OUTPUT_MODEL, response_modalities=[Modality.AUDIO]
+        model=_AUDIO_OUTPUT_MODEL,
+        response_modalities=[Modality.AUDIO],
+        **backend_config,
     )
 
     result = llm.invoke(
@@ -281,14 +306,14 @@ def test_chat_google_genai_invoke_with_audio() -> None:
     ],
 )
 def test_chat_google_genai_invoke_thinking(
-    thinking_budget: int | None, test_description: str
+    thinking_budget: int | None, test_description: str, backend_config: dict
 ) -> None:
     """Test invoke a thinking model with different thinking budget configurations."""
     llm_kwargs: dict[str, str | int] = {"model": _THINKING_MODEL}
     if thinking_budget is not None:
         llm_kwargs["thinking_budget"] = thinking_budget
 
-    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+    llm = ChatGoogleGenerativeAI(**llm_kwargs, **backend_config)
 
     result = llm.invoke(
         "How many O's are in Google? Please tell me how you double checked the result",
@@ -348,11 +373,14 @@ def _check_thinking_output(content: list, output_version: str) -> None:
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_google_genai_invoke_thinking_include_thoughts(
-    output_version: str,
+    output_version: str, backend_config: dict
 ) -> None:
     """Test invoke thinking model with `include_thoughts`."""
     llm = ChatGoogleGenerativeAI(
-        model=_THINKING_MODEL, include_thoughts=True, output_version=output_version
+        model=_THINKING_MODEL,
+        include_thoughts=True,
+        output_version=output_version,
+        **backend_config,
     )
 
     input_message = {
@@ -405,7 +433,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
 @pytest.mark.flaky(retries=5, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_chat_google_genai_invoke_thinking_with_tools(
-    output_version: str,
+    output_version: str, backend_config: dict
 ) -> None:
     """Test thinking with function calling to get thought signatures.
 
@@ -432,7 +460,10 @@ def test_chat_google_genai_invoke_thinking_with_tools(
         }
 
     llm = ChatGoogleGenerativeAI(
-        model=_THINKING_MODEL, include_thoughts=True, output_version=output_version
+        model=_THINKING_MODEL,
+        include_thoughts=True,
+        output_version=output_version,
+        **backend_config,
     )
     llm_with_tools = llm.bind_tools([analyze_weather])
 
@@ -537,7 +568,7 @@ def test_chat_google_genai_invoke_thinking_with_tools(
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_thought_signature_round_trip() -> None:
+def test_thought_signature_round_trip(backend_config: dict) -> None:
     """Test thought signatures are properly preserved in round-trip conversations."""
 
     @tool
@@ -546,7 +577,10 @@ def test_thought_signature_round_trip() -> None:
         return f"Response to: {query}"
 
     llm = ChatGoogleGenerativeAI(
-        model=_THINKING_MODEL, include_thoughts=True, output_version="v1"
+        model=_THINKING_MODEL,
+        include_thoughts=True,
+        output_version="v1",
+        **backend_config,
     )
     llm_with_tools = llm.bind_tools([simple_tool])
 
@@ -596,9 +630,11 @@ def test_thought_signature_round_trip() -> None:
         assert second_result.content is not None
 
 
-def test_chat_google_genai_invoke_thinking_disabled() -> None:
+def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> None:
     """Test invoking a thinking model with zero `thinking_budget`."""
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", thinking_budget=0)
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash", thinking_budget=0, **backend_config
+    )
 
     result = llm.invoke(
         "How many O's are in Google? Please tell me how you double checked the result",
@@ -614,9 +650,11 @@ def test_chat_google_genai_invoke_thinking_disabled() -> None:
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_chat_google_genai_invoke_no_image_generation_without_modalities() -> None:
+def test_chat_google_genai_invoke_no_image_generation_without_modalities(
+    backend_config: dict,
+) -> None:
     """Test invoke tokens with image without response modalities."""
-    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     result = llm.invoke(
         "Generate an image of a cat. Then, say meow!",
@@ -667,6 +705,7 @@ def test_chat_google_genai_multimodal(
     test_case: str,
     messages: list[BaseMessage],
     use_streaming: bool,
+    backend_config: dict,
 ) -> None:
     """Test multimodal functionality with various message types and streaming support.
 
@@ -677,7 +716,7 @@ def test_chat_google_genai_multimodal(
         use_streaming: Whether to test streaming functionality.
     """
     del test_case  # Parameters used for test organization
-    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL, **backend_config)
 
     if use_streaming:
         # Test streaming
@@ -713,6 +752,94 @@ def test_chat_google_genai_multimodal(
             assert len(response.content.strip()) > 0
 
 
+def test_multimodal_pdf_input_url(backend_config: dict) -> None:
+    """Test multimodal PDF input from a public URL.
+
+    Note: Unlike Vertex AI which supports gs:// URIs natively, the unified
+    Gemini API requires files to be uploaded via client.files.upload() first
+    for gs:// URIs. This test uses a public HTTP URL instead.
+    """
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL, **backend_config)
+    pdf_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+
+    message = HumanMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "Describe the provided document.",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": pdf_url},
+            },
+        ]
+    )
+
+    response = llm.invoke([message])
+    assert isinstance(response, AIMessage)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content.strip()) > 0
+    else:
+        assert isinstance(response.content, str)
+        assert len(response.content.strip()) > 0
+
+
+@pytest.mark.skip(
+    reason="Base64 PDF encoding not currently supported. "
+    "The _image_utils.ImageBytesLoader only accepts 'data:image/...' URIs, "
+    "not 'data:application/pdf;base64,...'. "
+    "To support this, would need to upload PDF via client.files.upload() "
+    "or extend _image_utils to support PDF mime types."
+)
+def test_multimodal_pdf_input_base64(backend_config: dict) -> None:
+    """Test multimodal PDF input from base64 encoded data.
+
+    Note: This test is currently skipped because base64 PDFs require using
+    Part.from_bytes() or client.files.upload(), which aren't yet integrated
+    into the message content format handling.
+    """
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL, **backend_config)
+    pdf_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+
+    # Download and encode PDF as base64
+    response_data = requests.get(pdf_url, allow_redirects=True)
+    with io.BytesIO() as stream:
+        stream.write(response_data.content)
+        pdf_base64 = base64.b64encode(stream.getbuffer()).decode("utf-8")
+        pdf_data_uri = f"data:application/pdf;base64,{pdf_base64}"
+
+    message = HumanMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "Describe the provided document.",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": pdf_data_uri},
+            },
+        ]
+    )
+
+    response = llm.invoke([message])
+    assert isinstance(response, AIMessage)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content.strip()) > 0
+    else:
+        assert isinstance(response.content, str)
+        assert len(response.content.strip()) > 0
+
+
 @pytest.mark.parametrize(
     "message",
     [
@@ -730,9 +857,11 @@ def test_chat_google_genai_multimodal(
         ),
     ],
 )
-def test_chat_google_genai_invoke_media_resolution(message: BaseMessage) -> None:
+def test_chat_google_genai_invoke_media_resolution(
+    message: BaseMessage, backend_config: dict
+) -> None:
     """Test invoke vision model with `media_resolution` set to low and without."""
-    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL)
+    llm = ChatGoogleGenerativeAI(model=_VISION_MODEL, **backend_config)
     result = llm.invoke([message])
     result_low_res = llm.invoke(
         [message], media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW
@@ -749,8 +878,8 @@ def test_chat_google_genai_invoke_media_resolution(message: BaseMessage) -> None
     )
 
 
-def test_chat_google_genai_single_call_with_history() -> None:
-    model = ChatGoogleGenerativeAI(model=_MODEL)
+def test_chat_google_genai_single_call_with_history(backend_config: dict) -> None:
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
@@ -774,16 +903,14 @@ def test_chat_google_genai_single_call_with_history() -> None:
     [_MODEL, _PRO_MODEL],
 )
 def test_chat_google_genai_system_message(
-    model_name: str,
+    model_name: str, backend_config: dict
 ) -> None:
     """Test system message handling.
 
     Tests that system messages are properly converted to system instructions for
     different models.
     """
-    model = ChatGoogleGenerativeAI(
-        model=model_name,
-    )
+    model = ChatGoogleGenerativeAI(model=model_name, **backend_config)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     system_message = SystemMessage(content="You're supposed to answer math questions.")
@@ -803,21 +930,239 @@ def test_chat_google_genai_system_message(
         assert isinstance(response.content, str)
 
 
-def test_generativeai_get_num_tokens_gemini() -> None:
+def test_generativeai_get_num_tokens_gemini(backend_config: dict) -> None:
     """Test model tokenizer."""
-    llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL)
+    llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL, **backend_config)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
 
 
+def test_get_num_tokens_from_messages(backend_config: dict) -> None:
+    """Test token counting from messages."""
+    model = ChatGoogleGenerativeAI(temperature=0.0, model=_MODEL, **backend_config)
+    message = HumanMessage(content="Hello")
+    token = model.get_num_tokens_from_messages(messages=[message])
+    assert isinstance(token, int)
+    assert token == 3
+
+
+def test_single_call_previous_blocked_response(backend_config: dict) -> None:
+    """Test handling of blocked responses in conversation history.
+
+    If a previous call was blocked, the AIMessage will have empty content.
+    Empty content should be ignored.
+    """
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    text_question = "How much is 3+3?"
+    # Previous blocked response included in history
+    blocked_message = AIMessage(
+        content="",
+        response_metadata={
+            "is_blocked": True,
+            "safety_ratings": [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "probability_label": "MEDIUM",
+                    "probability_score": 0.33039191365242004,
+                    "blocked": True,
+                    "severity": "HARM_SEVERITY_MEDIUM",
+                    "severity_score": 0.2782268822193146,
+                },
+            ],
+            "finish_reason": "SAFETY",
+        },
+    )
+    user_message = HumanMessage(content=text_question)
+    response = model.invoke([blocked_message, user_message])
+    assert isinstance(response, AIMessage)
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(response.content, str)
+
+
+def test_json_mode_typeddict(backend_config: dict) -> None:
+    """Test structured output with `TypedDict` using `json_mode` method."""
+    from typing_extensions import TypedDict
+
+    class MyModel(TypedDict):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    model = llm.with_structured_output(MyModel, method="json_mode")  # type: ignore[arg-type]
+    message = HumanMessage(content="My name is Erick and I am 28 years old")
+
+    response = model.invoke([message])
+    assert isinstance(response, dict)
+    assert response == {"name": "Erick", "age": 28}
+
+    # Test stream
+    for chunk in model.stream([message]):
+        assert isinstance(chunk, dict)
+        assert all(key in ["name", "age"] for key in chunk)
+    assert chunk == {"name": "Erick", "age": 28}
+
+
+def test_nested_bind_tools(backend_config: dict) -> None:
+    """Test nested Pydantic models in tool calling with `tool_choice`."""
+    from pydantic import Field
+
+    class Person(BaseModel):
+        name: str = Field(description="The name.")
+        hair_color: str | None = Field(
+            default=None, description="Hair color, only if provided."
+        )
+
+    class People(BaseModel):
+        data: list[Person] = Field(description="The people.")
+
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    llm_with_tools = llm.bind_tools([People], tool_choice="People")
+
+    response = llm_with_tools.invoke("Chester, no hair color provided.")
+    assert isinstance(response, AIMessage)
+    assert response.tool_calls[0]["name"] == "People"
+
+
+def test_timeout_non_streaming(backend_config: dict) -> None:
+    """Test timeout parameter in non-streaming mode.
+
+    Note: Unlike Vertex AI which uses gRPC and raises `DeadlineExceeded`,
+    the unified Gemini API uses REST (httpx) and raises httpx timeout exceptions.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        timeout=0.001,  # 1ms - too short to complete
+        **backend_config,
+    )
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+        model.invoke([HumanMessage(content="Hello")])
+
+
+def test_timeout_streaming(backend_config: dict) -> None:
+    """Test timeout parameter in streaming mode.
+
+    Note: Unlike Vertex AI which uses gRPC and raises `DeadlineExceeded`,
+    the unified Gemini API uses REST (httpx) and raises httpx timeout exceptions.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        timeout=0.001,  # 1ms - too short to complete
+        streaming=True,
+        **backend_config,
+    )
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+        model.invoke([HumanMessage(content="Hello")])
+
+
+def test_response_metadata_avg_logprobs(backend_config: dict) -> None:
+    """Test that `avg_logprobs` are present in response metadata."""
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    response = llm.invoke("Hello!")
+    probs = response.response_metadata.get("avg_logprobs")
+    if probs is not None:
+        assert isinstance(probs, float)
+
+
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
+def test_logprobs(backend_config: dict) -> None:
+    """Test logprobs parameter with different configurations."""
+    # Test with integer logprobs (top K)
+    llm = ChatGoogleGenerativeAI(model=_MODEL, logprobs=2, **backend_config)
+    msg = llm.invoke("hey")
+    tokenprobs = msg.response_metadata.get("logprobs_result")
+    assert tokenprobs is None or isinstance(tokenprobs, list)
+    if tokenprobs:
+        stack = tokenprobs[:]
+        while stack:
+            token = stack.pop()
+            assert isinstance(token, dict)
+            assert "token" in token
+            assert "logprob" in token
+            assert isinstance(token.get("token"), str)
+            assert isinstance(token.get("logprob"), float)
+            if "top_logprobs" in token and token.get("top_logprobs") is not None:
+                assert isinstance(token.get("top_logprobs"), list)
+                stack.extend(token.get("top_logprobs", []))
+
+    # Test with logprobs=True
+    llm2 = ChatGoogleGenerativeAI(model=_MODEL, logprobs=True, **backend_config)
+    msg2 = llm2.invoke("how are you")
+    assert msg2.response_metadata["logprobs_result"]
+
+    # Test with logprobs=False
+    llm3 = ChatGoogleGenerativeAI(model=_MODEL, logprobs=False, **backend_config)
+    msg3 = llm3.invoke("howdy")
+    assert msg3.response_metadata.get("logprobs_result") is None
+
+
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
+def test_logprobs_with_json_schema(backend_config: dict) -> None:
+    """Test logprobs with JSON schema structured output.
+
+    Ensures logprobs are populated when using JSON schema responses.
+    This exercises the logprobs path with `response_mime_type='application/json'`
+    and `response_schema` set.
+
+    The test verifies:
+    1. Zero logprobs (`prob=1.0`, 100% certainty) are included, not filtered
+    2. All logprob values are valid (non-positive, non-`NaN`)
+    """
+    output_schema = {
+        "title": "Test Schema",
+        "type": "object",
+        "properties": {
+            "fieldA": {"type": "string"},
+            "fieldB": {"type": "number"},
+        },
+        "required": ["fieldA", "fieldB"],
+    }
+
+    llm = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        response_mime_type="application/json",
+        response_schema=output_schema,
+        logprobs=True,
+        **backend_config,
+    )
+
+    msg = llm.invoke("Return a JSON object with fieldA='test' and fieldB=42")
+    tokenprobs = msg.response_metadata.get("logprobs_result")
+    # We don't assert exact content to avoid flakiness, but if present it must
+    # be a well-formed list of token/logprob dicts, including zero logprobs.
+    assert tokenprobs is None or isinstance(tokenprobs, list)
+    if tokenprobs:
+        logprob_values = []
+        for token in tokenprobs:
+            assert isinstance(token, dict)
+            assert "token" in token
+            assert "logprob" in token
+            assert isinstance(token.get("token"), str)
+            assert isinstance(token.get("logprob"), (float, int))
+            logprob_values.append(token["logprob"])
+
+        # Verify all logprobs are valid: non-positive (zero allowed) and not NaN
+        for lp in logprob_values:
+            assert lp <= 0.0, f"Logprob should be non-positive, got {lp}"
+            assert not (isinstance(lp, float) and math.isnan(lp)), (
+                f"Logprob should not be NaN, got {lp}"
+            )
+
+
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_safety_settings_gemini(use_streaming: bool) -> None:
+def test_safety_settings_gemini(use_streaming: bool, backend_config: dict) -> None:
     """Test safety settings with both `invoke` and `stream` methods."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
     }
     # Test with safety filters on bind
-    llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL).bind(
+    llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL, **backend_config).bind(
         safety_settings=safety_settings
     )
 
@@ -836,7 +1181,7 @@ def test_safety_settings_gemini(use_streaming: bool) -> None:
         assert len(output.content) > 0
 
 
-def test_chat_function_calling_with_multiple_parts() -> None:
+def test_chat_function_calling_with_multiple_parts(backend_config: dict) -> None:
     @tool
     def search(
         question: str,
@@ -852,7 +1197,9 @@ def test_chat_function_calling_with_multiple_parts() -> None:
     safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
-    llm = ChatGoogleGenerativeAI(model=_PRO_MODEL, safety_settings=safety)
+    llm = ChatGoogleGenerativeAI(
+        model=_PRO_MODEL, safety_settings=safety, **backend_config
+    )
     llm_with_search = llm.bind(
         functions=tools,
     )
@@ -912,7 +1259,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
         assert "brown" in content_str.lower()
 
 
-def test_chat_vertexai_gemini_function_calling() -> None:
+def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
     """Test function calling with Gemini models.
 
     Safety settings included but not tested.
@@ -930,9 +1277,9 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     message = HumanMessage(
         content="My name is Erick and I am 27 years old. I like apple and banana."
     )
-    model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
-        [MyModel]
-    )
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL, safety_settings=safety, **backend_config
+    ).bind_tools([MyModel])
     response = model.invoke([message])
     _check_tool_calls(response, "MyModel")
 
@@ -940,9 +1287,9 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     def my_model(name: str, age: int, likes: list[str]) -> None:
         """Invoke this with names and age and likes."""
 
-    model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
-        [my_model]
-    )
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL, safety_settings=safety, **backend_config
+    ).bind_tools([my_model])
     response = model.invoke([message])
     _check_tool_calls(response, "my_model")
 
@@ -951,9 +1298,9 @@ def test_chat_vertexai_gemini_function_calling() -> None:
     def my_tool(name: str, age: int, likes: list[str]) -> None:
         """Invoke this with names and age and likes."""
 
-    model = ChatGoogleGenerativeAI(model=_MODEL, safety_settings=safety).bind_tools(
-        [my_tool]
-    )
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL, safety_settings=safety, **backend_config
+    ).bind_tools([my_tool])
     response = model.invoke([message])
     _check_tool_calls(response, "my_tool")
 
@@ -994,6 +1341,7 @@ def test_chat_vertexai_gemini_function_calling() -> None:
 def test_chat_google_genai_with_structured_output(
     model_name: str,
     method: Literal["function_calling", "json_mode", "json_schema"] | None,
+    backend_config: dict,
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -1002,7 +1350,9 @@ def test_chat_google_genai_with_structured_output(
     safety: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
     }
-    llm = ChatGoogleGenerativeAI(model=model_name, safety_settings=safety)
+    llm = ChatGoogleGenerativeAI(
+        model=model_name, safety_settings=safety, **backend_config
+    )
     model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
@@ -1070,7 +1420,9 @@ def test_chat_google_genai_with_structured_output(
     assert response == expected, f"Expected {expected}, got {response}"
 
 
-def test_chat_google_genai_with_structured_output_nested_model() -> None:
+def test_chat_google_genai_with_structured_output_nested_model(
+    backend_config: dict,
+) -> None:
     """Deeply nested model test for structured output."""
 
     class Argument(BaseModel):
@@ -1084,9 +1436,9 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
         response: str
         reasons: list[Reason]
 
-    model = ChatGoogleGenerativeAI(model=_MODEL).with_structured_output(
-        Response, method="json_schema"
-    )
+    model = ChatGoogleGenerativeAI(
+        model=_MODEL, **backend_config
+    ).with_structured_output(Response, method="json_schema")
 
     response = model.invoke("Why is Real Madrid better than Barcelona?")
 
@@ -1104,7 +1456,7 @@ def test_chat_google_genai_with_structured_output_nested_model() -> None:
             assert isinstance(argument.description, str)
 
 
-def test_thinking_params_preserved_with_structured_output() -> None:
+def test_thinking_params_preserved_with_structured_output(backend_config: dict) -> None:
     """Test that `thinking_budget=0` and `include_thoughts=False` are preserved.
 
     Verifies that thinking configuration persists through `with_structured_output()`.
@@ -1118,6 +1470,7 @@ def test_thinking_params_preserved_with_structured_output() -> None:
         model="gemini-2.5-flash",
         thinking_budget=0,
         include_thoughts=False,
+        **backend_config,
     )
 
     # Apply structured output - params should be preserved
@@ -1131,9 +1484,11 @@ def test_thinking_params_preserved_with_structured_output() -> None:
 
 @pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_model_methods_without_eventloop(is_async: bool, use_streaming: bool) -> None:
+def test_model_methods_without_eventloop(
+    is_async: bool, use_streaming: bool, backend_config: dict
+) -> None:
     """Test `invoke` and `stream` (sync & async) without event loop."""
-    model = ChatGoogleGenerativeAI(model=_MODEL)
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     if use_streaming:
         if is_async:
@@ -1180,9 +1535,9 @@ def _check_web_search_output(message: AIMessage, output_version: str) -> None:
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_search_builtin(output_version: str) -> None:
+def test_search_builtin(output_version: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(
-        model=_MODEL, output_version=output_version
+        model=_MODEL, output_version=output_version, **backend_config
     ).bind_tools([{"google_search": {}}])
     input_message = {
         "role": "user",
@@ -1206,9 +1561,13 @@ def test_search_builtin(output_version: str) -> None:
 
 
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_search_builtin_with_citations(use_streaming: bool) -> None:
+def test_search_builtin_with_citations(
+    use_streaming: bool, backend_config: dict
+) -> None:
     """Test that citations are properly extracted from `grounding_metadata`."""
-    llm = ChatGoogleGenerativeAI(model=_MODEL).bind_tools([{"google_search": {}}])
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config).bind_tools(
+        [{"google_search": {}}]
+    )
     input_message = {
         "role": "user",
         "content": "Who won the 2024 UEFA Euro championship? Use search/citations.",
@@ -1351,9 +1710,9 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
     assert {block["type"] for block in message.content_blocks} == expected_block_types
 
 
-def test_search_with_googletool() -> None:
+def test_search_with_googletool(backend_config: dict) -> None:
     """Test using `GoogleTool` with Google Search."""
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash")
+    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", **backend_config)
     resp = llm.invoke(
         "When is the next total solar eclipse in US?",
         tools=[GoogleTool(google_search={})],
@@ -1363,9 +1722,9 @@ def test_search_with_googletool() -> None:
 
 @pytest.mark.filterwarnings("ignore::UserWarning")
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_code_execution_builtin(output_version: str) -> None:
+def test_code_execution_builtin(output_version: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(
-        model=_MODEL, output_version=output_version
+        model=_MODEL, output_version=output_version, **backend_config
     ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",
@@ -1389,8 +1748,8 @@ def test_code_execution_builtin(output_version: str) -> None:
     _check_code_execution_output(response, output_version)
 
 
-def test_url_context_tool() -> None:
-    model = ChatGoogleGenerativeAI(model=_MODEL)
+def test_url_context_tool(backend_config: dict) -> None:
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     model_with_search = model.bind_tools([{"url_context": {}}])
 
     input = "What is this page's contents about? https://docs.langchain.com"
@@ -1405,14 +1764,14 @@ def test_url_context_tool() -> None:
     )
 
 
-def test_chat_google_genai_invoke_with_generation_params() -> None:
+def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -> None:
     """Test that generation parameters passed to invoke() are respected.
 
     Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
     parameters passed directly to invoke() method override model defaults.
     """
     # Use gemini-2.5-flash because it supports thinking_budget=0
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", **backend_config)
 
     # Test with max_output_tokens constraint
     result_constrained = llm.invoke(
@@ -1441,9 +1800,11 @@ def test_chat_google_genai_invoke_with_generation_params() -> None:
 
 
 @pytest.mark.parametrize("max_tokens", [10, 20, 50])
-def test_chat_google_genai_invoke_respects_max_tokens(max_tokens: int) -> None:
+def test_chat_google_genai_invoke_respects_max_tokens(
+    max_tokens: int, backend_config: dict
+) -> None:
     """Test that different max_output_tokens values are respected."""
-    llm = ChatGoogleGenerativeAI(model=_MODEL)
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     result = llm.invoke(
         "Write a detailed essay about artificial intelligence.",
@@ -1460,7 +1821,7 @@ def test_chat_google_genai_invoke_respects_max_tokens(max_tokens: int) -> None:
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_agent_loop(output_version: Literal["v0", "v1"]) -> None:
+def test_agent_loop(output_version: Literal["v0", "v1"], backend_config: dict) -> None:
     """Test agent loop with tool calling (non-streaming).
 
     Ensures that the model can:
@@ -1469,7 +1830,9 @@ def test_agent_loop(output_version: Literal["v0", "v1"]) -> None:
     3. Generate a final response incorporating the tool result
     """
 
-    llm = ChatGoogleGenerativeAI(model=_MODEL, output_version=output_version)
+    llm = ChatGoogleGenerativeAI(
+        model=_MODEL, output_version=output_version, **backend_config
+    )
     llm_with_tools = llm.bind_tools([get_weather])
     input_message = HumanMessage("What is the weather in San Francisco, CA?")
 
@@ -1510,10 +1873,14 @@ def test_agent_loop(output_version: Literal["v0", "v1"]) -> None:
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_agent_loop_streaming(output_version: Literal["v0", "v1"]) -> None:
+def test_agent_loop_streaming(
+    output_version: Literal["v0", "v1"], backend_config: dict
+) -> None:
     """Test agent loop with tool calling (streaming)."""
 
-    llm = ChatGoogleGenerativeAI(model=_MODEL, output_version=output_version)
+    llm = ChatGoogleGenerativeAI(
+        model=_MODEL, output_version=output_version, **backend_config
+    )
     llm_with_tools = llm.bind_tools([get_weather])
     input_message = HumanMessage("What is the weather in San Francisco, CA?")
 
@@ -1577,7 +1944,9 @@ def test_agent_loop_streaming(output_version: Literal["v0", "v1"]) -> None:
 
 @pytest.mark.parametrize("use_stream_method", [False, True])
 @pytest.mark.parametrize("is_async", [False, True])
-async def test_basic_streaming(use_stream_method: bool, is_async: bool) -> None:
+async def test_basic_streaming(
+    use_stream_method: bool, is_async: bool, backend_config: dict
+) -> None:
     """Test basic streaming functionality.
 
     Args:
@@ -1585,61 +1954,68 @@ async def test_basic_streaming(use_stream_method: bool, is_async: bool) -> None:
         is_async: Test async vs sync streaming
     """
     if use_stream_method:
-        llm = ChatGoogleGenerativeAI(model=_MODEL)
+        llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     else:
-        llm = ChatGoogleGenerativeAI(model=_MODEL, streaming=True)
+        llm = ChatGoogleGenerativeAI(model=_MODEL, streaming=True, **backend_config)
 
     message = HumanMessage("Count from 1 to 5")
 
-    chunks: list[BaseMessageChunk] = []
-    if is_async:
-        if use_stream_method:
-            async for chunk in llm.astream([message]):
+    try:
+        chunks: list[BaseMessageChunk] = []
+        if is_async:
+            if use_stream_method:
+                async for chunk in llm.astream([message]):
+                    assert isinstance(chunk, AIMessageChunk)
+                    chunks.append(chunk)
+            else:
+                result = await llm.ainvoke([message])
+                # When streaming=True, ainvoke still returns full message
+                assert isinstance(result, AIMessage)
+                return
+        elif use_stream_method:
+            for chunk in llm.stream([message]):
                 assert isinstance(chunk, AIMessageChunk)
                 chunks.append(chunk)
         else:
-            result = await llm.ainvoke([message])
-            # When streaming=True, ainvoke still returns full message
+            result = llm.invoke([message])
+            # When streaming=True, invoke still returns full message
             assert isinstance(result, AIMessage)
             return
-    elif use_stream_method:
-        for chunk in llm.stream([message]):
-            assert isinstance(chunk, AIMessageChunk)
-            chunks.append(chunk)
-    else:
-        result = llm.invoke([message])
-        # When streaming=True, invoke still returns full message
-        assert isinstance(result, AIMessage)
-        return
 
-    # Verify we got chunks
-    assert len(chunks) > 0
+        # Verify we got chunks
+        assert len(chunks) > 0
 
-    # Verify we can reconstruct the message
-    full_message = chunks[0]
-    for chunk in chunks[1:]:  # type: ignore[assignment]
-        full_message = full_message + chunk
+        # Verify we can reconstruct the message
+        full_message = chunks[0]
+        for chunk in chunks[1:]:  # type: ignore[assignment]
+            full_message = full_message + chunk
 
-    full_message = cast("AIMessageChunk", full_message)
-    assert isinstance(full_message, AIMessageChunk)
-    if isinstance(full_message.content, list):
-        text_content = "".join(
-            block.get("text", "")
-            for block in full_message.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-        assert len(text_content) > 0
-    else:
-        assert isinstance(full_message.content, str)
-        assert len(full_message.content) > 0
+        full_message = cast("AIMessageChunk", full_message)
+        assert isinstance(full_message, AIMessageChunk)
+        if isinstance(full_message.content, list):
+            text_content = "".join(
+                block.get("text", "")
+                for block in full_message.content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+            assert len(text_content) > 0
+        else:
+            assert isinstance(full_message.content, str)
+            assert len(full_message.content) > 0
 
-    # Verify usage metadata is present in the final message
-    _check_usage_metadata(cast("AIMessage", full_message))
+        # Verify usage metadata is present in the final message
+        _check_usage_metadata(cast("AIMessage", full_message))
+    finally:
+        # Explicitly close the client to avoid resource warnings
+        if llm.client:
+            llm.client.close()
+            if llm.client.aio:
+                await llm.client.aio.aclose()
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_gemini_3_pro_streaming_with_thinking(
-    output_version: Literal["v0", "v1"],
+    output_version: Literal["v0", "v1"], backend_config: dict
 ) -> None:
     """Test `gemini-3-pro-preview` streaming with thinking capabilities.
 
@@ -1650,6 +2026,7 @@ def test_gemini_3_pro_streaming_with_thinking(
         thinking_level="high",
         include_thoughts=True,
         output_version=output_version,
+        **backend_config,
     )
 
     input_message = HumanMessage(
@@ -1707,7 +2084,9 @@ def test_gemini_3_pro_streaming_with_thinking(
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_gemini_3_pro_agent_loop_streaming(output_version: Literal["v0", "v1"]) -> None:
+def test_gemini_3_pro_agent_loop_streaming(
+    output_version: Literal["v0", "v1"], backend_config: dict
+) -> None:
     """Test `gemini-3-pro-preview` agent loop with streaming and thinking."""
 
     @tool
@@ -1728,6 +2107,7 @@ def test_gemini_3_pro_agent_loop_streaming(output_version: Literal["v0", "v1"]) 
         thinking_level="high",
         include_thoughts=True,
         output_version=output_version,
+        **backend_config,
     )
     llm_with_tools = llm.bind_tools([calculate_sum])
 
@@ -1792,7 +2172,7 @@ def test_gemini_3_pro_agent_loop_streaming(output_version: Literal["v0", "v1"]) 
 @pytest.mark.parametrize("model_name", [_MODEL, "gemini-3-pro-preview"])
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_streaming_with_multiple_tool_calls(
-    model_name: str, output_version: Literal["v0", "v1"]
+    model_name: str, output_version: Literal["v0", "v1"], backend_config: dict
 ) -> None:
     """Test streaming with multiple tool calls in a single response."""
 
@@ -1824,6 +2204,7 @@ def test_streaming_with_multiple_tool_calls(
         model=model_name,
         streaming=True,
         output_version=output_version,
+        **backend_config,
     )
     llm_with_tools = llm.bind_tools([get_temperature, get_humidity])
 
@@ -1876,7 +2257,9 @@ def test_streaming_with_multiple_tool_calls(
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_structured_output_with_google_search(use_streaming: bool) -> None:
+def test_structured_output_with_google_search(
+    use_streaming: bool, backend_config: dict
+) -> None:
     """Test structured outputs combined with Google Search tool.
 
     Tests that the model can:
@@ -1890,7 +2273,7 @@ def test_structured_output_with_google_search(use_streaming: bool) -> None:
         final_match_score: str
         scorers: list[str]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+    llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", **backend_config)
 
     # Bind tools and configure for structured output
     llm_with_search = llm.bind(
@@ -1953,3 +2336,423 @@ def test_structured_output_with_google_search(use_streaming: bool) -> None:
     # across chunks but input/output tokens only keep final values
     if not use_streaming:
         _check_usage_metadata(response)
+
+
+@pytest.mark.extended
+def test_context_caching(backend_config: dict) -> None:
+    """Test context caching with large text content.
+
+    Note: For Gemini API, gs:// URIs are not supported directly.
+    Files must be uploaded via client.files.upload() first.
+    For simplicity, this test uses large text content instead.
+    """
+    # Create a large context document (needs to be large enough to trigger caching)
+    large_document = (
+        "RESEARCH PAPER ON ARTIFICIAL INTELLIGENCE\n\n"
+        "Abstract: This paper discusses the fundamentals of artificial intelligence "
+        "and machine learning.\n\n"
+    )
+    # Add substantial content to meet caching minimum token requirements
+    for i in range(200):
+        large_document += (
+            f"Section {i}: This section contains detailed information about "
+            f"various aspects of AI including neural networks, deep learning, "
+            f"natural language processing, computer vision, and reinforcement "
+            f"learning. The field of artificial intelligence has evolved "
+            f"significantly over the past decades, with breakthroughs in pattern "
+            f"recognition, data processing, and autonomous systems. "
+        )
+
+    system_instruction = (
+        "You are an expert researcher. You always stick to the facts in the sources "
+        "provided, and never make up new facts.\n\n"
+        "If asked about it, the secret number is 747.\n\n"
+        "Now analyze the research paper provided and answer questions about it."
+    )
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+
+    cached_content = create_context_cache(
+        model,
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(content=large_document),
+        ],
+        ttl="300s",  # 5 minutes
+    )
+
+    # Using cached_content in constructor
+    chat = ChatGoogleGenerativeAI(
+        model=_MODEL, cached_content=cached_content, **backend_config
+    )
+
+    response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
+
+    # Verify cache was used (should have cache_read tokens in usage metadata)
+    if response.usage_metadata:
+        # Cache read tokens should be present when using cached content
+        cache_read_check = (
+            "cache_read_input" in response.usage_metadata
+            or cast("int", response.usage_metadata.get("cache_read_input", 0)) >= 0
+        )
+        assert cache_read_check
+
+    # Using cached content in request
+    chat = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    response = chat.invoke("What is the secret number?", cached_content=cached_content)
+
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "747" in response.content
+
+
+@pytest.mark.extended
+def test_context_caching_tools(backend_config: dict) -> None:
+    """Test context caching with tools and large text content.
+
+    Note: For Gemini API, gs:// URIs are not supported directly.
+    Files must be uploaded via client.files.upload() first.
+    For simplicity, this test uses large text content instead.
+    """
+
+    @tool
+    def get_secret_number() -> int:
+        """Gets secret number."""
+        return 747
+
+    tools = [get_secret_number]
+
+    # Create a large context document
+    large_document = (
+        "RESEARCH PAPER ON ARTIFICIAL INTELLIGENCE\n\n"
+        "Abstract: This paper discusses various AI topics.\n\n"
+    )
+    for i in range(200):
+        large_document += (
+            f"Section {i}: Detailed AI research content about neural networks, "
+            f"machine learning algorithms, and computational intelligence. "
+        )
+
+    system_instruction = (
+        "You are an expert researcher. You always stick to the facts in the sources "
+        "provided, and never make up new facts.\n\n"
+        "You have a get_secret_number function available. Use this tool if someone "
+        "asks for the secret number.\n\n"
+        "Now analyze the research paper and answer questions."
+    )
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+
+    cached_content = create_context_cache(
+        model,
+        messages=[
+            SystemMessage(content=system_instruction),
+            HumanMessage(content=large_document),
+        ],
+        tools=cast("list", tools),
+        ttl="300s",  # 5 minutes
+    )
+
+    # Note: When using cached content with tools, do NOT bind tools again
+    # The tools are already part of the cache and will be used automatically
+    chat = ChatGoogleGenerativeAI(
+        model=_MODEL, cached_content=cached_content, **backend_config
+    )
+
+    # Invoke the model - it should call the tool from the cached content
+    response = chat.invoke("What is the secret number?")
+
+    assert isinstance(response, AIMessage)
+    # The model should call the get_secret_number tool that was cached
+    assert len(response.tool_calls) > 0
+    assert response.tool_calls[0]["name"] == "get_secret_number"
+
+
+@pytest.mark.skip(
+    reason="Gemini API does not support gs:// URIs. "
+    "Files must be uploaded via client.files.upload() first. "
+    "This test would require uploading an audio file which adds complexity."
+)
+def test_audio_timestamp(backend_config: dict) -> None:
+    """Test audio transcription with timestamps.
+
+    Note: This test is skipped because the Gemini API does not support gs:// URIs
+    directly. To test audio timestamps, you would need to:
+    1. Upload a file: file = client.files.upload(file='audio.mp3')
+    2. Use file.uri in the message content
+    3. Pass generation_config={"audio_timestamp": True}
+
+    Example:
+        ```python
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        file = model.client.files.upload(file="audio.mp3")
+
+        message = HumanMessage(
+            content=[
+                {"type": "media", "file_uri": file.uri, "mime_type": "audio/mp3"},
+                {"type": "text", "text": "Transcribe with timestamps."},
+            ]
+        )
+
+        output = model.invoke([message], generation_config={"audio_timestamp": True})
+        # Output will contain timestamps like [00:00:15] or 00:15:
+        ```
+    """
+
+
+def test_langgraph_example(backend_config: dict) -> None:
+    """Test integration with LangGraph-style multi-turn tool calling."""
+    llm = ChatGoogleGenerativeAI(
+        model=_MODEL, max_output_tokens=8192, temperature=0.2, **backend_config
+    )
+
+    add_declaration = {
+        "name": "add",
+        "description": "Adds a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    multiply_declaration = {
+        "name": "multiply",
+        "description": "Multiply a and b.",
+        "parameters": {
+            "properties": {
+                "a": {"description": "first int", "type": "integer"},
+                "b": {"description": "second int", "type": "integer"},
+            },
+            "required": ["a", "b"],
+            "type": "object",
+        },
+    }
+
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a helpful assistant tasked with performing "
+                "arithmetic on a set of inputs."
+            )
+        ),
+        HumanMessage(content="Multiply 2 and 3"),
+        HumanMessage(content="No, actually multiply 3 and 3!"),
+    ]
+    step1 = llm.invoke(
+        messages,
+        tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
+    )
+    step2 = llm.invoke(
+        [
+            *messages,
+            step1,
+            ToolMessage(content="9", tool_call_id=step1.tool_calls[0]["id"]),
+        ],
+        tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
+    )
+    assert isinstance(step2, AIMessage)
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+def test_streaming_function_call_arguments() -> None:
+    """Test streaming function calling with stream_function_call_arguments=True.
+
+    Note: This feature is only available on Vertex AI with Gemini 3 Pro (Preview).
+    This test verifies that function call arguments are streamed incrementally
+    rather than being delivered in a single chunk.
+    """
+
+    @tool
+    def search_database(
+        query: str,
+        filters: dict[str, str],
+        max_results: int = 10,
+    ) -> str:
+        """Search a database with a query and filters.
+
+        Args:
+            query: The search query string.
+            filters: Dictionary of field:value filters to apply.
+            max_results: Maximum number of results to return.
+
+        Returns:
+            Search results as a string.
+        """
+        return f"Found {max_results} results for '{query}' with filters {filters}"
+
+    # Use Vertex AI as stream_function_call_arguments is only supported there
+    # Pass api_key=None to force use of application default credentials
+    import os
+
+    project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+    if not project:
+        pytest.skip("Vertex AI tests require GOOGLE_CLOUD_PROJECT env var to be set")
+
+    # Use Gemini 3 Pro as these features are only available there
+    # Note: This test explicitly requires Vertex AI, so we hardcode those parameters
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        vertexai=True,
+        project=project,
+        api_key=None,  # Force use of application default credentials
+    )
+
+    # Configure tool_config with streaming function call arguments
+    tool_config = ToolConfig(
+        function_calling_config=FunctionCallingConfig(
+            mode=FunctionCallingConfigMode.AUTO,
+            stream_function_call_arguments=True,
+        )
+    )
+
+    llm_with_tools = llm.bind_tools([search_database], tool_config=tool_config)
+
+    input_message = HumanMessage(
+        content=(
+            "Search the database for 'machine learning' with filters "
+            "category='AI' and year='2024', return 20 results"
+        )
+    )
+
+    # Stream the response
+    chunks: list[AIMessageChunk] = []
+    for chunk in llm_with_tools.stream([input_message]):
+        assert isinstance(chunk, AIMessageChunk)
+        chunks.append(chunk)
+
+    assert len(chunks) > 0, "No chunks received from streaming"
+
+    # Reconstruct the full message
+    full_message = chunks[0]
+    for chunk in chunks[1:]:
+        full_message = full_message + chunk
+
+    # Verify that the tool call was made
+    assert isinstance(full_message, AIMessageChunk)
+    tool_calls = full_message.tool_calls
+
+    # With stream_function_call_arguments=True, we should see incremental updates
+    # Check that we have multiple chunks with tool_call_chunks
+    chunks_with_tool_calls = [
+        c for c in chunks if c.tool_call_chunks and len(c.tool_call_chunks) > 0
+    ]
+
+    # Verify that streaming is actually happening
+    assert len(chunks_with_tool_calls) > 0, "No chunks contained tool call data"
+    assert len(chunks_with_tool_calls) > 1, (
+        f"Expected multiple chunks with tool call data to verify streaming, "
+        f"got {len(chunks_with_tool_calls)}"
+    )
+
+    # Verify the tool name appears in at least one tool call
+    # Note: Due to chunk aggregation behavior, args may be in separate chunks
+    tool_names = [tc.get("name") for tc in tool_calls if tc.get("name")]
+    assert "search_database" in tool_names, (
+        f"Expected 'search_database' in tool names, got {tool_names}"
+    )
+
+    # The presence of multiple tool calls indicates incremental streaming
+    assert len(tool_calls) > 1, (
+        f"Expected multiple tool calls indicating argument streaming, "
+        f"got {len(tool_calls)}"
+    )
+
+    # Test successful - streaming function calling is working
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+def test_multimodal_function_response() -> None:
+    """Test multimodal function responses with image/file data.
+
+    Note: This feature is only available on Vertex AI with Gemini 3 Pro (Preview).
+    This test verifies that function responses can include image/file data
+    and that the model can process multimodal function responses.
+    """
+
+    @tool
+    def get_product_image(product_id: str) -> str:
+        """Get the product image for a given product ID.
+
+        Args:
+            product_id: The unique identifier for the product.
+
+        Returns:
+            Information about retrieving the product image.
+        """
+        return f"Image data for product {product_id}"
+
+    # Use Vertex AI as this feature is only available there
+    # Pass api_key=None to force use of application default credentials
+
+    project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+    if not project:
+        pytest.skip("Vertex AI tests require GOOGLE_CLOUD_PROJECT env var to be set")
+
+    # Use Gemini 3 Pro as these features are only available there
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        vertexai=True,
+        project=project,
+        api_key=None,  # Force use of application default credentials
+    )
+    llm_with_tools = llm.bind_tools([get_product_image])
+
+    input_message = HumanMessage(
+        content="Show me the product image for product ID 'laptop-2024'"
+    )
+
+    # First call - model should request the tool
+    tool_call_message = llm_with_tools.invoke([input_message])
+    assert isinstance(tool_call_message, AIMessage)
+    tool_calls = tool_call_message.tool_calls
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["name"] == "get_product_image"
+    assert "product_id" in tool_call["args"]
+
+    # Create a multimodal function response with an image
+    # Using a Google Cloud Storage URI
+    tool_response = ToolMessage(
+        content=json.dumps(
+            {
+                "type": "function_response_file_data",
+                "file_uri": "gs://cloud-samples-data/generative-ai/image/scones.jpg",
+                "mime_type": "image/jpeg",
+                "display_name": "Product Image: laptop-2024",
+            }
+        ),
+        tool_call_id=tool_call["id"],
+    )
+
+    # Second call - model should incorporate the image response
+    response = llm_with_tools.invoke(
+        [
+            input_message,
+            tool_call_message,
+            tool_response,
+        ]
+    )
+
+    assert isinstance(response, AIMessage)
+
+    # The model should acknowledge receiving data
+    if isinstance(response.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0, "Expected text response from model"
+    else:
+        assert isinstance(response.content, str)
+        assert len(response.content) > 0, "Expected text response from model"
+
+    # Test successful - multimodal function response is working
