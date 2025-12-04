@@ -1527,9 +1527,10 @@ def test_agent_loop_streaming(output_version: Literal["v0", "v1"]) -> None:
 
     # Reconstruct the full message
     tool_call_message = chunks[0]
-    for chunk in chunks[1:]:
-        tool_call_message = tool_call_message + chunk  # type: ignore[operator]
+    for chunk in chunks[1:]:  # type: ignore[assignment]
+        tool_call_message = tool_call_message + chunk
 
+    tool_call_message = cast("AIMessageChunk", tool_call_message)
     assert isinstance(tool_call_message, AIMessageChunk)
     tool_calls = tool_call_message.tool_calls
     assert len(tool_calls) == 1
@@ -1555,9 +1556,10 @@ def test_agent_loop_streaming(output_version: Literal["v0", "v1"]) -> None:
     assert len(response_chunks) > 0
     # Reconstruct full response
     response = response_chunks[0]
-    for chunk in response_chunks[1:]:
-        response = response + chunk  # type: ignore[operator]
+    for chunk in response_chunks[1:]:  # type: ignore[assignment]
+        response = response + chunk
 
+    response = cast("AIMessageChunk", response)
     assert isinstance(response, AIMessageChunk)
     # Response should have content
     if isinstance(response.content, list):
@@ -1615,9 +1617,10 @@ async def test_basic_streaming(use_stream_method: bool, is_async: bool) -> None:
 
     # Verify we can reconstruct the message
     full_message = chunks[0]
-    for chunk in chunks[1:]:
-        full_message = full_message + chunk  # type: ignore[operator]
+    for chunk in chunks[1:]:  # type: ignore[assignment]
+        full_message = full_message + chunk
 
+    full_message = cast("AIMessageChunk", full_message)
     assert isinstance(full_message, AIMessageChunk)
     if isinstance(full_message.content, list):
         text_content = "".join(
@@ -1662,9 +1665,10 @@ def test_gemini_3_pro_streaming_with_thinking(
 
     # Reconstruct full message
     full_message = chunks[0]
-    for chunk in chunks[1:]:
-        full_message = full_message + chunk  # type: ignore[operator]
+    for chunk in chunks[1:]:  # type: ignore[assignment]
+        full_message = full_message + chunk
 
+    full_message = cast("AIMessageChunk", full_message)
     assert isinstance(full_message, AIMessageChunk)
     assert isinstance(full_message.content, list), (
         f"Expected list content, got {type(full_message.content)}"
@@ -1739,9 +1743,10 @@ def test_gemini_3_pro_agent_loop_streaming(output_version: Literal["v0", "v1"]) 
 
     # Reconstruct message
     tool_call_message = chunks[0]
-    for chunk in chunks[1:]:
-        tool_call_message = tool_call_message + chunk  # type: ignore[operator]
+    for chunk in chunks[1:]:  # type: ignore[assignment]
+        tool_call_message = tool_call_message + chunk
 
+    tool_call_message = cast("AIMessageChunk", tool_call_message)
     assert isinstance(tool_call_message, AIMessageChunk)
     tool_calls = tool_call_message.tool_calls
     assert len(tool_calls) == 1
@@ -1768,9 +1773,10 @@ def test_gemini_3_pro_agent_loop_streaming(output_version: Literal["v0", "v1"]) 
 
     # Reconstruct response
     response = response_chunks[0]
-    for chunk in response_chunks[1:]:
-        response = response + chunk  # type: ignore[operator]
+    for chunk in response_chunks[1:]:  # type: ignore[assignment]
+        response = response + chunk
 
+    response = cast("AIMessageChunk", response)
     assert isinstance(response, AIMessageChunk)
     assert isinstance(response.content, list)
 
@@ -1835,9 +1841,10 @@ def test_streaming_with_multiple_tool_calls(
 
     # Reconstruct message
     tool_call_message = chunks[0]
-    for chunk in chunks[1:]:
-        tool_call_message = tool_call_message + chunk  # type: ignore[operator]
+    for chunk in chunks[1:]:  # type: ignore[assignment]
+        tool_call_message = tool_call_message + chunk
 
+    tool_call_message = cast("AIMessageChunk", tool_call_message)
     assert isinstance(tool_call_message, AIMessageChunk)
     tool_calls = tool_call_message.tool_calls
 
@@ -1905,13 +1912,14 @@ def test_structured_output_with_google_search(use_streaming: bool) -> None:
 
         # Reconstruct full message
         response = chunks[0]
-        for chunk in chunks[1:]:
-            response = response + chunk  # type: ignore[operator]
+        for chunk in chunks[1:]:  # type: ignore[assignment]
+            response = response + chunk
 
+        response = cast("AIMessageChunk", response)
         assert isinstance(response, AIMessageChunk)
     else:
         # Test invoke
-        response = llm_with_search.invoke(
+        response = llm_with_search.invoke(  # type: ignore[assignment]
             "Search for all details for the latest Euro championship final match."
         )
         assert isinstance(response, AIMessage)
