@@ -19,11 +19,12 @@ integration_test integration_tests:
 
 # Run unit tests and generate a coverage report.
 coverage:
-	uv run pytest --cov \
-		--cov-config=.coveragerc \
+	uv run --with pytest-cov pytest --cov \
 		--cov-report xml \
+		--cov-report html \
 		--cov-report term-missing:skip-covered \
 		$(TEST_FILE)
+	open htmlcov/index.html
 
 ######################
 # LINTING AND FORMATTING

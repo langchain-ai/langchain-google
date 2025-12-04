@@ -114,7 +114,12 @@ constraint-dependencies = [
 ]
 
 [tool.coverage.run]
-omit = ["tests/*"]
+omit = [
+    "tests/*",
+    "*/site-packages/*",
+    "*/.venv/*",
+    "*/venv/*",
+]
 
 [tool.pytest.ini_options]
 # --strict-markers will raise errors on unknown marks.
