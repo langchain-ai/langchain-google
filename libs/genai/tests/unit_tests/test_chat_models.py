@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -3648,3 +3649,168 @@ def test_parse_response_candidate_handles_empty_args() -> None:
         result_message.additional_kwargs["function_call"]["arguments"]
     )
     assert function_call_args == {}
+
+
+def test_backend_detection_default() -> None:
+    """Test default backend detection (Gemini Developer API)."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+    )
+    assert llm._use_vertexai is False  # type: ignore[attr-defined]
+
+
+def test_backend_detection_explicit_vertexai_true() -> None:
+    """Test explicit `vertexai=True` forces Vertex AI backend."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+    assert llm._use_vertexai is True  # type: ignore[attr-defined]
+
+
+def test_backend_detection_explicit_vertexai_false() -> None:
+    """Test explicit `vertexai=False` forces Gemini Developer API."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=False,
+    )
+    assert llm._use_vertexai is False  # type: ignore[attr-defined]
+
+
+def test_backend_detection_project_auto_detects_vertexai() -> None:
+    """Test that providing project parameter auto-detects Vertex AI."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+    )
+    assert llm._use_vertexai is True  # type: ignore[attr-defined]
+
+
+def test_backend_detection_credentials_auto_detects_vertexai() -> None:
+    """Test that providing credentials parameter auto-detects Vertex AI."""
+    from unittest.mock import Mock
+
+    fake_credentials = Mock()
+    fake_credentials.project_id = "test-project"
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        credentials=fake_credentials,
+        project="test-project",
+    )
+    assert llm._use_vertexai is True  # type: ignore[attr-defined]
+
+
+def test_backend_detection_env_var_vertexai_true() -> None:
+    """Test `GOOGLE_GENAI_USE_VERTEXAI=true` forces Vertex AI."""
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+        )
+        assert llm._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_backend_detection_env_var_vertexai_false() -> None:
+    """Test `GOOGLE_GENAI_USE_VERTEXAI=false` forces Gemini Developer API."""
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            project="test-project",  # Would normally trigger Vertex AI
+        )
+        assert llm._use_vertexai is False  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_backend_detection_env_var_variations() -> None:
+    """Test various values for `GOOGLE_GENAI_USE_VERTEXAI` env var."""
+    original_env = os.environ.copy()
+
+    # Test "1" as true
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "1"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+        )
+        assert llm._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+    # Test "yes" as true
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "yes"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+        )
+        assert llm._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+    # Test "0" as false
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "0"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            project="test-project",
+        )
+        assert llm._use_vertexai is False  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_backend_detection_priority_explicit_over_env() -> None:
+    """Test that explicit vertexai parameter overrides env var."""
+
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        # Explicit False should override env var True
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            vertexai=False,
+        )
+        assert llm._use_vertexai is False  # type: ignore[attr-defined]
+
+        # Explicit True should also work
+        llm2 = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm2._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)

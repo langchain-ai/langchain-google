@@ -35,13 +35,22 @@ class _BaseGoogleGenerativeAI(BaseModel):
     ## Backend Selection
 
     This class supports both the Gemini Developer API and Google Cloud's Vertex AI
-    Platform as backends. The backend used is selected **automatically** based on your
-    authentication method:
+    Platform as backends. The backend is selected **automatically** based on your
+    configuration, or can be set explicitly using the `vertexai` parameter.
 
-    | Condition | Backend | Authentication |
-    |-----------|---------|----------------|
-    | API key provided | **Gemini Developer API** | `google_api_key`/`api_key` param or `GOOGLE_API_KEY`/`GEMINI_API_KEY` env var |
-    | No API key | **Vertex AI** | `credentials` param or [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) |
+    **Automatic backend detection** (when `vertexai=None`):
+
+    1. If `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses that value
+    2. If `credentials` parameter is provided, uses Vertex AI
+    3. If `project` parameter is provided, uses Vertex AI
+    4. Otherwise, uses Gemini Developer API
+
+    **Authentication options:**
+
+    | Backend | Authentication Methods |
+    |---------|------------------------|
+    | **Gemini Developer API** | API key (via `api_key` param or `GOOGLE_API_KEY`/`GEMINI_API_KEY` env var) |
+    | **Vertex AI** | API key, service account credentials, or [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) |
 
     !!! tip "Quick Start"
 
@@ -52,7 +61,31 @@ class _BaseGoogleGenerativeAI(BaseModel):
         llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", api_key="MY_API_KEY")
         ```
 
-        **Vertex AI** (enterprise):
+        **Vertex AI with API key**:
+
+        ```bash
+        export GEMINI_API_KEY='your-api-key'
+        export GOOGLE_GENAI_USE_VERTEXAI=true
+        export GOOGLE_CLOUD_PROJECT='your-project-id'
+        ```
+
+        ```python
+        # Automatically uses Vertex AI with API key
+        llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        ```
+
+        Or programmatically:
+
+        ```python
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-pro-preview",
+            api_key="your-api-key",
+            project="your-project-id",
+            vertexai=True,  # Explicitly use Vertex AI
+        )
+        ```
+
+        **Vertex AI with credentials**:
 
         ```python
         # Ensure ADC is configured: gcloud auth application-default login
@@ -69,8 +102,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     | Variable | Purpose | Backend |
     |----------|---------|---------|
-    | `GOOGLE_API_KEY` | API key (primary) | Gemini Developer API |
-    | `GEMINI_API_KEY` | API key (fallback) | Gemini Developer API |
+    | `GOOGLE_API_KEY` | API key (primary) | Both (see `GOOGLE_GENAI_USE_VERTEXAI`) |
+    | `GEMINI_API_KEY` | API key (fallback) | Both (see `GOOGLE_GENAI_USE_VERTEXAI`) |
+    | `GOOGLE_GENAI_USE_VERTEXAI` | Force Vertex AI backend (`true`/`false`) | Vertex AI |
     | `GOOGLE_CLOUD_PROJECT` | GCP project ID | Vertex AI |
     | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `us-central1`) | Vertex AI |
     | `HTTPS_PROXY` | HTTP/HTTPS proxy URL | Both |
@@ -106,19 +140,22 @@ class _BaseGoogleGenerativeAI(BaseModel):
             ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
         ),
     )
-    """API key for the Gemini Developer API.
+    """API key for authentication.
 
     If not specified, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY` with
     precedence given to `GOOGLE_API_KEY`.
 
-    !!! note "Vertex AI"
+    - **Gemini Developer API**: API key is required (default when no `project` is set)
+    - **Vertex AI**: API key is optional (set `vertexai=True` or provide `project`)
+        - If provided, uses API key for authentication
+        - If not provided, uses [Application Default Credentials (ADC)](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
+            or `credentials` parameter
 
-        To use Vertex AI instead, either provide explicit `credentials` or ensure
-        [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
-        are configured on your system.
+    !!! tip "Vertex AI with API key"
 
-        When no API key is found, the SDK automatically uses Vertex AI with ADC (unless)
-        custom `credentials` are provided.
+        You can now use Vertex AI with API key authentication instead of service account
+        credentials. Set `GOOGLE_GENAI_USE_VERTEXAI=true` or `vertexai=True` along with
+        your API key and project.
     """
 
     credentials: Any = None
@@ -148,6 +185,42 @@ class _BaseGoogleGenerativeAI(BaseModel):
             project="my-project-id",
         )
         ```
+    """
+
+    vertexai: bool | None = Field(default=None)
+    """Whether to use Vertex AI backend.
+
+    If `None` (default), backend is automatically determined as follows:
+
+    1. If the `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses Vertex AI
+    2. If the `credentials` parameter is provided, uses Vertex AI
+    3. If the `project` parameter is provided, uses Vertex AI
+    4. Otherwise, uses Gemini Developer API
+
+    Set explicitly to `True` or `False` to override auto-detection.
+
+    !!! tip "Vertex AI with API key"
+
+        You can use Vertex AI with API key authentication by setting:
+
+        ```bash
+        export GEMINI_API_KEY='your-api-key'
+        export GOOGLE_GENAI_USE_VERTEXAI=true
+        export GOOGLE_CLOUD_PROJECT='your-project-id'
+        ```
+
+        Or programmatically:
+
+        ```python
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-pro-preview",
+            api_key="your-api-key",
+            project="your-project-id",
+            vertexai=True,
+        )
+        ```
+
+        This allows for simpler authentication compared to service account JSON files.
     """
 
     project: str | None = Field(default=None)
@@ -368,6 +441,42 @@ class _BaseGoogleGenerativeAI(BaseModel):
         if self.project is None:
             if self.credentials and hasattr(self.credentials, "project_id"):
                 self.project = self.credentials.project_id
+        return self
+
+    @model_validator(mode="after")
+    def _determine_backend(self) -> Self:
+        """Determine which backend (Vertex AI or Gemini Developer API) to use.
+
+        The backend is determined by the following priority:
+        1. Explicit `vertexai` parameter value (if not None)
+        2. `GOOGLE_GENAI_USE_VERTEXAI` environment variable
+        3. Presence of `credentials` parameter (forces Vertex AI)
+        4. Presence of `project` parameter (implies Vertex AI)
+        5. Default to Gemini Developer API (False)
+
+        Stores result in `_use_vertexai` attribute for use in client initialization.
+        """
+        use_vertexai = self.vertexai
+
+        if use_vertexai is None:
+            # Check environment variable
+            env_var = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+            if env_var in ("true", "1", "yes"):
+                use_vertexai = True
+            elif env_var in ("false", "0", "no"):
+                use_vertexai = False
+            # Check for credentials (forces Vertex AI)
+            elif self.credentials is not None:
+                use_vertexai = True
+            # Check for project (implies Vertex AI)
+            elif self.project is not None:
+                use_vertexai = True
+            else:
+                # Default to Gemini Developer API
+                use_vertexai = False
+
+        # Store the determined backend in a private attribute
+        object.__setattr__(self, "_use_vertexai", use_vertexai)
         return self
 
     @property

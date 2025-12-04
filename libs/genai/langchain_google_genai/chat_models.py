@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import mimetypes
+import os
 import re
 import uuid
 import warnings
@@ -1119,13 +1120,50 @@ def _response_to_result(
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     r"""Google GenAI chat model integration.
 
+    Setup:
+        This integration supports both the **Gemini Developer API** and **Vertex AI**.
+
+        **For Gemini Developer API** (simplest):
+
+        1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
+        2. Pass your API key using the `api_key` parameter
+
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", api_key="...")
+        ```
+
+        **For Vertex AI with API key** (NEW - simpler than service accounts!):
+
+        ```bash
+        export GEMINI_API_KEY='your-api-key'
+        export GOOGLE_GENAI_USE_VERTEXAI=true
+        export GOOGLE_CLOUD_PROJECT='your-project-id'
+        ```
+
+        ```python
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        # Or explicitly:
+        model = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            api_key="...",
+            project="your-project-id",
+            vertexai=True,
+        )
+        ```
+
+        **For Vertex AI with credentials**:
+
+        ```python
+        model = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            project="your-project-id",
+            # Uses Application Default Credentials (ADC)
+        )
+        ```
+
     Instantiation:
-        To use, you must have either:
-
-        1. The `GOOGLE_API_KEY` environment variable set with your API key, or
-        2. Pass your API key using the `google_api_key` kwarg to the
-            `ChatGoogleGenerativeAI` constructor.
-
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -2068,16 +2106,46 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             async_client_args=self.client_args,
         )
 
-        if google_api_key:
-            self.client = Client(api_key=google_api_key, http_options=http_options)
+        if self._use_vertexai:  # type: ignore[attr-defined]
+            # Vertex AI backend - supports both API key and credentials
+            # Note: The google-genai SDK requires API keys to be passed via environment
+            # variables when using Vertex AI, not via the api_key parameter.
+            # If an API key is provided programmatically, we set it in the environment
+            # temporarily for the Client initialization.
+
+            api_key_env_set = False
+
+            if (
+                google_api_key
+                and not os.getenv("GOOGLE_API_KEY")
+                and not os.getenv("GEMINI_API_KEY")
+            ):
+                # Set the API key in environment for Client initialization
+                os.environ["GOOGLE_API_KEY"] = google_api_key
+                api_key_env_set = True
+
+            try:
+                self.client = Client(
+                    vertexai=True,
+                    project=self.project,
+                    location=self.location,
+                    credentials=self.credentials,
+                    http_options=http_options,
+                )
+            finally:
+                # Clean up the temporary environment variable if we set it
+                if api_key_env_set:
+                    os.environ.pop("GOOGLE_API_KEY", None)
         else:
-            self.client = Client(
-                vertexai=True,
-                project=self.project,
-                location=self.location,
-                credentials=self.credentials,
-                http_options=http_options,
-            )
+            # Gemini Developer API - requires API key
+            if not google_api_key:
+                msg = (
+                    "API key required for Gemini Developer API. Provide api_key "
+                    "parameter or set GOOGLE_API_KEY/GEMINI_API_KEY environment "
+                    "variable."
+                )
+                raise ValueError(msg)
+            self.client = Client(api_key=google_api_key, http_options=http_options)
         return self
 
     @model_validator(mode="after")
