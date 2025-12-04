@@ -171,6 +171,16 @@ To run integration tests:
 make integration_tests
 ```
 
+#### Backend Selection for Integration Tests
+
+For `libs/genai`, integration tests can run against different backends using the `TEST_VERTEXAI` environment variable:
+
+- **Google AI only (default)**: `make integration_tests`
+- **Both Google AI and Vertex AI**: `TEST_VERTEXAI=1 make integration_tests`
+- **Vertex AI only**: `TEST_VERTEXAI=only make integration_tests`
+
+Vertex AI tests require the `GOOGLE_CLOUD_PROJECT` environment variable to be set. Tests will automatically skip if not configured.
+
 #### Annotating integration tests
 
 We annotate integration tests to separate those tests which heavily rely on GCP infrastructure. Especially for running those tests we have created a separate GCP project with all necessary infrastructure parts provisioned. To run the extended integration tests locally you will need to provision a GCP project and pass its configuration via env variables.

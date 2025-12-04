@@ -2320,15 +2320,18 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
     model_content = formatted_messages[0]
     assert model_content.role == "model"
     assert model_content.parts is not None
-    assert len(model_content.parts) == 1
-    part = model_content.parts[0]
+    assert len(model_content.parts) == 2
 
-    # Check if function_call is present
-    assert part.function_call is not None
-    assert part.function_call.name == "my_tool"
+    # First part should be the thinking text (thinking blocks come first)
+    thinking_part = model_content.parts[0]
+    assert thinking_part.thought is True
+    assert thinking_part.text == "I should use the tool."
 
-    # Check if thought_signature is correctly attached
-    assert part.thought_signature == sig_bytes
+    # Second part should be the function call with signature
+    function_part = model_content.parts[1]
+    assert function_part.function_call is not None
+    assert function_part.function_call.name == "my_tool"
+    assert function_part.thought_signature == sig_bytes
 
 
 def test_system_message_only_raises_error() -> None:
@@ -4041,6 +4044,43 @@ def test_backend_detection_priority_explicit_over_env() -> None:
             vertexai=True,
         )
         assert llm2._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_model_name_normalization_for_vertexai() -> None:
+    """Test that model names with 'models/' prefix are normalized for Vertex AI."""
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        # Test with models/ prefix for Vertex AI - should be stripped
+        llm_vertex = ChatGoogleGenerativeAI(
+            model="models/gemini-2.5-flash",
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm_vertex.model == "gemini-2.5-flash"
+        assert llm_vertex._use_vertexai is True  # type: ignore[attr-defined]
+
+        # Test with models/ prefix for Google AI - should remain unchanged
+        llm_google_ai = ChatGoogleGenerativeAI(
+            model="models/gemini-2.5-flash",
+            api_key=FAKE_API_KEY,
+            vertexai=False,
+        )
+        assert llm_google_ai.model == "models/gemini-2.5-flash"
+        assert llm_google_ai._use_vertexai is False  # type: ignore[attr-defined]
+
+        # Test without models/ prefix for Vertex AI - should remain unchanged
+        llm_vertex_no_prefix = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm_vertex_no_prefix.model == "gemini-2.5-flash"
+        assert llm_vertex_no_prefix._use_vertexai is True  # type: ignore[attr-defined]
     finally:
         os.environ.clear()
         os.environ.update(original_env)
