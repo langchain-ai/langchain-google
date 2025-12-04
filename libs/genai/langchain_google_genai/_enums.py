@@ -8,13 +8,6 @@ from google.genai.types import (
     SafetySetting,
 )
 
-BlockedReason = BlockedReason
-HarmBlockThreshold = HarmBlockThreshold
-HarmCategory = HarmCategory
-MediaModality = MediaModality
-MediaResolution = MediaResolution
-SafetySetting = SafetySetting
-
 __all__ = [
     "BlockedReason",
     "HarmBlockThreshold",

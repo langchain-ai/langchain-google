@@ -132,7 +132,6 @@ def _dict_to_genai_schema(
         # Set type if present, or if we can infer it from anyOf
         # (for Gemini compatibility)
         if "type" in formatted_schema:
-            type_value = "STRING"
             type_obj = formatted_schema["type"]
             if isinstance(type_obj, dict):
                 type_value = type_obj["_value_"]

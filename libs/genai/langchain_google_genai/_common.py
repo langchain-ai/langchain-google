@@ -3,7 +3,7 @@ from importlib import metadata
 from typing import Any
 
 from google.api_core.gapic_v1.client_info import ClientInfo
-from langchain_core.utils import secret_from_env
+from langchain_core.utils import from_env, secret_from_env
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from typing_extensions import Self
 
@@ -32,13 +32,13 @@ class GoogleGenerativeAIError(Exception):
 class _BaseGoogleGenerativeAI(BaseModel):
     """Base class for Google Generative AI LLMs.
 
-    ## Backend Selection
+    ## Backend selection
 
     This class supports both the Gemini Developer API and Google Cloud's Vertex AI
     Platform as backends. The backend is selected **automatically** based on your
     configuration, or can be set explicitly using the `vertexai` parameter.
 
-    **Automatic backend detection** (when `vertexai=None`):
+    **Automatic backend detection** (when `vertexai=None` / unspecified):
 
     1. If `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses that value
     2. If `credentials` parameter is provided, uses Vertex AI
@@ -98,7 +98,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         )
         ```
 
-    ## Environment Variables
+    ## Environment variables
 
     | Variable | Purpose | Backend |
     |----------|---------|---------|
@@ -113,7 +113,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     `GOOGLE_API_KEY` is checked first for backwards compatibility. (`GEMINI_API_KEY` was
     introduced later to better reflect the API's branding.)
 
-    ## Proxy Configuration
+    ## Proxy configuration
 
     Set these before initializing:
 
@@ -231,7 +231,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
     Falls back to `GOOGLE_CLOUD_PROJECT` env var if not provided.
     """
 
-    location: str | None = Field(default=None)
+    location: str | None = Field(
+        default_factory=from_env("GOOGLE_CLOUD_LOCATION", default=None)
+    )
     """Google Cloud region (**Vertex AI only**).
 
     If not provided, falls back to the `GOOGLE_CLOUD_LOCATION` env var, then
@@ -286,21 +288,6 @@ class _BaseGoogleGenerativeAI(BaseModel):
             client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
-    """
-
-    transport: str | None = Field(
-        default=None,
-        alias="api_transport",
-    )
-    """Transport protocol for API calls. One of: `'rest'`, `'grpc'`, `'grpc_asyncio'`.
-
-    !!! warning "Legacy parameter"
-
-        This parameter is only used by `GoogleGenerativeAIEmbeddings` (which uses the
-        legacy client).
-
-        `ChatGoogleGenerativeAI` uses the new `google-genai` SDK which uses `httpx` for
-        requests and does not support this parameter.
     """
 
     # --- Model / invocation params ---
