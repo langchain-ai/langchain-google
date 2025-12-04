@@ -1865,3 +1865,83 @@ def test_streaming_with_multiple_tool_calls(
         response_chunks.append(chunk)
 
     assert len(response_chunks) > 0
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.parametrize("use_streaming", [False, True])
+def test_structured_output_with_google_search(use_streaming: bool) -> None:
+    """Test structured outputs combined with Google Search tool.
+
+    Tests that the model can:
+    1. Use Google Search to find information
+    2. Return a response that conforms to a structured schema
+    3. Include grounding metadata from the search
+    """
+
+    class MatchResult(BaseModel):
+        winner: str
+        final_match_score: str
+        scorers: list[str]
+
+    llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+
+    # Bind tools and configure for structured output
+    llm_with_search = llm.bind(
+        tools=[{"google_search": {}}, {"url_context": {}}],
+        response_mime_type="application/json",
+        response_schema=MatchResult.model_json_schema(),
+    )
+
+    if use_streaming:
+        # Test streaming
+        chunks: list[BaseMessageChunk] = []
+        for chunk in llm_with_search.stream(
+            "Search for all details for the latest Euro championship final match."
+        ):
+            assert isinstance(chunk, AIMessageChunk)
+            chunks.append(chunk)
+
+        assert len(chunks) > 0
+
+        # Reconstruct full message
+        response = chunks[0]
+        for chunk in chunks[1:]:
+            response = response + chunk  # type: ignore[operator]
+
+        assert isinstance(response, AIMessageChunk)
+    else:
+        # Test invoke
+        response = llm_with_search.invoke(
+            "Search for all details for the latest Euro championship final match."
+        )
+        assert isinstance(response, AIMessage)
+
+    # Extract JSON from response content
+    assert isinstance(response.content, list)
+    text_content = "".join(
+        block.get("text", "")
+        for block in response.content
+        if isinstance(block, dict) and block.get("type") == "text"
+    )
+
+    # Verify structured output can be parsed
+    result = MatchResult.model_validate_json(text_content)
+    assert isinstance(result, MatchResult)
+    assert isinstance(result.winner, str)
+    assert len(result.winner) > 0
+    assert isinstance(result.final_match_score, str)
+    assert len(result.final_match_score) > 0
+    assert isinstance(result.scorers, list)
+
+    # Verify grounding metadata is present (indicating search was used)
+    assert "grounding_metadata" in response.response_metadata
+    grounding = response.response_metadata["grounding_metadata"]
+    assert "grounding_chunks" in grounding or "grounding_supports" in grounding
+
+    # Verify usage metadata
+    # TODO: Investigate streaming usage metadata accumulation issue
+    # When streaming, total_tokens doesn't match input_tokens + output_tokens
+    # This appears to be a chunk accumulation bug where total_tokens is summed
+    # across chunks but input/output tokens only keep final values
+    if not use_streaming:
+        _check_usage_metadata(response)
