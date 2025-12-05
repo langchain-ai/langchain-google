@@ -1217,10 +1217,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     ???+ example "Invoke"
 
-        The shape of `content` may differ based on the model chosen. See
-        [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
-        for more info.
-
         ```python
         messages = [
             ("system", "Translate the user sentence to French."),
@@ -1257,10 +1253,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
+        !!! note "`content` format"
+
+            The shape of `content` may differ based on the model chosen. See
+            [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
+            for more info.
+
     ???+ example "Stream"
-        The shape of `content` may differ based on the model chosen. See
-        [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
-        for more info.
 
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -1318,7 +1317,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
-        To assemble a full `AIMessage` message from a stream of chunks:
+        To assemble a full [`AIMessage`][langchain.messages.AIMessage] message from a
+        stream of chunks:
 
         ```python
         stream = model.stream(messages)
@@ -1364,6 +1364,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             },
         )
         ```
+
+        !!! note "`content` format"
+
+            The shape of `content` may differ based on the model chosen. See
+            [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
+            for more info.
 
     ???+ example "Async invocation"
 
@@ -1632,7 +1638,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-generation)
         for more info.
 
-        !!! warning "Vertex compatibility"
+        !!! note "Vertex compatibility"
 
             Audio generation models (TTS) are currently in preview on Vertex AI
             and may require allowlist access. If you receive an `INVALID_ARGUMENT`
@@ -1678,8 +1684,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#thinking-support)
         for more info.
 
-        Gemini 3+ models use `thinking_level` (`'low'` or `'high'`) to control
-        reasoning depth. If not specified, defaults to `'high'`.
+        Gemini 3+ models use [`thinking_level`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_level]
+        (`'low'` or `'high'`) to control reasoning depth. If not specified, defaults to
+        `'high'`.
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -1688,15 +1695,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
-        Gemini 2.5 models use `thinking_budget` (an integer token count) to control
-        reasoning. Set to `0` to disable thinking (where supported), or `-1` for
-        dynamic thinking.
+        Gemini 2.5 models use [`thinking_budget`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_budget]
+        (an integer token count) to control reasoning. Set to `0` to disable thinking
+        (where supported), or `-1` for dynamic thinking.
 
         See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
         more details on thinking models.
 
-        To see a thinking model's thoughts, set `include_thoughts=True` to have the
-        model's reasoning summaries included in the response.
+        To see a thinking model's thoughts, set [`include_thoughts=True`][langchain_google_genai.ChatGoogleGenerativeAI.include_thoughts]
+        to have the model's reasoning summaries included in the response.
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -1709,10 +1716,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ???+ example "Thought signatures"
 
         Gemini 3+ models return *thought signatures*—encrypted representations of
-        the model's internal reasoning. For multi-turn conversations involving tool
-        calls, you must pass the full `AIMessage` back to the model so that these
+        the model's internal reasoning.
+
+        For multi-turn conversations involving tool calls, you must pass the full
+        [`AIMessage`][langchain.messages.AIMessage] back to the model so that these
         signatures are preserved. This happens automatically when you append the
-        `AIMessage` to your message list.
+        [`AIMessage`][langchain.messages.AIMessage] to your message list.
 
         See the [LangChain docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#thought-signatures) for more info as well as a code example.
 
@@ -1821,8 +1830,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         Context caching allows you to store and reuse content (e.g., PDFs, images) for
-        faster processing. The `cached_content` parameter accepts a cache name created
-        via the Google Generative AI API.
+        faster processing. The [`cached_content`][langchain_google_genai.ChatGoogleGenerativeAI.cached_content]
+        parameter accepts a cache name created via the Google Generative AI API.
 
         See the Gemini docs for more details on [cached content](https://ai.google.dev/gemini-api/docs/caching?lang=python).
 
