@@ -164,7 +164,8 @@ class _BaseGoogleGenerativeAI(BaseModel):
     When provided, forces Vertex AI backend (regardless of API key presence in
     `google_api_key`/`api_key`).
 
-    Accepts a `google.auth.credentials.Credentials` object.
+    Accepts a [`google.auth.credentials.Credentials`](https://googleapis.dev/python/google-auth/latest/reference/google.auth.credentials.html#google.auth.credentials.Credentials)
+    object.
 
     If omitted and no API key is found, the SDK uses
     [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials).
@@ -193,8 +194,10 @@ class _BaseGoogleGenerativeAI(BaseModel):
     If `None` (default), backend is automatically determined as follows:
 
     1. If the `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses Vertex AI
-    2. If the `credentials` parameter is provided, uses Vertex AI
-    3. If the `project` parameter is provided, uses Vertex AI
+    2. If the [`credentials`][langchain_google_genai.ChatGoogleGenerativeAI.credentials]
+        parameter is provided, uses Vertex AI
+    3. If the [`project`][langchain_google_genai.ChatGoogleGenerativeAI.project]
+        parameter is provided, uses Vertex AI
     4. Otherwise, uses Gemini Developer API
 
     Set explicitly to `True` or `False` to override auto-detection.
@@ -245,10 +248,15 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     If not provided, defaults depend on the API being used:
 
-    - **Gemini Developer API** (`api_key`/`google_api_key`): `https://generativelanguage.googleapis.com/`
-    - **Vertex AI** (`credentials`): `https://{location}-aiplatform.googleapis.com/`
+    - **Gemini Developer API** (
+        [`api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]/
+        [`google_api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]
+        ): `https://generativelanguage.googleapis.com/`
+    - **Vertex AI** (
+        [`credentials`][langchain_google_genai.ChatGoogleGenerativeAI.credentials]):
+        `https://{location}-aiplatform.googleapis.com/`
 
-    !!! note
+    !!! note "Backwards compatibility"
 
         Typed to accept `dict` to support backwards compatibility for the (now removed)
         `client_options` param.

@@ -1206,7 +1206,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
-    Instantiation:
+    ???+ example "Instantiation"
+
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -1214,7 +1215,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         model.invoke("Write me a ballad about LangChain")
         ```
 
-    Invoke:
+    ???+ example "Invoke"
+
         The shape of `content` may differ based on the model chosen. See
         [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
         for more info.
@@ -1255,7 +1257,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
-    Stream:
+    ???+ example "Stream"
         The shape of `content` may differ based on the model chosen. See
         [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
         for more info.
@@ -1363,7 +1365,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
-    Async:
+    ???+ example "Async invocation"
+
         ```python
         await model.ainvoke(messages)
 
@@ -1374,7 +1377,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         await model.abatch([messages])
         ```
 
-    Tool calling:
+    ???+ example "Tool calling"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#tool-calling)
         for more info.
 
@@ -1430,18 +1434,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ]
         ```
 
-    Search:
-        ```python
-        from google.genai.types import Tool as GoogleTool
+    ???+ example "Structured output"
 
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        resp = llm.invoke(
-            "When is the next total solar eclipse in US?",
-            tools=[GoogleTool(google_search={})],
-        )
-        ```
-
-    Structured output:
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#structured-output)
         for more info.
 
@@ -1494,7 +1488,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         constrains the model's generation process directly rather than relying on
         post-processing tool calls.
 
-    Image input:
+    ???+ example "Image input"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#image-input)
         for more info.
 
@@ -1524,7 +1519,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         and trees indicate a warm and possibly slightly breezy day. There are no...
         ```
 
-    PDF input:
+    ???+ example "PDF input"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#pdf-input)
         for more info.
 
@@ -1549,7 +1545,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg = model.invoke([message])
         ```
 
-    Audio input:
+    ???+ example "Audio input"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-input)
         for more info.
 
@@ -1574,7 +1571,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg = model.invoke([message])
         ```
 
-    Video input:
+    ???+ example "Video input"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#video-input)
         for more info.
 
@@ -1624,23 +1622,28 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         print(response.text)
         ```
 
-    Image generation:
+    ???+ example "Image generation"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#image-generation)
         for more info.
 
-    Audio generation:
+    ???+ example "Audio generation"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#audio-generation)
         for more info.
 
-        !!! note
+        !!! warning "Vertex compatibility"
 
             Audio generation models (TTS) are currently in preview on Vertex AI
             and may require allowlist access. If you receive an `INVALID_ARGUMENT`
             error when using TTS models with `vertexai=True`, your project may need to
-            be allowlisted. See this post on the [Google AI forum](https://discuss.ai.google.dev/t/request-allowlist-access-for-audio-output-in-gemini-2-5-pro-flash-tts-vertex-ai/108067)
+            be allowlisted.
+
+            See this post on the [Google AI forum](https://discuss.ai.google.dev/t/request-allowlist-access-for-audio-output-in-gemini-2-5-pro-flash-tts-vertex-ai/108067)
             for more details.
 
-    File upload:
+    ???+ example "File upload"
+
         You can also upload files to Google's servers and reference them by URI.
 
         This works for PDFs, images, videos, and audio files.
@@ -1670,7 +1673,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg = model.invoke([message])
         ```
 
-    Thinking:
+    ???+ example "Thinking"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#thinking-support)
         for more info.
 
@@ -1702,7 +1706,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ai_msg = model.invoke("How many 'r's are in the word 'strawberry'?")
         ```
 
-    Thought signatures:
+    ???+ example "Thought signatures"
+
         Gemini 3+ models return *thought signatures*—encrypted representations of
         the model's internal reasoning. For multi-turn conversations involving tool
         calls, you must pass the full `AIMessage` back to the model so that these
@@ -1714,13 +1719,23 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking)
         for more details on thought signatures.
 
-    Google search:
+    ???+ example "Google search"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#google-search)
         for more info.
 
         ```python
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        response = model.invoke(
+            "When is the next total solar eclipse in US?",
+            tools=[{"google_search": {}}],
+        )
+        response.content_blocks
+        ```
 
+        Alternatively, you can bind the tool to the model for easier reuse across calls:
+
+        ```python
         model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
 
         model_with_search = model.bind_tools([{"google_search": {}}])
@@ -1731,7 +1746,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         response.content_blocks
         ```
 
-    Code execution:
+    ???+ example "Code execution"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#code-execution)
         for more info.
 
@@ -1760,7 +1776,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
          {'type': 'text', 'text': 'The calculation of 3 to the power of 3 is 27.'}]
         ```
 
-    Token usage:
+    ???+ example "Token usage"
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#token-usage-tracking)
         for more info.
 
@@ -1773,7 +1789,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         {"input_tokens": 18, "output_tokens": 5, "total_tokens": 23}
         ```
 
-    Safety settings:
+    ???+ example "Safety settings"
+
         Gemini models have default safety settings that can be overridden. If you
         are receiving lots of "Safety Warnings" from your models, you can try
         tweaking the `safety_settings` attribute of the model. For example, to
@@ -1798,7 +1815,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         For an enumeration of the categories and thresholds available, see Google's
         [safety setting types](https://ai.google.dev/api/python/google/generativeai/types/SafetySettingDict).
 
-    Context caching:
+    ???+ example "Context caching"
+
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#context-caching)
         for more info.
 
@@ -1811,7 +1829,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Below are two examples: caching a single file directly and caching multiple
         files using `Part`.
 
-        !!! example "Single file example"
+        ???+ example "Single file example"
 
             This caches a single file and queries it.
 
@@ -1854,7 +1872,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             llm.invoke([message])
             ```
 
-        !!! example "Multiple files example"
+        ??? example "Multiple files example"
 
             This caches two files using `Part` and queries them together.
 
@@ -1913,7 +1931,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             llm.invoke([message])
             ```
 
-    Response metadata:
+    ???+ example "Response metadata"
+
         ```python
         ai_msg = model.invoke(messages)
         ai_msg.response_metadata
@@ -1921,6 +1940,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         {
+            "model_name": "gemini-3-pro-preview",
+            "model_provider": "google_genai",
             "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
             "finish_reason": "STOP",
             "safety_ratings": [
@@ -2305,12 +2326,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> AIMessage:
-        """Override `invoke` on `ChatGoogleGenerativeAI` to add `code_execution`.
-
-        See the [models page](https://ai.google.dev/gemini-api/docs/models) to see if
-        your chosen model supports code execution. When enabled, the model can execute
-        code to solve problems.
-        """
+        """Override `invoke` on `ChatGoogleGenerativeAI` to add `code_execution`."""
         if code_execution is not None:
             if not self._supports_code_execution:
                 msg = (
@@ -3067,8 +3083,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model.
-
-        Assumes model is compatible with google-generativeAI tool-calling API.
 
         Args:
             tools: A list of tool definitions to bind to this chat model.
