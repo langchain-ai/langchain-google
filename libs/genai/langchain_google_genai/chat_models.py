@@ -878,8 +878,17 @@ def _parse_response_candidate(
             hasattr(part, "code_execution_result")
             and part.code_execution_result is not None
         ) and part.code_execution_result.output:
-            # outcome: 1 = OUTCOME_OK (success), else = error
-            outcome = part.code_execution_result.outcome
+            # outcome: 1 = OUTCOME_OK (success), 2 = error
+            # Convert enum to int for compatibility with langchain_core
+            if part.code_execution_result.outcome is None:
+                outcome = 1  # Default to OUTCOME_OK
+            elif (
+                part.code_execution_result.outcome
+                == CodeExecutionResultOutcome.OUTCOME_OK
+            ):
+                outcome = 1
+            else:
+                outcome = 2
             execution_result = {
                 "type": "code_execution_result",
                 "code_execution_result": part.code_execution_result.output,
@@ -1781,7 +1790,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
           'status': 'success',
           'output': '27\n',
           'extras': {'block_type': 'code_execution_result',
-           'outcome': <Outcome.OUTCOME_OK: 1>}},
+           'outcome': 1}},
          {'type': 'text', 'text': 'The calculation of 3 to the power of 3 is 27.'}]
         ```
 
