@@ -17,13 +17,13 @@ MODEL_NAMES = ["gemini-2.5-flash-lite"]
     "model_name",
     MODEL_NAMES,
 )
-def test_google_generativeai_call(model_name: str) -> None:
+async def test_google_generativeai_call(model_name: str) -> None:
     """Test valid call to Google GenerativeAI text API."""
     if model_name:
         llm = GoogleGenerativeAI(max_tokens=10, model=model_name)
     else:
         llm = GoogleGenerativeAI(max_tokens=10)
-    output = llm.invoke("Say foo:")
+    output = await llm.ainvoke("Say foo:")
     assert isinstance(output, str)
     assert llm._llm_type == "google_gemini"
     assert llm.client.model == f"models/{model_name}"
@@ -33,9 +33,9 @@ def test_google_generativeai_call(model_name: str) -> None:
     "model_name",
     MODEL_NAMES,
 )
-def test_google_generativeai_generate(model_name: str) -> None:
+async def test_google_generativeai_generate(model_name: str) -> None:
     llm = GoogleGenerativeAI(temperature=0.3, model=model_name)
-    output = llm.generate(["Say foo:"])
+    output = await llm.agenerate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     assert len(output.generations[0]) == 1
@@ -59,9 +59,11 @@ async def test_google_generativeai_agenerate(model_name: str) -> None:
     "model_name",
     MODEL_NAMES,
 )
-def test_generativeai_stream(model_name: str) -> None:
+async def test_generativeai_stream(model_name: str) -> None:
     llm = GoogleGenerativeAI(temperature=0, model=model_name)
-    outputs = list(llm.stream("Please say foo:"))
+    outputs = []
+    async for chunk in llm.astream("Please say foo:"):
+        outputs.append(chunk)
     assert isinstance(outputs[0], str)
 
 
@@ -79,10 +81,10 @@ def test_generativeai_get_num_tokens_gemini(model_name: str) -> None:
     "model_name",
     MODEL_NAMES,
 )
-def test_safety_settings_gemini(model_name: str) -> None:
+async def test_safety_settings_gemini(model_name: str) -> None:
     # test with blocked prompt
     llm = GoogleGenerativeAI(temperature=0, model=model_name)
-    output = llm.generate(prompts=["how to make a bomb?"])
+    output = await llm.agenerate(prompts=["how to make a bomb?"])
     assert isinstance(output, LLMResult)
     assert len(output.generations[0]) > 0
 
@@ -92,14 +94,14 @@ def test_safety_settings_gemini(model_name: str) -> None:
     }
 
     # test with safety filters directly to generate
-    output = llm.generate(["how to make a bomb?"], safety_settings=safety_settings)
+    output = await llm.agenerate(["how to make a bomb?"], safety_settings=safety_settings)
     assert isinstance(output, LLMResult)
     assert len(output.generations[0]) > 0
 
     # test with safety filters directly to stream
-    output_stream = llm.stream("how to make a bomb?", safety_settings=safety_settings)
-    assert isinstance(output_stream, Generator)
-    streamed_messages = list(output_stream)
+    streamed_messages = []
+    async for chunk in llm.astream("how to make a bomb?", safety_settings=safety_settings):
+        streamed_messages.append(chunk)
     assert len(streamed_messages) > 0
 
     # test with safety filters on instantiation
@@ -108,6 +110,6 @@ def test_safety_settings_gemini(model_name: str) -> None:
         safety_settings=safety_settings,
         temperature=0,
     )
-    output = llm.generate(prompts=["how to make a bomb?"])
+    output = await llm.agenerate(prompts=["how to make a bomb?"])
     assert isinstance(output, LLMResult)
     assert len(output.generations[0]) > 0

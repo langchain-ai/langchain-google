@@ -15,7 +15,7 @@ test tests:
 	uv run --group test pytest --disable-socket --allow-unix-socket $(TEST_FILE)
 
 integration_test integration_tests:
-	uv run --group test --group test_integration pytest --retries 3 --retry-delay 1 $(TEST_FILE)
+	uv run --group test --group test_integration pytest -n auto --retries 3 --retry-delay 1 $(TEST_FILE)
 
 # Run unit tests and generate a coverage report.
 coverage:
