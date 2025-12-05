@@ -230,6 +230,15 @@ class _BaseGoogleGenerativeAI(BaseModel):
             ```
     """  # noqa: E501
 
+    seed: int | None = Field(
+        default=None,
+    )
+    """
+    Seed used in decoding.
+
+    If not set, the request uses a randomly generated seed.
+    """
+
     @property
     def lc_secrets(self) -> dict[str, str]:
         # Either could contain the API key

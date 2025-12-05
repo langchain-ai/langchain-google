@@ -2276,6 +2276,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     or thinking_level is not None
                     else None
                 ),
+                "seed": self.seed,
             }.items()
             if v is not None
         }
