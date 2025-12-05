@@ -52,6 +52,14 @@ from langchain_google_community.sheets import (
     SheetsToolkit,
     SheetsUpdateValuesTool,
 )
+from langchain_google_community.tasks.toolkit import (
+    TasksCreateTask,
+    TasksDeleteTask,
+    TasksGetTask,
+    TasksListTasks,
+    TasksToolkit,
+    TasksUpdateTask,
+)
 from langchain_google_community.texttospeech import TextToSpeechTool
 from langchain_google_community.translate import GoogleTranslateTransformer
 from langchain_google_community.vertex_ai_search import (
@@ -96,6 +104,12 @@ __all__ = [
     "SheetsReadDataTool",
     "SheetsToolkit",
     "SheetsUpdateValuesTool",
+    "TasksCreateTask",
+    "TasksDeleteTask",
+    "TasksGetTask",
+    "TasksListTasks",
+    "TasksToolkit",
+    "TasksUpdateTask",
     "GoogleGeocodingAPIWrapper",
     "GoogleGeocodingTool",
     "GooglePlacesAPIWrapper",
