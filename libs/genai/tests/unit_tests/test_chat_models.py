@@ -31,6 +31,7 @@ from google.protobuf.struct_pb2 import Struct
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
@@ -930,6 +931,71 @@ def test_parse_response_candidate_includes_model_name() -> None:
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
     assert "model_name" not in result.response_metadata
+
+
+def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
+    """Test that `model_name` is not duplicated when streaming chunks are concatenated.
+
+    When chunks are combined using the += operator, string values in `response_metadata`
+    get concatenated. To prevent `model_name` duplication, it should only be included
+    in the last chunk (when `finish_reason` exists), not in every chunk.
+    """
+
+    # Create streaming chunks - first chunk without finish_reason
+    raw_chunk1 = {
+        "content": {"parts": [{"text": "Hello"}]},
+        "safety_ratings": [],
+    }
+    chunk1_candidate = Candidate.model_validate(raw_chunk1)
+    response1 = GenerateContentResponse(
+        candidates=[chunk1_candidate], model_version="gemini-2.5-flash"
+    )
+
+    # Second chunk without finish_reason
+    raw_chunk2 = {
+        "content": {"parts": [{"text": " world"}]},
+        "safety_ratings": [],
+    }
+    chunk2_candidate = Candidate.model_validate(raw_chunk2)
+    response2 = GenerateContentResponse(
+        candidates=[chunk2_candidate], model_version="gemini-2.5-flash"
+    )
+
+    # Final chunk with finish_reason
+    raw_chunk3 = {
+        "content": {"parts": [{"text": "!"}]},
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+    chunk3_candidate = Candidate.model_validate(raw_chunk3)
+    response3 = GenerateContentResponse(
+        candidates=[chunk3_candidate], model_version="gemini-2.5-flash"
+    )
+
+    # Convert to LangChain messages (simulating what _stream does)
+    result1 = _response_to_result(response1, stream=True)
+    result2 = _response_to_result(response2, stream=True)
+    result3 = _response_to_result(response3, stream=True)
+
+    msg1 = cast("AIMessageChunk", result1.generations[0].message)
+    msg2 = cast("AIMessageChunk", result2.generations[0].message)
+    msg3 = cast("AIMessageChunk", result3.generations[0].message)
+
+    # First two chunks should NOT have model_name in response_metadata
+    assert "model_name" not in msg1.response_metadata
+    assert "model_name" not in msg2.response_metadata
+
+    # Only the last chunk should have model_name
+    assert msg3.response_metadata["model_name"] == "gemini-2.5-flash"
+
+    # Concatenate chunks (simulating user code with +=)
+    full = msg1 + msg2 + msg3
+
+    # Verify model_name is not duplicated
+    assert full.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert full.response_metadata["model_name"].count("gemini") == 1, (
+        "model_name should not be duplicated"
+    )
 
 
 def test_serialize() -> None:

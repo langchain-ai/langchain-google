@@ -1072,17 +1072,23 @@ def _response_to_result(
 
     for candidate in response.candidates or []:
         generation_info: dict[str, Any] = {}
+        # Only include model_name in response_metadata for the last chunk
+        # (when finish_reason exists)
+        # to avoid duplication when chunks are concatenated with +=
+        model_name_for_chunk = None
         if candidate.finish_reason:
             generation_info["finish_reason"] = candidate.finish_reason.name
             # Add model_name in last chunk
             generation_info["model_name"] = response.model_version or ""
+            # Set for final chunk
+            model_name_for_chunk = response.model_version
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings
             else []
         )
         message = _parse_response_candidate(
-            candidate, streaming=stream, model_name=response.model_version
+            candidate, streaming=stream, model_name=model_name_for_chunk
         )
 
         if not hasattr(message, "response_metadata"):
@@ -1157,12 +1163,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     r"""Google GenAI chat model integration.
 
     Setup:
-        This integration supports both the **Gemini Developer API** and **Vertex AI**.
+        This class supports both the **Gemini Developer API** and **Vertex AI**.
 
         **For Gemini Developer API** (simplest):
 
         1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
-        2. Pass your API key using the `api_key` parameter
+        2. Pass your API key using the [`api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]
+            parameter
 
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -1170,7 +1177,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", api_key="...")
         ```
 
-        **For Vertex AI with API key** (NEW - simpler than service accounts!):
+        **For Vertex AI with API key**:
 
         ```bash
         export GEMINI_API_KEY='your-api-key'
@@ -1179,10 +1186,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
         # Or explicitly:
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3-pro-preview",
             api_key="...",
             project="your-project-id",
             vertexai=True,
@@ -1208,7 +1215,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
     Invoke:
-        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
+        The shape of `content` may differ based on the model chosen. See
+        [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
         for more info.
 
         ```python
@@ -1248,6 +1256,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
     Stream:
+        The shape of `content` may differ based on the model chosen. See
+        [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#invocation)
+        for more info.
+
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -1303,6 +1315,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             },
         )
         ```
+
+        To assemble a full `AIMessage` message from a stream of chunks:
 
         ```python
         stream = model.stream(messages)
