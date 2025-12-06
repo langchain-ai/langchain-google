@@ -4326,4 +4326,4 @@ def test_finish_reason_as_integer() -> None:
         mock_response,
         stream=False,
     )
-    assert result.generations[0].generation_info["finish_reason"] == "UNKNOWN_15"
+    assert result.generations[0].generation_info["finish_reason"] == "UNKNOWN_15"  # type: ignore[index]
