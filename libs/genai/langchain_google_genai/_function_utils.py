@@ -129,9 +129,10 @@ def _dict_to_genai_schema(
         formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
         # Convert the formatted schema to google.genai.types.Schema
         schema_dict = {}
-        # Set type if present, or if we can infer it from anyOf
-        # (for Gemini compatibility)
-        if "type" in formatted_schema:
+        # Set type if present
+        # Note: Don't set type when anyOf is present, as Gemini requires
+        # that when any_of is used, it must be the only field set
+        if "type" in formatted_schema and "anyOf" not in formatted_schema:
             type_obj = formatted_schema["type"]
             if isinstance(type_obj, dict):
                 type_value = type_obj["_value_"]
@@ -141,13 +142,6 @@ def _dict_to_genai_schema(
                 msg = f"Invalid type: {type_obj}"
                 raise ValueError(msg)
             schema_dict["type"] = types.Type(type_value)
-        elif "anyOf" in formatted_schema:
-            # Try to infer type from anyOf for Gemini compatibility
-            inferred_type = _get_type_from_schema(formatted_schema)
-            if (
-                inferred_type != types.Type.STRING
-            ):  # Only set if it's not the default fallback
-                schema_dict["type"] = inferred_type
         if "description" in formatted_schema:
             schema_dict["description"] = formatted_schema["description"]
         if "title" in formatted_schema:
@@ -204,61 +198,101 @@ def _format_dict_to_function_declaration(
 # Info: gapicTool means function_declarations and other tool types
 def convert_to_genai_function_declarations(
     tools: _ToolsType,
-) -> types.Tool:
-    tool_dict: dict[str, Any] = {}
+) -> list[types.Tool]:
+    """Convert tools to google-genai `Tool` objects.
+
+    Each special tool type (`google_search`, `url_context`, etc.) must be in its own
+    Tool object due to protobuf oneof constraints.
+    """
     if not isinstance(tools, collections.abc.Sequence):
         logger.warning(
             "convert_to_genai_function_declarations expects a Sequence "
             "and not a single tool."
         )
         tools = [tools]
+
+    result_tools: list[types.Tool] = []
     function_declarations: list[types.FunctionDeclaration] = []
+
+    # Special tool types that must be in separate Tool objects
+    special_tool_types = [
+        "google_search_retrieval",
+        "google_search",
+        "code_execution",
+        "url_context",
+    ]
+
     for tool in tools:
         if isinstance(tool, types.Tool):
-            # Handle existing Tool objects
-            if hasattr(tool, "function_declarations") and tool.function_declarations:
-                function_declarations.extend(tool.function_declarations)
-            if (
-                hasattr(tool, "google_search_retrieval")
-                and tool.google_search_retrieval
-            ):
-                if "google_search_retrieval" in tool_dict:
-                    msg = (
-                        "Providing multiple google_search_retrieval "
-                        "or mixing with function_declarations is not supported"
-                    )
-                    raise ValueError(msg)
-                tool_dict["google_search_retrieval"] = tool.google_search_retrieval
-            if hasattr(tool, "google_search") and tool.google_search:
-                tool_dict["google_search"] = tool.google_search
-            if hasattr(tool, "code_execution") and tool.code_execution:
-                tool_dict["code_execution"] = tool.code_execution
-            if hasattr(tool, "url_context") and tool.url_context:
-                tool_dict["url_context"] = tool.url_context
+            # Already a Tool object, add it directly
+            result_tools.append(tool)
         elif isinstance(tool, dict):
-            # not _ToolDictLike
-            if not any(
-                f in tool
-                for f in [
-                    "function_declarations",
-                    "google_search_retrieval",
-                    "google_search",
-                    "code_execution",
-                    "url_context",
-                ]
+            # Check if this is a special tool type dict
+            # Only count keys that have non-None values
+            special_keys = [
+                k for k in special_tool_types if k in tool and tool.get(k) is not None
+            ]
+
+            if len(special_keys) > 1:
+                msg = (
+                    f"A single tool dict cannot have multiple special tool types. "
+                    f"Found: {special_keys}. Each special tool type must be in a "
+                    f"separate dict or Tool object."
+                )
+                raise ValueError(msg)
+
+            if special_keys:
+                # This is a special tool type - create a separate Tool for it
+                special_key = special_keys[0]
+                tool = cast("_ToolDict", tool)
+
+                if special_key == "google_search_retrieval":
+                    if isinstance(tool["google_search_retrieval"], dict):
+                        tool_obj = types.Tool(
+                            google_search_retrieval=types.GoogleSearchRetrieval(
+                                **tool["google_search_retrieval"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            google_search_retrieval=tool["google_search_retrieval"]
+                        )
+                elif special_key == "google_search":
+                    if isinstance(tool["google_search"], dict):
+                        tool_obj = types.Tool(
+                            google_search=types.GoogleSearch(**tool["google_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(google_search=tool["google_search"])
+                elif special_key == "code_execution":
+                    if isinstance(tool["code_execution"], dict):
+                        tool_obj = types.Tool(
+                            code_execution=types.ToolCodeExecution(
+                                **tool["code_execution"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(code_execution=tool["code_execution"])
+                elif isinstance(tool["url_context"], dict):
+                    tool_obj = types.Tool(
+                        url_context=types.UrlContext(**tool["url_context"])
+                    )
+                else:
+                    tool_obj = types.Tool(url_context=tool["url_context"])
+
+                result_tools.append(tool_obj)
+            elif (
+                "function_declarations" in tool
+                and tool["function_declarations"] is not None
             ):
-                fd = _format_to_genai_function_declaration(tool)  # type: ignore[arg-type]
-                function_declarations.append(fd)
-                continue
-            # _ToolDictLike
-            tool = cast("_ToolDict", tool)
-            if "function_declarations" in tool:
+                # Has function_declarations - add to our collection
+                tool = cast("_ToolDict", tool)
                 tool_function_declarations = tool["function_declarations"]
                 if tool_function_declarations is not None and not isinstance(
-                    tool["function_declarations"], collections.abc.Sequence
+                    tool_function_declarations, collections.abc.Sequence
                 ):
                     msg = (
-                        "function_declarations should be a list"
+                        "function_declarations should be a list, "
                         f"got '{type(tool_function_declarations)}'"
                     )
                     raise ValueError(msg)
@@ -268,47 +302,33 @@ def convert_to_genai_function_declarations(
                         for fd in tool_function_declarations
                     ]
                     function_declarations.extend(fds)
-            if "google_search_retrieval" in tool:
-                if "google_search_retrieval" in tool_dict:
-                    msg = (
-                        "Providing multiple google_search_retrieval"
-                        " or mixing with function_declarations is not supported"
-                    )
-                    raise ValueError(msg)
-                if isinstance(tool["google_search_retrieval"], dict):
-                    tool_dict["google_search_retrieval"] = types.GoogleSearchRetrieval(
-                        **tool["google_search_retrieval"]
-                    )
-                else:
-                    tool_dict["google_search_retrieval"] = tool[
-                        "google_search_retrieval"
-                    ]
-            if "google_search" in tool:
-                if isinstance(tool["google_search"], dict):
-                    tool_dict["google_search"] = types.GoogleSearch(
-                        **tool["google_search"]
-                    )
-                else:
-                    tool_dict["google_search"] = tool["google_search"]
-            if "code_execution" in tool:
-                if isinstance(tool["code_execution"], dict):
-                    tool_dict["code_execution"] = types.ToolCodeExecution(
-                        **tool["code_execution"]
-                    )
-                else:
-                    tool_dict["code_execution"] = tool["code_execution"]
-            if "url_context" in tool:
-                if isinstance(tool["url_context"], dict):
-                    tool_dict["url_context"] = types.UrlContext(**tool["url_context"])
-                else:
-                    tool_dict["url_context"] = tool["url_context"]
+            else:
+                # Regular function declaration dict
+                fd = _format_to_genai_function_declaration(tool)  # type: ignore[arg-type]
+                function_declarations.append(fd)
         else:
+            # Other tool type - convert to function declaration
             fd = _format_to_genai_function_declaration(tool)
             function_declarations.append(fd)
-    if function_declarations:
-        tool_dict["function_declarations"] = function_declarations
 
-    return types.Tool(**tool_dict)
+    # If we have function_declarations, create a Tool for them
+    if function_declarations:
+        result_tools.append(types.Tool(function_declarations=function_declarations))
+
+    # Validate that we don't have multiple google_search_retrieval tools
+    google_search_retrieval_count = sum(
+        1
+        for tool in result_tools
+        if hasattr(tool, "google_search_retrieval") and tool.google_search_retrieval
+    )
+    if google_search_retrieval_count > 1:
+        msg = (
+            "Providing multiple google_search_retrieval tools is not supported. "
+            "Only one google_search_retrieval tool can be used at a time."
+        )
+        raise ValueError(msg)
+
+    return result_tools
 
 
 def tool_to_dict(tool: types.Tool) -> _ToolDict:

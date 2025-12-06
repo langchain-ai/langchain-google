@@ -4174,3 +4174,156 @@ def test_model_name_normalization_for_vertexai() -> None:
     finally:
         os.environ.clear()
         os.environ.update(original_env)
+
+
+def test_max_retries_configuration_for_500_errors() -> None:
+    """Test that `max_retries` is properly configured for handling 500 errors.
+
+    This test verifies `max_retries` parameter is properly passed to the SDK's
+    `HttpRetryOptions`.
+
+    The actual retry logic for transient errors (including 500 INTERNAL errors) is
+    handled by the `google-genai` SDK at the HTTP transport level via
+    `HttpRetryOptions`.
+    """
+
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_retries=5,  # Configure retries for transient errors
+    )
+
+    # Prepare a request to inspect the configuration
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+    request = chat._prepare_request(messages)
+
+    # Verify HttpRetryOptions is configured with correct attempts
+    config = request["config"]
+    assert config.http_options is not None, "HttpOptions should be configured"
+    assert config.http_options.retry_options is not None, (
+        "HttpRetryOptions should be configured"
+    )
+    assert config.http_options.retry_options.attempts == 5, (
+        "Retry attempts should match max_retries"
+    )
+
+
+def test_max_retries_can_be_overridden_per_call() -> None:
+    """Test that `max_retries` can be overridden on a per-call basis.
+
+    Ensures users can adjust retry behavior for specific calls, which is useful
+    for handling different scenarios (e.g., interactive vs batch processing).
+    """
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_retries=3,  # Default
+    )
+
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+
+    # Test with call-level override
+    request = chat._prepare_request(messages, max_retries=10)
+    config = request["config"]
+
+    assert config.http_options is not None
+    assert config.http_options.retry_options is not None
+    assert config.http_options.retry_options.attempts == 10, (
+        "Call-level max_retries should override instance default"
+    )
+
+
+def test_default_max_retries_value() -> None:
+    """Test that `max_retries` has a sensible default value."""
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        # Don't specify max_retries - use default
+    )
+
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+    request = chat._prepare_request(messages)
+    config = request["config"]
+
+    # Verify a reasonable default is set (should be >= 2 for transient errors)
+    assert config.http_options is not None
+    assert config.http_options.retry_options is not None
+    assert config.http_options.retry_options.attempts >= 2, (
+        "Default max_retries should handle transient failures"
+    )
+
+
+def test_client_error_with_500_raises_descriptive_error() -> None:
+    """Test that 500 INTERNAL errors are properly reported when retries are exhausted.
+
+    This ensures that after the SDK exhausts all retry attempts, the error message
+    is clear and informative for debugging.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    # Simulate persistent 500 error (all retries exhausted)
+    mock_generate_content.side_effect = ClientError(
+        code=500,
+        response_json={
+            "error": {
+                "message": (
+                    "Unable to submit request because the service is temporarily "
+                    "unavailable."
+                ),
+                "status": "INTERNAL",
+            }
+        },
+        response=None,
+    )
+
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=1,  # Minimize test time
+        )
+
+        # Should raise descriptive error after retries exhausted
+        with pytest.raises(
+            ChatGoogleGenerativeAIError,
+            match=r"Error calling model .* \(INTERNAL\).*temporarily unavailable",
+        ):
+            chat.invoke("test message")
+
+
+def test_finish_reason_as_integer() -> None:
+    """Test that finish_reason as an integer doesn't crash.
+
+    Reproduces issue #1232 where the API returns finish_reason as a raw integer
+    (e.g., 15 for unknown enum values) instead of an enum object with .name attribute.
+
+    This can happen when the server returns a new/unknown finish reason value that
+    isn't in the local enum definition yet.
+    """
+    # Create a mock candidate where finish_reason is a raw integer
+    mock_candidate = Mock(spec=Candidate)
+    mock_candidate.finish_reason = 15  # Raw integer, not an enum
+    mock_candidate.safety_ratings = []
+    mock_candidate.content = Content(
+        parts=[Part.from_text(text="Test response")],
+        role="model",
+    )
+
+    # Create a mock response with the candidate
+    mock_response = Mock(spec=GenerateContentResponse)
+    mock_response.candidates = [mock_candidate]
+    mock_response.model_version = "gemini-2.5-flash-image"
+    mock_response.usage_metadata = None
+    mock_response.prompt_feedback = None
+
+    # This should not raise an error, and should convert the integer to a string
+    result = _response_to_result(
+        mock_response,
+        stream=False,
+    )
+    assert result.generations[0].generation_info["finish_reason"] == "UNKNOWN_15"

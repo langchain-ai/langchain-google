@@ -23,11 +23,12 @@ def check_tennis_score(player: str) -> str:
     return f"{player} is currently winning 6-0"
 
 
-def test_multiple_tools() -> None:
+def test_multiple_tools(backend_config: dict) -> None:
     tools = [check_weather, check_live_traffic, check_tennis_score]
 
     model = ChatGoogleGenerativeAI(
         model=MODEL,
+        **backend_config,
     )
 
     model_with_tools = model.bind_tools(tools)

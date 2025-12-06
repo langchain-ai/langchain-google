@@ -72,6 +72,9 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         self.client = ChatGoogleGenerativeAI(
             api_key=self.google_api_key,
             credentials=self.credentials,
+            vertexai=self.vertexai,
+            project=self.project,
+            location=self.location,
             temperature=self.temperature,
             top_p=self.top_p,
             top_k=self.top_k,

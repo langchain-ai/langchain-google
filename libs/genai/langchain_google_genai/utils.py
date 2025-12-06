@@ -157,10 +157,10 @@ def create_context_cache(
     # Parse messages into system instruction and content
     system_instruction, contents = _parse_chat_history(messages, model=model.model)
 
-    # Convert tools to Tool object if provided
-    tool = None
+    # Convert tools to Tool objects if provided
+    tool_list = None
     if tools:
-        tool = convert_to_genai_function_declarations(tools)
+        tool_list = convert_to_genai_function_declarations(tools)
 
     # Build the cache config
     cache_config_kwargs: dict[str, Any] = {}
@@ -177,8 +177,8 @@ def create_context_cache(
     if expire_time:
         cache_config_kwargs["expire_time"] = expire_time
 
-    if tool:
-        cache_config_kwargs["tools"] = [tool]
+    if tool_list:
+        cache_config_kwargs["tools"] = tool_list
 
     # Create the cache
     cache = model.client.caches.create(

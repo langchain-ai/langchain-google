@@ -418,7 +418,18 @@ def _convert_to_parts(
                         )
                         raise ValueError(msg)
                     if "outcome" in part:
-                        outcome = part["outcome"]
+                        raw_outcome = part["outcome"]
+                        # Convert integer outcome to enum if needed
+                        # (for backward compat)
+                        if isinstance(raw_outcome, int):
+                            if raw_outcome == 1:
+                                outcome = CodeExecutionResultOutcome.OUTCOME_OK
+                            elif raw_outcome == 2:
+                                outcome = CodeExecutionResultOutcome.OUTCOME_FAILED
+                            else:
+                                outcome = CodeExecutionResultOutcome.OUTCOME_UNSPECIFIED
+                        else:
+                            outcome = raw_outcome
                     else:
                         # Backward compatibility
                         outcome = CodeExecutionResultOutcome.OUTCOME_OK
@@ -806,7 +817,32 @@ def _parse_response_candidate(
     response_candidate: Candidate,
     streaming: bool = False,
     model_name: str | None = None,
+    *,
+    model_name_for_content: str | None = None,
 ) -> AIMessage:
+    """Parse a response candidate from Google into an `AIMessage`.
+
+    Args:
+        response_candidate: The candidate from the API response.
+        streaming: Whether this is a streaming response.
+        model_name: Model name to include in `response_metadata` (`None` for
+            intermediate streaming chunks to avoid duplication when concatenating).
+        model_name_for_content: Model name to use for determining content format.
+
+            For Gemini 3+, this determines whether to use list-based content blocks
+            or string content. Must be consistent across all streaming chunks to
+            enable proper concatenation. If not provided, falls back to `model_name`.
+
+    Returns:
+        The parsed `AIMessage` or `AIMessageChunk`.
+
+    Note:
+        During streaming, we want to avoid duplicating `model_name` in
+        `response_metadata` for intermediate chunks (only include it in the final
+        chunk), but we need the model name consistently across all chunks to determine
+        the content format. This is why `model_name` and `model_name_for_content` are
+        separate parameters.
+    """
     content: None | str | list[str | dict] = None
     additional_kwargs: dict[str, Any] = {}
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
@@ -815,6 +851,13 @@ def _parse_response_candidate(
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
+
+    # Use model_name_for_content if provided, otherwise fall back to model_name.
+    # This ensures consistent content format across all streaming chunks while
+    # only including model_name in response_metadata for the final chunk.
+    effective_model_name = (
+        model_name_for_content if model_name_for_content else model_name
+    )
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
     for part in parts:
@@ -856,7 +899,7 @@ def _parse_response_candidate(
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
-            if thought_sig or _is_gemini_3_or_later(model_name or ""):
+            if thought_sig or _is_gemini_3_or_later(effective_model_name or ""):
                 # append blocks if there's a signature or new Gemini model
                 content = _append_to_content(content, text_block)
             else:
@@ -985,7 +1028,7 @@ def _parse_response_candidate(
                 )
 
     if content is None:
-        if _is_gemini_3_or_later(model_name or ""):
+        if _is_gemini_3_or_later(effective_model_name or ""):
             content = []
         else:
             content = ""
@@ -1084,20 +1127,31 @@ def _response_to_result(
         # Only include model_name in response_metadata for the last chunk
         # (when finish_reason exists)
         # to avoid duplication when chunks are concatenated with +=
-        model_name_for_chunk = None
+        model_name_for_metadata = None
         if candidate.finish_reason:
-            generation_info["finish_reason"] = candidate.finish_reason.name
+            # Handle finish_reason that may be an enum or raw integer
+            if hasattr(candidate.finish_reason, "name"):
+                generation_info["finish_reason"] = candidate.finish_reason.name
+            elif isinstance(candidate.finish_reason, int):
+                generation_info["finish_reason"] = f"UNKNOWN_{candidate.finish_reason}"
             # Add model_name in last chunk
             generation_info["model_name"] = response.model_version or ""
             # Set for final chunk
-            model_name_for_chunk = response.model_version
+            model_name_for_metadata = response.model_version
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings
             else []
         )
+        # Pass model_version for content format determination (Gemini 3+ needs
+        # consistent list-based content across all chunks), but only include
+        # model_name in response_metadata for the final chunk to avoid duplication
+        # when chunks are concatenated.
         message = _parse_response_candidate(
-            candidate, streaming=stream, model_name=model_name_for_chunk
+            candidate,
+            streaming=stream,
+            model_name=model_name_for_metadata,  # None for intermediate chunks
+            model_name_for_content=response.model_version,  # Always set
         )
 
         if not hasattr(message, "response_metadata"):
@@ -1490,10 +1544,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         * `method='function_calling'` (default): Uses tool calling to extract
             structured data. Compatible with all models.
-        * `method='json_schema'`: Uses Gemini's native structured output.
+        * `method='json_schema'`: Uses Gemini's native structured output API.
 
-            Supports unions (`anyOf`), recursive schemas (`$ref`), property ordering
-            preservation, and streaming of partial JSON chunks.
+            The Google GenAI SDK automatically transforms schemas to ensure
+            compatibility with Gemini. This includes:
+
+            - Inlining `$defs` definitions (Union types work correctly)
+            - Resolving `$ref` references for nested schemas
+            - Property ordering preservation
+            - Support for streaming partial JSON chunks
 
             Uses Gemini's `response_json_schema` API param. Refer to the Gemini API
             [docs](https://ai.google.dev/gemini-api/docs/structured-output) for more
@@ -2035,18 +2094,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     response_schema: dict[str, Any] | None = None
     """Enforce a schema to the output.
 
-    The format of the dictionary should follow Open API schema.
+    The format of the dictionary should follow JSON Schema specification.
 
-    Has JSON Schema support including:
+    !!! note "Schema Transformation"
 
-    - `anyOf` for unions
-    - `$ref` for recursive schemas
-    - Output property ordering
-    - Minimum/maximum constraints
-    - Streaming of partial JSON chunks
+        The Google GenAI SDK automatically transforms schemas for Gemini compatibility:
+
+        - Inlines `$defs` definitions (enables Union types with `anyOf`)
+        - Resolves `$ref` pointers for nested/recursive schemas
+        - Preserves property ordering
+        - Supports constraints like `minimum`/`maximum`, `minItems`/`maxItems`
+
+    !!! tip "Using Union Types"
+
+        Union types in Pydantic models (e.g., `field: Union[TypeA, TypeB]`) are
+        automatically converted to `anyOf` schemas and work correctly with the
+        `json_schema` method.
 
     Refer to the Gemini API [docs](https://ai.google.dev/gemini-api/docs/structured-output)
-    for more details.
+    for more details on supported JSON Schema features.
     """
 
     thinking_level: Literal["low", "high"] | None = Field(
@@ -2639,9 +2705,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if tools == [code_execution_tool]:
             return list(tools)
         if tools:
-            return [convert_to_genai_function_declarations(tools)]
+            return convert_to_genai_function_declarations(tools)
         if functions:
-            return [convert_to_genai_function_declarations(functions)]
+            return convert_to_genai_function_declarations(functions)
         return None
 
     def _filter_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
@@ -3024,6 +3090,108 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         include_raw: bool = False,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, dict | BaseModel]:
+        """Return a `Runnable` that constrains model output to a given schema.
+
+        Constrains the model to return output conforming to the provided schema.
+
+        Supports Pydantic models, `TypedDict`, and JSON schema dictionaries.
+
+        Args:
+            schema: The output schema as a Pydantic `BaseModel` class, a `TypedDict`
+                class, or a JSON schema dictionary.
+            method: The method to use for structured output.
+
+                Options:
+
+                - `'json_schema'` (recommended): Uses native JSON schema support for
+                    reliable structured output. Supports streaming with fully-parsed
+                    Pydantic objects.
+                - `'json_mode'`: Deprecated alias for `'json_schema'`.
+                - `'function_calling'`: Uses tool/function calling. Less reliable than
+                    `'json_schema'` and not recommended for new code.
+            include_raw: If `True`, returns a dict with both the raw model output
+                and the parsed structured output.
+
+        Returns:
+            A `Runnable` that takes the same input as the chat model but returns the
+                structured output. When streaming, emits fully-parsed objects of the
+                specified schema type (not incremental JSON strings).
+
+        Example:
+            ```python title="Basic usage with Pydantic model"
+            from pydantic import BaseModel
+            from langchain_google_genai import ChatGoogleGenerativeAI
+
+
+            class Person(BaseModel):
+                name: str
+                age: int
+
+
+            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            structured_model = model.with_structured_output(
+                Person,
+                method="json_schema",
+            )
+
+            result = structured_model.invoke(
+                "Tell me about a person named Alice, age 30"
+            )
+            print(result)  # Person(name="Alice", age=30)
+            ```
+
+            ```python title="Streaming structured output"
+            from pydantic import BaseModel
+            from langchain_google_genai import ChatGoogleGenerativeAI
+
+
+            class Recipe(BaseModel):
+                name: str
+                ingredients: list[str]
+                steps: list[str]
+
+
+            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            structured_model = model.with_structured_output(
+                Recipe, method="json_schema"
+            )
+
+            # Emits fully-parsed Recipe objects, not incremental JSON strings
+            for chunk in structured_model.stream(
+                "Give me a recipe for chocolate chip cookies"
+            ):
+                print(chunk)  # Recipe(name=..., ingredients=[...], steps=[...])
+            ```
+
+            ```python title="Using with dict schema"
+            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "priority": {"type": "integer"},
+                },
+                "required": ["title", "priority"],
+            }
+
+            structured_model = model.with_structured_output(
+                schema, method="json_schema"
+            )
+            result = structured_model.invoke("Create a task: finish report, priority 1")
+            print(result)  # {"title": "finish report", "priority": 1}
+            ```
+
+            ```python title="Including raw output"
+            structured_model = model.with_structured_output(
+                Person, method="json_schema", include_raw=True
+            )
+
+            result = structured_model.invoke("Tell me about Bob, age 25")
+            print(result["parsed"])  # Person(name="Bob", age=25)
+            print(result["raw"])  # AIMessage with full model response
+            ```
+        """
         _ = kwargs.pop("strict", None)
         if kwargs:
             msg = f"Received unsupported arguments {kwargs}"
@@ -3051,6 +3219,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     raise ValueError(msg)
                 parser = JsonOutputParser()
 
+            # Note: The Google GenAI SDK automatically handles schema transformation
+            # (inlining $defs, resolving $ref) via its process_schema() function.
+            # This ensures Union types and nested schemas work correctly.
             llm = self.bind(
                 response_mime_type="application/json",
                 response_json_schema=schema_json,
@@ -3123,7 +3294,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
         except Exception:
             formatted_tools = [
-                tool_to_dict(convert_to_genai_function_declarations(tools))
+                tool_to_dict(t) for t in convert_to_genai_function_declarations(tools)
             ]
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
@@ -3147,7 +3318,8 @@ def _get_tool_name(
     tool: _ToolDict | GoogleTool | dict,
 ) -> str:
     try:
-        genai_tool = tool_to_dict(convert_to_genai_function_declarations([tool]))
+        genai_tools = convert_to_genai_function_declarations([tool])
+        genai_tool = tool_to_dict(genai_tools[0])
         return next(f["name"] for f in genai_tool["function_declarations"])  # type: ignore[index]
     except ValueError:  # other TypedDict
         if is_typeddict(tool):

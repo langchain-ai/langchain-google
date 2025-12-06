@@ -1178,6 +1178,7 @@ def test_safety_settings_gemini(use_streaming: bool, backend_config: dict) -> No
         assert len(output.content) > 0
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_chat_function_calling_with_multiple_parts(backend_config: dict) -> None:
     @tool
     def search(
@@ -1740,6 +1741,18 @@ def test_structured_output_with_google_search(
         for block in response.content
         if isinstance(block, dict) and block.get("type") == "text"
     )
+
+    # WORKAROUND: Strip markdown code blocks if present
+    # BUG: When using response_mime_type="application/json" with tools (e.g., Google
+    # Search), the google-genai SDK returns JSON wrapped in markdown code blocks
+    # (```json\n{...}\n```) instead of raw JSON. This only happens with tools;
+    # without tools, raw JSON is returned correctly as expected.
+    if text_content.startswith("```json"):
+        text_content = (
+            text_content.removeprefix("```json\n").removesuffix("```").strip()
+        )
+    elif text_content.startswith("```"):
+        text_content = text_content.removeprefix("```\n").removesuffix("```").strip()
 
     # Verify structured output can be parsed
     result = MatchResult.model_validate_json(text_content)

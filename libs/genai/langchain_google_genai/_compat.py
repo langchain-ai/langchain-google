@@ -272,18 +272,22 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             extras = cast("dict", block_dict.get("extras", {}))
             if extras.get("block_type") == "code_execution_result":
                 # LangChain v0 format
-                code_execution_result = {
-                    "type": "code_execution_result",
-                    "code_execution_result": block_dict.get("output", ""),
-                    "outcome": extras.get("outcome", ""),
-                    "tool_call_id": block_dict.get("tool_call_id", ""),
-                }
+                raw_outcome = extras.get("outcome", "")
+                if isinstance(raw_outcome, int):
+                    if raw_outcome == 1:
+                        outcome = "OUTCOME_OK"
+                    elif raw_outcome == 2:
+                        outcome = "OUTCOME_FAILED"
+                    else:
+                        outcome = "OUTCOME_UNSPECIFIED"
+                else:
+                    outcome = raw_outcome
                 # Google generativelanguage format
                 new_content.append(
                     {
                         "code_execution_result": {
-                            "outcome": code_execution_result["outcome"],
-                            "output": code_execution_result["code_execution_result"],
+                            "outcome": outcome,
+                            "output": block_dict.get("output", ""),
                         }
                     }
                 )

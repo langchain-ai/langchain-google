@@ -115,8 +115,8 @@ def test_tool_with_anyof_nullable_param() -> None:
 
     # Convert to OpenAI, then to GenAI, then to dict
     oai_tool: dict[str, Any] = convert_to_openai_tool(possibly_none)
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
     function_declarations = genai_tool_dict.get("function_declarations")
@@ -163,8 +163,8 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     oai_tool = convert_to_openai_tool(possibly_none_list)
 
     # Convert to GenAI, then to dict
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
     function_declarations = genai_tool_dict.get("function_declarations")
@@ -213,8 +213,8 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
 
     # Convert to OpenAI, then to GenAI, then to dict
     oai_tool = convert_to_openai_tool(possibly_none_dict)
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
     function_declarations = genai_tool_dict.get("function_declarations")
@@ -279,8 +279,8 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     ]
 
     # Convert to GenAI, then to dict
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
     function_declarations = genai_tool_dict.get("function_declarations")
@@ -412,7 +412,7 @@ def test_format_tool_to_genai_function() -> None:
         """Gets the current datetime."""
         return datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d")
 
-    schema = convert_to_genai_function_declarations([get_datetime])
+    schema = convert_to_genai_function_declarations([get_datetime])[0]
     assert schema.function_declarations is not None
     assert len(schema.function_declarations) > 0
     function_declaration = schema.function_declarations[0]
@@ -430,7 +430,7 @@ def test_format_tool_to_genai_function() -> None:
         """
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([sum_two_numbers])
+    schema = convert_to_genai_function_declarations([sum_two_numbers])[0]
 
     assert schema.function_declarations is not None
     assert len(schema.function_declarations) > 0
@@ -445,7 +445,7 @@ def test_format_tool_to_genai_function() -> None:
         """Some description."""
         return str(a + b)
 
-    schema = convert_to_genai_function_declarations([do_something_optional])
+    schema = convert_to_genai_function_declarations([do_something_optional])[0]
 
     assert schema.function_declarations is not None
     assert len(schema.function_declarations) > 0
@@ -458,19 +458,19 @@ def test_format_tool_to_genai_function() -> None:
     src = [src for src, _, _, _ in SRC_EXP_MOCKS_DESC]
     fds = [fd for _, fd, _, _ in SRC_EXP_MOCKS_DESC]
     expected = Tool(function_declarations=fds)
-    result = convert_to_genai_function_declarations(src)
+    result = convert_to_genai_function_declarations(src)[0]
     assert result == expected
 
     src_2 = Tool(google_search_retrieval={})
-    result = convert_to_genai_function_declarations([src_2])
+    result = convert_to_genai_function_declarations([src_2])[0]
     assert result == src_2
 
     src_3: dict[str, Any] = {"google_search_retrieval": {}}
-    result = convert_to_genai_function_declarations([src_3])
+    result = convert_to_genai_function_declarations([src_3])[0]
     assert result == src_2
 
     src_4 = Tool(google_search={})
-    result = convert_to_genai_function_declarations([src_4])
+    result = convert_to_genai_function_declarations([src_4])[0]
     assert result == src_4
 
     with pytest.raises(ValueError) as exc_info1:
@@ -525,7 +525,7 @@ def test_tool_with_annotated_optional_args() -> None:
     tools = [split_documents, search_web]
     # Convert to OpenAI first to mimic what we do in bind_tools.
     oai_tools = [convert_to_openai_tool(t) for t in tools]
-    actual = tool_to_dict(convert_to_genai_function_declarations(oai_tools))[
+    actual = tool_to_dict(convert_to_genai_function_declarations(oai_tools)[0])[
         "function_declarations"
     ]
 
@@ -616,7 +616,7 @@ def test_format_native_dict_to_genai_function() -> None:
             }
         ]
     }
-    schema = convert_to_genai_function_declarations([calculator])
+    schema = convert_to_genai_function_declarations([calculator])[0]
     expected = Tool(
         function_declarations=[
             FunctionDeclaration(
@@ -644,7 +644,7 @@ def test_format_dict_to_genai_function() -> None:
             }
         ]
     }
-    schema = convert_to_genai_function_declarations([calculator])
+    schema = convert_to_genai_function_declarations([calculator])[0]
     assert schema.function_declarations is not None
     assert len(schema.function_declarations) > 0
     function_declaration = schema.function_declarations[0]
@@ -683,7 +683,7 @@ def test_tool_to_dict_glm_tool() -> None:
         ]
     )
     tool_dict = tool_to_dict(tool)
-    assert tool == convert_to_genai_function_declarations([tool_dict])
+    assert tool == convert_to_genai_function_declarations([tool_dict])[0]
 
 
 @pytest.fixture
@@ -698,9 +698,9 @@ def test_tool_to_dict_pydantic() -> None:
         age: int
         likes: list[str]
 
-    gapic_tool = convert_to_genai_function_declarations([MyModel])
+    gapic_tool = convert_to_genai_function_declarations([MyModel])[0]
     tool_dict = tool_to_dict(gapic_tool)
-    assert gapic_tool == convert_to_genai_function_declarations([tool_dict])
+    assert gapic_tool == convert_to_genai_function_declarations([tool_dict])[0]
 
 
 def test_tool_to_dict_pydantic_nested() -> None:
@@ -711,7 +711,7 @@ def test_tool_to_dict_pydantic_nested() -> None:
     class Models(BaseModel):
         models: list[MyModel]
 
-    gapic_tool = convert_to_genai_function_declarations([Models])
+    gapic_tool = convert_to_genai_function_declarations([Models])[0]
     tool_dict = tool_to_dict(gapic_tool)
 
     # Check that we have the expected structure
@@ -770,9 +770,9 @@ def test_tool_to_dict_pydantic_without_import(mock_safe_import: MagicMock) -> No
 
     mock_safe_import.return_value = False
 
-    gapic_tool = convert_to_genai_function_declarations([MyModel])
+    gapic_tool = convert_to_genai_function_declarations([MyModel])[0]
     tool_dict = tool_to_dict(gapic_tool)
-    assert gapic_tool == convert_to_genai_function_declarations([tool_dict])
+    assert gapic_tool == convert_to_genai_function_declarations([tool_dict])[0]
 
 
 def test_tool_with_doubly_nested_list_param() -> None:
@@ -794,9 +794,9 @@ def test_tool_with_doubly_nested_list_param() -> None:
 
     oai_tool = convert_to_openai_tool(process_nested_data)
 
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
 
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tool_dict = tool_to_dict(genai_tools[0])
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
     function_declarations = genai_tool_dict.get("function_declarations")
@@ -854,8 +854,8 @@ def test_tool_with_union_types() -> None:
 
     # Convert to OpenAI, then to GenAI, then to dict
     oai_tool = convert_to_openai_tool(GetWeather)
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
 
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
@@ -916,8 +916,8 @@ def test_tool_with_union_primitive_types() -> None:
 
     # Convert to OpenAI, then to GenAI, then to dict
     oai_tool = convert_to_openai_tool(SearchQuery)
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
 
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
@@ -999,8 +999,8 @@ def test_tool_with_nested_union_types() -> None:
 
     # Convert to OpenAI, then to GenAI, then to dict
     oai_tool = convert_to_openai_tool(Person)
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
 
     assert isinstance(genai_tool_dict, dict), "Expected a dict."
 
@@ -1057,12 +1057,12 @@ def test_tool_invocation_with_union_types() -> None:
     oai_tool = convert_to_openai_tool(configure_service)
 
     # Convert to GenAI
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
 
     # Get function declaration
-    assert genai_tool.function_declarations is not None
-    assert len(genai_tool.function_declarations) > 0
-    function_declaration = genai_tool.function_declarations[0]
+    assert genai_tools[0].function_declarations is not None
+    assert len(genai_tools[0].function_declarations) > 0
+    function_declaration = genai_tools[0].function_declarations[0]
 
     # Check parameters
     parameters = function_declaration.parameters
@@ -1137,8 +1137,8 @@ def test_tool_field_union_types() -> None:
     oai_tool = convert_to_openai_tool(GetWeather)
 
     # Convert to GenAI
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
 
     # Get function declaration
     function_declarations = genai_tool_dict.get("function_declarations", [])
@@ -1194,8 +1194,12 @@ def test_tool_field_union_types() -> None:
 
 
 def test_union_type_schema_validation() -> None:
-    """Test that `Union` types get proper `type` assignment for Gemini
-    compatibility."""
+    """Test that `Union` types use `any_of` without a separate type field.
+
+    For Gemini compatibility, when `any_of` is present, it must be the only field set
+    (aside from description). The type information is contained within each option
+    in `any_of`, not as a separate top-level type field.
+    """
 
     class Response(BaseModel):
         """Response to user."""
@@ -1216,15 +1220,29 @@ def test_union_type_schema_validation() -> None:
     openai_func = convert_to_openai_function(Act)
     genai_func = _format_to_genai_function_declaration(openai_func)
 
-    # The action property should have a valid type (not 0) for Gemini compatibility
+    # Verify parameters structure
     assert genai_func.parameters is not None, "genai_func.parameters should not be None"
     assert genai_func.parameters.properties is not None, (
         "genai_func.parameters.properties should not be None"
     )
     action_prop = genai_func.parameters.properties["action"]
-    assert action_prop.type == Type.OBJECT, (
-        f"Union type should have OBJECT type, got {action_prop.type}"
+
+    # When any_of is present, type should NOT be set
+    assert action_prop.any_of is not None, (
+        "Expected any_of to be present for Union types"
     )
+    assert len(action_prop.any_of) == 2, "Expected 2 options in any_of"
+    assert action_prop.type is None, (
+        "When any_of is present, type field must NOT be set. "
+        "Gemini API requires that when any_of is used, it must be the only field set."
+    )
+
+    # Verify each option in any_of has the correct structure
+    for option in action_prop.any_of:
+        assert option.type == Type.OBJECT, (
+            f"Each option in any_of should have type OBJECT, got {option.type}"
+        )
+        assert option.properties is not None, "Each option should have properties"
 
 
 def test_optional_dict_schema_validation() -> None:
@@ -1266,8 +1284,8 @@ def test_tool_field_enum_array() -> None:
     oai_tool = convert_to_openai_tool(ToolInfo)
 
     # Convert to GenAI
-    genai_tool = convert_to_genai_function_declarations([oai_tool])
-    genai_tool_dict = tool_to_dict(genai_tool)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
 
     # Get function declaration
     function_declarations = genai_tool_dict.get("function_declarations", [])
@@ -1324,3 +1342,83 @@ def test_tool_with_non_class_args_schema() -> None:
     assert "args_schema must be a Pydantic BaseModel or JSON schema" in str(
         exc_info.value
     )
+
+
+def test_tool_with_union_int_float() -> None:
+    """Test that `Union[int, float]` types don't have both type and `any_of` fields.
+
+    See #1216
+    """
+
+    @tool
+    def calculator(a: int | float, b: int | float) -> float:
+        """Add two numbers together.
+
+        Args:
+            a: The first number.
+            b: The second number.
+
+        Returns:
+            The sum of a and b.
+        """
+        return a + b
+
+    # Convert to OpenAI tool format first (this is what bind_tools does)
+    oai_tool = convert_to_openai_tool(calculator)
+
+    # Convert to GenAI function declaration
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+
+    # Get the function declaration
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+    assert len(function_declarations) > 0
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    # Check parameters
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    # Check parameter 'a'
+    a_property = properties.get("a")
+    assert isinstance(a_property, dict), "Expected a dict."
+
+    if "any_of" in a_property:
+        assert a_property.get("type") is None, (
+            "When 'any_of' is present, 'type' field must NOT be set. "
+            "Gemini API requires that when any_of is used, it must be the only field "
+            "set."
+        )
+
+        # Verify any_of has the expected types
+        any_of = a_property.get("any_of")
+        assert isinstance(any_of, list), "Expected 'any_of' to be a list."
+        assert len(any_of) == 2, "Expected 'any_of' to have 2 options (int and float)."
+
+        # Check that we have both INTEGER and NUMBER types
+        types_in_any_of = []
+        for option in any_of:
+            type_dict = option.get("type", {})
+            if isinstance(type_dict, dict):
+                type_value = type_dict.get("_value_")
+                types_in_any_of.append(type_value)
+            else:
+                types_in_any_of.append(str(type_dict))
+
+        assert "INTEGER" in types_in_any_of, "Expected INTEGER in any_of options."
+        assert "NUMBER" in types_in_any_of, "Expected NUMBER in any_of options."
+
+    # Check parameter 'b' (should be the same)
+    b_property = properties.get("b")
+    assert isinstance(b_property, dict), "Expected a dict."
+
+    if "any_of" in b_property:
+        assert b_property.get("type") is None, (
+            "When 'any_of' is present, 'type' field must NOT be set."
+        )
