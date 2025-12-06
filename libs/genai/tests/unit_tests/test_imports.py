@@ -10,6 +10,7 @@ EXPECTED_ALL = [
     "HarmCategory",
     "Modality",
     "MediaResolution",
+    "create_context_cache",
 ]
 
 

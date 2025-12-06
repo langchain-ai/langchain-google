@@ -5,12 +5,14 @@ import mimetypes
 import os
 import re
 from enum import Enum
-from typing import Any
 from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
 import requests
-from google.ai.generativelanguage_v1beta.types import Part
+from google.genai.types import Blob, Part
+
+# Note: noticed the previous generativelanguage_v1beta Part has a `part_metadata` field
+# that is not present in the genai.types.Part.
 
 
 class Route(Enum):
@@ -22,12 +24,17 @@ class Route(Enum):
 
 
 class ImageBytesLoader:
-    """Loads image bytes from multiple sources given a string.
+    """Loads media bytes from multiple sources given a string.
+
+    (Despite the class name, this loader supports multiple media types including
+    images, PDFs, audio, and video files.)
 
     Currently supported:
 
-    - B64 Encoded image string
-    - URL
+    - Base64 encoded data URIs (e.g., `data:image/jpeg;base64,...` or
+        `data:application/pdf;base64,...`)
+    - HTTP/HTTPS URLs
+    - Google Cloud Storage URIs (gs://) via URL download, not direct URI passing
     """
 
     def load_bytes(self, image_string: str) -> bytes:
@@ -36,11 +43,12 @@ class ImageBytesLoader:
         Args:
             image_string: Can be either:
 
-                - B64 Encoded image string
-                - URL
+                - Base64 encoded data URI (e.g., `data:image/jpeg;base64,...` or
+                    `data:application/pdf;base64,...`)
+                - HTTP/HTTPS URL
 
         Returns:
-            Image bytes.
+            Media bytes (images, PDFs, audio, video, etc.).
         """
         route = self._route(image_string)
 
@@ -53,15 +61,17 @@ class ImageBytesLoader:
         if route == Route.LOCAL_FILE:
             msg = (
                 "Loading from local files is no longer supported for security reasons. "
-                "Please pass in images as Google Cloud Storage URI, "
-                "b64 encoded image string (data:image/...), or valid image url."
+                "Please pass in media as Google Cloud Storage URI, "
+                "base64 encoded data URI (e.g., data:image/..., "
+                "data:application/pdf;base64,...), or valid HTTP/HTTPS URL."
             )
             raise ValueError(msg)
             return self._bytes_from_file(image_string)
 
         msg = (
-            "Image string must be one of: Google Cloud Storage URI, "
-            "b64 encoded image string (data:image/...), or valid image url."
+            "Media string must be one of: Google Cloud Storage URI, "
+            "base64 encoded data URI (e.g., data:image/..., "
+            "data:application/pdf;base64,...), or valid HTTP/HTTPS URL. "
             f"Instead got '{image_string}'."
         )
         raise ValueError(msg)
@@ -71,8 +81,14 @@ class ImageBytesLoader:
 
         Args:
             image_string: Can be either:
-                    - B64 Encoded image string
-                    - URL
+
+                - Base64 encoded data URI (e.g., `data:image/jpeg;base64,...` or
+                    `data:application/pdf;base64,...`)
+                - HTTP/HTTPS URL
+
+        Returns:
+            Part object with `inline_data` containing the media bytes and detected mime
+                type.
         """
         route = self._route(image_string)
 
@@ -85,12 +101,11 @@ class ImageBytesLoader:
         if route == Route.LOCAL_FILE:
             msg = (
                 "Loading from local files is no longer supported for security reasons. "
-                "Please specify images as Google Cloud Storage URI, "
-                "b64 encoded image string (data:image/...), or valid image url."
+                "Please specify media as Google Cloud Storage URI, "
+                "base64 encoded data URI (e.g., data:image/..., "
+                "data:application/pdf;base64,...), or valid HTTP/HTTPS URL."
             )
             raise ValueError(msg)
-
-        inline_data: dict[str, Any] = {"data": bytes_}
 
         mime_type, _ = mimetypes.guess_type(image_string)
         if not mime_type:
@@ -98,13 +113,14 @@ class ImageBytesLoader:
             if kind:
                 mime_type = kind.mime
 
-        if mime_type:
-            inline_data["mime_type"] = mime_type
+        blob = Blob(data=bytes_, mime_type=mime_type)
 
-        return Part(inline_data=inline_data)
+        return Part(inline_data=blob)
 
     def _route(self, image_string: str) -> Route:
-        if image_string.startswith("data:image/"):
+        # Accept any data URI format (images, PDFs, audio, video, etc.)
+        # Examples: data:image/jpeg;base64,..., data:application/pdf;base64,...
+        if image_string.startswith("data:"):
             return Route.BASE64
 
         if self._is_url(image_string):
@@ -114,42 +130,57 @@ class ImageBytesLoader:
             return Route.LOCAL_FILE
 
         msg = (
-            "Image string must be one of: "
-            "b64 encoded image string (data:image/...) or valid image url."
-            f" Instead got '{image_string}'."
+            "Media string must be one of: "
+            "base64 encoded data URI (e.g., data:image/..., "
+            "data:application/pdf;base64,...) or valid HTTP/HTTPS URL. "
+            f"Instead got '{image_string}'."
         )
         raise ValueError(msg)
 
     def _bytes_from_b64(self, base64_image: str) -> bytes:
-        """Gets image bytes from a base64 encoded string.
+        """Gets media bytes from a base64 encoded data URI.
+
+        Supports any mime type including images, PDFs, audio, video, etc.
 
         Args:
-            base64_image: Encoded image in b64 format.
+            base64_image: Base64 encoded data URI (e.g., `data:image/jpeg;base64,...`
+                or `data:application/pdf;base64,...`).
 
         Returns:
-            Image bytes
+            Decoded media bytes.
+
+        Raises:
+            ValueError: If the data URI format is invalid.
         """
-        pattern = r"data:image/\w{2,4};base64,(.*)"
+        # Pattern captures any mime type: image/jpeg, application/pdf, audio/mp3, etc.
+        # Format: data:<mime_type>;base64,<encoded_data>
+        pattern = r"data:([^;]+);base64,(.*)"
         match = re.search(pattern, base64_image)
 
         if match is not None:
-            encoded_string = match.group(1)
+            # Group 1: mime type (e.g., "image/jpeg", "application/pdf")
+            # Group 2: base64 encoded data
+            encoded_string = match.group(2)
             return base64.b64decode(encoded_string)
 
-        msg = f"Error in b64 encoded image. Must follow pattern: {pattern}"
+        msg = (
+            f"Invalid base64 data URI format. Expected pattern: {pattern}\n"
+            f"Examples: data:image/jpeg;base64,... or data:application/pdf;base64,...\n"
+            f"Got: {base64_image[:100]}..."
+        )
         raise ValueError(msg)
 
     def _bytes_from_url(self, url: str) -> bytes:
-        """Gets image bytes from a public url.
+        """Gets media bytes from a public HTTP/HTTPS URL.
 
         Args:
-            url: Valid url.
+            url: Valid HTTP or HTTPS URL pointing to media content.
 
         Raises:
-            HTTP Error if there is one.
+            HTTPError: If the request fails.
 
         Returns:
-            Image bytes
+            Media bytes (images, PDFs, audio, video, etc.).
         """
         response = requests.get(url)
 

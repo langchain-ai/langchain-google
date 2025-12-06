@@ -57,9 +57,9 @@ class TreeNode(BaseModel):
 TreeNode.model_rebuild()
 
 
-def test_basic_response_json_schema() -> None:
+def test_basic_response_json_schema(backend_config: dict) -> None:
     """Test basic functionality."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
     schema = {
         "type": "object",
@@ -92,9 +92,9 @@ def test_basic_response_json_schema() -> None:
     assert response_data["count"] == 5
 
 
-def test_response_json_schema_union() -> None:
+def test_response_json_schema_union(backend_config: dict) -> None:
     """Test that `response_json_schema` works with unions"""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
     schema_with_union = {
         "anyOf": [
@@ -148,9 +148,9 @@ def test_response_json_schema_union() -> None:
     )
 
 
-def test_json_schema_with_pydantic_model() -> None:
+def test_json_schema_with_pydantic_model(backend_config: dict) -> None:
     """Test `json_schema` with a Pydantic model."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
     structured_llm = llm.with_structured_output(SimpleResponse, method="json_schema")
 
     result = structured_llm.invoke(
@@ -162,9 +162,9 @@ def test_json_schema_with_pydantic_model() -> None:
     assert result.count == 42
 
 
-def test_json_schema_with_dict_schema() -> None:
+def test_json_schema_with_dict_schema(backend_config: dict) -> None:
     """Test `json_schema` with a `dict` schema."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
     schema = {
         "type": "object",
@@ -188,9 +188,9 @@ def test_json_schema_with_dict_schema() -> None:
     assert result["priority"] == 3
 
 
-def test_recursive_schema_integration() -> None:
+def test_recursive_schema_integration(backend_config: dict) -> None:
     """Test recursive schemas."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
     structured_llm = llm.with_structured_output(TreeNode, method="json_schema")
 
@@ -213,9 +213,9 @@ def test_recursive_schema_integration() -> None:
     assert b_node.children[0].value == "D"
 
 
-def test_union_schema_integration() -> None:
+def test_union_schema_integration(backend_config: dict) -> None:
     """Test union schemas with `anyOf` support."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
     # Test with union schema
     union_schema = {
@@ -271,9 +271,9 @@ def test_union_schema_integration() -> None:
         pytest.fail(f"Expected either text or number format, got: {number_result}")
 
 
-def test_complex_schema_handling() -> None:
+def test_complex_schema_handling(backend_config: dict) -> None:
     """Test handling of complex schemas with constraints."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
     complex_schema = {
         "type": "object",
@@ -311,9 +311,9 @@ def test_complex_schema_handling() -> None:
         assert 0 <= item["score"] <= 100
 
 
-def test_streaming_with_json_schema() -> None:
+def test_streaming_with_json_schema(backend_config: dict) -> None:
     """Test that streaming works with `json_schema`."""
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, streaming=True)
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, streaming=True, **backend_config)
 
     structured_llm = llm.with_structured_output(SimpleResponse, method="json_schema")
 
@@ -332,3 +332,221 @@ def test_streaming_with_json_schema() -> None:
     assert isinstance(final_result, SimpleResponse)
     assert final_result.message == "Streaming test"
     assert final_result.count == 7
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+def test_streaming_with_json_schema_output_versions(
+    output_version: str, backend_config: dict
+) -> None:
+    """Test that streaming works with `json_schema` for different output versions."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        streaming=True,
+        output_version=output_version,
+        **backend_config,
+    )
+
+    structured_llm = llm.with_structured_output(SimpleResponse, method="json_schema")
+
+    # Test streaming by collecting chunks
+    chunks = []
+    for chunk in structured_llm.stream(
+        "Create response with message 'Version test' and count 42"
+    ):
+        chunks.append(chunk)  # noqa: PERF402
+
+    # Should have received at least one chunk
+    assert len(chunks) >= 1
+
+    # Final result should be a SimpleResponse object
+    final_result = chunks[-1]
+    assert isinstance(final_result, SimpleResponse)
+    assert final_result.message == "Version test"
+    assert final_result.count == 42
+
+
+async def test_async_streaming_with_json_schema(backend_config: dict) -> None:
+    """Test that async streaming works with `json_schema`."""
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, streaming=True, **backend_config)
+
+    structured_llm = llm.with_structured_output(SimpleResponse, method="json_schema")
+
+    # Test async streaming by collecting chunks
+    chunks = []
+    async for chunk in structured_llm.astream(
+        "Create response with message 'Async streaming test' and count 99"
+    ):
+        chunks.append(chunk)  # noqa: PERF401
+
+    # Should have received at least one chunk
+    assert len(chunks) >= 1
+
+    # Final result should be a SimpleResponse object
+    final_result = chunks[-1]
+    assert isinstance(final_result, SimpleResponse)
+    assert final_result.message == "Async streaming test"
+    assert final_result.count == 99
+
+
+def test_streaming_raw_chunks_accumulation(backend_config: dict) -> None:
+    """Test that raw `AIMessageChunk` objects can be accumulated before parsing.
+
+    At the LLM level (before the `PydanticOutputParser`), we get `AIMessageChunk`
+    objects that can be accumulated using the + operator. This test verifies
+    that accumulation works correctly at the raw level.
+    """
+    from langchain_core.messages import AIMessageChunk
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, streaming=True, **backend_config)
+
+    # Bind JSON schema at LLM level (without parser)
+    llm_with_schema = llm.bind(
+        response_mime_type="application/json",
+        response_json_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"},
+                "skills": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["name", "age", "skills"],
+        },
+    )
+
+    # Collect and accumulate raw chunks
+    chunks = []
+    accumulated: AIMessageChunk | None = None
+    for chunk in llm_with_schema.stream(
+        "Create a person with name 'Bob Smith', age 25, "
+        "and skills: ['Java', 'Kubernetes']"
+    ):
+        chunks.append(chunk)
+        if accumulated is None:
+            accumulated = chunk  # type: ignore[assignment]
+        else:
+            accumulated = accumulated + chunk  # type: ignore[assignment]
+
+    # Should have received chunks
+    assert len(chunks) >= 1
+
+    # All chunks should be AIMessageChunk objects
+    for chunk in chunks:
+        assert isinstance(chunk, AIMessageChunk)
+
+    # Accumulated result should be a valid AIMessageChunk
+    assert isinstance(accumulated, AIMessageChunk)
+    assert accumulated.content  # Should have content
+
+    # Extract JSON from content (could be string or list of content blocks)
+    content = accumulated.content
+    if isinstance(content, list) and len(content) > 0:
+        # Extract text from first content block
+        first_block = content[0]
+        if isinstance(first_block, dict) and "text" in first_block:
+            json_str = first_block["text"]
+        elif isinstance(first_block, str):
+            json_str = first_block
+        else:
+            json_str = str(first_block)
+    else:
+        json_str = str(content)
+
+    # The content should be valid JSON
+    result_json = json.loads(json_str)
+    assert "name" in result_json
+    assert "age" in result_json
+    assert "skills" in result_json
+    assert result_json["name"] == "Bob Smith"
+    assert result_json["age"] == 25
+
+
+def test_streaming_parsed_output_behavior(backend_config: dict) -> None:
+    """Test streaming behavior with PydanticOutputParser.
+
+    When using `with_structured_output` with `json_schema` method,
+    the PydanticOutputParser buffers the raw chunks and emits
+    fully-parsed Pydantic objects. This test verifies that behavior.
+    """
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, streaming=True, **backend_config)
+
+    structured_llm = llm.with_structured_output(PersonResponse, method="json_schema")
+
+    # Collect all chunks from the parser
+    chunks: list[PersonResponse] = []
+    for chunk in structured_llm.stream(
+        "Create a person with name 'Alice Johnson', age 30, "
+        "and skills: ['Python', 'Machine Learning', 'Data Science']"
+    ):
+        chunks.append(chunk)  # type: ignore[arg-type]  # noqa: PERF402
+
+    # Parser emits complete Pydantic objects (not incremental JSON strings)
+    assert len(chunks) >= 1
+
+    # All chunks should be complete PersonResponse objects
+    for chunk in chunks:
+        assert isinstance(chunk, PersonResponse)
+        # Each chunk should have valid, complete data
+        assert chunk.name
+        assert chunk.age > 0
+        assert len(chunk.skills) > 0
+
+    # Verify the final result has all expected data
+    final_chunk = chunks[-1]
+    assert final_chunk.name == "Alice Johnson"
+    assert final_chunk.age == 30
+    assert len(final_chunk.skills) == 3
+    assert "Python" in final_chunk.skills
+    assert "Machine Learning" in final_chunk.skills
+    assert "Data Science" in final_chunk.skills
+
+
+def test_moderation_union_schema(backend_config: dict) -> None:
+    """Test Union types work correctly."""
+
+    class SpamDetails(BaseModel):
+        """Details for content classified as spam."""
+
+        reason: str
+        spam_type: str
+
+    class NotSpamDetails(BaseModel):
+        """Details for content classified as not spam."""
+
+        summary: str
+        is_safe: bool
+
+    class ModerationResult(BaseModel):
+        """The result of content moderation."""
+
+        decision: SpamDetails | NotSpamDetails
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
+
+    # Test passing Pydantic model directly
+    structured_llm_model = llm.with_structured_output(
+        ModerationResult, method="json_schema"
+    )
+
+    # Test passing schema dict directly
+    structured_llm_dict = llm.with_structured_output(
+        ModerationResult.model_json_schema(), method="json_schema"
+    )
+
+    safe_prompt = "Review this content: 'Great recipe for chocolate cake! Thanks!'"
+    spam_prompt = "Review this content: 'Click here to win $1000000!!!'"
+
+    # Test with Pydantic model (should return Pydantic object)
+    safe_result_model = structured_llm_model.invoke(safe_prompt)
+    assert isinstance(safe_result_model, ModerationResult)
+    assert hasattr(safe_result_model.decision, "summary") or hasattr(
+        safe_result_model.decision, "reason"
+    )
+
+    # Test with dict schema (should return dict)
+    safe_result_dict = structured_llm_dict.invoke(safe_prompt)
+    assert isinstance(safe_result_dict, dict)
+    assert "decision" in safe_result_dict
+
+    # Test spam detection
+    spam_result = structured_llm_model.invoke(spam_prompt)
+    assert isinstance(spam_result, ModerationResult)

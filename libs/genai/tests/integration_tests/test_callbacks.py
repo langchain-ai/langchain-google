@@ -27,10 +27,10 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
     "model_name",
     MODEL_NAMES,
 )
-def test_streaming_callback(model_name: str) -> None:
+def test_streaming_callback(model_name: str, backend_config: dict) -> None:
     prompt_template = "Tell me details about the Company {name} with 2 bullet point?"
     cb = StreamingLLMCallbackHandler()
-    llm = ChatGoogleGenerativeAI(model=model_name, callbacks=[cb])
+    llm = ChatGoogleGenerativeAI(model=model_name, callbacks=[cb], **backend_config)
     llm_chain = PromptTemplate.from_template(prompt_template) | llm
     for _t in llm_chain.stream({"name": "Google"}):
         pass
