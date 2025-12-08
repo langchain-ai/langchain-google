@@ -188,17 +188,7 @@ The `google-genai` library requires creating a client object for all API calls.
 
 ## Models
 
-- By default, use the following models when using `google-genai`:
-  - **General Text & Multimodal Tasks:** `gemini-2.5-flash`
-  - **Coding and Complex Reasoning Tasks:** `gemini-2.5-pro`
-  - **Low Latency & High Volume Tasks:** `gemini-2.5-flash-lite`
-  - **Image Editing and Manipulation:** `gemini-2.5-flash-image`
-  - **High-Quality Image Generation:** `imagen-4.0-generate-001`
-  - **Rapid Image Generation:** `imagen-4.0-fast-generate-001`
-  - **Advanced Image Generation:** `imagen-4.0-ultra-generate-001`
-  - **High-Fidelity Video Generation:** `veo-3.0-generate-001` or `veo-3.1-generate-preview`
-  - **Fast Video Generation:** `veo-3.0-fast-generate-001` or `veo-3.1-fast-generate-preview`
-  - **Advanced Video Editing Tasks:** `veo-3.1-generate-preview`
+- Refer to the Gemini docs for a list of available models and their capabilities: <https://ai.google.dev/gemini-api/docs/models>
 
 - Do not use the following deprecated models (or their variants like `gemini-1.5-flash-latest`):
   - **Prohibited:** `gemini-1.5-flash`
@@ -598,6 +588,38 @@ print(f"Search Pages: {', '.join([site.web.title for site in response.candidates
 ```
 
 The output `response.text` will likely not be in JSON format, do not attempt to parse it as JSON.
+
+### Maps grounding
+
+Google Maps can be used as a tool for grounding location-based queries with current, factual location data. This enables location-aware applications that provide accurate, geographically specific responses.
+
+```python
+from google import genai
+from google.genai import types
+
+client = genai.Client()
+
+response = client.models.generate_content(
+    model='gemini-2.5-flash',
+    contents='What are the best Italian restaurants within a 15-minute walk from here?',
+    config=types.GenerateContentConfig(
+        tools=[types.Tool(google_maps=types.GoogleMaps())],
+        tool_config=types.ToolConfig(
+            retrieval_config=types.RetrievalConfig(
+                lat_lng=types.LatLng(latitude=34.050481, longitude=-118.248526)
+            )
+        ),
+    ),
+)
+
+print(f'Response:\n {response.text}')
+
+# Check if grounding metadata is available
+if hasattr(response.candidates[0], 'grounding_metadata'):
+    grounding = response.candidates[0].grounding_metadata
+    if grounding.google_maps_widget_context_token:
+        print(f'Maps Widget Token: {grounding.google_maps_widget_context_token}')
+```
 
 ### Content and part hierarchy
 

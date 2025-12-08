@@ -18,7 +18,7 @@
       }),
       'max_output_tokens': 100,
       'max_retries': 2,
-      'model': 'models/gemini-2.5-flash',
+      'model': 'gemini-2.5-flash',
       'n': 1,
       'stop': list([
       ]),

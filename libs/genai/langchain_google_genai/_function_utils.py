@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import collections
 import importlib
-import json
 import logging
 from collections.abc import Callable, Sequence
 from typing import (
@@ -12,9 +11,7 @@ from typing import (
     cast,
 )
 
-import google.ai.generativelanguage as glm
-import google.ai.generativelanguage_v1beta.types as gapic
-import proto  # type: ignore[import-untyped]
+from google.genai import types
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as callable_as_lc_tool
 from langchain_core.utils.function_calling import (
@@ -30,46 +27,68 @@ logger = logging.getLogger(__name__)
 
 
 TYPE_ENUM = {
-    "string": glm.Type.STRING,
-    "number": glm.Type.NUMBER,
-    "integer": glm.Type.INTEGER,
-    "boolean": glm.Type.BOOLEAN,
-    "array": glm.Type.ARRAY,
-    "object": glm.Type.OBJECT,
+    "string": types.Type.STRING,
+    "number": types.Type.NUMBER,
+    "integer": types.Type.INTEGER,
+    "boolean": types.Type.BOOLEAN,
+    "array": types.Type.ARRAY,
+    "object": types.Type.OBJECT,
     "null": None,
 }
 
-_ALLOWED_SCHEMA_FIELDS = []
-_ALLOWED_SCHEMA_FIELDS.extend([f.name for f in gapic.Schema()._pb.DESCRIPTOR.fields])
-_ALLOWED_SCHEMA_FIELDS.extend(
-    list(gapic.Schema.to_dict(gapic.Schema(), preserving_proto_field_name=False).keys())
-)
+# Note: For google.genai, we'll use a simplified approach for allowed schema fields
+# since the new library doesn't expose protobuf fields in the same way
+_ALLOWED_SCHEMA_FIELDS = [
+    "type",
+    "type_",
+    "description",
+    "enum",
+    "format",
+    "items",
+    "properties",
+    "required",
+    "nullable",
+    "anyOf",
+    "default",
+    "minimum",
+    "maximum",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "minItems",
+    "maxItems",
+    "title",
+]
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
 
 # Info: This is a FunctionDeclaration(=fc).
 _FunctionDeclarationLike = (
-    BaseTool | type[BaseModel] | gapic.FunctionDeclaration | Callable | dict[str, Any]
+    BaseTool | type[BaseModel] | types.FunctionDeclaration | Callable | dict[str, Any]
 )
-_GoogleSearchRetrievalLike = gapic.GoogleSearchRetrieval | dict[str, Any]
+_GoogleSearchRetrievalLike = types.GoogleSearchRetrieval | dict[str, Any]
 
-_GoogleSearchLike = gapic.Tool.GoogleSearch | dict[str, Any]
-_CodeExecutionLike = gapic.CodeExecution | dict[str, Any]
-_UrlContextLike = gapic.UrlContext | dict[str, Any]
+_GoogleSearchLike = types.GoogleSearch | dict[str, Any]
+_GoogleMapsLike = types.GoogleMaps | dict[str, Any]
+_CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
+_UrlContextLike = types.UrlContext | dict[str, Any]
+_ComputerUseLike = types.ComputerUse | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
     function_declarations: Sequence[_FunctionDeclarationLike]
     google_search_retrieval: _GoogleSearchRetrievalLike | None
     google_search: NotRequired[_GoogleSearchLike]
+    google_maps: NotRequired[_GoogleMapsLike]
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
+    computer_use: NotRequired[_ComputerUseLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
-# The dict should be gapic.Tool like. {"function_declarations": [ { "name": ...}.
+# The dict should be Tool like. {"function_declarations": [ { "name": ...}.
 # OpenAI like dict is not be accepted. {{'type': 'function', 'function': {'name': ...}
-_ToolType = gapic.Tool | _ToolDict | _FunctionDeclarationLike
+_ToolType = types.Tool | _ToolDict | _FunctionDeclarationLike
 _ToolsType = Sequence[_ToolType]
 
 
@@ -79,7 +98,8 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
         if key == "definitions":
             continue
         if key == "items":
-            converted_schema["items"] = _format_json_schema_to_gapic(value)
+            if value is not None:
+                converted_schema["items"] = _format_json_schema_to_gapic(value)
         elif key == "properties":
             converted_schema["properties"] = _get_properties_from_schema(value)
             continue
@@ -90,8 +110,14 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
                     f"Got {len(value)}, ignoring other than first value!"
                 )
             return _format_json_schema_to_gapic(value[0])
-        elif key in ["type", "_type"]:
-            converted_schema["type"] = str(value).upper()
+        elif key in ["type", "type_"]:
+            if isinstance(value, dict):
+                converted_schema["type"] = value["_value_"]
+            elif isinstance(value, str):
+                converted_schema["type"] = value
+            else:
+                msg = f"Invalid type: {value}"
+                raise ValueError(msg)
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
@@ -99,120 +125,271 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
     return converted_schema
 
 
-def _dict_to_gapic_schema(schema: dict[str, Any]) -> gapic.Schema | None:
+def _dict_to_genai_schema(
+    schema: dict[str, Any],
+    is_property: bool = False,
+    is_any_of_item: bool = False,
+) -> types.Schema | None:
     if schema:
         dereferenced_schema = dereference_refs(schema)
         formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
-        json_schema = json.dumps(formatted_schema)
-        return gapic.Schema.from_json(json_schema)
+        # Convert the formatted schema to google.genai.types.Schema
+        schema_dict = {}
+        # Set type if present
+        # Note: Don't set type when anyOf is present, as Gemini requires
+        # that when any_of is used, it must be the only field set
+        if "type" in formatted_schema and "anyOf" not in formatted_schema:
+            type_obj = formatted_schema["type"]
+            if isinstance(type_obj, dict):
+                type_value = type_obj["_value_"]
+            elif isinstance(type_obj, str):
+                type_value = type_obj
+            else:
+                msg = f"Invalid type: {type_obj}"
+                raise ValueError(msg)
+            schema_dict["type"] = types.Type(type_value)
+        if "description" in formatted_schema:
+            schema_dict["description"] = formatted_schema["description"]
+        # Include title for non-properties and for anyOf items
+        # (to identify alternatives)
+        if "title" in formatted_schema and (not is_property or is_any_of_item):
+            schema_dict["title"] = formatted_schema["title"]
+        if "properties" in formatted_schema:
+            # Recursively process each property
+            properties_dict = {}
+            for prop_name, prop_schema in formatted_schema["properties"].items():
+                properties_dict[prop_name] = _dict_to_genai_schema(
+                    prop_schema, is_property=True
+                )
+            schema_dict["properties"] = properties_dict  # type: ignore[assignment]
+        # Set required field for all schemas
+        if "required" in formatted_schema and formatted_schema["required"] is not None:
+            schema_dict["required"] = formatted_schema["required"]
+        elif not is_property:
+            # For backward compatibility, set empty list for non-property schemas
+            empty_required: list[str] = []
+            schema_dict["required"] = empty_required  # type: ignore[assignment]
+        if "items" in formatted_schema:
+            # Recursively process items schema
+            schema_dict["items"] = _dict_to_genai_schema(
+                formatted_schema["items"], is_property=True
+            )  # type: ignore[assignment]
+        if "enum" in formatted_schema:
+            schema_dict["enum"] = formatted_schema["enum"]
+        if "nullable" in formatted_schema:
+            schema_dict["nullable"] = formatted_schema["nullable"]
+        if "anyOf" in formatted_schema:
+            # Convert anyOf list to list of Schema objects
+            any_of_schemas = []
+            for any_of_item in formatted_schema["anyOf"]:
+                any_of_schema = _dict_to_genai_schema(
+                    any_of_item, is_property=True, is_any_of_item=True
+                )
+                if any_of_schema:
+                    any_of_schemas.append(any_of_schema)
+            schema_dict["any_of"] = any_of_schemas  # type: ignore[assignment]
+        return types.Schema.model_validate(schema_dict)
     return None
 
 
 def _format_dict_to_function_declaration(
     tool: FunctionDescription | dict[str, Any],
-) -> gapic.FunctionDeclaration:
-    return gapic.FunctionDeclaration(
-        name=tool.get("name") or tool.get("title"),
-        description=tool.get("description"),
-        parameters=_dict_to_gapic_schema(tool.get("parameters", {})),
+) -> types.FunctionDeclaration:
+    name = tool.get("name") or tool.get("title") or "MISSING_NAME"
+    description = tool.get("description") or None
+    parameters = _dict_to_genai_schema(tool.get("parameters", {}))
+    return types.FunctionDeclaration(
+        name=str(name),
+        description=description,
+        parameters=parameters,
     )
 
 
-# Info: gapic.Tool means function_declarations and proto.Message.
+# Info: gapicTool means function_declarations and other tool types
 def convert_to_genai_function_declarations(
     tools: _ToolsType,
-) -> gapic.Tool:
+) -> list[types.Tool]:
+    """Convert tools to google-genai `Tool` objects.
+
+    Each special tool type (`google_search`, `google_maps`, `url_context`, etc.) must
+    be in its own Tool object due to protobuf oneof constraints.
+    """
     if not isinstance(tools, collections.abc.Sequence):
         logger.warning(
             "convert_to_genai_function_declarations expects a Sequence "
             "and not a single tool."
         )
         tools = [tools]
-    gapic_tool = gapic.Tool()
+
+    result_tools: list[types.Tool] = []
+    function_declarations: list[types.FunctionDeclaration] = []
+
+    # Special tool types that must be in separate Tool objects
+    special_tool_types = [
+        "google_search_retrieval",
+        "google_search",
+        "google_maps",
+        "code_execution",
+        "url_context",
+        "computer_use",
+    ]
+
     for tool in tools:
-        if any(f in gapic_tool for f in ["google_search_retrieval"]):
-            msg = (
-                "Providing multiple google_search_retrieval"
-                " or mixing with function_declarations is not supported"
-            )
-            raise ValueError(msg)
-        if isinstance(tool, (gapic.Tool)):
-            rt: gapic.Tool = (
-                tool if isinstance(tool, gapic.Tool) else tool._raw_tool  # type: ignore
-            )
-            if "google_search_retrieval" in rt:
-                gapic_tool.google_search_retrieval = rt.google_search_retrieval
-            if "function_declarations" in rt:
-                gapic_tool.function_declarations.extend(rt.function_declarations)
-            if "google_search" in rt:
-                gapic_tool.google_search = rt.google_search
+        if isinstance(tool, types.Tool):
+            # Already a Tool object, add it directly
+            result_tools.append(tool)
         elif isinstance(tool, dict):
-            # not _ToolDictLike
-            if not any(
-                f in tool
-                for f in [
-                    "function_declarations",
-                    "google_search_retrieval",
-                    "google_search",
-                    "code_execution",
-                    "url_context",
-                ]
+            # Check if this is a special tool type dict
+            # Only count keys that have non-None values
+            special_keys = [
+                k for k in special_tool_types if k in tool and tool.get(k) is not None
+            ]
+
+            if len(special_keys) > 1:
+                msg = (
+                    f"A single tool dict cannot have multiple special tool types. "
+                    f"Found: {special_keys}. Each special tool type must be in a "
+                    f"separate dict or Tool object."
+                )
+                raise ValueError(msg)
+
+            if special_keys:
+                # This is a special tool type - create a separate Tool for it
+                special_key = special_keys[0]
+                tool = cast("_ToolDict", tool)
+
+                if special_key == "google_search_retrieval":
+                    if isinstance(tool["google_search_retrieval"], dict):
+                        tool_obj = types.Tool(
+                            google_search_retrieval=types.GoogleSearchRetrieval(
+                                **tool["google_search_retrieval"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            google_search_retrieval=tool["google_search_retrieval"]
+                        )
+                elif special_key == "google_search":
+                    if isinstance(tool["google_search"], dict):
+                        tool_obj = types.Tool(
+                            google_search=types.GoogleSearch(**tool["google_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(google_search=tool["google_search"])
+                elif special_key == "google_maps":
+                    if isinstance(tool["google_maps"], dict):
+                        tool_obj = types.Tool(
+                            google_maps=types.GoogleMaps(**tool["google_maps"])
+                        )
+                    else:
+                        tool_obj = types.Tool(google_maps=tool["google_maps"])
+                elif special_key == "code_execution":
+                    if isinstance(tool["code_execution"], dict):
+                        tool_obj = types.Tool(
+                            code_execution=types.ToolCodeExecution(
+                                **tool["code_execution"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(code_execution=tool["code_execution"])
+                elif special_key == "url_context":
+                    if isinstance(tool["url_context"], dict):
+                        tool_obj = types.Tool(
+                            url_context=types.UrlContext(**tool["url_context"])
+                        )
+                    else:
+                        tool_obj = types.Tool(url_context=tool["url_context"])
+                elif special_key == "computer_use":
+                    if isinstance(tool["computer_use"], dict):
+                        # Handle enum conversion - extract string values from
+                        # Environment enums
+                        computer_use_config = dict(tool["computer_use"])
+                        if "environment" in computer_use_config:
+                            env = computer_use_config["environment"]
+                            # Handle serialized enum (dict with _value_ key)
+                            if isinstance(env, dict) and "_value_" in env:
+                                computer_use_config["environment"] = env["_value_"]
+                            # Handle enum instance
+                            elif hasattr(env, "value"):
+                                computer_use_config["environment"] = env.value
+                        tool_obj = types.Tool(
+                            computer_use=types.ComputerUse(**computer_use_config)
+                        )
+                    else:
+                        tool_obj = types.Tool(computer_use=tool["computer_use"])
+
+                result_tools.append(tool_obj)
+            elif (
+                "function_declarations" in tool
+                and tool["function_declarations"] is not None
             ):
-                fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
-                gapic_tool.function_declarations.append(fd)
-                continue
-            # _ToolDictLike
-            tool = cast("_ToolDict", tool)
-            if "function_declarations" in tool:
-                function_declarations = tool["function_declarations"]
-                if not isinstance(
-                    tool["function_declarations"], collections.abc.Sequence
+                # Has function_declarations - add to our collection
+                tool = cast("_ToolDict", tool)
+                tool_function_declarations = tool["function_declarations"]
+                if tool_function_declarations is not None and not isinstance(
+                    tool_function_declarations, collections.abc.Sequence
                 ):
                     msg = (
-                        "function_declarations should be a list"
-                        f"got '{type(function_declarations)}'"
+                        "function_declarations should be a list, "
+                        f"got '{type(tool_function_declarations)}'"
                     )
                     raise ValueError(msg)
-                if function_declarations:
+                if tool_function_declarations:
                     fds = [
-                        _format_to_gapic_function_declaration(fd)
-                        for fd in function_declarations
+                        _format_to_genai_function_declaration(fd)
+                        for fd in tool_function_declarations
                     ]
-                    gapic_tool.function_declarations.extend(fds)
-            if "google_search_retrieval" in tool:
-                gapic_tool.google_search_retrieval = gapic.GoogleSearchRetrieval(
-                    tool["google_search_retrieval"]
-                )
-            if "google_search" in tool:
-                gapic_tool.google_search = gapic.Tool.GoogleSearch(
-                    tool["google_search"]
-                )
-            if "code_execution" in tool:
-                gapic_tool.code_execution = gapic.CodeExecution(tool["code_execution"])
-            if "url_context" in tool:
-                gapic_tool.url_context = gapic.UrlContext(tool["url_context"])
+                    function_declarations.extend(fds)
+            else:
+                # Regular function declaration dict
+                fd = _format_to_genai_function_declaration(tool)  # type: ignore[arg-type]
+                function_declarations.append(fd)
         else:
-            fd = _format_to_gapic_function_declaration(tool)
-            gapic_tool.function_declarations.append(fd)
-    return gapic_tool
+            # Other tool type - convert to function declaration
+            fd = _format_to_genai_function_declaration(tool)
+            function_declarations.append(fd)
+
+    # If we have function_declarations, create a Tool for them
+    if function_declarations:
+        result_tools.append(types.Tool(function_declarations=function_declarations))
+
+    # Validate that we don't have multiple google_search_retrieval tools
+    google_search_retrieval_count = sum(
+        1
+        for tool in result_tools
+        if hasattr(tool, "google_search_retrieval") and tool.google_search_retrieval
+    )
+    if google_search_retrieval_count > 1:
+        msg = (
+            "Providing multiple google_search_retrieval tools is not supported. "
+            "Only one google_search_retrieval tool can be used at a time."
+        )
+        raise ValueError(msg)
+
+    return result_tools
 
 
-def tool_to_dict(tool: gapic.Tool) -> _ToolDict:
+def tool_to_dict(tool: types.Tool) -> _ToolDict:
     def _traverse_values(raw: Any) -> Any:
         if isinstance(raw, list):
             return [_traverse_values(v) for v in raw]
         if isinstance(raw, dict):
             return {k: _traverse_values(v) for k, v in raw.items()}
-        if isinstance(raw, proto.Message):
-            return _traverse_values(type(raw).to_dict(raw))
+        if hasattr(raw, "__dict__"):
+            return _traverse_values(raw.__dict__)
         return raw
 
-    return _traverse_values(type(tool).to_dict(tool))
+    if hasattr(tool, "model_dump"):
+        raw_result = tool.model_dump()
+    else:
+        raw_result = tool.__dict__
+
+    return _traverse_values(raw_result)
 
 
-def _format_to_gapic_function_declaration(
+def _format_to_genai_function_declaration(
     tool: _FunctionDeclarationLike,
-) -> gapic.FunctionDeclaration:
+) -> types.FunctionDeclaration:
     if isinstance(tool, BaseTool):
         return _format_base_tool_to_function_declaration(tool)
     if isinstance(tool, type) and is_basemodel_subclass_safe(tool):
@@ -224,9 +401,7 @@ def _format_to_gapic_function_declaration(
             all(k in tool for k in ("name", "description")) and "parameters" not in tool
         ):
             function = cast("dict", tool)
-        elif (
-            "parameters" in tool and tool["parameters"].get("properties")  # type: ignore[index]
-        ):
+        elif "parameters" in tool and tool["parameters"].get("properties"):
             function = convert_to_openai_tool(cast("dict", tool))["function"]
         else:
             function = cast("dict", tool)
@@ -245,15 +420,15 @@ def _format_to_gapic_function_declaration(
 
 def _format_base_tool_to_function_declaration(
     tool: BaseTool,
-) -> gapic.FunctionDeclaration:
+) -> types.FunctionDeclaration:
     if not tool.args_schema:
-        return gapic.FunctionDeclaration(
+        return types.FunctionDeclaration(
             name=tool.name,
             description=tool.description,
-            parameters=gapic.Schema(
-                type=gapic.Type.OBJECT,
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
                 properties={
-                    "__arg1": gapic.Schema(type=gapic.Type.STRING),
+                    "__arg1": types.Schema(type=types.Type.STRING),
                 },
                 required=["__arg1"],
             ),
@@ -261,9 +436,11 @@ def _format_base_tool_to_function_declaration(
 
     if isinstance(tool.args_schema, dict):
         schema = tool.args_schema
-    elif issubclass(tool.args_schema, BaseModel):
+    elif isinstance(tool.args_schema, type) and issubclass(tool.args_schema, BaseModel):
         schema = tool.args_schema.model_json_schema()
-    elif issubclass(tool.args_schema, BaseModelV1):
+    elif isinstance(tool.args_schema, type) and issubclass(
+        tool.args_schema, BaseModelV1
+    ):
         schema = tool.args_schema.schema()
     else:
         msg = (
@@ -271,9 +448,9 @@ def _format_base_tool_to_function_declaration(
             f"got {tool.args_schema}."
         )
         raise NotImplementedError(msg)
-    parameters = _dict_to_gapic_schema(schema)
+    parameters = _dict_to_genai_schema(schema)
 
-    return gapic.FunctionDeclaration(
+    return types.FunctionDeclaration(
         name=tool.name or schema.get("title"),
         description=tool.description or schema.get("description"),
         parameters=parameters,
@@ -284,7 +461,7 @@ def _convert_pydantic_to_genai_function(
     pydantic_model: type[BaseModel],
     tool_name: str | None = None,
     tool_description: str | None = None,
-) -> gapic.FunctionDeclaration:
+) -> types.FunctionDeclaration:
     if issubclass(pydantic_model, BaseModel):
         schema = pydantic_model.model_json_schema()
     elif issubclass(pydantic_model, BaseModelV1):
@@ -292,21 +469,17 @@ def _convert_pydantic_to_genai_function(
     else:
         msg = f"pydantic_model must be a Pydantic BaseModel, got {pydantic_model}"
         raise NotImplementedError(msg)
-    schema = dereference_refs(schema)
     schema.pop("definitions", None)
-    return gapic.FunctionDeclaration(
+
+    # Convert to google.genai Schema format - remove title/description for parameters
+    schema_for_params = schema.copy()
+    schema_for_params.pop("title", None)
+    schema_for_params.pop("description", None)
+    parameters = _dict_to_genai_schema(schema_for_params)
+    return types.FunctionDeclaration(
         name=tool_name if tool_name else schema.get("title"),
         description=tool_description if tool_description else schema.get("description"),
-        parameters={
-            "properties": _get_properties_from_schema_any(
-                schema.get("properties")
-            ),  # TODO: use _dict_to_gapic_schema() if possible
-            # "items": _get_items_from_schema_any(
-            #     schema
-            # ),  # TODO: fix it https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling?hl#schema
-            "required": schema.get("required", []),
-            "type_": TYPE_ENUM[schema["type"]],
-        },
+        parameters=parameters,
     )
 
 
@@ -339,19 +512,17 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
                 _format_json_schema_to_gapic(anyOf_type)
                 for anyOf_type in v.get("anyOf", [])
             ]
-            # For non-nullable anyOf, we still need to set a type
-            item_type_ = _get_type_from_schema(v)
-            properties_item["type_"] = item_type_
+            # Don't set type_ when anyOf is present as they're mutually exclusive
         elif v.get("type") or v.get("anyOf") or v.get("type_"):
             item_type_ = _get_type_from_schema(v)
-            properties_item["type_"] = item_type_
+            properties_item["type"] = item_type_
             if _is_nullable_schema(v):
                 properties_item["nullable"] = True
 
             # Replace `v` with chosen definition for array / object json types
             any_of_types = v.get("anyOf")
-            if any_of_types and item_type_ in [glm.Type.ARRAY, glm.Type.OBJECT]:
-                json_type_ = "array" if item_type_ == glm.Type.ARRAY else "object"
+            if any_of_types and item_type_ in [types.Type.ARRAY, types.Type.OBJECT]:
+                json_type_ = "array" if item_type_ == types.Type.ARRAY else "object"
                 # Use Index -1 for consistency with `_get_nullable_type_from_schema`
                 filtered_schema = [
                     val for val in any_of_types if val.get("type") == json_type_
@@ -384,10 +555,10 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
         if description and isinstance(description, str):
             properties_item["description"] = description
 
-        if properties_item.get("type_") == glm.Type.ARRAY and v.get("items"):
+        if properties_item.get("type") == types.Type.ARRAY and v.get("items"):
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
 
-        if properties_item.get("type_") == glm.Type.OBJECT:
+        if properties_item.get("type") == types.Type.OBJECT:
             if (
                 v.get("anyOf")
                 and isinstance(v["anyOf"], list)
@@ -406,7 +577,7 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
             elif not v.get("additionalProperties"):
                 # Only provide dummy type for object without properties AND without
                 # additionalProperties
-                properties_item["type_"] = glm.Type.STRING
+                properties_item["type"] = types.Type.STRING
 
         if k == "title" and "description" not in properties_item:
             properties_item["description"] = k + " is " + str(v)
@@ -428,15 +599,13 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
         for i, v in enumerate(schema):
             items[f"item{i}"] = _get_properties_from_schema_any(v)
     elif isinstance(schema, dict):
-        items["type_"] = _get_type_from_schema(schema)
-        if items["type_"] == glm.Type.OBJECT and "properties" in schema:
+        items["type"] = _get_type_from_schema(schema)
+        if items["type"] == types.Type.OBJECT and "properties" in schema:
             items["properties"] = _get_properties_from_schema_any(schema["properties"])
-        if items["type_"] == glm.Type.ARRAY and "items" in schema:
+        if items["type"] == types.Type.ARRAY and "items" in schema:
             items["items"] = _format_json_schema_to_gapic(schema["items"])
         if "title" in schema or "description" in schema:
-            items["description"] = (
-                schema.get("description") or schema.get("title") or ""
-            )
+            items["description"] = schema.get("description") or schema.get("title")
         if "enum" in schema:
             items["enum"] = schema["enum"]
         if _is_nullable_schema(schema):
@@ -447,69 +616,103 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
             items["enum"] = schema["enum"]
     else:
         # str
-        items["type_"] = _get_type_from_schema({"type": schema})
+        items["type"] = _get_type_from_schema({"type": schema})
         if _is_nullable_schema({"type": schema}):
             items["nullable"] = True
 
     return items
 
 
-def _get_type_from_schema(schema: dict[str, Any]) -> int:
-    return _get_nullable_type_from_schema(schema) or glm.Type.STRING
+def _get_type_from_schema(schema: dict[str, Any]) -> types.Type:
+    type_ = _get_nullable_type_from_schema(schema)
+    return type_ if type_ is not None else types.Type.STRING
 
 
-def _get_nullable_type_from_schema(schema: dict[str, Any]) -> int | None:
+def _get_nullable_type_from_schema(schema: dict[str, Any]) -> types.Type | None:
     if "anyOf" in schema:
-        types = [
+        schema_types = [
             _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
         ]
-        types = [t for t in types if t is not None]  # Remove None values
-        if types:
-            return types[-1]  # TODO: update FunctionDeclaration and pass all types?
+        schema_types = [t for t in schema_types if t is not None]  # Remove None values
+        # TODO: update FunctionDeclaration and pass all types?
+        if schema_types:
+            return schema_types[-1]
     elif "type" in schema or "type_" in schema:
         type_ = schema["type"] if "type" in schema else schema["type_"]
-        if isinstance(type_, int):
+        if isinstance(type_, types.Type):
             return type_
-        stype = str(schema["type"]) if "type" in schema else str(schema["type_"])
-        return TYPE_ENUM.get(stype, glm.Type.STRING)
+        if isinstance(type_, int):
+            msg = f"Invalid type, int not supported: {type_}"
+            raise ValueError(msg)
+        if isinstance(type_, dict):
+            return types.Type(type_["_value_"])
+        if isinstance(type_, str):
+            if type_ == "null":
+                return None
+            return types.Type(type_)
+        return None
     else:
         pass
-    return glm.Type.STRING  # Default to string if no valid types found
+    return None  # No valid types found
 
 
 def _is_nullable_schema(schema: dict[str, Any]) -> bool:
     if "anyOf" in schema:
-        types = [
+        schema_types = [
             _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
         ]
-        return any(t is None for t in types)
+        return any(t is None for t in schema_types)
     if "type" in schema or "type_" in schema:
         type_ = schema["type"] if "type" in schema else schema["type_"]
-        if isinstance(type_, int):
+        if isinstance(type_, types.Type):
             return False
-        stype = str(schema["type"]) if "type" in schema else str(schema["type_"])
-        return TYPE_ENUM.get(stype, glm.Type.STRING) is None
+        if isinstance(type_, int):
+            # Handle integer type values (from tool_to_dict serialization)
+            # Integer types are never null (except for NULL type handled separately)
+            return type_ == 7  # 7 corresponds to NULL type
+    else:
+        pass
     return False
 
 
-_ToolChoiceType = Literal["auto", "none", "any", True] | dict | list[str] | str
-
-
-class _FunctionCallingConfigDict(TypedDict):
-    mode: gapic.FunctionCallingConfig.Mode | str
-    allowed_function_names: list[str] | None
-
-
-class _ToolConfigDict(TypedDict):
-    function_calling_config: _FunctionCallingConfigDict
+_ToolChoiceType = (
+    Literal["auto", "none", "any", "required", True] | dict | list[str] | str
+)
 
 
 def _tool_choice_to_tool_config(
     tool_choice: _ToolChoiceType,
     all_names: list[str],
-) -> _ToolConfigDict:
+) -> types.ToolConfig:
+    """Convert `tool_choice` to Google's `ToolConfig` format.
+
+    Maps LangChain/OpenAI-style `tool_choice` values to Google's function calling modes:
+
+    - `'auto'` -> `AUTO`: Model decides whether to call functions or generate text
+    - `'any'` / `'required'` / `True` -> `ANY`: Model must call one of the provided
+        functions.
+
+        Both `'any'` and `'required'` map to the same Google API mode for compatibility
+        (OpenAI uses `'required'`)
+    - `'none'` -> `NONE`: Model cannot call functions
+    - `'function_name'` -> `ANY` with specific function: Model must call the named
+        function
+    - `['fn1', 'fn2']` -> `ANY` with specific functions: Model must call one of the
+        listed functions
+
+    Args:
+        tool_choice: The tool choice specification.
+        all_names: List of all available function names.
+
+    Returns:
+        `ToolConfig` object for the Google API.
+    """
     allowed_function_names: list[str] | None = None
     if tool_choice is True or tool_choice == "any":
+        mode = "ANY"
+        allowed_function_names = all_names
+    elif tool_choice == "required":
+        # OpenAI-compatible alias for "any"
         mode = "ANY"
         allowed_function_names = all_names
     elif tool_choice == "auto":
@@ -540,11 +743,11 @@ def _tool_choice_to_tool_config(
     else:
         msg = f"Unrecognized tool choice format:\n\n{tool_choice=}"
         raise ValueError(msg)
-    return _ToolConfigDict(
-        function_calling_config={
-            "mode": mode.upper(),
-            "allowed_function_names": allowed_function_names,
-        }
+    return types.ToolConfig(
+        function_calling_config=types.FunctionCallingConfig(
+            mode=types.FunctionCallingConfigMode(mode),
+            allowed_function_names=allowed_function_names,
+        )
     )
 
 
@@ -580,3 +783,7 @@ def _get_def_key_from_schema_path(schema_path: str) -> str:
         raise ValueError(error_message)
 
     return parts[-1]
+
+
+# Backward compatibility alias
+_dict_to_gapic_schema = _dict_to_genai_schema

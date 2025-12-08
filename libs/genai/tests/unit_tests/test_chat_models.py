@@ -1,27 +1,37 @@
 """Test chat model integration."""
 
-import asyncio
 import base64
 import json
+import os
 import warnings
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
-import google.ai.generativelanguage as glm
 import pytest
-from google.ai.generativelanguage_v1beta.types import (
+from google.genai.errors import ClientError
+from google.genai.types import (
+    Blob,
     Candidate,
     Content,
+    FinishReason,
     FunctionCall,
+    FunctionResponse,
     GenerateContentResponse,
+    GenerateContentResponseUsageMetadata,
+    Language,
     Part,
+    ThinkingLevel,
 )
-from google.api_core.exceptions import ResourceExhausted
+from google.genai.types import (
+    Outcome as CodeExecutionResultOutcome,
+)
+from google.protobuf.struct_pb2 import Struct
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
@@ -43,9 +53,10 @@ from langchain_google_genai._compat import (
 )
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
-    _chat_with_retry,
+    ChatGoogleGenerativeAIError,
     _convert_to_parts,
     _convert_tool_message_to_parts,
+    _get_ai_message_tool_messages_parts,
     _is_gemini_3_or_later,
     _is_gemini_25_model,
     _parse_chat_history,
@@ -56,6 +67,8 @@ from langchain_google_genai.chat_models import (
 MODEL_NAME = "gemini-2.5-flash"
 
 FAKE_API_KEY = "fake-api-key"
+
+SMALL_VIEWABLE_BASE64_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII="  # noqa: E501
 
 
 def test_integration_initialization() -> None:
@@ -109,7 +122,7 @@ def test_integration_initialization() -> None:
                     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_LOW_AND_ABOVE"
                 },  # Invalid arg
             )
-        assert llm.model == f"models/{MODEL_NAME}"
+        assert llm.model == f"{MODEL_NAME}"
         mock_warning.assert_called_once()
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
@@ -119,7 +132,7 @@ def test_integration_initialization() -> None:
 def test_safety_settings_initialization() -> None:
     """Test chat model initialization with `safety_settings` parameter."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
     }
 
     # Test initialization with safety_settings
@@ -133,7 +146,7 @@ def test_safety_settings_initialization() -> None:
     # Verify the safety_settings are stored correctly
     assert llm.safety_settings == safety_settings
     assert llm.temperature == 0.7
-    assert llm.model == f"models/{MODEL_NAME}"
+    assert llm.model == f"{MODEL_NAME}"
 
 
 def test_initialization_inside_threadpool() -> None:
@@ -145,50 +158,6 @@ def test_initialization_inside_threadpool() -> None:
             model=MODEL_NAME,
             google_api_key=SecretStr(FAKE_API_KEY),
         ).result()
-
-
-def test_client_transport() -> None:
-    """Test client transport configuration."""
-    model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=FAKE_API_KEY)
-    assert model.client.transport.kind == "grpc"
-
-    model = ChatGoogleGenerativeAI(
-        model=MODEL_NAME, google_api_key="fake-key", transport="rest"
-    )
-    assert model.client.transport.kind == "rest"
-
-    async def check_async_client() -> None:
-        model = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=FAKE_API_KEY)
-        assert model.async_client.transport.kind == "grpc_asyncio"
-
-        # Test auto conversion of transport to "grpc_asyncio" from "rest"
-        model = ChatGoogleGenerativeAI(
-            model=MODEL_NAME, google_api_key=FAKE_API_KEY, transport="rest"
-        )
-        assert model.async_client.transport.kind == "grpc_asyncio"
-
-    asyncio.run(check_async_client())
-
-
-def test_initalization_without_async() -> None:
-    chat = ChatGoogleGenerativeAI(
-        model=MODEL_NAME,
-        google_api_key=SecretStr(FAKE_API_KEY),
-    )
-    assert chat.async_client is None
-
-
-def test_initialization_with_async() -> None:
-    async def initialize_chat_with_async_client() -> ChatGoogleGenerativeAI:
-        model = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=SecretStr(FAKE_API_KEY),
-        )
-        _ = model.async_client
-        return model
-
-    chat = asyncio.run(initialize_chat_with_async_client())
-    assert chat.async_client is not None
 
 
 def test_api_key_is_string() -> None:
@@ -213,15 +182,24 @@ def test_api_key_masked_when_passed_via_constructor(
 
 
 def test_profile() -> None:
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
     assert model.profile
     assert not model.profile["reasoning_output"]
 
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
     assert model.profile
     assert model.profile["reasoning_output"]
 
-    model = ChatGoogleGenerativeAI(model="foo")
+    model = ChatGoogleGenerativeAI(
+        model="foo",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
     assert model.profile == {}
 
 
@@ -293,106 +271,90 @@ def test_parse_history() -> None:
     ]
     system_instruction, history = _parse_chat_history(messages)
     assert len(history) == 8
-    assert history[0] == glm.Content(role="user", parts=[glm.Part(text=text_question1)])
-    assert history[1] == glm.Content(
+    assert history[0] == Content(role="user", parts=[Part(text=text_question1)])
+    assert history[1] == Content(
         role="model",
         parts=[
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": function_call_1["args"],
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=function_call_1["args"],
                 )
             )
         ],
     )
-    assert history[2] == glm.Content(
+    assert history[2] == Content(
         role="user",
         parts=[
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 4},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 4},
                 )
             )
         ],
     )
-    assert history[3] == glm.Content(
+    assert history[3] == Content(
         role="model",
         parts=[
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": json.loads(function_call_2["arguments"]),
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=json.loads(function_call_2["arguments"]),
                 )
             )
         ],
     )
-    assert history[4] == glm.Content(
+    assert history[4] == Content(
         role="user",
         parts=[
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 4},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 4},
                 )
             )
         ],
     )
-    assert history[5] == glm.Content(
+    assert history[5] == Content(
         role="model",
         parts=[
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": function_call_3["args"],
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=function_call_3["args"],
                 )
             ),
-            glm.Part(
-                function_call=glm.FunctionCall(
-                    {
-                        "name": "calculator",
-                        "args": function_call_4["args"],
-                    }
+            Part(
+                function_call=FunctionCall(
+                    name="calculator",
+                    args=function_call_4["args"],
                 )
             ),
         ],
     )
-    assert history[6] == glm.Content(
+    assert history[6] == Content(
         role="user",
         parts=[
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 4},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 4},
                 )
             ),
-            glm.Part(
-                function_response=glm.FunctionResponse(
-                    {
-                        "name": "calculator",
-                        "response": {"result": 6},
-                    }
+            Part(
+                function_response=FunctionResponse(
+                    name="calculator",
+                    response={"result": 6},
                 )
             ),
         ],
     )
-    assert history[7] == glm.Content(role="model", parts=[glm.Part(text=text_answer1)])
+    assert history[7] == Content(role="model", parts=[Part(text=text_answer1)])
     if convert_system_message_to_human:
         assert system_instruction is None
     else:
-        assert system_instruction == glm.Content(parts=[glm.Part(text=system_input)])
+        assert system_instruction == Content(parts=[Part(text=system_input)])
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
@@ -406,26 +368,27 @@ def test_parse_function_history(content: str | list[str | dict]) -> None:
 )
 def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     mock_client = Mock()
+    mock_models = Mock()
     mock_generate_content = Mock()
     mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
     )
-    mock_client.return_value.generate_content = mock_generate_content
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
     api_endpoint = "http://127.0.0.1:8000/ai"
     param_api_key = FAKE_API_KEY
     param_secret_api_key = SecretStr(param_api_key)
-    param_client_options = {"api_endpoint": api_endpoint}
-    param_transport = "rest"
 
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
-    ):
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
         chat = ChatGoogleGenerativeAI(
             model=MODEL_NAME,
             google_api_key=param_secret_api_key,
-            client_options=param_client_options,
-            transport=param_transport,
+            base_url=api_endpoint,
             additional_headers=headers,
         )
 
@@ -442,442 +405,154 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     assert response.content == "test response"
 
     mock_client.assert_called_once_with(
-        transport=param_transport,
-        client_options=ANY,
-        client_info=ANY,
+        api_key=param_api_key,
+        http_options=ANY,
     )
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_key == param_api_key
-    assert call_client_options.api_endpoint == api_endpoint
-    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
-    assert "langchain-google-genai" in call_client_info.user_agent
-    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+    call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+    assert call_http_options.base_url == api_endpoint
+
+    # Verify user-agent header is set
+    assert "User-Agent" in call_http_options.headers
+    assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+    assert "ChatGoogleGenerativeAI" in call_http_options.headers["User-Agent"]
+
+    # Verify user-provided headers are included
+    if headers:
+        for key, value in headers.items():
+            assert call_http_options.headers[key] == value
 
 
-def test_base_url_support() -> None:
-    """Test that `base_url` is properly merged into `client_options`."""
-    mock_client = Mock()
-    mock_generate_content = Mock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+def test_base_url_set_in_constructor() -> None:
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        base_url="http://localhost:8000",
     )
-    mock_client.return_value.generate_content = mock_generate_content
-    base_url = "https://example.com"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-    param_transport = "rest"
+    assert chat.base_url == "http://localhost:8000"
 
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
+
+def test_base_url_passed_to_client() -> None:
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
             model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport=param_transport,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            base_url="http://localhost:8000",
         )
+        mock_client.assert_called_once_with(
+            api_key=FAKE_API_KEY,
+            http_options=ANY,
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.base_url == "http://localhost:8000"
+        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
 
-    response = chat.invoke("test")
-    assert response.content == "test response"
 
-    mock_client.assert_called_once_with(
-        transport=param_transport,
-        client_options=ANY,
-        client_info=ANY,
+def test_async_client_property() -> None:
+    """Test that async_client property exposes `client.aio`."""
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
     )
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_key == param_api_key
-    assert call_client_options.api_endpoint == base_url
-    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
-    assert "langchain-google-genai" in call_client_info.user_agent
-    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+    # Verify client is initialized
+    client = chat.client
+    assert client is not None
+    # Verify async_client returns client.aio
+    assert chat.async_client is client.aio
+    # Verify async_client has the expected async methods
+    assert hasattr(chat.async_client, "models")
 
 
-async def test_async_base_url_support() -> None:
-    """Test that `base_url` is properly merged into `client_options` for async."""
-    mock_async_client = Mock()
-    mock_generate_content = AsyncMock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[
-            Candidate(content=Content(parts=[Part(text="async test response")]))
-        ]
+def test_async_client_raises_when_client_not_initialized() -> None:
+    """Test that async_client raises `ValueError` if client is `None`."""
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
     )
-    mock_async_client.return_value.generate_content = mock_generate_content
-    base_url = "https://async-example.com"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
-        mock_async_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport="rest",  # Should keep "rest" when custom endpoint is used
-        )
-
-        response = await chat.ainvoke("async test")
-        assert response.content == "async test response"
-
-        mock_async_client.assert_called_once_with(
-            transport="rest",  # Should keep "rest" when custom endpoint is specified
-            client_options=ANY,
-            client_info=ANY,
-        )
-        call_client_options = mock_async_client.call_args_list[0].kwargs[
-            "client_options"
-        ]
-        assert call_client_options.api_key == param_api_key
-        assert call_client_options.api_endpoint == base_url
+    # Force client to None to test error handling
+    chat.client = None
+    with pytest.raises(ValueError, match="Client not initialized"):
+        _ = chat.async_client
 
 
 def test_api_endpoint_via_client_options() -> None:
     """Test that `api_endpoint` via `client_options` is used in API calls."""
-    mock_client = Mock()
     mock_generate_content = Mock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
-    )
-    mock_client.return_value.generate_content = mock_generate_content
     api_endpoint = "https://custom-endpoint.com"
     param_api_key = FAKE_API_KEY
     param_secret_api_key = SecretStr(param_api_key)
-    param_transport = "rest"
 
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
-    ):
+    with patch("langchain_google_genai.chat_models.Client") as mock_client_class:
+        mock_client_instance = Mock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_generate_content.return_value = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+        mock_client_instance.models.generate_content = mock_generate_content
+
         chat = ChatGoogleGenerativeAI(
             model=MODEL_NAME,
             google_api_key=param_secret_api_key,
             client_options={"api_endpoint": api_endpoint},
-            transport=param_transport,
         )
 
-    response = chat.invoke("test")
-    assert response.content == "test response"
-
-    mock_client.assert_called_once_with(
-        transport=param_transport,
-        client_options=ANY,
-        client_info=ANY,
-    )
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_key == param_api_key
-    assert call_client_options.api_endpoint == api_endpoint
-    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
-    assert "langchain-google-genai" in call_client_info.user_agent
-    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
+        response = chat.invoke("test")
+        assert response.content == "test response"
+        mock_client_class.assert_called_once_with(
+            api_key=param_api_key,
+            http_options=ANY,
+        )
+        call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.base_url == api_endpoint
+        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
 
 
 async def test_async_api_endpoint_via_client_options() -> None:
     """Test that `api_endpoint` via `client_options` is used in async API calls."""
-    mock_async_client = Mock()
-    mock_generate_content = AsyncMock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[
-            Candidate(
-                content=Content(parts=[Part(text="async custom endpoint response")])
-            )
-        ]
-    )
-    mock_async_client.return_value.generate_content = mock_generate_content
     api_endpoint = "https://async-custom-endpoint.com"
     param_api_key = FAKE_API_KEY
     param_secret_api_key = SecretStr(param_api_key)
 
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
-        mock_async_client,
-    ):
+    with patch("langchain_google_genai.chat_models.Client") as mock_client_class:
+        mock_client_instance = Mock()
+        mock_client_class.return_value = mock_client_instance
+
+        # Mock the aio.models.generate_content method for async calls
+        mock_aio = Mock()
+        mock_client_instance.aio = mock_aio
+        mock_aio_models = Mock()
+        mock_aio.models = mock_aio_models
+        mock_aio_models.generate_content = AsyncMock(
+            return_value=GenerateContentResponse(
+                candidates=[
+                    Candidate(
+                        content=Content(
+                            parts=[Part(text="async custom endpoint response")]
+                        )
+                    )
+                ]
+            )
+        )
+
         chat = ChatGoogleGenerativeAI(
             model=MODEL_NAME,
             google_api_key=param_secret_api_key,
             client_options={"api_endpoint": api_endpoint},
-            transport="grpc_asyncio",
         )
 
         response = await chat.ainvoke("async custom endpoint test")
         assert response.content == "async custom endpoint response"
-
-        mock_async_client.assert_called_once_with(
-            transport="grpc_asyncio",
-            client_options=ANY,
-            client_info=ANY,
+        mock_client_class.assert_called_once_with(
+            api_key=param_api_key,
+            http_options=ANY,
         )
-        call_client_options = mock_async_client.call_args_list[0].kwargs[
-            "client_options"
-        ]
-        assert call_client_options.api_key == param_api_key
-        # For gRPC async transport, URL is formatted to hostname:port
-        assert call_client_options.api_endpoint == "async-custom-endpoint.com:443"
-
-
-def test_base_url_preserves_existing_client_options() -> None:
-    """Test that `base_url` doesn't override existing `api_endpoint` in
-    `client_options`."""
-    mock_client = Mock()
-    mock_generate_content = Mock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
-    )
-    mock_client.return_value.generate_content = mock_generate_content
-    base_url = "https://base-url.com"
-    api_endpoint = "https://client-options-endpoint.com"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-    param_transport = "rest"
-
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            client_options={"api_endpoint": api_endpoint},
-            transport=param_transport,
-        )
-
-    response = chat.invoke("test")
-    assert response.content == "test response"
-
-    mock_client.assert_called_once_with(
-        transport=param_transport,
-        client_options=ANY,
-        client_info=ANY,
-    )
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_key == param_api_key
-    # client_options.api_endpoint should take precedence over base_url
-    assert call_client_options.api_endpoint == api_endpoint
-    call_client_info = mock_client.call_args_list[0].kwargs["client_info"]
-    assert "langchain-google-genai" in call_client_info.user_agent
-    assert "ChatGoogleGenerativeAI" in call_client_info.user_agent
-
-
-async def test_async_base_url_preserves_existing_client_options() -> None:
-    """Test that `base_url` doesn't override existing `api_endpoint` in async client."""
-    mock_async_client = Mock()
-    mock_generate_content = AsyncMock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[
-            Candidate(
-                content=Content(parts=[Part(text="async precedence test response")])
-            )
-        ]
-    )
-    mock_async_client.return_value.generate_content = mock_generate_content
-    base_url = "https://async-base-url.com"
-    api_endpoint = "https://async-client-options-endpoint.com"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
-        mock_async_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            client_options={"api_endpoint": api_endpoint},
-            transport="grpc_asyncio",
-        )
-
-        response = await chat.ainvoke("async precedence test")
-        assert response.content == "async precedence test response"
-
-        mock_async_client.assert_called_once_with(
-            transport="grpc_asyncio",
-            client_options=ANY,
-            client_info=ANY,
-        )
-        call_client_options = mock_async_client.call_args_list[0].kwargs[
-            "client_options"
-        ]
-        assert call_client_options.api_key == param_api_key
-        # client_options.api_endpoint should take precedence over base_url
-        # For gRPC async transport, URL is formatted to hostname:port
-        expected_endpoint = "async-client-options-endpoint.com:443"
-        assert call_client_options.api_endpoint == expected_endpoint
-
-
-def test_grpc_base_url_valid_hostname() -> None:
-    """Test that valid `hostname:port` `base_url` works with gRPC."""
-    mock_client = Mock()
-    mock_generate_content = Mock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="grpc test response")]))]
-    )
-    mock_client.return_value.generate_content = mock_generate_content
-    base_url = "example.com:443"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport="grpc",
-        )
-
-    response = chat.invoke("grpc test")
-    assert response.content == "grpc test response"
-
-    mock_client.assert_called_once_with(
-        transport="grpc",
-        client_options=ANY,
-        client_info=ANY,
-    )
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_endpoint == base_url
-
-
-async def test_async_grpc_base_url_valid_hostname() -> None:
-    """Test that valid `hostname:port` `base_url` works with `grpc_asyncio`."""
-    mock_async_client = Mock()
-    mock_generate_content = AsyncMock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[
-            Candidate(content=Content(parts=[Part(text="async grpc test response")]))
-        ]
-    )
-    mock_async_client.return_value.generate_content = mock_generate_content
-    base_url = "async.example.com:443"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceAsyncClient",
-        mock_async_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport="grpc_asyncio",
-        )
-
-        response = await chat.ainvoke("async grpc test")
-        assert response.content == "async grpc test response"
-
-    mock_async_client.assert_called_once_with(
-        transport="grpc_asyncio",
-        client_options=ANY,
-        client_info=ANY,
-    )
-    call_client_options = mock_async_client.call_args_list[0].kwargs["client_options"]
-    assert call_client_options.api_endpoint == base_url
-
-
-def test_grpc_base_url_formats_https_without_path() -> None:
-    """Test that `https://` URLs without paths are formatted correctly for gRPC."""
-    mock_client = Mock()
-    mock_generate_content = Mock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[Candidate(content=Content(parts=[Part(text="formatted response")]))]
-    )
-    mock_client.return_value.generate_content = mock_generate_content
-    base_url = "https://custom.googleapis.com"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport="grpc",
-        )
-
-    response = chat.invoke("format test")
-    assert response.content == "formatted response"
-
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    # Should be formatted as hostname:port for gRPC
-    assert call_client_options.api_endpoint == "custom.googleapis.com:443"
-
-
-def test_grpc_base_url_with_path_raises_error() -> None:
-    """Test that `base_url` with path raises `ValueError` for gRPC."""
-    base_url = "https://webhook.site/path-not-allowed"
-    param_secret_api_key = SecretStr(FAKE_API_KEY)
-
-    with pytest.raises(
-        ValueError, match="gRPC transport 'grpc' does not support URL paths"
-    ):
-        ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport="grpc",
-        )
-
-
-def test_grpc_asyncio_base_url_with_path_raises_error() -> None:
-    """Test that `base_url` with path raises `ValueError` for `grpc_asyncio`."""
-    base_url = "example.com/api/v1"
-    param_secret_api_key = SecretStr(FAKE_API_KEY)
-
-    with pytest.raises(
-        ValueError, match="gRPC transport 'grpc_asyncio' does not support URL paths"
-    ):
-        ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport="grpc_asyncio",
-        )
-
-
-def test_grpc_base_url_adds_default_port() -> None:
-    """Test that hostname without port gets default port `443` for gRPC."""
-    mock_client = Mock()
-    mock_generate_content = Mock()
-    mock_generate_content.return_value = GenerateContentResponse(
-        candidates=[
-            Candidate(content=Content(parts=[Part(text="default port response")]))
-        ]
-    )
-    mock_client.return_value.generate_content = mock_generate_content
-    base_url = "custom.example.com"
-    param_api_key = FAKE_API_KEY
-    param_secret_api_key = SecretStr(param_api_key)
-
-    with patch(
-        "langchain_google_genai._genai_extension.v1betaGenerativeServiceClient",
-        mock_client,
-    ):
-        chat = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=param_secret_api_key,
-            base_url=base_url,
-            transport="grpc",
-        )
-
-    response = chat.invoke("default port test")
-    assert response.content == "default port response"
-
-    call_client_options = mock_client.call_args_list[0].kwargs["client_options"]
-    # Should add default port 443
-    assert call_client_options.api_endpoint == "custom.example.com:443"
+        call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.base_url == api_endpoint
+        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
 
 
 def test_default_metadata_field_alias() -> None:
-    """Test 'default_metadata' and 'default_metadata_input' fields work correctly."""
+    """Test `default_metadata` and `default_metadata_input` fields work correctly."""
     # Test with default_metadata_input field name (alias) - should accept None without
     # error
     # This is the main issue: LangSmith Playground passes None to default_metadata_input
@@ -995,7 +670,7 @@ def test_default_metadata_field_alias() -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information", args={"name": "Ben"}
                             )
                         }
@@ -1024,7 +699,7 @@ def test_default_metadata_field_alias() -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information",
                                 args={"info": ["A", "B", "C"]},
                             )
@@ -1054,7 +729,7 @@ def test_default_metadata_field_alias() -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information",
                                 args={
                                     "people": [
@@ -1101,7 +776,7 @@ def test_default_metadata_field_alias() -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information",
                                 args={"info": [[1, 2, 3], [4, 5, 6]]},
                             )
@@ -1132,7 +807,7 @@ def test_default_metadata_field_alias() -> None:
                     "parts": [
                         {"text": "Mike age is 30"},
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information", args={"name": "Ben"}
                             )
                         },
@@ -1161,7 +836,7 @@ def test_default_metadata_field_alias() -> None:
                 "content": {
                     "parts": [
                         {
-                            "function_call": glm.FunctionCall(
+                            "function_call": FunctionCall(
                                 name="Information", args={"name": "Ben"}
                             )
                         },
@@ -1191,7 +866,7 @@ def test_default_metadata_field_alias() -> None:
 def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> None:
     with patch("langchain_google_genai.chat_models.uuid.uuid4") as uuid4:
         uuid4.return_value = "00000000-0000-0000-0000-00000000000"
-        response_candidate = glm.Candidate(raw_candidate)
+        response_candidate = Candidate.model_validate(raw_candidate)
         result = _parse_response_candidate(response_candidate)
         assert result.content == expected.content
         assert result.tool_calls == expected.tool_calls
@@ -1214,11 +889,11 @@ def test_parse_response_candidate_includes_model_provider() -> None:
     """Test `_parse_response_candidate` has `model_provider` in `response_metadata`."""
     raw_candidate = {
         "content": {"parts": [{"text": "Hello, world!"}]},
-        "finish_reason": 1,
+        "finish_reason": "STOP",
         "safety_ratings": [],
     }
 
-    response_candidate = glm.Candidate(raw_candidate)
+    response_candidate = Candidate.model_validate(raw_candidate)
     result = _parse_response_candidate(response_candidate)
 
     assert hasattr(result, "response_metadata")
@@ -1229,6 +904,98 @@ def test_parse_response_candidate_includes_model_provider() -> None:
 
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
+
+
+def test_parse_response_candidate_includes_model_name() -> None:
+    """Test that `_parse_response_candidate` includes `model_name` in
+    `response_metadata`."""
+    raw_candidate = {
+        "content": {"parts": [{"text": "Hello, world!"}]},
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+
+    response_candidate = Candidate.model_validate(raw_candidate)
+    result = _parse_response_candidate(
+        response_candidate, model_name="gemini-2.5-flash"
+    )
+
+    assert hasattr(result, "response_metadata")
+    assert result.response_metadata["model_provider"] == "google_genai"
+    assert result.response_metadata["model_name"] == "gemini-2.5-flash"
+
+    # No name
+
+    result = _parse_response_candidate(response_candidate)
+
+    assert hasattr(result, "response_metadata")
+    assert result.response_metadata["model_provider"] == "google_genai"
+    assert "model_name" not in result.response_metadata
+
+
+def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
+    """Test that `model_name` is not duplicated when streaming chunks are concatenated.
+
+    When chunks are combined using the += operator, string values in `response_metadata`
+    get concatenated. To prevent `model_name` duplication, it should only be included
+    in the last chunk (when `finish_reason` exists), not in every chunk.
+    """
+
+    # Create streaming chunks - first chunk without finish_reason
+    raw_chunk1 = {
+        "content": {"parts": [{"text": "Hello"}]},
+        "safety_ratings": [],
+    }
+    chunk1_candidate = Candidate.model_validate(raw_chunk1)
+    response1 = GenerateContentResponse(
+        candidates=[chunk1_candidate], model_version="gemini-2.5-flash"
+    )
+
+    # Second chunk without finish_reason
+    raw_chunk2 = {
+        "content": {"parts": [{"text": " world"}]},
+        "safety_ratings": [],
+    }
+    chunk2_candidate = Candidate.model_validate(raw_chunk2)
+    response2 = GenerateContentResponse(
+        candidates=[chunk2_candidate], model_version="gemini-2.5-flash"
+    )
+
+    # Final chunk with finish_reason
+    raw_chunk3 = {
+        "content": {"parts": [{"text": "!"}]},
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+    chunk3_candidate = Candidate.model_validate(raw_chunk3)
+    response3 = GenerateContentResponse(
+        candidates=[chunk3_candidate], model_version="gemini-2.5-flash"
+    )
+
+    # Convert to LangChain messages (simulating what _stream does)
+    result1 = _response_to_result(response1, stream=True)
+    result2 = _response_to_result(response2, stream=True)
+    result3 = _response_to_result(response3, stream=True)
+
+    msg1 = cast("AIMessageChunk", result1.generations[0].message)
+    msg2 = cast("AIMessageChunk", result2.generations[0].message)
+    msg3 = cast("AIMessageChunk", result3.generations[0].message)
+
+    # First two chunks should NOT have model_name in response_metadata
+    assert "model_name" not in msg1.response_metadata
+    assert "model_name" not in msg2.response_metadata
+
+    # Only the last chunk should have model_name
+    assert msg3.response_metadata["model_name"] == "gemini-2.5-flash"
+
+    # Concatenate chunks (simulating user code with +=)
+    full = msg1 + msg2 + msg3
+
+    # Verify model_name is not duplicated
+    assert full.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert full.response_metadata["model_name"].count("gemini") == 1, (
+        "model_name should not be duplicated"
+    )
 
 
 def test_serialize() -> None:
@@ -1264,8 +1031,38 @@ def test__convert_tool_message_to_parts__sets_tool_name(
     parts = _convert_tool_message_to_parts(tool_message)
     assert len(parts) == 1
     part = parts[0]
+    assert part.function_response is not None
     assert part.function_response.name == "tool_name"
     assert part.function_response.response == {"output": "test_content"}
+
+
+def test_supports_thinking() -> None:
+    """Test that `_supports_thinking` correctly identifies model capabilities."""
+    llm_image_gen = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash-preview-image-generation",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert not llm_image_gen._supports_thinking()
+    llm_tts = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-preview-tts",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert not llm_tts._supports_thinking()
+    llm_normal = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_normal._supports_thinking()
+    llm_pro = ChatGoogleGenerativeAI(
+        model="gemini-2.5-pro",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_pro._supports_thinking()
+    llm_15 = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert not llm_15._supports_thinking()
 
 
 def test_temperature_range_pydantic_validation() -> None:
@@ -1299,46 +1096,197 @@ def test_temperature_range_model_validation() -> None:
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.5)
 
 
-def test_model_kwargs() -> None:
+@patch("langchain_google_genai.chat_models.Client")
+def test_model_kwargs(mock_client: Mock) -> None:
     """Test we can transfer unknown params to `model_kwargs`."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
         convert_system_message_to_human=True,
         model_kwargs={"foo": "bar"},
     )
-    assert llm.model == f"models/{MODEL_NAME}"
+    assert llm.model == MODEL_NAME
     assert llm.convert_system_message_to_human is True
     assert llm.model_kwargs == {"foo": "bar"}
-
     with pytest.warns(match="transferred to model_kwargs"):
         llm = ChatGoogleGenerativeAI(
             model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
             convert_system_message_to_human=True,
             foo="bar",
         )
-    assert llm.model == f"models/{MODEL_NAME}"
-    assert llm.convert_system_message_to_human is True
-    assert llm.model_kwargs == {"foo": "bar"}
+        assert llm.model == MODEL_NAME
+        assert llm.convert_system_message_to_human is True
+        assert llm.model_kwargs == {"foo": "bar"}
 
 
-def test_retry_decorator_with_custom_parameters() -> None:
-    # Mock the generation method
-    mock_generation_method = Mock()
-    # TODO: remove ignore once google-auth has types.
-    mock_generation_method.side_effect = ResourceExhausted("Quota exceeded")  # type: ignore[no-untyped-call]
+@pytest.mark.parametrize(
+    "is_async,method_name,client_method",
+    [
+        (False, "_generate", "models.generate_content"),  # Sync
+        (True, "_agenerate", "aio.models.generate_content"),  # Async
+    ],
+)
+@pytest.mark.parametrize(
+    "instance_timeout,call_timeout,expected_timeout_ms,should_have_timeout",
+    [
+        (5.0, None, 5000, True),  # Instance-level timeout (converted to ms)
+        (5.0, 10.0, 10000, True),  # Call-level overrides instance (in ms)
+        (None, None, None, False),  # No timeout anywhere
+    ],
+)
+async def test_timeout_parameter_handling(
+    is_async: bool,
+    method_name: str,
+    client_method: str,
+    instance_timeout: float | None,
+    call_timeout: float | None,
+    expected_timeout_ms: int | None,
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for sync and async methods."""
+    with patch(
+        "langchain_google_genai.chat_models.ChatGoogleGenerativeAI.client", create=True
+    ):
+        # Create LLM with optional instance-level timeout
+        llm_kwargs: dict[str, Any] = {
+            "model": MODEL_NAME,
+            "google_api_key": SecretStr(FAKE_API_KEY),
+        }
+        if instance_timeout is not None:
+            llm_kwargs["timeout"] = instance_timeout
 
-    # Call the function with custom retry parameters
-    with pytest.raises(ResourceExhausted):
-        _chat_with_retry(
-            generation_method=mock_generation_method,
-            max_retries=3,
-            wait_exponential_multiplier=1.5,
-            wait_exponential_min=2.0,
-            wait_exponential_max=30.0,
+        llm = ChatGoogleGenerativeAI(**llm_kwargs)
+
+        # Mock the client method
+        mock_response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Test response")]))]
         )
 
-    # Verify that the retry mechanism used the custom parameters
-    assert mock_generation_method.call_count == 3
+        if is_async:
+            mock_method = AsyncMock(return_value=mock_response)
+        else:
+            mock_method = Mock(return_value=mock_response)
+
+        # Set up the mock on the client
+        client_parts = client_method.split(".")
+        mock_client = llm.client
+        for part in client_parts[:-1]:
+            mock_client = getattr(mock_client, part)
+        setattr(mock_client, client_parts[-1], mock_method)
+
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+        # Call the appropriate method with optional call-level timeout
+        method = getattr(llm, method_name)
+        call_kwargs: dict[str, Any] = {}
+        if call_timeout is not None:
+            call_kwargs["timeout"] = call_timeout
+
+        if is_async:
+            await method(messages, **call_kwargs)
+        else:
+            method(messages, **call_kwargs)
+
+        # Verify http_options were set correctly in config
+        mock_method.assert_called_once()
+        call_args = mock_method.call_args
+        config = call_args.kwargs.get("config") or call_args[0][0].kwargs.get("config")
+
+        if should_have_timeout:
+            assert config.http_options is not None
+            assert config.http_options.timeout == expected_timeout_ms
+        else:
+            assert config.http_options is None or config.http_options.timeout is None
+
+
+@pytest.mark.parametrize(
+    "instance_timeout,expected_timeout_ms,should_have_timeout",
+    [
+        (5.0, 5000, True),  # Instance-level timeout (converted to ms)
+        (None, None, False),  # No timeout
+    ],
+)
+def test_timeout_streaming_parameter_handling(
+    instance_timeout: float | None,
+    expected_timeout_ms: int | None,
+    should_have_timeout: bool,
+) -> None:
+    """Test timeout parameter handling for streaming methods."""
+    # Create LLM with optional instance-level timeout
+    llm_kwargs: dict[str, Any] = {
+        "model": MODEL_NAME,
+        "google_api_key": SecretStr(FAKE_API_KEY),
+    }
+    if instance_timeout is not None:
+        llm_kwargs["timeout"] = instance_timeout
+
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+    assert llm.client is not None
+
+    # Mock the client method
+    def mock_stream() -> Iterator[GenerateContentResponse]:
+        yield GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="chunk1")]))]
+        )
+
+    with patch.object(
+        llm.client.models, "generate_content_stream", return_value=mock_stream()
+    ):
+        # Call _stream (which should include timeout in config)
+        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+        request = llm._prepare_request(messages)
+
+        # Verify timeout was set correctly in config
+        config = request["config"]
+        if should_have_timeout:
+            assert config.http_options is not None
+            assert config.http_options.timeout == expected_timeout_ms
+        else:
+            assert config.http_options is None or config.http_options.timeout is None
+
+
+@pytest.mark.parametrize(
+    "instance_max_retries,call_max_retries,expected_max_retries,should_have_max_retries",
+    [
+        (1, None, 1, True),  # Instance-level max_retries
+        (3, 5, 5, True),  # Call-level overrides instance
+        (6, None, 6, True),  # Default instance value
+    ],
+)
+def test_max_retries_parameter_handling(
+    instance_max_retries: int,
+    call_max_retries: int | None,
+    expected_max_retries: int,
+    should_have_max_retries: bool,
+) -> None:
+    """Test `max_retries` handling for sync and async methods."""
+    # Instance-level max_retries
+    llm_kwargs: dict[str, Any] = {
+        "model": MODEL_NAME,
+        "google_api_key": SecretStr(FAKE_API_KEY),
+        "max_retries": instance_max_retries,
+    }
+
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    # Prepare request with optional call-level max_retries
+    call_kwargs: dict[str, Any] = {}
+    if call_max_retries is not None:
+        call_kwargs["max_retries"] = call_max_retries
+
+    request = llm._prepare_request(messages, **call_kwargs)
+
+    # Verify max_retries was set correctly in http_options.retry_options
+    config = request["config"]
+    if should_have_max_retries:
+        assert config.http_options is not None
+        assert config.http_options.retry_options is not None
+        assert config.http_options.retry_options.attempts == expected_max_retries
+    else:
+        assert config.http_options is None or config.http_options.retry_options is None
 
 
 @pytest.mark.parametrize(
@@ -1375,7 +1323,10 @@ def test_retry_decorator_with_custom_parameters() -> None:
                         },
                     }
                 ],
-                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "prompt_feedback": {
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
                 "usage_metadata": {
                     "prompt_token_count": 10,
                     "candidates_token_count": 5,
@@ -1383,8 +1334,17 @@ def test_retry_decorator_with_custom_parameters() -> None:
                 },
             },
             {
+                "google_maps_widget_context_token": None,
                 "grounding_chunks": [
-                    {"web": {"uri": "https://example.com", "title": "Example Site"}}
+                    {
+                        "maps": None,
+                        "retrieved_context": None,
+                        "web": {
+                            "domain": None,
+                            "uri": "https://example.com",
+                            "title": "Example Site",
+                        },
+                    }
                 ],
                 "grounding_supports": [
                     {
@@ -1398,6 +1358,10 @@ def test_retry_decorator_with_custom_parameters() -> None:
                         "confidence_scores": [0.95],
                     }
                 ],
+                "retrieval_metadata": None,
+                "retrieval_queries": None,
+                "search_entry_point": None,
+                "source_flagging_uris": None,
                 "web_search_queries": ["test query"],
             },
         ),
@@ -1409,7 +1373,10 @@ def test_retry_decorator_with_custom_parameters() -> None:
                         "content": {"parts": [{"text": "Test response"}]},
                     }
                 ],
-                "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+                "prompt_feedback": {
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
                 "usage_metadata": {
                     "prompt_token_count": 10,
                     "candidates_token_count": 5,
@@ -1423,8 +1390,8 @@ def test_retry_decorator_with_custom_parameters() -> None:
 def test_response_to_result_grounding_metadata(
     raw_response: dict, expected_grounding_metadata: dict
 ) -> None:
-    """Test that `_response_to_result` includes grounding_metadata in the response."""
-    response = GenerateContentResponse(raw_response)
+    """Test that `_response_to_result` includes `grounding_metadata` in the response."""
+    response = GenerateContentResponse.model_validate(raw_response)
     result = _response_to_result(response, stream=False)
 
     assert len(result.generations) == len(raw_response["candidates"])
@@ -1515,7 +1482,10 @@ def test_grounding_metadata_to_citations_conversion() -> None:
                 },
             }
         ],
-        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "prompt_feedback": {
+            "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+            "safety_ratings": [],
+        },
         "usage_metadata": {
             "prompt_token_count": 10,
             "candidates_token_count": 20,
@@ -1523,7 +1493,7 @@ def test_grounding_metadata_to_citations_conversion() -> None:
         },
     }
 
-    response = GenerateContentResponse(raw_response)
+    response = GenerateContentResponse.model_validate(raw_response)
     result = _response_to_result(response, stream=False)
 
     assert len(result.generations) == 1
@@ -1559,8 +1529,8 @@ def test_grounding_metadata_to_citations_conversion() -> None:
     assert len(text_blocks_with_citations) > 0, "Expected citations in text blocks"
 
     for block in text_blocks_with_citations:
-        annotations = block.get("annotations", [])
-        citations = [ann for ann in annotations if ann.get("type") == "citation"]  # type: ignore[attr-defined]
+        annotations = cast("list[Any]", block.get("annotations", []))
+        citations = [ann for ann in annotations if ann.get("type") == "citation"]
         assert len(citations) > 0, "Expected at least one citation"
 
         for citation in citations:
@@ -1581,7 +1551,10 @@ def test_empty_grounding_metadata_no_citations() -> None:
                 "grounding_metadata": {},
             }
         ],
-        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "prompt_feedback": {
+            "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+            "safety_ratings": [],
+        },
         "usage_metadata": {
             "prompt_token_count": 5,
             "candidates_token_count": 8,
@@ -1589,7 +1562,7 @@ def test_empty_grounding_metadata_no_citations() -> None:
         },
     }
 
-    response = GenerateContentResponse(raw_response)
+    response = GenerateContentResponse.model_validate(raw_response)
     result = _response_to_result(response, stream=False)
 
     message = result.generations[0].message
@@ -1634,7 +1607,10 @@ def test_grounding_metadata_missing_optional_fields() -> None:
                 },
             }
         ],
-        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "prompt_feedback": {
+            "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+            "safety_ratings": [],
+        },
         "usage_metadata": {
             "prompt_token_count": 5,
             "candidates_token_count": 3,
@@ -1642,7 +1618,7 @@ def test_grounding_metadata_missing_optional_fields() -> None:
         },
     }
 
-    response = GenerateContentResponse(raw_response)
+    response = GenerateContentResponse.model_validate(raw_response)
     result = _response_to_result(response, stream=False)
 
     message = result.generations[0].message
@@ -1699,7 +1675,10 @@ def test_grounding_metadata_multiple_parts() -> None:
                 },
             }
         ],
-        "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
+        "prompt_feedback": {
+            "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+            "safety_ratings": [],
+        },
         "usage_metadata": {
             "prompt_token_count": 10,
             "candidates_token_count": 10,
@@ -1707,7 +1686,7 @@ def test_grounding_metadata_multiple_parts() -> None:
         },
     }
 
-    response = GenerateContentResponse(raw_response)
+    response = GenerateContentResponse.model_validate(raw_response)
     result = _response_to_result(response, stream=False)
 
     message = result.generations[0].message
@@ -1720,246 +1699,172 @@ def test_grounding_metadata_multiple_parts() -> None:
     assert grounding["grounding_supports"][0]["segment"]["part_index"] == 1
 
 
-@pytest.mark.parametrize(
-    "is_async,mock_target,method_name",
-    [
-        (False, "_chat_with_retry", "_generate"),  # Sync
-        (True, "_achat_with_retry", "_agenerate"),  # Async
-    ],
-)
-@pytest.mark.parametrize(
-    "instance_timeout,call_timeout,expected_timeout,should_have_timeout",
-    [
-        (5.0, None, 5.0, True),  # Instance-level timeout
-        (5.0, 10.0, 10.0, True),  # Call-level overrides instance
-        (None, None, None, False),  # No timeout anywhere
-    ],
-)
-async def test_timeout_parameter_handling(
-    is_async: bool,
-    mock_target: str,
-    method_name: str,
-    instance_timeout: float | None,
-    call_timeout: float | None,
-    expected_timeout: float | None,
-    should_have_timeout: bool,
-) -> None:
-    """Test timeout parameter handling for sync and async methods."""
-    with patch(f"langchain_google_genai.chat_models.{mock_target}") as mock_retry:
-        mock_retry.return_value = GenerateContentResponse(
+def test_maps_grounding_content_blocks() -> None:
+    """Test that `content_blocks` works with Maps grounding metadata."""
+    raw_response = {
+        "candidates": [
             {
-                "candidates": [
-                    {
-                        "content": {"parts": [{"text": "Test response"}]},
-                        "finish_reason": "STOP",
-                    }
-                ]
+                "content": {
+                    "parts": [
+                        {
+                            "text": (
+                                "Here are some great Italian restaurants near the "
+                                "Eiffel Tower: Chez Pippo and La Casa di Alfio."
+                            )
+                        }
+                    ]
+                },
+                "grounding_metadata": {
+                    "grounding_chunks": [
+                        {
+                            "web": None,
+                            "maps": {
+                                "uri": "https://maps.google.com/?cid=8846610044005889834",
+                                "title": "Chez Pippo",
+                                "placeId": "places/ChIJ123",
+                            },
+                        },
+                        {
+                            "web": None,
+                            "maps": {
+                                "uri": "https://maps.google.com/?cid=3067710458301396100",
+                                "title": "La Casa di Alfio",
+                                "placeId": "places/ChIJ456",
+                            },
+                        },
+                    ],
+                    "grounding_supports": [
+                        {
+                            "segment": {
+                                "start_index": 57,
+                                "end_index": 67,
+                                "text": "Chez Pippo",
+                                "part_index": 0,
+                            },
+                            "grounding_chunk_indices": [0],
+                            "confidence_scores": None,
+                        },
+                        {
+                            "segment": {
+                                "start_index": 72,
+                                "end_index": 87,
+                                "text": "La Casa di Alfio",
+                                "part_index": 0,
+                            },
+                            "grounding_chunk_indices": [1],
+                            "confidence_scores": None,
+                        },
+                    ],
+                    "web_search_queries": [],
+                },
             }
-        )
-
-        # Create LLM with optional instance-level timeout
-        llm_kwargs = {
-            "model": "gemini-2.5-flash",
-            "google_api_key": SecretStr(FAKE_API_KEY),
-        }
-        if instance_timeout is not None:
-            llm_kwargs["timeout"] = instance_timeout
-
-        llm = ChatGoogleGenerativeAI(**llm_kwargs)
-        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
-
-        # Call the appropriate method with optional call-level timeout
-        method = getattr(llm, method_name)
-        call_kwargs = {}
-        if call_timeout is not None:
-            call_kwargs["timeout"] = call_timeout
-
-        if is_async:
-            await method(messages, **call_kwargs)
-        else:
-            method(messages, **call_kwargs)
-
-        # Verify timeout was passed correctly
-        mock_retry.assert_called_once()
-        call_kwargs_actual = mock_retry.call_args[1]
-
-        if should_have_timeout:
-            assert "timeout" in call_kwargs_actual
-            assert call_kwargs_actual["timeout"] == expected_timeout
-        else:
-            assert "timeout" not in call_kwargs_actual
-
-
-@pytest.mark.parametrize(
-    "instance_timeout,expected_timeout,should_have_timeout",
-    [
-        (5.0, 5.0, True),  # Instance-level timeout
-        (None, None, False),  # No timeout
-    ],
-)
-@patch("langchain_google_genai.chat_models._chat_with_retry")
-def test_timeout_streaming_parameter_handling(
-    mock_retry: Mock,
-    instance_timeout: float | None,
-    expected_timeout: float | None,
-    should_have_timeout: bool,
-) -> None:
-    """Test timeout parameter handling for streaming methods."""
-
-    # Mock the return value for _chat_with_retry to return an iterator
-    def mock_stream() -> Iterator[GenerateContentResponse]:
-        yield GenerateContentResponse(
-            {
-                "candidates": [
-                    {
-                        "content": {"parts": [{"text": "chunk1"}]},
-                        "finish_reason": "STOP",
-                    }
-                ]
-            }
-        )
-
-    mock_retry.return_value = mock_stream()
-
-    # Create LLM with optional instance-level timeout
-    llm_kwargs = {
-        "model": "gemini-2.5-flash",
-        "google_api_key": SecretStr(FAKE_API_KEY),
+        ],
+        "prompt_feedback": {
+            "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+            "safety_ratings": [],
+        },
+        "usage_metadata": {
+            "prompt_token_count": 15,
+            "candidates_token_count": 25,
+            "total_token_count": 40,
+        },
     }
-    if instance_timeout is not None:
-        llm_kwargs["timeout"] = instance_timeout
 
-    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+    response = GenerateContentResponse.model_validate(raw_response)
+    result = _response_to_result(response, stream=False)
 
-    # Call _stream (which should pass timeout to _chat_with_retry)
-    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
-    list(llm._stream(messages))  # Convert generator to list to trigger execution
+    message = result.generations[0].message
 
-    # Verify timeout was passed correctly
-    mock_retry.assert_called_once()
-    call_kwargs = mock_retry.call_args[1]
+    assert "grounding_metadata" in message.response_metadata
+    gm = message.response_metadata["grounding_metadata"]
+    assert len(gm["grounding_chunks"]) == 2
+    assert gm["grounding_chunks"][0]["maps"] is not None
+    assert gm["grounding_chunks"][0]["web"] is None
 
-    if should_have_timeout:
-        assert "timeout" in call_kwargs
-        assert call_kwargs["timeout"] == expected_timeout
-    else:
-        assert "timeout" not in call_kwargs
+    content_blocks = message.content_blocks
+    assert isinstance(content_blocks, list)
 
+    # Verify citations are created from maps data
+    text_blocks_with_citations = [
+        block
+        for block in content_blocks
+        if block.get("type") == "text" and block.get("annotations")
+    ]
+    assert len(text_blocks_with_citations) > 0, "Expected citations in text blocks"
 
-@pytest.mark.parametrize(
-    "is_async,mock_target,method_name",
-    [
-        (False, "_chat_with_retry", "_generate"),  # Sync
-        (True, "_achat_with_retry", "_agenerate"),  # Async
-    ],
-)
-@pytest.mark.parametrize(
-    "instance_max_retries,call_max_retries,expected_max_retries,should_have_max_retries",
-    [
-        (1, None, 1, True),  # Instance-level max_retries
-        (3, 5, 5, True),  # Call-level overrides instance
-        (6, None, 6, True),  # Default instance value
-    ],
-)
-async def test_max_retries_parameter_handling(
-    is_async: bool,
-    mock_target: str,
-    method_name: str,
-    instance_max_retries: int,
-    call_max_retries: int | None,
-    expected_max_retries: int,
-    should_have_max_retries: bool,
-) -> None:
-    """Test `max_retries` handling for sync and async methods."""
-    with patch(f"langchain_google_genai.chat_models.{mock_target}") as mock_retry:
-        mock_retry.return_value = GenerateContentResponse(
-            {
-                "candidates": [
-                    {
-                        "content": {"parts": [{"text": "Test response"}]},
-                        "finish_reason": "STOP",
-                    }
-                ]
-            }
-        )
+    for block in text_blocks_with_citations:
+        annotations = cast("list[Any]", block.get("annotations", []))
+        citations = [ann for ann in annotations if ann.get("type") == "citation"]
+        assert len(citations) > 0, "Expected at least one citation from maps"
 
-        # Instance-level max_retries
-        llm_kwargs = {
-            "model": "gemini-2.5-flash",
-            "google_api_key": SecretStr(FAKE_API_KEY),
-            "max_retries": instance_max_retries,
-        }
-
-        llm = ChatGoogleGenerativeAI(**llm_kwargs)
-        messages: list[BaseMessage] = [HumanMessage(content="Hello")]
-
-        # Call the appropriate method with optional call-level max_retries
-        method = getattr(llm, method_name)
-        call_kwargs = {}
-        if call_max_retries is not None:
-            call_kwargs["max_retries"] = call_max_retries
-
-        if is_async:
-            await method(messages, **call_kwargs)
-        else:
-            method(messages, **call_kwargs)
-
-        # Verify max_retries was passed correctly
-        mock_retry.assert_called_once()
-        call_kwargs_actual = mock_retry.call_args[1]
-
-        if should_have_max_retries:
-            assert "max_retries" in call_kwargs_actual
-            assert call_kwargs_actual["max_retries"] == expected_max_retries
-        else:
-            assert "max_retries" not in call_kwargs_actual
+        for citation in citations:
+            assert citation.get("type") == "citation"
+            assert "id" in citation
+            # Maps citations should have maps.google.com URLs
+            if "url" in citation:
+                assert isinstance(citation["url"], str)
+                assert "maps.google.com" in citation["url"]
+            # Maps citations should have place_id in extras
+            if "extras" in citation:
+                google_ai_metadata = citation["extras"].get("google_ai_metadata", {})
+                # At least one citation should have a place_id
+                if "place_id" in google_ai_metadata:
+                    assert google_ai_metadata["place_id"].startswith("places/")
 
 
 def test_thinking_config_merging_with_generation_config() -> None:
     """Test that `thinking_config` is properly merged when passed in
     `generation_config`."""
-    with patch("langchain_google_genai.chat_models._chat_with_retry") as mock_retry:
-        # Mock response with thinking content followed by regular text
-        mock_response = GenerateContentResponse(
-            {
-                "candidates": [
-                    {
-                        "content": {
-                            "parts": [
-                                Part(text="Let me think about this...", thought=True),
-                                Part(text="There are 2 O's in Google."),
-                            ]
-                        },
-                        "finish_reason": "STOP",
-                    }
-                ],
-                "usage_metadata": {
-                    "prompt_token_count": 20,
-                    "candidates_token_count": 15,
-                    "total_token_count": 35,
-                    "cached_content_token_count": 0,
-                },
-            }
-        )
-        mock_retry.return_value = mock_response
+    # Mock response with thinking content followed by regular text
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(text="Let me think about this...", thought=True),
+                        Part(text="There are 2 O's in Google."),
+                    ]
+                ),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=20,
+            candidates_token_count=15,
+            total_token_count=35,
+            cached_content_token_count=0,
+        ),
+    )
 
-        llm = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=SecretStr(FAKE_API_KEY),
-        )
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.client is not None
 
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
         result = llm.invoke(
             "How many O's are in Google?",
             generation_config={"thinking_config": {"include_thoughts": True}},
         )
 
         # Verify the call was made with merged config
-        mock_retry.assert_called_once()
-        call_args = mock_retry.call_args
-        request = call_args.kwargs["request"]
-        assert hasattr(request, "generation_config")
-        assert hasattr(request.generation_config, "thinking_config")
-        assert request.generation_config.thinking_config.include_thoughts is True
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+        # Extract config from kwargs or positional args
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            # Config might be in positional args as well
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None
+        assert hasattr(config, "thinking_config")
+        assert config.thinking_config.include_thoughts is True
 
         # Verify response structure
         assert isinstance(result, AIMessage)
@@ -1993,7 +1898,7 @@ def test_modalities_override_in_generation_config() -> None:
             content=Content(
                 parts=[
                     Part(
-                        inline_data=glm.Blob(
+                        inline_data=Blob(
                             mime_type="image/jpeg",
                             data=base64.b64decode(
                                 "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
@@ -2003,18 +1908,14 @@ def test_modalities_override_in_generation_config() -> None:
                     Part(text="Meow! Here's a cat image for you."),
                 ]
             ),
-            finish_reason=Candidate.FinishReason.STOP,
+            finish_reason="STOP",
         )
     ]
-    # Create proper usage metadata using dict approach
-    from google.ai.generativelanguage_v1beta.types import UsageMetadata
-
-    mock_response.usage_metadata = UsageMetadata(
-        {
-            "prompt_token_count": 10,
-            "response_token_count": 5,
-            "total_token_count": 15,
-        }
+    # Create proper usage metadata
+    mock_response.usage_metadata = GenerateContentResponseUsageMetadata(
+        prompt_token_count=10,
+        candidates_token_count=5,
+        total_token_count=15,
     )
 
     llm = ChatGoogleGenerativeAI(
@@ -2102,40 +2003,41 @@ def test_chat_google_genai_image_content_blocks() -> None:
     """Test generating an image with mocked response and `content_blocks`
     translation."""
     mock_response = GenerateContentResponse(
-        {
-            "candidates": [
-                {
-                    "content": {
-                        "parts": [
-                            {"text": "Meow!"},
-                            {
-                                "inline_data": {
-                                    "mime_type": "image/png",
-                                    "data": base64.b64decode(
-                                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf"
-                                        "FcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-                                    ),
-                                }
-                            },
-                        ]
-                    },
-                    "finish_reason": "STOP",
-                }
-            ],
-            "usage_metadata": {
-                "prompt_token_count": 10,
-                "candidates_token_count": 5,
-                "total_token_count": 15,
-            },
-        }
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(text="Meow!"),
+                        Part(
+                            inline_data=Blob(
+                                mime_type="image/png",
+                                data=base64.b64decode(
+                                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf"
+                                    "FcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+                                ),
+                            )
+                        ),
+                    ]
+                ),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
     )
 
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
+    assert llm.client is not None
 
-    with patch.object(llm.client, "generate_content", return_value=mock_response):
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ):
         result = llm.invoke(
             "Say 'meow!' and then Generate an image of a cat.",
             generation_config={
@@ -2217,20 +2119,18 @@ def test_content_blocks_translation_with_mixed_image_content() -> None:
 def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     """Test generating audio with mocked response and `content_blocks` translation."""
     mock_response = GenerateContentResponse(
-        {
-            "candidates": [
-                {
-                    # Empty content when audio is in additional_kwargs
-                    "content": {"parts": []},
-                    "finish_reason": "STOP",
-                }
-            ],
-            "usage_metadata": {
-                "prompt_token_count": 10,
-                "candidates_token_count": 5,
-                "total_token_count": 15,
-            },
-        }
+        candidates=[
+            Candidate(
+                # Empty content when audio is in additional_kwargs
+                content=Content(parts=[]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
     )
 
     wav_bytes = (  # (minimal WAV header)
@@ -2243,8 +2143,11 @@ def test_chat_google_genai_invoke_with_audio_mocked() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         response_modalities=[Modality.AUDIO],
     )
+    assert llm.client is not None
 
-    with patch.object(llm.client, "generate_content", return_value=mock_response):
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ):
         with patch(
             "langchain_google_genai.chat_models._parse_response_candidate"
         ) as mock_parse:
@@ -2279,6 +2182,78 @@ def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     assert audio_block["type"] == "audio"
     assert "base64" in audio_block
     assert audio_block["base64"] == base64.b64encode(wav_bytes).decode()
+
+
+def test_auto_audio_modality_for_tts_models() -> None:
+    """Test that TTS models automatically set output modality to AUDIO."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-preview-tts",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        # Note: NOT setting response_modalities explicitly
+    )
+    assert llm.client is not None
+
+    # Mock the generate_content method to capture the config
+    with patch.object(llm.client.models, "generate_content") as mock_generate:
+        mock_response = GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part.from_text(text="test")]),
+                    finish_reason="STOP",
+                )
+            ],
+            usage_metadata=GenerateContentResponseUsageMetadata(
+                prompt_token_count=10,
+                candidates_token_count=5,
+                total_token_count=15,
+            ),
+        )
+        mock_generate.return_value = mock_response
+
+        llm.invoke("test message")
+
+        # Verify that generate_content was called with AUDIO in response_modalities
+        assert mock_generate.called
+        call_kwargs = mock_generate.call_args.kwargs
+        config = call_kwargs.get("config")
+        assert config is not None
+        assert config.response_modalities == ["AUDIO"]
+
+
+def test_explicit_modality_overrides_tts_default() -> None:
+    """Test that explicitly setting `response_modalities` overrides TTS auto-config."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-preview-tts",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        response_modalities=[Modality.TEXT],  # Explicitly set to TEXT
+    )
+    assert llm.client is not None
+
+    # Mock the generate_content method to capture the config
+    with patch.object(llm.client.models, "generate_content") as mock_generate:
+        mock_response = GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part.from_text(text="test")]),
+                    finish_reason="STOP",
+                )
+            ],
+            usage_metadata=GenerateContentResponseUsageMetadata(
+                prompt_token_count=10,
+                candidates_token_count=5,
+                total_token_count=15,
+            ),
+        )
+        mock_generate.return_value = mock_response
+
+        llm.invoke("test message")
+
+        # Verify that generate_content was called with TEXT (not AUDIO)
+        assert mock_generate.called
+        call_kwargs = mock_generate.call_args.kwargs
+        config = call_kwargs.get("config")
+        assert config is not None
+        assert config.response_modalities == ["TEXT"]
 
 
 def test_compat() -> None:
@@ -2480,16 +2455,17 @@ def test_signature_round_trip_conversion() -> None:
         ]
     )
 
-    with patch("langchain_google_genai.chat_models._chat_with_retry") as mock_chat:
-        mock_chat.return_value = mock_response
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        output_version="v1",
+        include_thoughts=True,
+    )
+    assert llm.client is not None
 
-        llm = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=SecretStr(FAKE_API_KEY),
-            output_version="v1",
-            include_thoughts=True,
-        )
-
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ):
         # First call - get response with signatures
         result = llm.invoke("Test message")
 
@@ -2526,14 +2502,17 @@ def test_signature_round_trip_conversion() -> None:
                 HumanMessage(content="Follow up"),
             ]
 
-            # This should trigger signature conversion
-            mock_chat.return_value = GenerateContentResponse(
+            # Set up mock for the follow-up response
+            follow_up_response = GenerateContentResponse(
                 candidates=[
                     Candidate(content=Content(parts=[Part(text="Follow up response")]))
                 ]
             )
 
-            follow_up = llm.invoke(conversation)
+            with patch.object(
+                llm.client.models, "generate_content", return_value=follow_up_response
+            ):
+                follow_up = llm.invoke(conversation)
 
             # Verify conversion was called
             assert mock_convert.call_count >= 1
@@ -2611,15 +2590,19 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
     # Check the result
     model_content = formatted_messages[0]
     assert model_content.role == "model"
-    assert len(model_content.parts) == 1
-    part = model_content.parts[0]
+    assert model_content.parts is not None
+    assert len(model_content.parts) == 2
 
-    # Check if function_call is present
-    assert part.function_call is not None
-    assert part.function_call.name == "my_tool"
+    # First part should be the thinking text (thinking blocks come first)
+    thinking_part = model_content.parts[0]
+    assert thinking_part.thought is True
+    assert thinking_part.text == "I should use the tool."
 
-    # Check if thought_signature is correctly attached
-    assert part.thought_signature == sig_bytes
+    # Second part should be the function call with signature
+    function_part = model_content.parts[1]
+    assert function_part.function_call is not None
+    assert function_part.function_call.name == "my_tool"
+    assert function_part.thought_signature == sig_bytes
 
 
 def test_system_message_only_raises_error() -> None:
@@ -2632,45 +2615,629 @@ def test_system_message_only_raises_error() -> None:
     # Should raise ValueError when only SystemMessage is provided
     with pytest.raises(
         ValueError,
-        match=r"No content messages found. The Gemini API requires at least one",
+        match=r"contents are required\.",
     ):
         llm.invoke([SystemMessage(content="You are a helpful assistant")])
 
 
-def test_system_message_with_additional_message_works() -> None:
-    """Test that `SystemMessage` works when combined with other messages."""
-    mock_response = GenerateContentResponse(
+def test_convert_to_parts_text_only() -> None:
+    """Test `_convert_to_parts` with text content."""
+    # Test single string
+    result = _convert_to_parts("Hello, world!")
+    assert len(result) == 1
+    assert result[0].text == "Hello, world!"
+    assert result[0].inline_data is None
+    # Test list of strings
+    result = _convert_to_parts(["Hello", "world", "!"])
+    assert len(result) == 3
+    assert result[0].text == "Hello"
+    assert result[1].text == "world"
+    assert result[2].text == "!"
+
+
+def test_convert_to_parts_text_content_block() -> None:
+    """Test `_convert_to_parts` with text content blocks."""
+    content = [{"type": "text", "text": "Hello, world!"}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].text == "Hello, world!"
+
+
+def test_convert_to_parts_image_url() -> None:
+    """Test `_convert_to_parts` with `image_url` content blocks."""
+    content = [{"type": "image_url", "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE}}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "image/png"
+
+
+def test_convert_to_parts_image_url_string() -> None:
+    """Test `_convert_to_parts` with `image_url` as string."""
+    content = [{"type": "image_url", "image_url": SMALL_VIEWABLE_BASE64_IMAGE}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "image/png"
+
+
+def test_convert_to_parts_file_data_url() -> None:
+    """Test `_convert_to_parts` with file data URL."""
+    content = [
         {
-            "candidates": [
-                {
-                    "content": {"parts": [{"text": "Hello! I'm ready to help."}]},
-                    "finish_reason": "STOP",
-                }
-            ],
-            "usage_metadata": {
-                "prompt_token_count": 10,
-                "candidates_token_count": 5,
-                "total_token_count": 15,
-            },
+            "type": "file",
+            "source_type": "url",
+            "url": "https://example.com/image.jpg",
+            "mime_type": "image/jpeg",
         }
+    ]
+    with patch("langchain_google_genai.chat_models.ImageBytesLoader") as mock_loader:
+        mock_loader_instance = Mock()
+        mock_loader_instance._bytes_from_url.return_value = b"fake_image_data"
+        mock_loader.return_value = mock_loader_instance
+        result = _convert_to_parts(content)
+        assert len(result) == 1
+        assert result[0].inline_data is not None
+        assert result[0].inline_data.mime_type == "image/jpeg"
+        assert result[0].inline_data.data == b"fake_image_data"
+
+
+def test_convert_to_parts_file_data_base64() -> None:
+    """Test `_convert_to_parts` with file data base64."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "base64",
+            "data": "SGVsbG8gV29ybGQ=",  # "Hello World" in base64
+            "mime_type": "text/plain",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "text/plain"
+    assert result[0].inline_data.data == b"Hello World"
+
+
+def test_convert_to_parts_file_data_auto_mime_type() -> None:
+    """Test `_convert_to_parts` with auto-detected mime type."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "base64",
+            "data": "SGVsbG8gV29ybGQ=",
+            # No mime_type specified, should be auto-detected
+        }
+    ]
+    with patch("langchain_google_genai.chat_models.mimetypes.guess_type") as mock_guess:
+        mock_guess.return_value = ("text/plain", None)
+        result = _convert_to_parts(content)
+        assert len(result) == 1
+        assert result[0].inline_data is not None
+        assert result[0].inline_data.mime_type == "text/plain"
+
+
+def test_convert_to_parts_file_with_file_id() -> None:
+    """Test `_convert_to_parts` with `FileContentBlock` containing `file_id`."""
+    content = [
+        {
+            "type": "file",
+            "file_id": "files/abc123xyz",
+            "mime_type": "application/pdf",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == "files/abc123xyz"
+    assert result[0].file_data.mime_type == "application/pdf"
+
+
+def test_convert_to_parts_file_with_file_id_default_mime_type() -> None:
+    """Test `_convert_to_parts` with `file_id` but no `mime_type` specified."""
+    content = [
+        {
+            "type": "file",
+            "file_id": "files/xyz789",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == "files/xyz789"
+    assert result[0].file_data.mime_type == "application/octet-stream"
+
+
+def test_convert_to_parts_media_with_data() -> None:
+    """Test `_convert_to_parts` with media type containing data."""
+    content = [{"type": "media", "mime_type": "video/mp4", "data": b"fake_video_data"}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "video/mp4"
+    assert result[0].inline_data.data == b"fake_video_data"
+
+
+def test_convert_to_parts_media_with_file_uri() -> None:
+    """Test `_convert_to_parts` with media type containing file_uri."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "application/pdf",
+            "file_uri": "gs://bucket/file.pdf",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.mime_type == "application/pdf"
+    assert result[0].file_data.file_uri == "gs://bucket/file.pdf"
+
+
+def test_convert_to_parts_media_with_video_metadata() -> None:
+    """Test `_convert_to_parts` with media type containing video metadata."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+            "video_metadata": {"start_offset": "10s", "end_offset": "20s"},
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].video_metadata is not None
+    assert result[0].video_metadata.start_offset == "10s"
+    assert result[0].video_metadata.end_offset == "20s"
+
+
+def test_convert_to_parts_executable_code() -> None:
+    """Test `_convert_to_parts` with executable code."""
+    content = [
+        {
+            "type": "executable_code",
+            "language": "python",
+            "executable_code": "print('Hello, World!')",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].executable_code is not None
+    assert result[0].executable_code.language == Language.PYTHON
+    assert result[0].executable_code.code == "print('Hello, World!')"
+
+
+def test_convert_to_parts_code_execution_result() -> None:
+    """Test `_convert_to_parts` with code execution result."""
+    content = [
+        {
+            "type": "code_execution_result",
+            "code_execution_result": "Hello, World!",
+            "outcome": CodeExecutionResultOutcome.OUTCOME_OK,
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].code_execution_result is not None
+    assert result[0].code_execution_result.output == "Hello, World!"
+    assert (
+        result[0].code_execution_result.outcome == CodeExecutionResultOutcome.OUTCOME_OK
     )
 
-    llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME,
-        google_api_key=SecretStr(FAKE_API_KEY),
+
+def test_convert_to_parts_code_execution_result_backward_compatibility() -> None:
+    """Test `_convert_to_parts` with code execution result without outcome (compat)."""
+    content = [
+        {
+            "type": "code_execution_result",
+            "code_execution_result": "Hello, World!",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].code_execution_result is not None
+    assert result[0].code_execution_result.output == "Hello, World!"
+    assert (
+        result[0].code_execution_result.outcome == CodeExecutionResultOutcome.OUTCOME_OK
     )
 
-    with patch.object(llm.client, "generate_content", return_value=mock_response):
-        # SystemMessage + HumanMessage should work fine
-        result = llm.invoke(
-            [
-                SystemMessage(content="You are a helpful assistant"),
-                HumanMessage(content="Hello"),
-            ]
-        )
 
-    assert isinstance(result, AIMessage)
-    assert result.content == "Hello! I'm ready to help."
+def test_convert_to_parts_thinking() -> None:
+    """Test `_convert_to_parts` with thinking content."""
+    content = [{"type": "thinking", "thinking": "I need to think about this..."}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].text == "I need to think about this..."
+    assert result[0].thought is True
+
+
+def test_convert_to_parts_mixed_content() -> None:
+    """Test `_convert_to_parts` with mixed content types."""
+    content: list[dict[str, Any]] = [
+        {"type": "text", "text": "Hello"},
+        {"type": "text", "text": "World"},
+        {"type": "image_url", "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE}},
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 3
+    assert result[0].text == "Hello"
+    assert result[1].text == "World"
+    assert result[2].inline_data is not None
+
+
+def test_convert_to_parts_invalid_type() -> None:
+    """Test `_convert_to_parts` with invalid source_type."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "invalid",
+            "data": "some_data",
+        }
+    ]
+    with pytest.raises(ValueError, match="Unrecognized message part type: file"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_invalid_source_type() -> None:
+    """Test `_convert_to_parts` with invalid source_type."""
+    content = [
+        {
+            "type": "media",
+            "source_type": "invalid",
+            "data": "some_data",
+            "mime_type": "text/plain",
+        }
+    ]
+    with pytest.raises(ValueError, match="Data should be valid base64"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_invalid_image_url_format() -> None:
+    """Test `_convert_to_parts` with invalid `image_url` format."""
+    content = [{"type": "image_url", "image_url": {"invalid_key": "value"}}]
+    with pytest.raises(ValueError, match="Unrecognized message image format"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_missing_mime_type_in_media() -> None:
+    """Test `_convert_to_parts` with missing `mime_type` in media."""
+    content = [
+        {
+            "type": "media",
+            "file_uri": "gs://bucket/file.pdf",
+            # Missing mime_type
+        }
+    ]
+    with pytest.raises(ValueError, match="Missing mime_type in media part"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_media_missing_data_and_file_uri() -> None:
+    """Test `_convert_to_parts` with media missing both data and `file_uri`."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "application/pdf",
+            # Missing both data and file_uri
+        }
+    ]
+    with pytest.raises(
+        ValueError, match="Media part must have either data or file_uri"
+    ):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_missing_executable_code_keys() -> None:
+    """Test `_convert_to_parts` with missing keys in `executable_code`."""
+    content = [
+        {
+            "type": "executable_code",
+            "language": "python",
+            # Missing executable_code key
+        }
+    ]
+    with pytest.raises(
+        ValueError, match="Executable code part must have 'code' and 'language'"
+    ):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_missing_code_execution_result_key() -> None:
+    """Test `_convert_to_parts` with missing `code_execution_result` key."""
+    content = [
+        {
+            "type": "code_execution_result"
+            # Missing code_execution_result key
+        }
+    ]
+    with pytest.raises(
+        ValueError, match="Code execution result part must have 'code_execution_result'"
+    ):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_unrecognized_type() -> None:
+    """Test `_convert_to_parts` with unrecognized type."""
+    content = [{"type": "unrecognized_type", "data": "some_data"}]
+    with pytest.raises(ValueError, match="Unrecognized message part type"):
+        _convert_to_parts(content)
+
+
+def test_convert_to_parts_non_dict_mapping() -> None:
+    """Test `_convert_to_parts` with non-dict mapping."""
+    content = [123]  # Not a string or dict
+    with pytest.raises(
+        ChatGoogleGenerativeAIError,
+        match="Unknown error occurred while converting LC message content to parts",
+    ):
+        _convert_to_parts(content)  # type: ignore[arg-type]
+
+
+def test_convert_to_parts_unrecognized_format_warning() -> None:
+    """Test `_convert_to_parts` with unrecognized format triggers warning."""
+    content = [{"some_key": "some_value"}]  # Not a recognized format
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        result = _convert_to_parts(content)
+        mock_warning.assert_called_once()
+        assert "Unrecognized message part format" in mock_warning.call_args[0][0]
+        assert len(result) == 1
+        assert result[0].text == "{'some_key': 'some_value'}"
+
+
+def test_convert_tool_message_to_parts_string_content() -> None:
+    """Test `_convert_tool_message_to_parts` with string content."""
+    message = ToolMessage(name="test_tool", content="test_result", tool_call_id="123")
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {"output": "test_result"}
+
+
+def test_convert_tool_message_to_parts_json_content() -> None:
+    """Test `_convert_tool_message_to_parts` with JSON string content."""
+    message = ToolMessage(
+        name="test_tool",
+        content='{"result": "success", "data": [1, 2, 3]}',
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {
+        "result": "success",
+        "data": [1, 2, 3],
+    }
+
+
+def test_convert_tool_message_to_parts_dict_content() -> None:
+    """Test `_convert_tool_message_to_parts` with `dict` content."""
+    message = ToolMessage(  # type: ignore[call-overload]
+        name="test_tool",
+        content={"result": "success", "data": [1, 2, 3]},
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {
+        "output": str({"result": "success", "data": [1, 2, 3]})
+    }
+
+
+def test_convert_tool_message_to_parts_list_content_with_media() -> None:
+    """Test `_convert_tool_message_to_parts` with `list` content containing media."""
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            "Text response",
+            {"type": "image_url", "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE}},
+        ],
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 2
+    # First part should be the media (image)
+    assert result[0].inline_data is not None
+    # Second part should be the function response
+    assert result[1].function_response is not None
+    assert result[1].function_response.name == "test_tool"
+    assert result[1].function_response.response == {"output": ["Text response"]}
+
+
+def test_convert_tool_message_to_parts_with_name_parameter() -> None:
+    """Test `_convert_tool_message_to_parts` with explicit name parameter."""
+    message = ToolMessage(
+        content="test_result",
+        tool_call_id="123",
+        # No name in message
+    )
+    result = _convert_tool_message_to_parts(message, name="explicit_tool_name")
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "explicit_tool_name"
+
+
+def test_convert_tool_message_to_parts_legacy_name_in_kwargs() -> None:
+    """Test `_convert_tool_message_to_parts` with legacy name in `additional_kwargs`."""
+    message = ToolMessage(
+        content="test_result",
+        tool_call_id="123",
+        additional_kwargs={"name": "legacy_tool_name"},
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "legacy_tool_name"
+
+
+def test_convert_tool_message_to_parts_function_message() -> None:
+    """Test `_convert_tool_message_to_parts` with `FunctionMessage`."""
+    message = FunctionMessage(name="test_function", content="function_result")
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_function"
+    assert result[0].function_response.response == {"output": "function_result"}
+
+
+def test_convert_tool_message_to_parts_invalid_json_fallback() -> None:
+    """Test `_convert_tool_message_to_parts` with invalid JSON falls back to string."""
+    message = ToolMessage(
+        name="test_tool",
+        content='{"invalid": json}',  # Invalid JSON
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.response == {"output": '{"invalid": json}'}
+
+
+def test_get_ai_message_tool_messages_parts_basic() -> None:
+    """Test `_get_ai_message_tool_messages_parts` with basic tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {"id": "call_2", "name": "tool_2", "args": {"arg2": "value2"}},
+        ],
+    )
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1"),
+        ToolMessage(name="tool_2", content="result_2", tool_call_id="call_2"),
+    ]
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 2
+    # Check first tool response
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "tool_1"
+    assert result[0].function_response.response == {"output": "result_1"}
+    # Check second tool response
+    assert result[1].function_response is not None
+    assert result[1].function_response.name == "tool_2"
+    assert result[1].function_response.response == {"output": "result_2"}
+
+
+def test_get_ai_message_tool_messages_parts_partial_matches() -> None:
+    """Test `_get_ai_message_tool_messages_parts` with partial tool message matches."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {"id": "call_2", "name": "tool_2", "args": {"arg2": "value2"}},
+        ],
+    )
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1"),
+        # Missing tool_2 response
+    ]
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 1
+    # Only tool_1 response should be included
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "tool_1"
+    assert result[0].function_response.response == {"output": "result_1"}
+
+
+def test_get_ai_message_tool_messages_parts_no_matches() -> None:
+    """Test `_get_ai_message_tool_messages_parts` with no matching tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[{"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}}],
+    )
+    tool_messages = [
+        ToolMessage(name="tool_2", content="result_2", tool_call_id="call_2"),
+        ToolMessage(name="tool_3", content="result_3", tool_call_id="call_3"),
+    ]
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 0
+
+
+def test_get_ai_message_tool_messages_parts_empty_tool_calls() -> None:
+    """Test `_get_ai_message_tool_messages_parts` with empty tool calls."""
+    ai_message = AIMessage(content="No tool calls")
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1")
+    ]
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 0
+
+
+def test_get_ai_message_tool_messages_parts_empty_tool_messages() -> None:
+    """Test `_get_ai_message_tool_messages_parts` with empty tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[{"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}}],
+    )
+    result = _get_ai_message_tool_messages_parts([], ai_message)
+    assert len(result) == 0
+
+
+def test_get_ai_message_tool_messages_parts_duplicate_tool_calls() -> None:
+    """Test `_get_ai_message_tool_messages_parts` handles duplicate tool call IDs."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {
+                "id": "call_1",
+                "name": "tool_1",
+                "args": {"arg1": "value1"},
+            },  # Duplicate ID
+        ],
+    )
+    tool_messages = [
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1")
+    ]
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 1  # Should only process the first match
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "tool_1"
+
+
+def test_get_ai_message_tool_messages_parts_order_preserved() -> None:
+    """Test `_get_ai_message_tool_messages_parts` preserves order of tool messages."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_1", "args": {"arg1": "value1"}},
+            {"id": "call_2", "name": "tool_2", "args": {"arg2": "value2"}},
+        ],
+    )
+    tool_messages = [
+        ToolMessage(name="tool_2", content="result_2", tool_call_id="call_2"),
+        ToolMessage(name="tool_1", content="result_1", tool_call_id="call_1"),
+    ]
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 2
+    # Order should be preserved based on tool_messages order, not tool_calls order
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "tool_2"
+    assert result[1].function_response is not None
+    assert result[1].function_response.name == "tool_1"
+
+
+def test_get_ai_message_tool_messages_parts_with_name_from_tool_call() -> None:
+    """Test `_get_ai_message_tool_messages_parts` uses name from tool call"""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_from_call", "args": {"arg1": "value1"}}
+        ],
+    )
+    tool_messages = [
+        ToolMessage(content="result_1", tool_call_id="call_1")  # No name in message
+    ]
+    result = _get_ai_message_tool_messages_parts(tool_messages, ai_message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert (
+        result[0].function_response.name == "tool_from_call"
+    )  # Should use name from tool call
 
 
 def test_with_structured_output_json_schema_alias() -> None:
@@ -2940,7 +3507,9 @@ def test_response_schema_mime_type_validation() -> None:
     schema = {"type": "object", "properties": {"field": {"type": "string"}}}
 
     # Test response_schema validation - error happens during _prepare_params
-    with pytest.raises(ValueError, match=r"response_schema.*is only supported when"):
+    with pytest.raises(
+        ValueError, match=r"JSON schema structured output is only supported when"
+    ):
         llm._prepare_params(
             stop=None, response_schema=schema, response_mime_type="text/plain"
         )
@@ -2955,6 +3524,233 @@ def test_response_schema_mime_type_validation() -> None:
         response_json_schema=schema, response_mime_type="application/json"
     )
     assert llm_with_json_schema is not None
+
+
+def test_thinking_budget_preserved_with_structured_output() -> None:
+    """Test that `thinking_budget` is preserved when using `with_structured_output`."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text='{"name": "test", "value": 42}')]),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=0,
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+
+        call_args = mock_client_method.call_args
+        config = call_args.kwargs.get("config")
+
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        assert config.thinking_config.thinking_budget == 0, (
+            f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        )
+
+
+def test_thinking_level_preserved_with_structured_output() -> None:
+    """Test that `thinking_level` is preserved when using `with_structured_output`."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text='{"name": "test", "value": 42}')]),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        # Verify thinking_level is in the config
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        assert config.thinking_config.thinking_level == ThinkingLevel.LOW, (
+            f"thinking_level should be LOW, got {config.thinking_config.thinking_level}"
+        )
+
+
+def test_include_thoughts_preserved_with_structured_output() -> None:
+    """Test that `include_thoughts` is preserved when using `with_structured_output`."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(text="Let me think...", thought=True),
+                        Part(text='{"name": "test", "value": 42}'),
+                    ]
+                ),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        include_thoughts=True,
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        msg = (
+            f"include_thoughts should be True, "
+            f"got {config.thinking_config.include_thoughts}"
+        )
+        assert config.thinking_config.include_thoughts is True, msg
+
+
+def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
+    """Test that both `thinking_budget` and `include_thoughts` are preserved."""
+
+    class TestSchema(BaseModel):
+        name: str
+        value: int
+
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text='{"name": "test", "value": 42}')]),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=0,
+        include_thoughts=False,
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(TestSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        structured_llm.invoke("test input")
+
+        mock_client_method.assert_called_once()
+        call_args = mock_client_method.call_args
+
+        config = call_args.kwargs.get("config")
+        if config is None and len(call_args.args) > 0:
+            for arg in call_args.args:
+                if hasattr(arg, "thinking_config"):
+                    config = arg
+                    break
+
+        assert config is not None, "Config should be present in API call"
+        assert hasattr(config, "thinking_config"), "thinking_config should be present"
+        assert config.thinking_config is not None, "thinking_config should not be None"
+        assert config.thinking_config.thinking_budget == 0, (
+            f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        )
+        msg = (
+            f"include_thoughts should be False, "
+            f"got {config.thinking_config.include_thoughts}"
+        )
+        assert config.thinking_config.include_thoughts is False, msg
 
 
 def test_is_new_gemini_model() -> None:
@@ -3006,7 +3802,6 @@ def test_per_part_media_resolution_warning_gemini_25() -> None:
         assert expected_msg in str(w[0].message)
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_per_part_media_resolution_no_warning_new_models() -> None:
     """Test that per-part `media_resolution` does not warn for new models."""
     content_with_media_resolution = [
@@ -3070,7 +3865,6 @@ def test_per_part_media_resolution_warning_gemini_25_data_block() -> None:
         )
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_thinking_level_parameter() -> None:
     """Test that `thinking_level` is properly handled."""
     # Test with thinking_level only
@@ -3081,8 +3875,9 @@ def test_thinking_level_parameter() -> None:
     )
     config = llm._prepare_params(stop=None)
     assert config.thinking_config is not None
-    assert config.thinking_config.thinking_level == "low"
-    assert not hasattr(config.thinking_config, "thinking_budget")
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    # Pydantic models define all fields; check value is None rather than hasattr
+    assert config.thinking_config.thinking_budget is None
 
     # Test with thinking_level="high"
     llm = ChatGoogleGenerativeAI(
@@ -3092,10 +3887,9 @@ def test_thinking_level_parameter() -> None:
     )
     config = llm._prepare_params(stop=None)
     assert config.thinking_config is not None
-    assert config.thinking_config.thinking_level == "high"
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
     """Test that `thinking_level` takes precedence when both are provided."""
     with warnings.catch_warnings(record=True) as warning_list:
@@ -3116,8 +3910,9 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
 
         # Check that thinking_level is used and thinking_budget is ignored
         assert config.thinking_config is not None
-        assert config.thinking_config.thinking_level == "low"
-        assert not hasattr(config.thinking_config, "thinking_budget")
+        assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+        # Pydantic models define all fields; check value is None rather than hasattr
+        assert config.thinking_config.thinking_budget is None
 
 
 def test_thinking_budget_alone_still_works() -> None:
@@ -3130,7 +3925,8 @@ def test_thinking_budget_alone_still_works() -> None:
     config = llm._prepare_params(stop=None)
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_budget == 64
-    assert not hasattr(config.thinking_config, "thinking_level")
+    # Pydantic models define all fields; check value is None rather than hasattr
+    assert config.thinking_config.thinking_level is None
 
 
 def test_kwargs_override_max_output_tokens() -> None:
@@ -3158,7 +3954,6 @@ def test_kwargs_override_thinking_budget() -> None:
     assert config.thinking_config.thinking_budget == 128
 
 
-@pytest.mark.xfail(reason="Needs support in SDK.")
 def test_kwargs_override_thinking_level() -> None:
     """Test that thinking_level can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
@@ -3169,4 +3964,704 @@ def test_kwargs_override_thinking_level() -> None:
 
     config = llm._prepare_params(stop=None, thinking_level="high")
     assert config.thinking_config is not None
-    assert config.thinking_config.thinking_level == "high"
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_client_error_raises_descriptive_error() -> None:
+    """Test `ClientError` from the API is properly converted to a descriptive error."""
+    invalid_model_name = "gemini-invalid-model-name"
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    # Simulate a NOT_FOUND error from the API (what happens with invalid model names)
+    mock_generate_content.side_effect = ClientError(
+        code=404,
+        response_json={
+            "error": {
+                "message": f"models/{invalid_model_name} is not found",
+                "status": "NOT_FOUND",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=invalid_model_name,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ChatGoogleGenerativeAIError,
+            match=rf"Error calling model '{invalid_model_name}' \(NOT_FOUND\)",
+        ):
+            chat.invoke("test")
+
+
+def test_kwargs_override_response_modalities() -> None:
+    """Test that `response_modalities` can be overridden via kwargs."""
+    from langchain_core.messages import HumanMessage
+
+    from langchain_google_genai import Modality
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    # Test passing response_modalities as kwarg to _prepare_request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request(
+        [msg],
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+
+    # Verify response_modalities is set correctly in the config
+    assert request["config"].response_modalities == ["TEXT", "IMAGE"]
+
+
+def test_response_modalities_set_on_instance() -> None:
+    """Test that `response_modalities` can be set on the instance."""
+    from langchain_core.messages import HumanMessage
+
+    from langchain_google_genai import Modality
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        response_modalities=[Modality.TEXT],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+
+    assert request["config"].response_modalities == ["TEXT"]
+
+
+def test_kwargs_response_modalities_overrides_instance() -> None:
+    """Test that kwarg `response_modalities` overrides instance value."""
+    from langchain_core.messages import HumanMessage
+
+    from langchain_google_genai import Modality
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        response_modalities=[Modality.TEXT],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request(
+        [msg],
+        response_modalities=[Modality.TEXT, Modality.IMAGE],
+    )
+
+    # Kwarg should override instance value
+    assert request["config"].response_modalities == ["TEXT", "IMAGE"]
+
+
+# Test for protobuf integer/float conversion fix in chat models.
+
+
+def test_parse_response_candidate_corrects_integer_like_floats() -> None:
+    """Test that `_parse_response_candidate` correctly handles integer-like floats.
+
+    Handling in tool call arguments from the Gemini API response.
+
+    This test addresses a bug where `proto.Message.to_dict()` converts integers
+    to floats, causing downstream type casting errors.
+    """
+    # Create a mock Protobuf Struct for the arguments with problematic float values
+    args_struct = Struct()
+    args_struct.update(
+        {
+            "entity_type": "table",
+            "upstream_depth": 3.0,  # The problematic float value that should be int
+            "downstream_depth": 5.0,  # Another problematic float value
+            "fqn": "test.table.name",
+            "valid_float": 3.14,  # This should remain as float
+            "string_param": "test_string",  # This should remain as string
+            "bool_param": True,  # This should remain as boolean
+        }
+    )
+
+    # Create the mock API response candidate
+    candidate = Candidate(
+        content=Content(
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="get_entity_lineage",
+                        args=args_struct,
+                    )
+                )
+            ]
+        )
+    )
+
+    # Call the function we are testing
+    result_message = _parse_response_candidate(candidate)
+
+    # Assert that the parsed tool_calls have the correct integer types
+    assert len(result_message.tool_calls) == 1
+    tool_call = result_message.tool_calls[0]
+    assert tool_call["name"] == "get_entity_lineage"
+    assert tool_call["args"]["upstream_depth"] == 3
+    assert tool_call["args"]["downstream_depth"] == 5
+    assert isinstance(tool_call["args"]["upstream_depth"], int)
+    assert isinstance(tool_call["args"]["downstream_depth"], int)
+
+    # Assert that non-integer values are preserved correctly
+    assert tool_call["args"]["valid_float"] == 3.14
+    assert isinstance(tool_call["args"]["valid_float"], float)
+    assert tool_call["args"]["string_param"] == "test_string"
+    assert isinstance(tool_call["args"]["string_param"], str)
+    assert tool_call["args"]["bool_param"] is True
+    assert isinstance(tool_call["args"]["bool_param"], bool)
+
+    # Assert that the additional_kwargs also contains corrected JSON
+    function_call_args = json.loads(
+        result_message.additional_kwargs["function_call"]["arguments"]
+    )
+    assert function_call_args["upstream_depth"] == 3
+    assert function_call_args["downstream_depth"] == 5
+    assert isinstance(function_call_args["upstream_depth"], int)
+    assert isinstance(function_call_args["downstream_depth"], int)
+
+    # Assert that non-integer values are preserved in additional_kwargs too
+    assert function_call_args["valid_float"] == 3.14
+    assert isinstance(function_call_args["valid_float"], float)
+
+
+def test_parse_response_candidate_handles_no_function_call() -> None:
+    """Test that the function works correctly when there's no function call."""
+    candidate = Candidate(
+        content=Content(
+            parts=[Part(text="This is a regular text response without function calls")]
+        )
+    )
+
+    result_message = _parse_response_candidate(candidate)
+
+    assert (
+        result_message.content
+        == "This is a regular text response without function calls"
+    )
+    assert len(result_message.tool_calls) == 0
+    assert "function_call" not in result_message.additional_kwargs
+
+
+def test_parse_response_candidate_handles_empty_args() -> None:
+    """Test that the function works correctly with empty function call arguments."""
+    args_struct = Struct()
+    # Empty struct - no arguments
+
+    candidate = Candidate(
+        content=Content(
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="no_args_function",
+                        args=args_struct,
+                    )
+                )
+            ]
+        )
+    )
+
+    result_message = _parse_response_candidate(candidate)
+
+    assert len(result_message.tool_calls) == 1
+    tool_call = result_message.tool_calls[0]
+    assert tool_call["name"] == "no_args_function"
+    assert tool_call["args"] == {}
+
+    function_call_args = json.loads(
+        result_message.additional_kwargs["function_call"]["arguments"]
+    )
+    assert function_call_args == {}
+
+
+def test_backend_detection_default() -> None:
+    """Test default backend detection (Gemini Developer API)."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+    )
+    assert llm._use_vertexai is False  # type: ignore[attr-defined]
+
+
+def test_backend_detection_explicit_vertexai_true() -> None:
+    """Test explicit `vertexai=True` forces Vertex AI backend."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+    assert llm._use_vertexai is True  # type: ignore[attr-defined]
+
+
+def test_backend_detection_explicit_vertexai_false() -> None:
+    """Test explicit `vertexai=False` forces Gemini Developer API."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=False,
+    )
+    assert llm._use_vertexai is False  # type: ignore[attr-defined]
+
+
+def test_backend_detection_project_auto_detects_vertexai() -> None:
+    """Test that providing project parameter auto-detects Vertex AI."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+    )
+    assert llm._use_vertexai is True  # type: ignore[attr-defined]
+
+
+def test_backend_detection_credentials_auto_detects_vertexai() -> None:
+    """Test that providing credentials parameter auto-detects Vertex AI."""
+    from unittest.mock import Mock
+
+    fake_credentials = Mock()
+    fake_credentials.project_id = "test-project"
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        credentials=fake_credentials,
+        project="test-project",
+    )
+    assert llm._use_vertexai is True  # type: ignore[attr-defined]
+
+
+def test_backend_detection_env_var_vertexai_true() -> None:
+    """Test `GOOGLE_GENAI_USE_VERTEXAI=true` forces Vertex AI."""
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+        )
+        assert llm._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_backend_detection_env_var_vertexai_false() -> None:
+    """Test `GOOGLE_GENAI_USE_VERTEXAI=false` forces Gemini Developer API."""
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            project="test-project",  # Would normally trigger Vertex AI
+        )
+        assert llm._use_vertexai is False  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_backend_detection_env_var_variations() -> None:
+    """Test various values for `GOOGLE_GENAI_USE_VERTEXAI` env var."""
+    original_env = os.environ.copy()
+
+    # Test "1" as true
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "1"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+        )
+        assert llm._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+    # Test "yes" as true
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "yes"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+        )
+        assert llm._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+    # Test "0" as false
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "0"
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            project="test-project",
+        )
+        assert llm._use_vertexai is False  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_backend_detection_priority_explicit_over_env() -> None:
+    """Test that explicit vertexai parameter overrides env var."""
+
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        # Explicit False should override env var True
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            vertexai=False,
+        )
+        assert llm._use_vertexai is False  # type: ignore[attr-defined]
+
+        # Explicit True should also work
+        llm2 = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm2._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_model_name_normalization_for_vertexai() -> None:
+    """Test that model names with `'models/'` prefix are normalized for Vertex AI."""
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "test-project"
+
+        # Test with models/ prefix for Vertex AI - should be stripped
+        llm_vertex = ChatGoogleGenerativeAI(
+            model=f"models/{MODEL_NAME}",
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm_vertex.model == "gemini-2.5-flash"
+        assert llm_vertex._use_vertexai is True  # type: ignore[attr-defined]
+
+        # Test with models/ prefix for Google AI - should remain unchanged
+        llm_google_ai = ChatGoogleGenerativeAI(
+            model=f"models/{MODEL_NAME}",
+            api_key=FAKE_API_KEY,
+            vertexai=False,
+        )
+        assert llm_google_ai.model == "models/gemini-2.5-flash"
+        assert llm_google_ai._use_vertexai is False  # type: ignore[attr-defined]
+
+        # Test without models/ prefix for Vertex AI - should remain unchanged
+        llm_vertex_no_prefix = ChatGoogleGenerativeAI(
+            model=f"models/{MODEL_NAME}",
+            api_key=FAKE_API_KEY,
+            vertexai=True,
+        )
+        assert llm_vertex_no_prefix.model == "gemini-2.5-flash"
+        assert llm_vertex_no_prefix._use_vertexai is True  # type: ignore[attr-defined]
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_max_retries_configuration_for_500_errors() -> None:
+    """Test that `max_retries` is properly configured for handling 500 errors.
+
+    This test verifies `max_retries` parameter is properly passed to the SDK's
+    `HttpRetryOptions`.
+
+    The actual retry logic for transient errors (including 500 INTERNAL errors) is
+    handled by the `google-genai` SDK at the HTTP transport level via
+    `HttpRetryOptions`.
+    """
+
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_retries=5,  # Configure retries for transient errors
+    )
+
+    # Prepare a request to inspect the configuration
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+    request = chat._prepare_request(messages)
+
+    # Verify HttpRetryOptions is configured with correct attempts
+    config = request["config"]
+    assert config.http_options is not None, "HttpOptions should be configured"
+    assert config.http_options.retry_options is not None, (
+        "HttpRetryOptions should be configured"
+    )
+    assert config.http_options.retry_options.attempts == 5, (
+        "Retry attempts should match max_retries"
+    )
+
+
+def test_max_retries_can_be_overridden_per_call() -> None:
+    """Test that `max_retries` can be overridden on a per-call basis.
+
+    Ensures users can adjust retry behavior for specific calls, which is useful
+    for handling different scenarios (e.g., interactive vs batch processing).
+    """
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_retries=3,  # Default
+    )
+
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+
+    # Test with call-level override
+    request = chat._prepare_request(messages, max_retries=10)
+    config = request["config"]
+
+    assert config.http_options is not None
+    assert config.http_options.retry_options is not None
+    assert config.http_options.retry_options.attempts == 10, (
+        "Call-level max_retries should override instance default"
+    )
+
+
+def test_default_max_retries_value() -> None:
+    """Test that `max_retries` has a sensible default value."""
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        # Don't specify max_retries - use default
+    )
+
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+    request = chat._prepare_request(messages)
+    config = request["config"]
+
+    # Verify a reasonable default is set (should be >= 2 for transient errors)
+    assert config.http_options is not None
+    assert config.http_options.retry_options is not None
+    assert config.http_options.retry_options.attempts >= 2, (
+        "Default max_retries should handle transient failures"
+    )
+
+
+def test_client_error_with_500_raises_descriptive_error() -> None:
+    """Test that 500 INTERNAL errors are properly reported when retries are exhausted.
+
+    This ensures that after the SDK exhausts all retry attempts, the error message
+    is clear and informative for debugging.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    # Simulate persistent 500 error (all retries exhausted)
+    mock_generate_content.side_effect = ClientError(
+        code=500,
+        response_json={
+            "error": {
+                "message": (
+                    "Unable to submit request because the service is temporarily "
+                    "unavailable."
+                ),
+                "status": "INTERNAL",
+            }
+        },
+        response=None,
+    )
+
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=1,  # Minimize test time
+        )
+
+        # Should raise descriptive error after retries exhausted
+        with pytest.raises(
+            ChatGoogleGenerativeAIError,
+            match=r"Error calling model .* \(INTERNAL\).*temporarily unavailable",
+        ):
+            chat.invoke("test message")
+
+
+def test_finish_reason_as_integer() -> None:
+    """Test that finish_reason as an integer doesn't crash.
+
+    Reproduces issue #1232 where the API returns finish_reason as a raw integer
+    (e.g., 15 for unknown enum values) instead of an enum object with .name attribute.
+
+    This can happen when the server returns a new/unknown finish reason value that
+    isn't in the local enum definition yet.
+    """
+    # Create a mock candidate where finish_reason is a raw integer
+    mock_candidate = Mock(spec=Candidate)
+    mock_candidate.finish_reason = 15  # Raw integer, not an enum
+    mock_candidate.safety_ratings = []
+    mock_candidate.content = Content(
+        parts=[Part.from_text(text="Test response")],
+        role="model",
+    )
+
+    # Create a mock response with the candidate
+    mock_response = Mock(spec=GenerateContentResponse)
+    mock_response.candidates = [mock_candidate]
+    mock_response.model_version = "gemini-2.5-flash-image"
+    mock_response.usage_metadata = None
+    mock_response.prompt_feedback = None
+
+    # This should not raise an error, and should convert the integer to a string
+    result = _response_to_result(
+        mock_response,
+        stream=False,
+    )
+    assert result.generations[0].generation_info["finish_reason"] == "UNKNOWN_15"  # type: ignore[index]
+
+
+def test_image_config_in_init() -> None:
+    """Test that `image_config` is properly initialized."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "16:9", "image_size": "2K"},
+    )
+    assert llm.image_config == {"aspect_ratio": "16:9", "image_size": "2K"}
+
+
+def test_image_config_in_identifying_params() -> None:
+    """Test that `image_config` is included in identifying parameters."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "16:9", "image_size": "2K"},
+    )
+    params = llm._identifying_params
+    assert "image_config" in params
+    assert params["image_config"] == {"aspect_ratio": "16:9", "image_size": "2K"}
+
+
+def test_image_config_passed_to_generate_content_config() -> None:
+    """Test that `image_config` is properly passed to `GenerateContentConfig`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "16:9", "image_size": "2K"},
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image of a cat")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "16:9"
+    assert config.image_config.image_size == "2K"
+
+
+def test_image_config_none_by_default() -> None:
+    """Test that `image_config` is `None` by default."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.image_config is None
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.image_config is None
+
+
+def test_image_config_override_in_invoke() -> None:
+    """Test that `image_config` can be overridden in `invoke()`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "1:1"},
+    )
+
+    # Override with different config
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(
+        messages, image_config={"aspect_ratio": "16:9", "image_size": "2K"}
+    )
+    config = request["config"]
+
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "16:9"
+    assert config.image_config.image_size == "2K"
+
+
+def test_image_config_override_with_none() -> None:
+    """Test that `image_config` defaults to instance config when `None` is passed."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "1:1"},
+    )
+
+    # Don't pass image_config parameter (defaults to None)
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    # Should use instance-level config
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "1:1"
+
+
+def test_image_config_override_with_empty_dict() -> None:
+    """Test that passing empty `dict` creates empty `ImageConfig`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "1:1"},
+    )
+
+    # Pass empty dict - should create ImageConfig with no fields set
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(messages, image_config={})
+    config = request["config"]
+
+    # Empty dict creates an ImageConfig with all fields None
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio is None
+    assert config.image_config.image_size is None
+
+
+def test_image_config_no_instance_config_with_override() -> None:
+    """Test that `image_config` works when not set at instance level."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    # No instance config, but override in invoke
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(messages, image_config={"aspect_ratio": "16:9"})
+    config = request["config"]
+
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "16:9"

@@ -52,6 +52,8 @@ def test_google_api_key_precedence() -> None:
 def test_get_user_agent_with_telemetry_env_variable(
     mock_environ_get: MagicMock,
 ) -> None:
+    """Test `get_user_agent` includes telemetry suffix when env variable is set."""
+
     mock_environ_get.return_value = True
     client_lib_version, user_agent_str = get_user_agent(module="test-module")
     assert client_lib_version == "1.2.3-test-module+remote_reasoning_engine"
@@ -65,21 +67,11 @@ def test_get_user_agent_with_telemetry_env_variable(
 def test_get_user_agent_without_telemetry_env_variable(
     mock_environ_get: MagicMock,
 ) -> None:
+    """Test `get_user_agent` without telemetry suffix when env variable is not set."""
     mock_environ_get.return_value = False
     client_lib_version, user_agent_str = get_user_agent(module="test-module")
     assert client_lib_version == "1.2.3-test-module"
     assert user_agent_str == "langchain-google-genai/1.2.3-test-module"
-
-
-def test_version_is_cached_at_module_level() -> None:
-    """Test that version is cached at module level and doesn't call
-    `metadata.version`."""
-    from langchain_google_genai import _common
-
-    # The cached version should be a string
-    assert isinstance(_common.LC_GOOGLE_GENAI_VERSION, str)
-    # Should be either a valid version or "0.0.0" (fallback)
-    assert _common.LC_GOOGLE_GENAI_VERSION != ""
 
 
 async def test_get_user_agent_no_blocking_in_async_context() -> None:
@@ -103,6 +95,18 @@ async def test_get_user_agent_no_blocking_in_async_context() -> None:
         # Verify we got valid output (using the cached version)
         assert "test-async" in client_lib_version
         assert "langchain-google-genai" in user_agent_str
+
+
+def test_version_is_cached_at_module_level() -> None:
+    """Test that version is cached at module level and doesn't call
+    `metadata.version`."""
+    from langchain_google_genai import _common
+
+    # The cached version should be a string
+    assert isinstance(_common.LC_GOOGLE_GENAI_VERSION, str)
+
+    # Should be either a valid version or "0.0.0" (fallback)
+    assert _common.LC_GOOGLE_GENAI_VERSION != ""
 
 
 def test_async_context_execution() -> None:

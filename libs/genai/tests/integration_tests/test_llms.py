@@ -17,24 +17,28 @@ MODEL_NAMES = ["gemini-2.5-flash-lite"]
     "model_name",
     MODEL_NAMES,
 )
-def test_google_generativeai_call(model_name: str) -> None:
+def test_google_generativeai_call(model_name: str, backend_config: dict) -> None:
     """Test valid call to Google GenerativeAI text API."""
     if model_name:
-        llm = GoogleGenerativeAI(max_tokens=10, model=model_name)
+        llm = GoogleGenerativeAI(max_tokens=10, model=model_name, **backend_config)
     else:
-        llm = GoogleGenerativeAI(max_tokens=10)
+        llm = GoogleGenerativeAI(max_tokens=10, **backend_config)
     output = llm.invoke("Say foo:")
     assert isinstance(output, str)
     assert llm._llm_type == "google_gemini"
-    assert llm.client.model == f"models/{model_name}"
+    # Vertex AI strips the "models/" prefix, Google AI keeps it
+    expected_model = (
+        model_name if backend_config.get("vertexai") else f"models/{model_name}"
+    )
+    assert llm.client.model == expected_model
 
 
 @pytest.mark.parametrize(
     "model_name",
     MODEL_NAMES,
 )
-def test_google_generativeai_generate(model_name: str) -> None:
-    llm = GoogleGenerativeAI(temperature=0.3, model=model_name)
+def test_google_generativeai_generate(model_name: str, backend_config: dict) -> None:
+    llm = GoogleGenerativeAI(temperature=0.3, model=model_name, **backend_config)
     output = llm.generate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
@@ -49,18 +53,27 @@ def test_google_generativeai_generate(model_name: str) -> None:
     "model_name",
     MODEL_NAMES,
 )
-async def test_google_generativeai_agenerate(model_name: str) -> None:
-    llm = GoogleGenerativeAI(temperature=0, model=model_name)
-    output = await llm.agenerate(["Please say foo:"])
-    assert isinstance(output, LLMResult)
+async def test_google_generativeai_agenerate(
+    model_name: str, backend_config: dict
+) -> None:
+    llm = GoogleGenerativeAI(temperature=0, model=model_name, **backend_config)
+    try:
+        output = await llm.agenerate(["Please say foo:"])
+        assert isinstance(output, LLMResult)
+    finally:
+        # Explicitly close the client to avoid resource warnings
+        if llm.client and hasattr(llm.client, "client") and llm.client.client:
+            llm.client.client.close()
+            if llm.client.client.aio:
+                await llm.client.client.aio.aclose()
 
 
 @pytest.mark.parametrize(
     "model_name",
     MODEL_NAMES,
 )
-def test_generativeai_stream(model_name: str) -> None:
-    llm = GoogleGenerativeAI(temperature=0, model=model_name)
+def test_generativeai_stream(model_name: str, backend_config: dict) -> None:
+    llm = GoogleGenerativeAI(temperature=0, model=model_name, **backend_config)
     outputs = list(llm.stream("Please say foo:"))
     assert isinstance(outputs[0], str)
 
@@ -69,8 +82,10 @@ def test_generativeai_stream(model_name: str) -> None:
     "model_name",
     MODEL_NAMES,
 )
-def test_generativeai_get_num_tokens_gemini(model_name: str) -> None:
-    llm = GoogleGenerativeAI(temperature=0, model=model_name)
+def test_generativeai_get_num_tokens_gemini(
+    model_name: str, backend_config: dict
+) -> None:
+    llm = GoogleGenerativeAI(temperature=0, model=model_name, **backend_config)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
 
@@ -79,16 +94,16 @@ def test_generativeai_get_num_tokens_gemini(model_name: str) -> None:
     "model_name",
     MODEL_NAMES,
 )
-def test_safety_settings_gemini(model_name: str) -> None:
+def test_safety_settings_gemini(model_name: str, backend_config: dict) -> None:
     # test with blocked prompt
-    llm = GoogleGenerativeAI(temperature=0, model=model_name)
+    llm = GoogleGenerativeAI(temperature=0, model=model_name, **backend_config)
     output = llm.generate(prompts=["how to make a bomb?"])
     assert isinstance(output, LLMResult)
     assert len(output.generations[0]) > 0
 
     # safety filters
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,  # type: ignore[dict-item]
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
     }
 
     # test with safety filters directly to generate
@@ -107,6 +122,7 @@ def test_safety_settings_gemini(model_name: str) -> None:
         model=model_name,
         safety_settings=safety_settings,
         temperature=0,
+        **backend_config,
     )
     output = llm.generate(prompts=["how to make a bomb?"])
     assert isinstance(output, LLMResult)

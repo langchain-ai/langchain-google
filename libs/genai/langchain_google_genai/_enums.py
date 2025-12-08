@@ -1,8 +1,39 @@
-import google.ai.generativelanguage_v1beta as genai
+from google.genai.types import (
+    BlockedReason,
+    ComputerUse,
+    Environment,
+    HarmBlockThreshold,
+    HarmCategory,
+    MediaModality,
+    MediaResolution,
+    Modality,
+    SafetySetting,
+)
 
-HarmBlockThreshold = genai.SafetySetting.HarmBlockThreshold
-HarmCategory = genai.HarmCategory
-Modality = genai.GenerationConfig.Modality
-MediaResolution = genai.GenerationConfig.MediaResolution
+__all__ = [
+    "BlockedReason",
+    "ComputerUse",
+    "Environment",
+    "HarmBlockThreshold",
+    "HarmCategory",
+    "MediaModality",
+    "MediaResolution",
+    "Modality",
+    "SafetySetting",
+]
 
-__all__ = ["HarmBlockThreshold", "HarmCategory", "MediaResolution", "Modality"]
+# Migration notes:
+# - Added:
+#   - `BlockedReason`
+#   - `SafetySetting`
+#
+# Parity between generativelanguage_v1beta and genai.types
+# - `HarmBlockThreshold`: equivalent
+# - `HarmCategory`: there are a few Vertex-only and categories not supported by Gemini
+# - `MediaResolution`: equivalent
+#
+# `MediaModality` has additional modalities not present in `Modality`:
+# - `VIDEO`
+# - `DOCUMENT`
+#
+# TODO: investigate why both? Or not just use `MediaModality` everywhere?
