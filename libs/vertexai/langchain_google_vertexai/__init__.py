@@ -6,20 +6,18 @@ and third-party models available on Vertex Model Garden.
 
 **Supported integrations**
 
-1. Google's foundational models: `Gemini` family - `ChatVertexAI`, `VertexAI` (LLM),
-    `VertexAIEmbeddings`.
-2. Other Google's foundational models: Imagen - `VertexAIImageCaptioning`,
+1. Other Google's foundational models: Imagen - `VertexAIImageCaptioning`,
     `VertexAIImageCaptioningChat`, `VertexAIImageEditorChat`,
     `VertexAIImageGeneratorChat`, `VertexAIVisualQnAChat`.
-3. Third-party foundational models available as a an API (mdel-as-a-service) on Vertex
+2. Third-party foundational models available as a an API (mdel-as-a-service) on Vertex
     Model Garden (Mistral, Llama, Anthropic) - `model_garden.ChatAnthropicVertex`,
     `model_garden_maas.VertexModelGardenLlama`,
     `model_garden_maas.VertexModelGardenMistral`.
-4. Third-party foundational models deployed on Vertex AI endpoints from Vertex Model
+3. Third-party foundational models deployed on Vertex AI endpoints from Vertex Model
     Garden or Huggingface - `VertexAIModelGarden`.
-5. Vector Search on Vertex AI - `VectorSearchVectorStore`,
+4. Vector Search on Vertex AI - `VectorSearchVectorStore`,
     `VectorSearchVectorStoreDatastore`, `VectorSearchVectorStoreGCS`.
-6. Vertex AI evaluators for generative AI - `VertexPairWiseStringEvaluator`,
+5. Vertex AI evaluators for generative AI - `VertexPairWiseStringEvaluator`,
     `VertexStringEvaluator`.
 
 You need to enable required Google Cloud APIs (depending on the integration you're
