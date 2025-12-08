@@ -69,6 +69,7 @@ _FunctionDeclarationLike = (
 _GoogleSearchRetrievalLike = types.GoogleSearchRetrieval | dict[str, Any]
 
 _GoogleSearchLike = types.GoogleSearch | dict[str, Any]
+_GoogleMapsLike = types.GoogleMaps | dict[str, Any]
 _CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
 _UrlContextLike = types.UrlContext | dict[str, Any]
 _ComputerUseLike = types.ComputerUse | dict[str, Any]
@@ -78,6 +79,7 @@ class _ToolDict(TypedDict):
     function_declarations: Sequence[_FunctionDeclarationLike]
     google_search_retrieval: _GoogleSearchRetrievalLike | None
     google_search: NotRequired[_GoogleSearchLike]
+    google_maps: NotRequired[_GoogleMapsLike]
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
     computer_use: NotRequired[_ComputerUseLike]
@@ -203,8 +205,8 @@ def convert_to_genai_function_declarations(
 ) -> list[types.Tool]:
     """Convert tools to google-genai `Tool` objects.
 
-    Each special tool type (`google_search`, `url_context`, etc.) must be in its own
-    Tool object due to protobuf oneof constraints.
+    Each special tool type (`google_search`, `google_maps`, `url_context`, etc.) must
+    be in its own Tool object due to protobuf oneof constraints.
     """
     if not isinstance(tools, collections.abc.Sequence):
         logger.warning(
@@ -220,6 +222,7 @@ def convert_to_genai_function_declarations(
     special_tool_types = [
         "google_search_retrieval",
         "google_search",
+        "google_maps",
         "code_execution",
         "url_context",
         "computer_use",
@@ -267,6 +270,13 @@ def convert_to_genai_function_declarations(
                         )
                     else:
                         tool_obj = types.Tool(google_search=tool["google_search"])
+                elif special_key == "google_maps":
+                    if isinstance(tool["google_maps"], dict):
+                        tool_obj = types.Tool(
+                            google_maps=types.GoogleMaps(**tool["google_maps"])
+                        )
+                    else:
+                        tool_obj = types.Tool(google_maps=tool["google_maps"])
                 elif special_key == "code_execution":
                     if isinstance(tool["code_execution"], dict):
                         tool_obj = types.Tool(

@@ -1824,6 +1824,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         response.content_blocks
         ```
 
+    ???+ example "Google Maps"
+
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#google-maps)
+        for more info.
+
     ???+ example "Code execution"
 
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#code-execution)

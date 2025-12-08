@@ -497,6 +497,15 @@ def test_format_tool_to_genai_function() -> None:
     assert result.computer_use is not None
     assert result.computer_use.environment == "ENVIRONMENT_BROWSER"
 
+    # Test google_maps tool
+    src_9 = Tool(google_maps={})
+    result = convert_to_genai_function_declarations([src_9])[0]
+    assert result == src_9
+
+    src_10: dict[str, Any] = {"google_maps": {}}
+    result = convert_to_genai_function_declarations([src_10])[0]
+    assert result == src_9
+
     with pytest.raises(ValueError) as exc_info1:
         _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore
     assert str(exc_info1.value).startswith("Unsupported tool")

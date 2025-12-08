@@ -1805,6 +1805,35 @@ def test_url_context_tool(backend_config: dict) -> None:
     )
 
 
+def test_google_maps_grounding(backend_config: dict) -> None:
+    """Test using Google Maps grounding for location-aware responses."""
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    model_with_maps = model.bind_tools([{"google_maps": {}}])
+
+    response = model_with_maps.invoke(
+        "What are some good Italian restaurants in Boston's North End?"
+    )
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str) or isinstance(response.content, list)
+
+    assert "grounding_metadata" in response.response_metadata
+    grounding = response.response_metadata["grounding_metadata"]
+
+    # Maps grounding should have grounding_chunks with maps data or a
+    # google_maps_widget_context_token
+    has_grounding_chunks = (
+        "grounding_chunks" in grounding and grounding["grounding_chunks"]
+    )
+    has_widget_token = (
+        "google_maps_widget_context_token" in grounding
+        and grounding["google_maps_widget_context_token"] is not None
+    )
+
+    assert has_grounding_chunks or has_widget_token, (
+        "Expected maps grounding data or widget token"
+    )
+
+
 def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
     if output_version == "v0":
         blocks = [block for block in message.content if isinstance(block, dict)]
