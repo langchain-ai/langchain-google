@@ -71,6 +71,7 @@ _GoogleSearchRetrievalLike = types.GoogleSearchRetrieval | dict[str, Any]
 _GoogleSearchLike = types.GoogleSearch | dict[str, Any]
 _CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
 _UrlContextLike = types.UrlContext | dict[str, Any]
+_ComputerUseLike = types.ComputerUse | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
@@ -79,6 +80,7 @@ class _ToolDict(TypedDict):
     google_search: NotRequired[_GoogleSearchLike]
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
+    computer_use: NotRequired[_ComputerUseLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -220,6 +222,7 @@ def convert_to_genai_function_declarations(
         "google_search",
         "code_execution",
         "url_context",
+        "computer_use",
     ]
 
     for tool in tools:
@@ -273,12 +276,31 @@ def convert_to_genai_function_declarations(
                         )
                     else:
                         tool_obj = types.Tool(code_execution=tool["code_execution"])
-                elif isinstance(tool["url_context"], dict):
-                    tool_obj = types.Tool(
-                        url_context=types.UrlContext(**tool["url_context"])
-                    )
-                else:
-                    tool_obj = types.Tool(url_context=tool["url_context"])
+                elif special_key == "url_context":
+                    if isinstance(tool["url_context"], dict):
+                        tool_obj = types.Tool(
+                            url_context=types.UrlContext(**tool["url_context"])
+                        )
+                    else:
+                        tool_obj = types.Tool(url_context=tool["url_context"])
+                elif special_key == "computer_use":
+                    if isinstance(tool["computer_use"], dict):
+                        # Handle enum conversion - extract string values from
+                        # Environment enums
+                        computer_use_config = dict(tool["computer_use"])
+                        if "environment" in computer_use_config:
+                            env = computer_use_config["environment"]
+                            # Handle serialized enum (dict with _value_ key)
+                            if isinstance(env, dict) and "_value_" in env:
+                                computer_use_config["environment"] = env["_value_"]
+                            # Handle enum instance
+                            elif hasattr(env, "value"):
+                                computer_use_config["environment"] = env.value
+                        tool_obj = types.Tool(
+                            computer_use=types.ComputerUse(**computer_use_config)
+                        )
+                    else:
+                        tool_obj = types.Tool(computer_use=tool["computer_use"])
 
                 result_tools.append(tool_obj)
             elif (

@@ -37,6 +37,8 @@ more information on usage of this package.
 """
 
 from langchain_google_genai._enums import (
+    ComputerUse,
+    Environment,
     HarmBlockThreshold,
     HarmCategory,
     MediaResolution,
@@ -53,7 +55,9 @@ from langchain_google_genai.utils import create_context_cache
 
 __all__ = [
     "ChatGoogleGenerativeAI",
+    "ComputerUse",
     "DoesNotExistsException",
+    "Environment",
     "GoogleGenerativeAI",
     "GoogleGenerativeAIEmbeddings",
     "GoogleVectorStore",

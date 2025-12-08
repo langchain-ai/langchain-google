@@ -1,5 +1,7 @@
 from google.genai.types import (
     BlockedReason,
+    ComputerUse,
+    Environment,
     HarmBlockThreshold,
     HarmCategory,
     MediaModality,
@@ -10,6 +12,8 @@ from google.genai.types import (
 
 __all__ = [
     "BlockedReason",
+    "ComputerUse",
+    "Environment",
     "HarmBlockThreshold",
     "HarmCategory",
     "MediaModality",

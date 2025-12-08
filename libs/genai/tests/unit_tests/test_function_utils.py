@@ -21,6 +21,7 @@ from langchain_core.utils.function_calling import (
 )
 from pydantic import BaseModel, Field
 
+from langchain_google_genai import Environment
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
     _format_base_tool_to_function_declaration,
@@ -472,6 +473,29 @@ def test_format_tool_to_genai_function() -> None:
     src_4 = Tool(google_search={})
     result = convert_to_genai_function_declarations([src_4])[0]
     assert result == src_4
+
+    src_5 = Tool(computer_use={})
+    result = convert_to_genai_function_declarations([src_5])[0]
+    assert result == src_5
+
+    src_6: dict[str, Any] = {"computer_use": {}}
+    result = convert_to_genai_function_declarations([src_6])[0]
+    assert result == src_5
+
+    src_7: dict[str, Any] = {
+        "computer_use": {"environment": Environment.ENVIRONMENT_BROWSER}
+    }
+    result = convert_to_genai_function_declarations([src_7])[0]
+    assert result.computer_use is not None
+    assert result.computer_use.environment == "ENVIRONMENT_BROWSER"
+
+    # Test with serialized enum (dict with _value_ key)
+    src_8: dict[str, Any] = {
+        "computer_use": {"environment": {"_value_": "ENVIRONMENT_BROWSER"}}
+    }
+    result = convert_to_genai_function_declarations([src_8])[0]
+    assert result.computer_use is not None
+    assert result.computer_use.environment == "ENVIRONMENT_BROWSER"
 
     with pytest.raises(ValueError) as exc_info1:
         _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore

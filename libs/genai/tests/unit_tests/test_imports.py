@@ -2,14 +2,16 @@ from langchain_google_genai import __all__
 
 EXPECTED_ALL = [
     "ChatGoogleGenerativeAI",
+    "ComputerUse",
     "DoesNotExistsException",
-    "GoogleGenerativeAIEmbeddings",
+    "Environment",
     "GoogleGenerativeAI",
+    "GoogleGenerativeAIEmbeddings",
     "GoogleVectorStore",
     "HarmBlockThreshold",
     "HarmCategory",
-    "Modality",
     "MediaResolution",
+    "Modality",
     "create_context_cache",
 ]
 

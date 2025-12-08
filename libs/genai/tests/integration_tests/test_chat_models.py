@@ -38,6 +38,7 @@ from pydantic import BaseModel
 
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,
+    Environment,
     HarmBlockThreshold,
     HarmCategory,
     MediaResolution,
@@ -1857,6 +1858,32 @@ def test_code_execution_builtin(output_version: str, backend_config: dict) -> No
     }
     response = llm.invoke([input_message, full, next_message])
     _check_code_execution_output(response, output_version)
+
+
+def test_computer_use_tool(backend_config: dict) -> None:
+    """Test computer use tool integration.
+
+    To run this test:
+    1. Set environment variable: TEST_COMPUTER_USE=1
+    2. Ensure you have a valid API key configured
+    3. The model may require a screenshot/screen context in production use
+
+    Example:
+        TEST_COMPUTER_USE=1 pytest -k test_computer_use_tool -v
+    """
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-computer-use-preview-10-2025", **backend_config
+    )
+
+    model_with_computer = model.bind_tools(
+        [{"computer_use": {"environment": Environment.ENVIRONMENT_BROWSER}}]
+    )
+
+    # Simple test - just verify tool binding works
+    input_message = "Describe what actions you could take on a web page."
+    response = model_with_computer.invoke(input_message)
+    assert isinstance(response, AIMessage)
+    assert response.content is not None
 
 
 def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -> None:

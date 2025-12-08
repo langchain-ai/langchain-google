@@ -1854,6 +1854,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
          {'type': 'text', 'text': 'The calculation of 3 to the power of 3 is 27.'}]
         ```
 
+    ???+ example "Computer use"
+
+        See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#computer-use)
+        for more info.
+
+        !!! warning "Preview model limitations"
+
+            The Computer Use model is in preview and may produce unexpected behavior.
+
+            Always supervise automated tasks and avoid use with sensitive data or
+            critical operations. See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/computer-use)
+            for safety best practices.
+
     ???+ example "Token usage"
         See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#token-usage-tracking)
         for more info.
