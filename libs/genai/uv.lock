@@ -2,10 +2,8 @@ version = 1
 revision = 3
 requires-python = ">=3.10.0, <4.0.0"
 resolution-markers = [
-    "python_full_version >= '3.14' and platform_python_implementation == 'PyPy'",
-    "python_full_version >= '3.14' and platform_python_implementation != 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation == 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation != 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
     "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
@@ -401,7 +399,7 @@ wheels = [
 
 [[package]]
 name = "langchain-google-genai"
-version = "3.2.0"
+version = "4.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "filetype" },
@@ -800,10 +798,8 @@ name = "numpy"
 version = "2.3.5"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.14' and platform_python_implementation == 'PyPy'",
-    "python_full_version >= '3.14' and platform_python_implementation != 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation == 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation != 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
 ]
@@ -1690,8 +1686,7 @@ name = "types-requests"
 version = "2.31.0.6"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.14' and platform_python_implementation == 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation == 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
     "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
 ]
@@ -1708,8 +1703,7 @@ name = "types-requests"
 version = "2.32.4.20250913"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.14' and platform_python_implementation != 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation != 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
     "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
 ]
@@ -1756,8 +1750,7 @@ name = "urllib3"
 version = "1.26.20"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.14' and platform_python_implementation == 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation == 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
     "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
 ]
@@ -1771,8 +1764,7 @@ name = "urllib3"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.14' and platform_python_implementation != 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation != 'PyPy'",
+    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
     "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
 ]
