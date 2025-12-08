@@ -28,8 +28,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
             Added in `langchain-google-genai` 4.0.0.
 
-            `GoogleGenerativeAIEmbeddings` now supports both the **Gemini Developer API** and
-            **Vertex AI Platform** as backend options.
+            `GoogleGenerativeAIEmbeddings` now supports both the **Gemini Developer
+            API** and **Vertex AI Platform** as backend options.
 
         **For Gemini Developer API** (simplest):
 

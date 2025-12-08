@@ -78,7 +78,7 @@ from langchain_google_vertexai.vision_models import (
 )
 
 __all__ = [
-    "ChatVertexAI",
+    "ChatVertexAI",  # Deprecated
     "DataStoreDocumentStorage",
     "FunctionCallingConfig",
     "FunctionDeclaration",
@@ -94,8 +94,8 @@ __all__ = [
     "VectorSearchVectorStore",
     "VectorSearchVectorStoreDatastore",
     "VectorSearchVectorStoreGCS",
-    "VertexAI",
-    "VertexAIEmbeddings",
+    "VertexAI",  # Deprecated
+    "VertexAIEmbeddings",  # Deprecated
     "VertexAIImageCaptioning",
     "VertexAIImageCaptioningChat",
     "VertexAIImageEditorChat",
