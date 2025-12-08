@@ -2,7 +2,6 @@ import os
 from importlib import metadata
 from typing import Any
 
-from google.api_core.gapic_v1.client_info import ClientInfo
 from langchain_core.utils import from_env, secret_from_env
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from typing_extensions import Self
@@ -531,20 +530,6 @@ def get_user_agent(module: str | None = None) -> tuple[str, str]:
     if os.environ.get(_TELEMETRY_ENV_VARIABLE_NAME):
         client_library_version += f"+{_TELEMETRY_TAG}"
     return client_library_version, f"langchain-google-genai/{client_library_version}"
-
-
-def get_client_info(module: str | None = None) -> "ClientInfo":
-    r"""Returns a client info object with a custom user agent header.
-
-    Args:
-        module: The module for a custom user agent header.
-    """
-    client_library_version, user_agent = get_user_agent(module)
-    # TODO: remove ignore once google-auth has types.
-    return ClientInfo(  # type: ignore[no-untyped-call]
-        client_library_version=client_library_version,
-        user_agent=user_agent,
-    )
 
 
 SafetySettingDict = SafetySetting

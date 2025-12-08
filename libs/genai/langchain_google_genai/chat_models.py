@@ -21,7 +21,6 @@ from typing import (
 )
 
 import filetype  # type: ignore[import-untyped]
-import proto  # type: ignore[import-untyped]
 from google.genai.client import Client
 from google.genai.errors import ClientError
 from google.genai.types import (
@@ -1215,15 +1214,16 @@ def _response_to_result(
             f"Feedback: {response.prompt_feedback}"
         )
         if stream:
+            response_metadata = (
+                {"prompt_feedback": response.prompt_feedback.model_dump()}
+                if response.prompt_feedback
+                else {}
+            )
             generations = [
                 ChatGenerationChunk(
                     message=AIMessageChunk(
                         content="",
-                        response_metadata={
-                            "prompt_feedback": proto.Message.to_dict(
-                                response.prompt_feedback
-                            )
-                        },
+                        response_metadata=response_metadata,
                     ),
                     generation_info={},
                 )

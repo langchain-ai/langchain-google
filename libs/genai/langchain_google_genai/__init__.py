@@ -46,21 +46,15 @@ from langchain_google_genai._enums import (
 )
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
-from langchain_google_genai.google_vector_store import (
-    DoesNotExistsException,
-    GoogleVectorStore,
-)
 from langchain_google_genai.llms import GoogleGenerativeAI
 from langchain_google_genai.utils import create_context_cache
 
 __all__ = [
     "ChatGoogleGenerativeAI",
     "ComputerUse",
-    "DoesNotExistsException",
     "Environment",
     "GoogleGenerativeAI",
     "GoogleGenerativeAIEmbeddings",
-    "GoogleVectorStore",
     "HarmBlockThreshold",
     "HarmCategory",
     "MediaResolution",

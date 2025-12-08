@@ -1911,15 +1911,11 @@ def test_modalities_override_in_generation_config() -> None:
             finish_reason="STOP",
         )
     ]
-    # Create proper usage metadata using dict approach
-    from google.ai.generativelanguage_v1beta.types import UsageMetadata
-
-    mock_response.usage_metadata = UsageMetadata(
-        {
-            "prompt_token_count": 10,
-            "response_token_count": 5,
-            "total_token_count": 15,
-        }
+    # Create proper usage metadata
+    mock_response.usage_metadata = GenerateContentResponseUsageMetadata(
+        prompt_token_count=10,
+        candidates_token_count=5,
+        total_token_count=15,
     )
 
     llm = ChatGoogleGenerativeAI(

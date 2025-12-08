@@ -8,7 +8,7 @@ from google.genai.errors import ClientError
 from google.genai.types import EmbedContentConfig, HttpOptions
 from langchain_core.embeddings import Embeddings
 from langchain_core.utils import from_env, secret_from_env
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from typing_extensions import Self
 
 from langchain_google_genai._common import (
@@ -147,6 +147,10 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
     Example: `{'timeout': 10}`
     """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     @model_validator(mode="after")
     def _determine_backend(self) -> Self:

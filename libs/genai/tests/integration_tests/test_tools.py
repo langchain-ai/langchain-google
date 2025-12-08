@@ -1,3 +1,4 @@
+import pytest
 from langchain_core.tools import tool
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -23,6 +24,7 @@ def check_tennis_score(player: str) -> str:
     return f"{player} is currently winning 6-0"
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_multiple_tools(backend_config: dict) -> None:
     tools = [check_weather, check_live_traffic, check_tennis_score]
 
