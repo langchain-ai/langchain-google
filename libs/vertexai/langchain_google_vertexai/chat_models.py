@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
 
+from langchain_core._api import deprecated
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -145,7 +146,7 @@ from langchain_google_vertexai.functions_utils import (
 )
 from pydantic import ConfigDict
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Self, is_typeddict
+from typing_extensions import Self, deprecated as typing_deprecated, is_typeddict
 from difflib import get_close_matches
 
 
@@ -885,6 +886,15 @@ async def _acompletion_with_retry(
     )
 
 
+@typing_deprecated(
+    "Use [`ChatGoogleGenerativeAI`][langchain_google_genai.ChatGoogleGenerativeAI] "
+    "instead."
+)
+@deprecated(
+    since="3.2.0",
+    removal="4.0.0",
+    alternative_import="langchain_google_genai.ChatGoogleGenerativeAI",
+)
 class ChatVertexAI(_VertexAICommon, BaseChatModel):
     r"""Google Cloud Vertex AI chat model integration.
 

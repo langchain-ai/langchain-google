@@ -2,7 +2,7 @@
 
 !!! note "Vertex AI consolidation & compatibility"
 
-    As of `langchain-google-genai 4.0.0`, this package uses the consolidated
+    As of `langchain-google-genai` 4.0.0, this package uses the consolidated
     [`google-genai`](https://googleapis.github.io/python-genai/) SDK
     instead of the legacy [`google-ai-generativelanguage`](https://googleapis.dev/python/generativelanguage/latest/)
     SDK.

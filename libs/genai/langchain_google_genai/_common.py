@@ -31,11 +31,15 @@ class GoogleGenerativeAIError(Exception):
 class _BaseGoogleGenerativeAI(BaseModel):
     """Base class for Google Generative AI LLMs.
 
-    ## Backend selection
+    !!! version-added "Vertex AI Platform Support"
 
-    This class supports both the Gemini Developer API and Google Cloud's Vertex AI
-    Platform as backends. The backend is selected **automatically** based on your
-    configuration, or can be set explicitly using the `vertexai` parameter.
+        Added in `langchain-google-genai` 4.0.0.
+
+        `ChatGoogleGenerativeAI` and `GoogleGenerativeAIEmbeddings` now supports both
+        the **Gemini Developer API** and **Vertex AI Platform** as backend options.
+
+        The backend is selected **automatically** based on your configuration, or can be
+        set explicitly using the `vertexai` parameter.
 
     **Automatic backend detection** (when `vertexai=None` / unspecified):
 
