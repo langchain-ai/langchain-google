@@ -39,6 +39,7 @@ from google.genai.types import (
     GenerationConfig,
     HttpOptions,
     HttpRetryOptions,
+    ImageConfig,
     Part,
     SafetySetting,
     ThinkingConfig,
@@ -2391,7 +2392,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return {
             "model": self.model,
             "temperature": self.temperature,
+            "top_p": self.top_p,
             "top_k": self.top_k,
+            "max_output_tokens": self.max_output_tokens,
             "n": self.n,
             "safety_settings": self.safety_settings,
             "response_modalities": self.response_modalities,
@@ -2399,6 +2402,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
             "thinking_level": self.thinking_level,
+            "image_config": self.image_config,
         }
 
     def invoke(
@@ -2665,6 +2669,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             stop, generation_config=generation_config, **kwargs
         )
 
+        image_config = kwargs.pop("image_config", None)
+
         _consumed_kwargs = {
             "thinking_budget",
             "thinking_level",
@@ -2689,6 +2695,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             stop,
             timeout=timeout,
             max_retries=max_retries,
+            image_config=image_config,
             **remaining_kwargs,
         )
 
@@ -2790,6 +2797,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stop: list[str] | None,
         timeout: int | None = None,
         max_retries: int | None = None,
+        image_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
@@ -2799,6 +2807,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             if params.response_modalities
             else None
         )
+
+        # Auto-set audio output for TTS models if not explicitly configured
+        if response_modalities is None and self.model.endswith("-tts"):
+            response_modalities = ["AUDIO"]
         # Create thinking config if supported
         thinking_config = None
         if params.thinking_config is not None and self._supports_thinking():
@@ -2819,6 +2831,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 retry_options=retry_options,
             )
 
+        image_config_dict = (
+            image_config if image_config is not None else self.image_config
+        )
+        image_config_obj = None
+        if image_config_dict is not None:
+            image_config_obj = ImageConfig(**image_config_dict)
+
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
@@ -2829,6 +2848,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             system_instruction=system_instruction,
             stop_sequences=stop,
             http_options=http_options,
+            image_config=image_config_obj,
             **kwargs,
         )
 

@@ -132,6 +132,8 @@ class _BaseGoogleGenerativeAI(BaseModel):
     ```
     """  # noqa: E501
 
+    # This class is used by ChatGoogleGenerativeAI and GoogleGenerativeAI (LLM)
+
     # --- Client params ---
 
     google_api_key: SecretStr | None = Field(
@@ -381,6 +383,27 @@ class _BaseGoogleGenerativeAI(BaseModel):
         supported.
     """
 
+    image_config: dict[str, Any] | None = Field(
+        default=None,
+    )
+    """Configuration for image generation.
+
+    Provides control over generated image dimensions and quality for image generation
+    models.
+
+    See [`genai.types.ImageConfig`](https://googleapis.github.io/python-genai/genai.html#genai.types.ImageConfig)
+    for a list of supported fields and their values.
+
+    !!! note "Model compatibility"
+
+        This parameter only applies to image generation models. Supported parameters
+        vary by model and backend (Gemini Developer API and Vertex AI each support
+        different subsets of parameters and models).
+
+    See [the docs](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai#image-generation)
+    for more details and examples.
+    """
+
     thinking_budget: int | None = Field(
         default=None,
     )
@@ -492,6 +515,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
             "top_k": self.top_k,
             "max_output_tokens": self.max_output_tokens,
             "candidate_count": self.n,
+            "image_config": self.image_config,
         }
 
 

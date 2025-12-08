@@ -2075,6 +2075,78 @@ def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     assert audio_block["base64"] == base64.b64encode(wav_bytes).decode()
 
 
+def test_auto_audio_modality_for_tts_models() -> None:
+    """Test that TTS models automatically set output modality to AUDIO."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-preview-tts",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        # Note: NOT setting response_modalities explicitly
+    )
+    assert llm.client is not None
+
+    # Mock the generate_content method to capture the config
+    with patch.object(llm.client.models, "generate_content") as mock_generate:
+        mock_response = GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part.from_text(text="test")]),
+                    finish_reason="STOP",
+                )
+            ],
+            usage_metadata=GenerateContentResponseUsageMetadata(
+                prompt_token_count=10,
+                candidates_token_count=5,
+                total_token_count=15,
+            ),
+        )
+        mock_generate.return_value = mock_response
+
+        llm.invoke("test message")
+
+        # Verify that generate_content was called with AUDIO in response_modalities
+        assert mock_generate.called
+        call_kwargs = mock_generate.call_args.kwargs
+        config = call_kwargs.get("config")
+        assert config is not None
+        assert config.response_modalities == ["AUDIO"]
+
+
+def test_explicit_modality_overrides_tts_default() -> None:
+    """Test that explicitly setting `response_modalities` overrides TTS auto-config."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-preview-tts",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        response_modalities=[Modality.TEXT],  # Explicitly set to TEXT
+    )
+    assert llm.client is not None
+
+    # Mock the generate_content method to capture the config
+    with patch.object(llm.client.models, "generate_content") as mock_generate:
+        mock_response = GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part.from_text(text="test")]),
+                    finish_reason="STOP",
+                )
+            ],
+            usage_metadata=GenerateContentResponseUsageMetadata(
+                prompt_token_count=10,
+                candidates_token_count=5,
+                total_token_count=15,
+            ),
+        )
+        mock_generate.return_value = mock_response
+
+        llm.invoke("test message")
+
+        # Verify that generate_content was called with TEXT (not AUDIO)
+        assert mock_generate.called
+        call_kwargs = mock_generate.call_args.kwargs
+        config = call_kwargs.get("config")
+        assert config is not None
+        assert config.response_modalities == ["TEXT"]
+
+
 def test_compat() -> None:
     block: types.TextContentBlock = {"type": "text", "text": "foo"}
     result = _convert_from_v1_to_generativelanguage_v1beta([block], "google_genai")
@@ -4147,7 +4219,7 @@ def test_model_name_normalization_for_vertexai() -> None:
 
         # Test with models/ prefix for Vertex AI - should be stripped
         llm_vertex = ChatGoogleGenerativeAI(
-            model="models/gemini-2.5-flash",
+            model=f"models/{MODEL_NAME}",
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
@@ -4156,7 +4228,7 @@ def test_model_name_normalization_for_vertexai() -> None:
 
         # Test with models/ prefix for Google AI - should remain unchanged
         llm_google_ai = ChatGoogleGenerativeAI(
-            model="models/gemini-2.5-flash",
+            model=f"models/{MODEL_NAME}",
             api_key=FAKE_API_KEY,
             vertexai=False,
         )
@@ -4165,7 +4237,7 @@ def test_model_name_normalization_for_vertexai() -> None:
 
         # Test without models/ prefix for Vertex AI - should remain unchanged
         llm_vertex_no_prefix = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=f"models/{MODEL_NAME}",
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
@@ -4327,3 +4399,129 @@ def test_finish_reason_as_integer() -> None:
         stream=False,
     )
     assert result.generations[0].generation_info["finish_reason"] == "UNKNOWN_15"  # type: ignore[index]
+
+
+def test_image_config_in_init() -> None:
+    """Test that `image_config` is properly initialized."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "16:9", "image_size": "2K"},
+    )
+    assert llm.image_config == {"aspect_ratio": "16:9", "image_size": "2K"}
+
+
+def test_image_config_in_identifying_params() -> None:
+    """Test that `image_config` is included in identifying parameters."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "16:9", "image_size": "2K"},
+    )
+    params = llm._identifying_params
+    assert "image_config" in params
+    assert params["image_config"] == {"aspect_ratio": "16:9", "image_size": "2K"}
+
+
+def test_image_config_passed_to_generate_content_config() -> None:
+    """Test that `image_config` is properly passed to `GenerateContentConfig`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "16:9", "image_size": "2K"},
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image of a cat")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "16:9"
+    assert config.image_config.image_size == "2K"
+
+
+def test_image_config_none_by_default() -> None:
+    """Test that `image_config` is `None` by default."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.image_config is None
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.image_config is None
+
+
+def test_image_config_override_in_invoke() -> None:
+    """Test that `image_config` can be overridden in `invoke()`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "1:1"},
+    )
+
+    # Override with different config
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(
+        messages, image_config={"aspect_ratio": "16:9", "image_size": "2K"}
+    )
+    config = request["config"]
+
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "16:9"
+    assert config.image_config.image_size == "2K"
+
+
+def test_image_config_override_with_none() -> None:
+    """Test that `image_config` defaults to instance config when `None` is passed."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "1:1"},
+    )
+
+    # Don't pass image_config parameter (defaults to None)
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    # Should use instance-level config
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "1:1"
+
+
+def test_image_config_override_with_empty_dict() -> None:
+    """Test that passing empty `dict` creates empty `ImageConfig`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        image_config={"aspect_ratio": "1:1"},
+    )
+
+    # Pass empty dict - should create ImageConfig with no fields set
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(messages, image_config={})
+    config = request["config"]
+
+    # Empty dict creates an ImageConfig with all fields None
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio is None
+    assert config.image_config.image_size is None
+
+
+def test_image_config_no_instance_config_with_override() -> None:
+    """Test that `image_config` works when not set at instance level."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    # No instance config, but override in invoke
+    messages: list[BaseMessage] = [HumanMessage(content="Generate an image")]
+    request = llm._prepare_request(messages, image_config={"aspect_ratio": "16:9"})
+    config = request["config"]
+
+    assert config.image_config is not None
+    assert config.image_config.aspect_ratio == "16:9"

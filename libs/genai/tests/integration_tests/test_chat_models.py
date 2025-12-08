@@ -6,6 +6,7 @@ import io
 import json
 import math
 import os
+import re
 from collections.abc import Generator, Sequence
 from typing import Literal, cast
 from unittest.mock import patch
@@ -2518,12 +2519,21 @@ def test_audio_timestamp(backend_config: dict) -> None:
     assert len(text_content.strip()) > 0
 
     # Check that the response contains timestamp markers
-    # Timestamps appear in formats like **[00:00]**, **0:00**, or [HH:MM:SS]
-    # Check for common timestamp patterns
+    # Timestamps appear in various formats:
+    # - **[00:00]** or **0:00** (with asterisks)
+    # - [00:00:00] or [HH:MM:SS] (with hours)
+    # - [0:00-0:54] or [M:SS-M:SS] (time ranges)
+    # - [ 0m0s405ms - 0m3s245ms ] (millisecond precision with brackets and spaces)
+    # Pattern matches various timestamp formats
+    timestamp_patterns = [
+        r"\[\d+:\d{2}",  # [0:00] or [00:00]
+        r"\[\s*\d+m\d+s",  # [ 0m0s or [0m0s
+    ]
     has_timestamps = (
         "**[" in text_content  # Format: **[00:00]**
         or "**0:" in text_content  # Format: **0:00**
         or "[00:" in text_content  # Format: [00:00:00]
+        or any(bool(re.search(pattern, text_content)) for pattern in timestamp_patterns)
     )
     assert has_timestamps, (
         f"No timestamp markers found in response: {text_content[:200]}"
