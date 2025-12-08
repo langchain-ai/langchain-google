@@ -1237,7 +1237,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     r"""Google GenAI chat model integration.
 
     Setup:
-        This class supports both the **Gemini Developer API** and **Vertex AI**.
+        !!! version-added "Vertex AI Platform Support"
+
+            Added in `langchain-google-genai` 4.0.0.
+
+            `ChatGoogleGenerativeAI` now supports both the **Gemini Developer API** and
+            **Vertex AI Platform** as backend options.
 
         **For Gemini Developer API** (simplest):
 
@@ -1251,7 +1256,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", api_key="...")
         ```
 
-        **For Vertex AI with API key**:
+        **For Vertex AI Platform with API key**:
 
         ```bash
         export GEMINI_API_KEY='your-api-key'
@@ -1277,6 +1282,46 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             model="gemini-2.5-flash",
             project="your-project-id",
             # Uses Application Default Credentials (ADC)
+        )
+        ```
+
+        **Automatic backend detection** (when `vertexai=None` / unspecified):
+
+        1. If `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses that value
+        2. If `credentials` parameter is provided, uses Vertex AI
+        3. If `project` parameter is provided, uses Vertex AI
+        4. Otherwise, uses Gemini Developer API
+
+    Environment variables:
+        | Variable | Purpose | Backend |
+        |----------|---------|---------|
+        | `GOOGLE_API_KEY` | API key (primary) | Both (see `GOOGLE_GENAI_USE_VERTEXAI`) |
+        | `GEMINI_API_KEY` | API key (fallback) | Both (see `GOOGLE_GENAI_USE_VERTEXAI`) |
+        | `GOOGLE_GENAI_USE_VERTEXAI` | Force Vertex AI backend (`true`/`false`) | Vertex AI |
+        | `GOOGLE_CLOUD_PROJECT` | GCP project ID | Vertex AI |
+        | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `us-central1`) | Vertex AI |
+        | `HTTPS_PROXY` | HTTP/HTTPS proxy URL | Both |
+        | `SSL_CERT_FILE` | Custom SSL certificate file | Both |
+
+        `GOOGLE_API_KEY` is checked first for backwards compatibility. (`GEMINI_API_KEY`
+        was introduced later to better reflect the API's branding.)
+
+    Proxy configuration:
+        Set these before initializing:
+
+        ```bash
+        export HTTPS_PROXY='http://username:password@proxy_uri:port'
+        export SSL_CERT_FILE='path/to/cert.pem'  # Optional: custom SSL certificate
+        ```
+
+        For SOCKS5 proxies or advanced proxy configuration, use the
+        [`client_args`][langchain_google_genai.ChatGoogleGenerativeAI.client_args]
+        parameter:
+
+        ```python
+        model = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
 

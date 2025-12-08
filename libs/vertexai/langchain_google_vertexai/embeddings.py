@@ -4,9 +4,11 @@ from typing import Any, Literal
 
 from google import genai
 from google.genai.types import EmbedContentConfig
+from langchain_core._api import deprecated
 from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
+from typing_extensions import deprecated as typing_deprecated
 
 from langchain_google_vertexai._utils import create_retry_decorator
 
@@ -25,6 +27,15 @@ EmbeddingTaskTypes = Literal[
 ]
 
 
+@typing_deprecated(
+    "Use [`GoogleGenerativeAIEmbeddings`][langchain_google_genai.GoogleGenerativeAIEmbeddings] "  # noqa: E501
+    "instead."
+)
+@deprecated(
+    since="3.2.0",
+    removal="4.0.0",
+    alternative_import="langchain_google_genai.GoogleGenerativeAIEmbeddings",
+)
 class VertexAIEmbeddings(BaseModel, Embeddings):
     """Google Cloud VertexAI embedding models."""
 

@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Iterator
 from difflib import get_close_matches
 from typing import Any
 
+from langchain_core._api import deprecated
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -14,6 +15,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from pydantic import ConfigDict, Field, model_validator
 from typing_extensions import Self
+from typing_extensions import deprecated as typing_deprecated
 
 from langchain_google_vertexai._base import _VertexAICommon
 from langchain_google_vertexai.chat_models import ChatVertexAI
@@ -21,8 +23,24 @@ from langchain_google_vertexai.chat_models import ChatVertexAI
 logger = logging.getLogger(__name__)
 
 
+@typing_deprecated(
+    "Use [`GoogleGenerativeAI`][langchain_google_genai.GoogleGenerativeAI] instead."
+)
+@deprecated(
+    since="3.2.0",
+    removal="4.0.0",
+    alternative_import="langchain_google_genai.GoogleGenerativeAI",
+)
 class VertexAI(_VertexAICommon, BaseLLM):
-    """Google Vertex AI text completion large language models (legacy LLM)."""
+    """Google Vertex AI text completion large language models (legacy LLM).
+
+    !!! version-added "Vertex AI Platform Support"
+
+        Added in `langchain-google-genai` 4.0.0.
+
+        `ChatGoogleGenerativeAI` now supports both the **Gemini Developer API** and
+        **Vertex AI Platform** as backend options.
+    """
 
     model_name: str = Field(default="gemini-2.5-flash", alias="model")
     "The name of the Vertex AI text completion model."

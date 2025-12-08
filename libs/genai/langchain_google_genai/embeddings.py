@@ -21,32 +21,77 @@ _DEFAULT_BATCH_SIZE = 100
 
 
 class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
-    """`Google Generative AI Embeddings`.
+    """Google Generative AI Embeddings.
 
-    This class supports both the **Gemini Developer API** and **Vertex AI**.
+    Setup:
+        !!! version-added "Vertex AI Platform Support"
 
-    **For Gemini Developer API** (simplest):
+            Added in `langchain-google-genai` 4.0.0.
 
-    1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
-    2. Pass your API key using the `google_api_key` kwarg
+            `GoogleGenerativeAIEmbeddings` now supports both the **Gemini Developer
+            API** and **Vertex AI Platform** as backend options.
 
-    **For Vertex AI**:
+        **For Gemini Developer API** (simplest):
 
-    Set `vertexai=True` and provide `project` (and optionally `location`).
+        1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
+        2. Pass your API key using the `google_api_key` kwarg
 
-    Example:
+        **For Vertex AI**:
+
+        Set `vertexai=True` and provide `project` (and optionally `location`).
+
+        Example:
+            ```python
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+            # Gemini Developer API
+            embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+            embeddings.embed_query("What's our Q1 revenue?")
+
+            # Vertex AI
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="gemini-embedding-001",
+                project="my-project",
+                vertexai=True,
+            )
+            ```
+
+            **Automatic backend detection** (when `vertexai=None` / unspecified):
+
+            1. If `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses that value
+            2. If `credentials` parameter is provided, uses Vertex AI
+            3. If `project` parameter is provided, uses Vertex AI
+            4. Otherwise, uses Gemini Developer API
+
+    Environment variables:
+        | Variable | Purpose | Backend |
+        |----------|---------|---------|
+        | `GOOGLE_API_KEY` | API key (primary) | Both |
+        | `GEMINI_API_KEY` | API key (fallback) | Both |
+        | `GOOGLE_GENAI_USE_VERTEXAI` | Force Vertex AI (`true`/`false`) | Vertex AI |
+        | `GOOGLE_CLOUD_PROJECT` | GCP project ID | Vertex AI |
+        | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `us-central1`) | Vertex AI |
+        | `HTTPS_PROXY` | HTTP/HTTPS proxy URL | Both |
+        | `SSL_CERT_FILE` | Custom SSL certificate file | Both |
+
+        `GOOGLE_API_KEY` is checked first for backwards compatibility. (`GEMINI_API_KEY`
+        was introduced later to better reflect the API's branding.)
+
+    Proxy configuration:
+        Set these before initializing:
+
+        ```bash
+        export HTTPS_PROXY='http://username:password@proxy_uri:port'
+        export SSL_CERT_FILE='path/to/cert.pem'  # Optional: custom SSL certificate
+        ```
+
+        For SOCKS5 proxies or advanced proxy configuration, use the `client_args`
+        parameter:
+
         ```python
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-        # Gemini Developer API
-        embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
-        embeddings.embed_query("What's our Q1 revenue?")
-
-        # Vertex AI
         embeddings = GoogleGenerativeAIEmbeddings(
             model="gemini-embedding-001",
-            project="my-project",
-            vertexai=True,
+            client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
     """
