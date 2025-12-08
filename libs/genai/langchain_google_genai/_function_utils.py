@@ -150,7 +150,8 @@ def _dict_to_genai_schema(
             schema_dict["type"] = types.Type(type_value)
         if "description" in formatted_schema:
             schema_dict["description"] = formatted_schema["description"]
-        # Include title for non-properties and for anyOf items (to identify alternatives)
+        # Include title for non-properties and for anyOf items
+        # (to identify alternatives)
         if "title" in formatted_schema and (not is_property or is_any_of_item):
             schema_dict["title"] = formatted_schema["title"]
         if "properties" in formatted_schema:
