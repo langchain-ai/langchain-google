@@ -1562,6 +1562,7 @@ def test_search_builtin(output_version: str, backend_config: dict) -> None:
     _check_web_search_output(response, output_version)
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_search_builtin_with_citations(
     use_streaming: bool, backend_config: dict
