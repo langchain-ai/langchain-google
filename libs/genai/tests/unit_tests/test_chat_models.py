@@ -1529,8 +1529,8 @@ def test_grounding_metadata_to_citations_conversion() -> None:
     assert len(text_blocks_with_citations) > 0, "Expected citations in text blocks"
 
     for block in text_blocks_with_citations:
-        annotations = block.get("annotations", [])
-        citations = [ann for ann in annotations if ann.get("type") == "citation"]  # type: ignore[attr-defined]
+        annotations = cast("list[Any]", block.get("annotations", []))
+        citations = [ann for ann in annotations if ann.get("type") == "citation"]
         assert len(citations) > 0, "Expected at least one citation"
 
         for citation in citations:
@@ -1793,7 +1793,7 @@ def test_maps_grounding_content_blocks() -> None:
     assert len(text_blocks_with_citations) > 0, "Expected citations in text blocks"
 
     for block in text_blocks_with_citations:
-        annotations = block.get("annotations", [])
+        annotations = cast("list[Any]", block.get("annotations", []))
         citations = [ann for ann in annotations if ann.get("type") == "citation"]
         assert len(citations) > 0, "Expected at least one citation from maps"
 
