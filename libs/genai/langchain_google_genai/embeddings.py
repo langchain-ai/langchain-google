@@ -1,66 +1,63 @@
-import asyncio
+import os
 import re
 import string
 from typing import Any
 
-# TODO: remove ignore once the google package is published with types
-from google.ai.generativelanguage_v1beta.types import (
-    BatchEmbedContentsRequest,
-    EmbedContentRequest,
-    EmbedContentResponse,
-)
+from google.genai.client import Client
+from google.genai.errors import ClientError
+from google.genai.types import EmbedContentConfig, HttpOptions
 from langchain_core.embeddings import Embeddings
-from langchain_core.utils import secret_from_env
+from langchain_core.utils import from_env, secret_from_env
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from typing_extensions import Self
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
-    get_client_info,
-)
-from langchain_google_genai._genai_extension import (
-    build_generative_async_service,
-    build_generative_service,
+    get_user_agent,
 )
 
 _MAX_TOKENS_PER_BATCH = 20000
 _DEFAULT_BATCH_SIZE = 100
 
 
-def _is_event_loop_running() -> bool:
-    try:
-        asyncio.get_running_loop()
-        return True
-    except RuntimeError:
-        return False
-
-
 class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     """`Google Generative AI Embeddings`.
 
-    To use, you must have either:
+    This class supports both the **Gemini Developer API** and **Vertex AI**.
 
-    1. The `GOOGLE_API_KEY` environment variable set with your API key, or
-    2. Pass your API key using the `google_api_key` kwarg to the
-        `GoogleGenerativeAIEmbeddings` constructor.
+    **For Gemini Developer API** (simplest):
+
+    1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
+    2. Pass your API key using the `google_api_key` kwarg
+
+    **For Vertex AI**:
+
+    Set `vertexai=True` and provide `project` (and optionally `location`).
 
     Example:
         ```python
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
+        # Gemini Developer API
         embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
         embeddings.embed_query("What's our Q1 revenue?")
+
+        # Vertex AI
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="gemini-embedding-001",
+            project="my-project",
+            vertexai=True,
+        )
         ```
     """
 
     client: Any = None
-
-    async_client: Any = None
+    """The Google GenAI client instance."""
 
     model: str = Field(...)
     """The name of the embedding model to use.
 
-    Example: `'models/gemini-embedding-001'`
+    Example: `'gemini-embedding-001'`
     """
 
     task_type: str | None = Field(
@@ -70,46 +67,78 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
     Valid options include:
 
-    * `'task_type_unspecified'`
-    * `'retrieval_query'`
-    * `'retrieval_document'`
-    * `'semantic_similarity'`
-    * `'classification'`
-    * `'clustering'`
+    * `'TASK_TYPE_UNSPECIFIED'`
+    * `'RETRIEVAL_QUERY'`
+    * `'RETRIEVAL_DOCUMENT'`
+    * `'SEMANTIC_SIMILARITY'`
+    * `'CLASSIFICATION'`
+    * `'CLUSTERING'`
+    * `'QUESTION_ANSWERING'`
+    * `'FACT_VERIFICATION'`
+    * `'CODE_RETRIEVAL_QUERY'`
+
+    See [`TaskType`](https://ai.google.dev/api/embeddings#tasktype) for details.
     """
 
     google_api_key: SecretStr | None = Field(
-        default_factory=secret_from_env("GOOGLE_API_KEY", default=None)
+        alias="api_key",
+        default_factory=secret_from_env(
+            ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
+        ),
     )
     """The Google API key to use.
 
-    If not provided, the `GOOGLE_API_KEY` environment variable will be used.
+    If not provided, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY`.
     """
 
     credentials: Any = Field(default=None, exclude=True)
-    """The default custom credentials to use when making API calls.
+    """Custom credentials for Vertex AI authentication.
 
-    (`google.auth.credentials.Credentials`)
+    When provided, forces Vertex AI backend.
 
-    If not provided, credentials will be ascertained from the `GOOGLE_API_KEY` env var.
+    Accepts a `google.auth.credentials.Credentials` object.
     """
 
-    client_options: dict | None = Field(default=None)
-    """A dictionary of client options to pass to the Google API client.
+    vertexai: bool | None = Field(default=None)
+    """Whether to use Vertex AI backend.
 
-    Example: `api_endpoint`
+    If `None` (default), backend is automatically determined:
+
+    1. If `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses that value
+    2. If `credentials` parameter is provided, uses Vertex AI
+    3. If `project` parameter is provided, uses Vertex AI
+    4. Otherwise, uses Gemini Developer API
+    """
+
+    project: str | None = Field(default=None)
+    """Google Cloud project ID (Vertex AI only).
+
+    Falls back to `GOOGLE_CLOUD_PROJECT` env var if not provided.
+    """
+
+    location: str | None = Field(
+        default_factory=from_env("GOOGLE_CLOUD_LOCATION", default=None)
+    )
+    """Google Cloud region (Vertex AI only).
+
+    Defaults to `GOOGLE_CLOUD_LOCATION` env var, then `'us-central1'`.
     """
 
     base_url: str | None = Field(
         default=None,
     )
-    """The base URL to use for the API client.
+    """The base URL to use for the API client."""
 
-    Alias of `client_options['api_endpoint']`.
+    additional_headers: dict[str, str] | None = Field(
+        default=None,
+    )
+    """Additional HTTP headers to include in API requests."""
+
+    client_args: dict[str, Any] | None = Field(default=None)
+    """Additional arguments to pass to the underlying HTTP client.
+
+    Applied to both sync and async clients.
     """
-
-    transport: str | None = Field(default=None)
-    """A string, one of: [`'rest'`, `'grpc'`, `'grpc_asyncio'`]."""
 
     request_options: dict | None = Field(
         default=None,
@@ -120,63 +149,93 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     """
 
     @model_validator(mode="after")
-    def validate_environment(self) -> Self:
-        """Validates params and passes them to `google-generativeai` package."""
+    def _determine_backend(self) -> Self:
+        """Determine which backend (Vertex AI or Gemini Developer API) to use."""
+        use_vertexai = self.vertexai
+
+        if use_vertexai is None:
+            # Check environment variable
+            env_var = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+            if env_var in ("true", "1", "yes"):
+                use_vertexai = True
+            elif env_var in ("false", "0", "no"):
+                use_vertexai = False
+            # Check for credentials (forces Vertex AI)
+            elif self.credentials is not None:
+                use_vertexai = True
+            # Check for project (implies Vertex AI)
+            elif self.project is not None:
+                use_vertexai = True
+            else:
+                # Default to Gemini Developer API
+                use_vertexai = False
+
+        # Store the determined backend in a private attribute
+        object.__setattr__(self, "_use_vertexai", use_vertexai)
+        return self
+
+    @model_validator(mode="after")
+    def _initialize_client(self) -> Self:
+        """Initialize the Google GenAI client."""
         if isinstance(self.google_api_key, SecretStr):
             google_api_key: str | None = self.google_api_key.get_secret_value()
         else:
             google_api_key = self.google_api_key
-        client_info = get_client_info("GoogleGenerativeAIEmbeddings")
 
-        if not any(self.model.startswith(prefix) for prefix in ("models/",)):
-            self.model = f"models/{self.model}"
+        # Build headers with user agent
+        _, user_agent = get_user_agent("GoogleGenerativeAIEmbeddings")
+        headers = {"User-Agent": user_agent}
+        if self.additional_headers:
+            headers.update(self.additional_headers)
 
-        # Merge base_url into client_options if provided
-        client_options = self.client_options or {}
-        if self.base_url and "api_endpoint" not in client_options:
-            client_options = {**client_options, "api_endpoint": self.base_url}
-
-        self.client = build_generative_service(
-            credentials=self.credentials,
-            api_key=google_api_key,
-            client_info=client_info,
-            client_options=client_options,
-            transport=self.transport,
+        http_options = HttpOptions(
+            base_url=self.base_url,
+            headers=headers,
+            client_args=self.client_args,
+            async_client_args=self.client_args,
         )
-        # Always defer async client initialization to first async call.
-        # Avoids implicit event loop creation and aligns with lazy init
-        # in chat models.
-        self.async_client = None
+
+        if self._use_vertexai:  # type: ignore[attr-defined]
+            # Vertex AI backend
+            # Normalize model name - strip 'models/' prefix for Vertex AI
+            if self.model.startswith("models/"):
+                object.__setattr__(self, "model", self.model.replace("models/", "", 1))
+
+            api_key_env_set = False
+
+            if (
+                google_api_key
+                and not os.getenv("GOOGLE_API_KEY")
+                and not os.getenv("GEMINI_API_KEY")
+            ):
+                # Set the API key in environment for Client initialization
+                os.environ["GOOGLE_API_KEY"] = google_api_key
+                api_key_env_set = True
+
+            try:
+                self.client = Client(
+                    vertexai=True,
+                    project=self.project,
+                    location=self.location,
+                    credentials=self.credentials,
+                    http_options=http_options,
+                )
+            finally:
+                # Clean up the temporary environment variable if we set it
+                if api_key_env_set:
+                    os.environ.pop("GOOGLE_API_KEY", None)
+        else:
+            # Gemini Developer API - requires API key
+            if not google_api_key:
+                msg = (
+                    "API key required for Gemini Developer API. Provide api_key "
+                    "parameter or set GOOGLE_API_KEY/GEMINI_API_KEY environment "
+                    "variable."
+                )
+                raise ValueError(msg)
+            self.client = Client(api_key=google_api_key, http_options=http_options)
+
         return self
-
-    @property
-    def _async_client(self) -> Any:
-        """Get or create the async client when needed."""
-        if self.async_client is None:
-            if isinstance(self.google_api_key, SecretStr):
-                google_api_key: str | None = self.google_api_key.get_secret_value()
-            else:
-                google_api_key = self.google_api_key
-
-            client_info = get_client_info("GoogleGenerativeAIEmbeddings")
-            # async clients don't support "rest" transport
-            transport = self.transport
-            if transport == "rest":
-                transport = "grpc_asyncio"
-
-            # Merge base_url into client_options if provided
-            client_options = self.client_options or {}
-            if self.base_url and "api_endpoint" not in client_options:
-                client_options = {**client_options, "api_endpoint": self.base_url}
-
-            self.async_client = build_generative_async_service(
-                credentials=self.credentials,
-                api_key=google_api_key,
-                client_info=client_info,
-                client_options=client_options,
-                transport=transport,
-            )
-        return self.async_client
 
     @staticmethod
     def _split_by_punctuation(text: str) -> list[str]:
@@ -239,19 +298,20 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 batch_token_len = 0
         return batches
 
-    def _prepare_request(
+    def _build_config(
         self,
-        text: str,
         *,
         task_type: str | None = None,
         title: str | None = None,
         output_dimensionality: int | None = None,
-    ) -> EmbedContentRequest:
-        task_type = self.task_type or task_type or "RETRIEVAL_DOCUMENT"
-        return EmbedContentRequest(
-            content={"parts": [{"text": text}]},
-            model=self.model,
-            task_type=task_type.upper(),
+    ) -> EmbedContentConfig:
+        """Build an `EmbedContentConfig` for the embed request."""
+        effective_task_type = task_type or self.task_type
+        if effective_task_type:
+            effective_task_type = effective_task_type.upper()
+
+        return EmbedContentConfig(
+            task_type=effective_task_type,
             title=title,
             output_dimensionality=output_dimensionality,
         )
@@ -265,7 +325,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         titles: list[str] | None = None,
         output_dimensionality: int | None = None,
     ) -> list[list[float]]:
-        """Embed a list of strings using the [batch endpoint](https://ai.google.dev/api/embeddings#method:-models.batchembedcontents)
+        """Embed a list of strings.
 
         Google Generative AI currently sets a max batch size of 100 strings.
 
@@ -276,39 +336,53 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             titles: Optional list of titles for texts provided.
 
                 Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
-            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
+            output_dimensionality: Optional reduced dimension for the output embedding.
 
         Returns:
             List of embeddings, one for each text.
         """
         embeddings: list[list[float]] = []
         batch_start_index = 0
+
+        # Use RETRIEVAL_DOCUMENT as default for documents
+        effective_task_type = task_type or self.task_type or "RETRIEVAL_DOCUMENT"
+
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
+            # Handle titles for this batch
             if titles:
                 titles_batch = titles[
                     batch_start_index : batch_start_index + len(batch)
                 ]
                 batch_start_index += len(batch)
             else:
-                titles_batch = [None] * len(batch)  # type: ignore[list-item]
+                titles_batch = None
 
-            requests = [
-                self._prepare_request(
-                    text=text,
-                    task_type=task_type,
-                    title=title,
-                    output_dimensionality=output_dimensionality,
-                )
-                for text, title in zip(batch, titles_batch, strict=False)
-            ]
+            # Build config - title only used if single text or all same title
+            # The SDK handles batching internally
+            # Title only applies to single-text batches
+            title = None
+            if titles_batch and len(titles_batch) == 1:
+                title = titles_batch[0]
+
+            config = self._build_config(
+                task_type=effective_task_type,
+                title=title,
+                output_dimensionality=output_dimensionality,
+            )
 
             try:
-                result = self.client.batch_embed_contents(
-                    BatchEmbedContentsRequest(requests=requests, model=self.model)
+                result = self.client.models.embed_content(
+                    model=self.model,
+                    contents=batch,
+                    config=config,
                 )
+            except ClientError as e:
+                msg = f"Error embedding content ({e.status}): {e}"
+                raise GoogleGenerativeAIError(msg) from e
             except Exception as e:
                 msg = f"Error embedding content: {e}"
                 raise GoogleGenerativeAIError(msg) from e
+
             embeddings.extend([list(e.values) for e in result.embeddings])
         return embeddings
 
@@ -320,7 +394,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         title: str | None = None,
         output_dimensionality: int | None = None,
     ) -> list[float]:
-        """Embed a text, using the [non-batch endpoint](https://ai.google.dev/api/embeddings#method:-models.embedcontent)
+        """Embed a single text.
 
         Args:
             text: The text to embed.
@@ -328,26 +402,35 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             title: Optional title for the text.
 
                 Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
-            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
+            output_dimensionality: Optional reduced dimension for the output embedding.
 
         Returns:
             Embedding for the text.
         """
-        task_type_to_use = task_type if task_type else self.task_type
-        if task_type_to_use is None:
-            task_type_to_use = "RETRIEVAL_QUERY"
+        # Use RETRIEVAL_QUERY as default for queries
+        effective_task_type = task_type or self.task_type or "RETRIEVAL_QUERY"
+
+        config = self._build_config(
+            task_type=effective_task_type,
+            title=title,
+            output_dimensionality=output_dimensionality,
+        )
+
         try:
-            request: EmbedContentRequest = self._prepare_request(
-                text=text,
-                task_type=task_type_to_use,
-                title=title,
-                output_dimensionality=output_dimensionality,
+            result = self.client.models.embed_content(
+                model=self.model,
+                contents=text,
+                config=config,
             )
-            result: EmbedContentResponse = self.client.embed_content(request)
+        except ClientError as e:
+            msg = f"Error embedding content ({e.status}): {e}"
+            raise GoogleGenerativeAIError(msg) from e
         except Exception as e:
             msg = f"Error embedding content: {e}"
             raise GoogleGenerativeAIError(msg) from e
-        return list(result.embedding.values)
+
+        # Single text returns single embedding
+        return list(result.embeddings[0].values)
 
     async def aembed_documents(
         self,
@@ -358,7 +441,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         titles: list[str] | None = None,
         output_dimensionality: int | None = None,
     ) -> list[list[float]]:
-        """Embed a list of strings using the [batch endpoint](https://ai.google.dev/api/embeddings#method:-models.batchembedcontents)
+        """Embed a list of strings asynchronously.
 
         Google Generative AI currently sets a max batch size of 100 strings.
 
@@ -369,39 +452,51 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             titles: Optional list of titles for texts provided.
 
                 Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
-            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
+            output_dimensionality: Optional reduced dimension for the output embedding.
 
         Returns:
             List of embeddings, one for each text.
         """
         embeddings: list[list[float]] = []
         batch_start_index = 0
+
+        # Use RETRIEVAL_DOCUMENT as default for documents
+        effective_task_type = task_type or self.task_type or "RETRIEVAL_DOCUMENT"
+
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
+            # Handle titles for this batch
             if titles:
                 titles_batch = titles[
                     batch_start_index : batch_start_index + len(batch)
                 ]
                 batch_start_index += len(batch)
             else:
-                titles_batch = [None] * len(batch)  # type: ignore[list-item]
+                titles_batch = None
 
-            requests = [
-                self._prepare_request(
-                    text=text,
-                    task_type=task_type,
-                    title=title,
-                    output_dimensionality=output_dimensionality,
-                )
-                for text, title in zip(batch, titles_batch, strict=False)
-            ]
+            # Title only applies to single-text batches
+            title = None
+            if titles_batch and len(titles_batch) == 1:
+                title = titles_batch[0]
+
+            config = self._build_config(
+                task_type=effective_task_type,
+                title=title,
+                output_dimensionality=output_dimensionality,
+            )
 
             try:
-                result = await self._async_client.batch_embed_contents(
-                    BatchEmbedContentsRequest(requests=requests, model=self.model)
+                result = await self.client.aio.models.embed_content(
+                    model=self.model,
+                    contents=batch,
+                    config=config,
                 )
+            except ClientError as e:
+                msg = f"Error embedding content ({e.status}): {e}"
+                raise GoogleGenerativeAIError(msg) from e
             except Exception as e:
                 msg = f"Error embedding content: {e}"
                 raise GoogleGenerativeAIError(msg) from e
+
             embeddings.extend([list(e.values) for e in result.embeddings])
         return embeddings
 
@@ -413,7 +508,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         title: str | None = None,
         output_dimensionality: int | None = None,
     ) -> list[float]:
-        """Embed a text, using the [non-batch endpoint](https://ai.google.dev/api/embeddings#method:-models.embedcontent).
+        """Embed a single text asynchronously.
 
         Args:
             text: The text to embed.
@@ -421,25 +516,32 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             title: Optional title for the text.
 
                 Only applicable when `TaskType` is `'RETRIEVAL_DOCUMENT'`.
-            output_dimensionality: Optional [reduced dimension for the output embedding](https://ai.google.dev/api/embeddings#EmbedContentRequest)
+            output_dimensionality: Optional reduced dimension for the output embedding.
 
         Returns:
             Embedding for the text.
         """
-        task_type_to_use = task_type if task_type else self.task_type
-        if task_type_to_use is None:
-            task_type_to_use = "RETRIEVAL_QUERY"
+        # Use RETRIEVAL_QUERY as default for queries
+        effective_task_type = task_type or self.task_type or "RETRIEVAL_QUERY"
+
+        config = self._build_config(
+            task_type=effective_task_type,
+            title=title,
+            output_dimensionality=output_dimensionality,
+        )
+
         try:
-            request: EmbedContentRequest = self._prepare_request(
-                text=text,
-                task_type=task_type_to_use,
-                title=title,
-                output_dimensionality=output_dimensionality,
+            result = await self.client.aio.models.embed_content(
+                model=self.model,
+                contents=text,
+                config=config,
             )
-            result: EmbedContentResponse = await self._async_client.embed_content(
-                request
-            )
+        except ClientError as e:
+            msg = f"Error embedding content ({e.status}): {e}"
+            raise GoogleGenerativeAIError(msg) from e
         except Exception as e:
             msg = f"Error embedding content: {e}"
             raise GoogleGenerativeAIError(msg) from e
-        return list(result.embedding.values)
+
+        # Single text returns single embedding
+        return list(result.embeddings[0].values)
