@@ -219,6 +219,16 @@ def _convert_to_parts(
                         )
                     else:
                         parts.append(Part(text=part["text"]))
+                elif part.get("type") == "file" and "file_id" in part:
+                    # Handle FileContentBlock with file_id (uploaded file reference)
+                    mime_type = part.get("mime_type", "application/octet-stream")
+                    parts.append(
+                        Part(
+                            file_data=FileData(
+                                file_uri=part["file_id"], mime_type=mime_type
+                            )
+                        )
+                    )
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
@@ -2642,14 +2652,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Prepare the request configuration for the API call."""
-        # Validate tool configuration
-        if tool_choice and tool_config:
-            msg = (
-                "Must specify at most one of tool_choice and tool_config, received "
-                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
-            )
-            raise ValueError(msg)
-
         # Process tools and functions
         formatted_tools = self._format_tools(tools, functions)
 
@@ -2753,7 +2755,35 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_config: dict | ToolConfig | None,
         formatted_tools: list | None,
     ) -> ToolConfig | None:
-        """Process tool configuration and choice."""
+        """Process tool configuration and choice.
+
+        Merges `tool_choice` and `tool_config` when both are provided.
+
+        `tool_choice` controls `function_calling_config` while `tool_config` can provide
+        retrieval_config (for Maps/Search grounding) and other configurations.
+        """
+        # Normalize tool_config to ToolConfig object if dict
+        normalized_config: ToolConfig | None = None
+        if tool_config:
+            normalized_config = (
+                ToolConfig.model_validate(tool_config)
+                if isinstance(tool_config, dict)
+                else tool_config
+            )
+
+        # Check for conflicts
+        if tool_choice and normalized_config:
+            if normalized_config.function_calling_config:
+                msg = (
+                    "Cannot specify both tool_choice and "
+                    "tool_config.function_calling_config. "
+                    f"Received {tool_choice=} and "
+                    f"tool_config.function_calling_config="
+                    f"{normalized_config.function_calling_config}"
+                )
+                raise ValueError(msg)
+
+        # Process tool_choice
         if tool_choice:
             if not formatted_tools:
                 msg = (
@@ -2762,23 +2792,46 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
             all_names = self._extract_tool_names(formatted_tools)
-            return _tool_choice_to_tool_config(tool_choice, all_names)
-        if tool_config:
-            if isinstance(tool_config, dict):
-                return ToolConfig.model_validate(tool_config)
-            return tool_config
+
+            # Only set function_calling_config if there are actual callable functions
+            # (built-in tools like google_maps don't have function_declarations)
+            if not all_names:
+                # No callable functions, only built-in tools like Maps/Search
+                # Just pass through tool_config without function_calling_config
+                if normalized_config:
+                    return normalized_config
+                return None
+
+            choice_config = _tool_choice_to_tool_config(tool_choice, all_names)
+
+            # Merge with tool_config if it exists
+            if normalized_config:
+                # Merge: take function_calling_config from choice_config
+                # and other fields from normalized_config
+                return ToolConfig(
+                    function_calling_config=choice_config.function_calling_config,
+                    retrieval_config=normalized_config.retrieval_config,
+                )
+            return choice_config
+
+        # Only tool_config provided
+        if normalized_config:
+            return normalized_config
+
         return None
 
     def _extract_tool_names(self, formatted_tools: list) -> list[str]:
         """Extract tool names from formatted tools."""
         all_names: list[str] = []
         for t in formatted_tools:
-            if hasattr(t, "function_declarations"):
+            if hasattr(t, "function_declarations") and t.function_declarations:
                 t_with_declarations = cast("Any", t)
                 all_names.extend(
                     f.name for f in t_with_declarations.function_declarations
                 )
-            elif isinstance(t, GoogleTool) and hasattr(t, "code_execution"):
+            elif isinstance(t, GoogleTool):
+                # Built-in tools like code_execution, google_search, google_maps
+                # don't have function_declarations
                 continue
             else:
                 msg = f"Tool {t} doesn't have function_declarations attribute"
@@ -3239,6 +3292,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         # `json_mode` kept for backwards compatibility; shouldn't be used in new code
         if method in ("json_mode", "json_schema"):
+            # For ls_structured_output_format, we use convert_to_json_schema for
+            # Pydantic/TypedDict/dict-with-title schemas to match langchain standard
+            # tests. Raw dicts without titles are passed through as-is.
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 # Handle Pydantic models
                 if issubclass(schema, BaseModelV1):
@@ -3247,15 +3303,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 else:
                     schema_json = schema.model_json_schema()
                 parser = PydanticOutputParser(pydantic_object=schema)
-            else:
-                if is_typeddict(schema):
-                    schema_json = convert_to_json_schema(schema)
-                elif isinstance(schema, dict):
-                    schema_json = schema
-                else:
-                    msg = f"Unsupported schema type {type(schema)}"
-                    raise ValueError(msg)
+                ls_schema = convert_to_json_schema(schema)
+            elif is_typeddict(schema):
+                schema_json = convert_to_json_schema(schema)
                 parser = JsonOutputParser()
+                ls_schema = schema_json
+            elif isinstance(schema, dict):
+                schema_json = schema
+                parser = JsonOutputParser()
+                # Dicts with title can be converted; raw dicts pass through as-is
+                ls_schema = (
+                    convert_to_json_schema(schema) if "title" in schema else schema
+                )
+            else:
+                msg = f"Unsupported schema type {type(schema)}"
+                raise ValueError(msg)
 
             # Note: The Google GenAI SDK automatically handles schema transformation
             # (inlining $defs, resolving $ref) via its process_schema() function.
@@ -3265,7 +3327,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 response_json_schema=schema_json,
                 ls_structured_output_format={
                     "kwargs": {"method": method},
-                    "schema": schema_json,
+                    "schema": ls_schema,
                 },
             )
         else:
@@ -3320,14 +3382,50 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
                 Tools with Union types in their arguments are now supported and
                 converted to `anyOf` schemas.
+            tool_config: Optional tool configuration for additional settings like
+                `retrieval_config` (for Google Maps/Google Search grounding).
+
+                Can be used together with `tool_choice`, but cannot specify
+                `function_calling_config` in `tool_config` if `tool_choice` is also
+                provided (they would conflict).
+
+                !!! example "Example with Google Maps grounding"
+
+                    ```python
+                    from langchain_google_genai import ChatGoogleGenerativeAI
+
+                    model = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
+
+                    response = model.invoke(
+                        "What Italian restaurants are near here?",
+                        tools=[{"google_maps": {}}],
+                        tool_choice="required",
+                        tool_config={
+                            "retrieval_config": {
+                                "lat_lng": {
+                                    "latitude": 48.858844,
+                                    "longitude": 2.294351,
+                                }
+                            }
+                        },
+                    )
+                    ```
+            tool_choice: Control how the model uses tools.
+
+                Options:
+
+                - `'auto'` (default): Model decides whether to call functions
+                - `'any'` or `'required'`: Model must call a function (both are
+                    equivalent)
+                - `'none'`: Model cannot call functions
+                - `'function_name'`: Model must call the specified function
+                - `['fn1', 'fn2']`: Model must call one of the specified functions
+                - `True`: Same as `'any'`
+
+                Can be used together with `tool_config` to control function calling
+                while also providing additional configuration like `retrieval_config`.
             **kwargs: Any additional parameters to pass to the `Runnable` constructor.
         """
-        if tool_choice and tool_config:
-            msg = (
-                "Must specify at most one of tool_choice and tool_config, received "
-                f"both:\n\n{tool_choice=}\n\n{tool_config=}"
-            )
-            raise ValueError(msg)
         try:
             formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
         except Exception:
@@ -3336,10 +3434,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ]
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
-        elif tool_config:
+        if tool_config:
             kwargs["tool_config"] = tool_config
-        else:
-            pass
         return self.bind(tools=formatted_tools, **kwargs)
 
     @property

@@ -2721,6 +2721,37 @@ def test_convert_to_parts_file_data_auto_mime_type() -> None:
         assert result[0].inline_data.mime_type == "text/plain"
 
 
+def test_convert_to_parts_file_with_file_id() -> None:
+    """Test `_convert_to_parts` with `FileContentBlock` containing `file_id`."""
+    content = [
+        {
+            "type": "file",
+            "file_id": "files/abc123xyz",
+            "mime_type": "application/pdf",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == "files/abc123xyz"
+    assert result[0].file_data.mime_type == "application/pdf"
+
+
+def test_convert_to_parts_file_with_file_id_default_mime_type() -> None:
+    """Test `_convert_to_parts` with `file_id` but no `mime_type` specified."""
+    content = [
+        {
+            "type": "file",
+            "file_id": "files/xyz789",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == "files/xyz789"
+    assert result[0].file_data.mime_type == "application/octet-stream"
+
+
 def test_convert_to_parts_media_with_data() -> None:
     """Test `_convert_to_parts` with media type containing data."""
     content = [{"type": "media", "mime_type": "video/mp4", "data": b"fake_video_data"}]

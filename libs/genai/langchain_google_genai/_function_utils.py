@@ -126,7 +126,9 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def _dict_to_genai_schema(
-    schema: dict[str, Any], is_property: bool = False
+    schema: dict[str, Any],
+    is_property: bool = False,
+    is_any_of_item: bool = False,
 ) -> types.Schema | None:
     if schema:
         dereferenced_schema = dereference_refs(schema)
@@ -148,7 +150,8 @@ def _dict_to_genai_schema(
             schema_dict["type"] = types.Type(type_value)
         if "description" in formatted_schema:
             schema_dict["description"] = formatted_schema["description"]
-        if "title" in formatted_schema:
+        # Include title for non-properties and for anyOf items (to identify alternatives)
+        if "title" in formatted_schema and (not is_property or is_any_of_item):
             schema_dict["title"] = formatted_schema["title"]
         if "properties" in formatted_schema:
             # Recursively process each property
@@ -178,7 +181,9 @@ def _dict_to_genai_schema(
             # Convert anyOf list to list of Schema objects
             any_of_schemas = []
             for any_of_item in formatted_schema["anyOf"]:
-                any_of_schema = _dict_to_genai_schema(any_of_item, is_property=True)
+                any_of_schema = _dict_to_genai_schema(
+                    any_of_item, is_property=True, is_any_of_item=True
+                )
                 if any_of_schema:
                     any_of_schemas.append(any_of_schema)
             schema_dict["any_of"] = any_of_schemas  # type: ignore[assignment]
@@ -669,15 +674,44 @@ def _is_nullable_schema(schema: dict[str, Any]) -> bool:
     return False
 
 
-_ToolChoiceType = Literal["auto", "none", "any", True] | dict | list[str] | str
+_ToolChoiceType = (
+    Literal["auto", "none", "any", "required", True] | dict | list[str] | str
+)
 
 
 def _tool_choice_to_tool_config(
     tool_choice: _ToolChoiceType,
     all_names: list[str],
 ) -> types.ToolConfig:
+    """Convert `tool_choice` to Google's `ToolConfig` format.
+
+    Maps LangChain/OpenAI-style `tool_choice` values to Google's function calling modes:
+
+    - `'auto'` -> `AUTO`: Model decides whether to call functions or generate text
+    - `'any'` / `'required'` / `True` -> `ANY`: Model must call one of the provided
+        functions.
+
+        Both `'any'` and `'required'` map to the same Google API mode for compatibility
+        (OpenAI uses `'required'`)
+    - `'none'` -> `NONE`: Model cannot call functions
+    - `'function_name'` -> `ANY` with specific function: Model must call the named
+        function
+    - `['fn1', 'fn2']` -> `ANY` with specific functions: Model must call one of the
+        listed functions
+
+    Args:
+        tool_choice: The tool choice specification.
+        all_names: List of all available function names.
+
+    Returns:
+        `ToolConfig` object for the Google API.
+    """
     allowed_function_names: list[str] | None = None
     if tool_choice is True or tool_choice == "any":
+        mode = "ANY"
+        allowed_function_names = all_names
+    elif tool_choice == "required":
+        # OpenAI-compatible alias for "any"
         mode = "ANY"
         allowed_function_names = all_names
     elif tool_choice == "auto":

@@ -210,6 +210,17 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
+            elif file_id := block_dict.get("file_id"):
+                # File ID from uploaded file
+                new_block = {
+                    "file_data": {
+                        "mime_type": block_dict.get(
+                            "mime_type", "application/octet-stream"
+                        ),
+                        "file_uri": file_id,
+                    }
+                }
+                new_content.append(new_block)
             elif url := block_dict.get("url") and model_provider == "google_genai":
                 # Google file service
                 new_block = {

@@ -37,7 +37,7 @@ def test_function_call(model_name: str, backend_config: dict) -> None:
         }
     ]
     llm = ChatGoogleGenerativeAI(model=model_name, **backend_config).bind(
-        functions=functions
+        functions=functions, tool_choice="any"
     )
     res = llm.invoke("what weather is today in san francisco?")
     assert res
@@ -61,7 +61,7 @@ def test_tool_call(model_name: str, backend_config: dict) -> None:
         raise NotImplementedError
 
     llm = ChatGoogleGenerativeAI(model=model_name, **backend_config).bind(
-        functions=[search_tool]
+        functions=[search_tool], tool_choice="any"
     )
     response = llm.invoke("weather in san francisco")
     assert isinstance(response, AIMessage)
@@ -85,7 +85,7 @@ class MyModel(BaseModel):
 )
 def test_pydantic_call(model_name: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name, **backend_config).bind(
-        functions=[MyModel]
+        functions=[MyModel], tool_choice="any"
     )
     response = llm.invoke("my name is Erick and I am 27 years old")
     assert isinstance(response, AIMessage)
