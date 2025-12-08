@@ -2,6 +2,7 @@
 
 import base64
 import json
+import sys
 import warnings
 from dataclasses import dataclass
 from typing import Any
@@ -1871,6 +1872,10 @@ def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
     assert schema["properties"]["name"]["description"] == "Person's name"
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="Pydantic v1 compatibility not supported on Python 3.14",
+)
 def test_json_mode_pydantic_v1_backward_compatibility() -> None:
     """Test that Pydantic v1 models continue to work with json_mode.
 
