@@ -217,10 +217,29 @@ def _format_message_anthropic(
                                 "file_id": block["file_id"],
                             },
                         }
+                    # Backward compatibility for langchain < 1.X
+                    # where source_type was used
+                    elif "data" in block and block.get("source_type", None) == "base64":
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": block["mime_type"],
+                                "data": block["data"],
+                            },
+                        }
+                    elif "id" in block and block.get("source_type", None) == "id":
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "file",
+                                "file_id": block["id"],
+                            },
+                        }
                     else:
                         msg = (
                             "Image content blocks must have either 'url', 'base64', "
-                            "or 'file_id' field."
+                            "'file_id', 'id' or 'data' field."
                         )
                         raise ValueError(msg)
                     content.append(formatted_block)
