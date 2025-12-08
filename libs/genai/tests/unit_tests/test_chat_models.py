@@ -1699,6 +1699,119 @@ def test_grounding_metadata_multiple_parts() -> None:
     assert grounding["grounding_supports"][0]["segment"]["part_index"] == 1
 
 
+def test_maps_grounding_content_blocks() -> None:
+    """Test that `content_blocks` works with Maps grounding metadata."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": (
+                                "Here are some great Italian restaurants near the "
+                                "Eiffel Tower: Chez Pippo and La Casa di Alfio."
+                            )
+                        }
+                    ]
+                },
+                "grounding_metadata": {
+                    "grounding_chunks": [
+                        {
+                            "web": None,
+                            "maps": {
+                                "uri": "https://maps.google.com/?cid=8846610044005889834",
+                                "title": "Chez Pippo",
+                                "placeId": "places/ChIJ123",
+                            },
+                        },
+                        {
+                            "web": None,
+                            "maps": {
+                                "uri": "https://maps.google.com/?cid=3067710458301396100",
+                                "title": "La Casa di Alfio",
+                                "placeId": "places/ChIJ456",
+                            },
+                        },
+                    ],
+                    "grounding_supports": [
+                        {
+                            "segment": {
+                                "start_index": 57,
+                                "end_index": 67,
+                                "text": "Chez Pippo",
+                                "part_index": 0,
+                            },
+                            "grounding_chunk_indices": [0],
+                            "confidence_scores": None,
+                        },
+                        {
+                            "segment": {
+                                "start_index": 72,
+                                "end_index": 87,
+                                "text": "La Casa di Alfio",
+                                "part_index": 0,
+                            },
+                            "grounding_chunk_indices": [1],
+                            "confidence_scores": None,
+                        },
+                    ],
+                    "web_search_queries": [],
+                },
+            }
+        ],
+        "prompt_feedback": {
+            "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+            "safety_ratings": [],
+        },
+        "usage_metadata": {
+            "prompt_token_count": 15,
+            "candidates_token_count": 25,
+            "total_token_count": 40,
+        },
+    }
+
+    response = GenerateContentResponse.model_validate(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    message = result.generations[0].message
+
+    assert "grounding_metadata" in message.response_metadata
+    gm = message.response_metadata["grounding_metadata"]
+    assert len(gm["grounding_chunks"]) == 2
+    assert gm["grounding_chunks"][0]["maps"] is not None
+    assert gm["grounding_chunks"][0]["web"] is None
+
+    content_blocks = message.content_blocks
+    assert isinstance(content_blocks, list)
+
+    # Verify citations are created from maps data
+    text_blocks_with_citations = [
+        block
+        for block in content_blocks
+        if block.get("type") == "text" and block.get("annotations")
+    ]
+    assert len(text_blocks_with_citations) > 0, "Expected citations in text blocks"
+
+    for block in text_blocks_with_citations:
+        annotations = block.get("annotations", [])
+        citations = [ann for ann in annotations if ann.get("type") == "citation"]
+        assert len(citations) > 0, "Expected at least one citation from maps"
+
+        for citation in citations:
+            assert citation.get("type") == "citation"
+            assert "id" in citation
+            # Maps citations should have maps.google.com URLs
+            if "url" in citation:
+                assert isinstance(citation["url"], str)
+                assert "maps.google.com" in citation["url"]
+            # Maps citations should have place_id in extras
+            if "extras" in citation:
+                google_ai_metadata = citation["extras"].get("google_ai_metadata", {})
+                # At least one citation should have a place_id
+                if "place_id" in google_ai_metadata:
+                    assert google_ai_metadata["place_id"].startswith("places/")
+
+
 def test_thinking_config_merging_with_generation_config() -> None:
     """Test that `thinking_config` is properly merged when passed in
     `generation_config`."""

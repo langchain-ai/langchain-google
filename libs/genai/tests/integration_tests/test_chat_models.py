@@ -1807,7 +1807,7 @@ def test_url_context_tool(backend_config: dict) -> None:
 
 def test_google_maps_grounding(backend_config: dict) -> None:
     """Test using Google Maps grounding for location-aware responses."""
-    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", **backend_config)
     model_with_maps = model.bind_tools([{"google_maps": {}}])
 
     response = model_with_maps.invoke(
@@ -1832,6 +1832,74 @@ def test_google_maps_grounding(backend_config: dict) -> None:
     assert has_grounding_chunks or has_widget_token, (
         "Expected maps grounding data or widget token"
     )
+
+    # Test multi-turn conversation with grounding metadata in history
+    messages = [
+        HumanMessage("What are some good Italian restaurants in Boston's North End?"),
+        response,  # Include the response with grounding metadata
+        HumanMessage("What about French restaurants in the same area?"),
+    ]
+
+    follow_up_response = model_with_maps.invoke(messages)
+    assert isinstance(follow_up_response, AIMessage)
+    assert isinstance(follow_up_response.content, str) or isinstance(
+        follow_up_response.content, list
+    )
+
+    # Test with explicit location context via tool_config
+    model_with_location = model.bind_tools(
+        [{"google_maps": {}}],
+        tool_config={
+            "retrieval_config": {
+                "lat_lng": {
+                    "latitude": 42.366978,
+                    "longitude": -71.053940,
+                }
+            }
+        },
+    )
+
+    response_with_location = model_with_location.invoke(
+        "What Italian restaurants are within a 5 minute walk from here?"
+    )
+    assert isinstance(response_with_location, AIMessage)
+    assert isinstance(response_with_location.content, str) or isinstance(
+        response_with_location.content, list
+    )
+    assert "grounding_metadata" in response_with_location.response_metadata
+
+
+def test_google_maps_grounding_invoke_direct(backend_config: dict) -> None:
+    """Test passing Maps grounding tool directly to invoke without binding."""
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", **backend_config)
+
+    # Pass tools directly to invoke instead of binding
+    response = model.invoke(
+        "What are some good Italian restaurants in Boston's North End?",
+        tools=[{"google_maps": {}}],
+    )
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str) or isinstance(response.content, list)
+    assert "grounding_metadata" in response.response_metadata
+
+    # Test with tool_config passed directly to invoke
+    response_with_location = model.invoke(
+        "What Italian restaurants are within a 5 minute walk from here?",
+        tools=[{"google_maps": {}}],
+        tool_config={
+            "retrieval_config": {
+                "lat_lng": {
+                    "latitude": 42.366978,
+                    "longitude": -71.053940,
+                }
+            }
+        },
+    )
+    assert isinstance(response_with_location, AIMessage)
+    assert isinstance(response_with_location.content, str) or isinstance(
+        response_with_location.content, list
+    )
+    assert "grounding_metadata" in response_with_location.response_metadata
 
 
 def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
