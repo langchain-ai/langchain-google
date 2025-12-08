@@ -389,6 +389,26 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations([src_4])
     assert result == src_4
 
+    # Test computer_use built-in tool (Issue #1243)
+    src_5: dict[str, Any] = {"computer_use": {"environment": "browser"}}
+    result = convert_to_genai_function_declarations([src_5])
+    assert result.computer_use is not None
+    assert (
+        result.computer_use.environment
+        == glm.Tool.ComputerUse.Environment.ENVIRONMENT_BROWSER
+    )
+    # Should NOT be treated as a function declaration (was the bug)
+    assert len(result.function_declarations) == 0
+
+    # Test computer_use with default environment
+    src_6: dict[str, Any] = {"computer_use": {}}
+    result = convert_to_genai_function_declarations([src_6])
+    assert result.computer_use is not None
+    assert (
+        result.computer_use.environment
+        == glm.Tool.ComputerUse.Environment.ENVIRONMENT_BROWSER
+    )
+
     with pytest.raises(ValueError) as exc_info1:
         _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore
     assert str(exc_info1.value).startswith("Unsupported tool")

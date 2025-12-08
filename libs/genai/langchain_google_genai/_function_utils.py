@@ -56,6 +56,7 @@ _GoogleSearchRetrievalLike = gapic.GoogleSearchRetrieval | dict[str, Any]
 _GoogleSearchLike = gapic.Tool.GoogleSearch | dict[str, Any]
 _CodeExecutionLike = gapic.CodeExecution | dict[str, Any]
 _UrlContextLike = gapic.UrlContext | dict[str, Any]
+_ComputerUseLike = gapic.Tool.ComputerUse | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
@@ -64,6 +65,7 @@ class _ToolDict(TypedDict):
     google_search: NotRequired[_GoogleSearchLike]
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
+    computer_use: NotRequired[_ComputerUseLike]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -156,6 +158,7 @@ def convert_to_genai_function_declarations(
                     "google_search",
                     "code_execution",
                     "url_context",
+                    "computer_use",
                 ]
             ):
                 fd = _format_to_gapic_function_declaration(tool)  # type: ignore[arg-type]
@@ -191,6 +194,25 @@ def convert_to_genai_function_declarations(
                 gapic_tool.code_execution = gapic.CodeExecution(tool["code_execution"])
             if "url_context" in tool:
                 gapic_tool.url_context = gapic.UrlContext(tool["url_context"])
+            if "computer_use" in tool:
+                # Handle Computer Use tool for browser/desktop automation.
+                # Supports: {"computer_use": {"environment": "browser"}}
+                # See: https://ai.google.dev/gemini-api/docs/computer-use
+                cu_config = tool["computer_use"]
+                if isinstance(cu_config, gapic.Tool.ComputerUse):
+                    gapic_tool.computer_use = cu_config
+                else:
+                    # Map environment string to enum
+                    env_str = cu_config.get("environment", "browser")
+                    browser_env = gapic.Tool.ComputerUse.Environment.ENVIRONMENT_BROWSER
+                    env_map = {
+                        "browser": browser_env,
+                        "ENVIRONMENT_BROWSER": browser_env,
+                    }
+                    environment = env_map.get(env_str, browser_env)
+                    gapic_tool.computer_use = gapic.Tool.ComputerUse(
+                        environment=environment
+                    )
         else:
             fd = _format_to_gapic_function_declaration(tool)
             gapic_tool.function_declarations.append(fd)
