@@ -24,16 +24,16 @@ def test_vertex_initialization() -> None:
 
 
 @pytest.mark.release
-def test_vertex_invoke() -> None:
+async def test_vertex_invoke() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0)
-    output = llm.invoke("Say foo:")
+    output = await llm.ainvoke("Say foo:")
     assert isinstance(output, str)
 
 
 @pytest.mark.release
-def test_vertex_generate() -> None:
+async def test_vertex_generate() -> None:
     llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0)
-    output = llm.generate(["Say foo:"])
+    output = await llm.agenerate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     usage_metadata = output.generations[0][0].generation_info["usage_metadata"]  # type: ignore
@@ -43,9 +43,10 @@ def test_vertex_generate() -> None:
 
 @pytest.mark.release
 @pytest.mark.xfail(reason="VertexAI doesn't always respect number of candidates")
-def test_vertex_generate_multiple_candidates() -> None:
+@pytest.mark.xfail(reason="VertexAI doesn't always respect number of candidates")
+async def test_vertex_generate_multiple_candidates() -> None:
     llm = VertexAI(temperature=0.3, n=2, model_name="text-bison@001")
-    output = llm.generate(["Say foo:"])
+    output = await llm.agenerate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     assert len(output.generations[0]) == 2
@@ -62,9 +63,9 @@ async def test_vertex_agenerate() -> None:
 
 
 @pytest.mark.release
-def test_stream() -> None:
+async def test_stream() -> None:
     llm = VertexAI(temperature=0, model_name=_DEFAULT_MODEL_NAME)
-    for token in llm.stream("I'm Pickle Rick"):
+    async for token in llm.astream("I'm Pickle Rick"):
         assert isinstance(token, str)
 
 
@@ -93,7 +94,7 @@ def test_vertex_call_count_tokens() -> None:
 
 
 @pytest.mark.extended
-def test_structured_output_schema_json() -> None:
+async def test_structured_output_schema_json() -> None:
     model = VertexAI(
         rate_limiter=rate_limiter,
         model_name="gemini-2.0-flash-001",
@@ -112,7 +113,7 @@ def test_structured_output_schema_json() -> None:
         },
     )
 
-    response = model.invoke("List a few popular cookie recipes")
+    response = await model.ainvoke("List a few popular cookie recipes")
 
     assert isinstance(response, str)
     parsed_response = json.loads(response)

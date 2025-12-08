@@ -23,7 +23,7 @@ def check_tennis_score(player: str) -> str:
     return f"{player} is currently winning 6-0"
 
 
-def test_multiple_tools() -> None:
+async def test_multiple_tools() -> None:
     tools = [check_weather, check_live_traffic, check_tennis_score]
 
     model = ChatGoogleGenerativeAI(
@@ -34,6 +34,6 @@ def test_multiple_tools() -> None:
 
     input_ = "What is the latest tennis score for Leonid?"
 
-    result = model_with_tools.invoke(input_)
+    result = await model_with_tools.ainvoke(input_)
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0]["name"] == "check_tennis_score"

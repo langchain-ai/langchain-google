@@ -173,7 +173,7 @@ async def test_chat_google_genai_invoke(is_async: bool) -> None:
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_chat_google_genai_invoke_with_image() -> None:
+async def test_chat_google_genai_invoke_with_image() -> None:
     """Test generating an image and then text.
 
     Using `generation_config` to specify response modalities.
@@ -184,7 +184,7 @@ def test_chat_google_genai_invoke_with_image() -> None:
 
     for _ in range(3):
         # We break as soon as we get an image back, as it's not guaranteed
-        result = llm.invoke(
+        result = await llm.ainvoke(
             "Say 'meow!' and then Generate an image of a cat.",
             config={"tags": ["meow"]},
             generation_config={
@@ -210,7 +210,7 @@ def test_chat_google_genai_invoke_with_image() -> None:
 
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
-    _ = llm.invoke([result, next_message])
+    _ = await llm.ainvoke([result, next_message])
 
     # Test content_blocks property
     content_blocks = result.content_blocks
@@ -225,13 +225,13 @@ def test_chat_google_genai_invoke_with_image() -> None:
     _ = llm.invoke(["What's this?", {"role": "assistant", "content": content_blocks}])
 
 
-def test_chat_google_genai_invoke_with_audio() -> None:
+async def test_chat_google_genai_invoke_with_audio() -> None:
     """Test generating audio."""
     llm = ChatGoogleGenerativeAI(
         model=_AUDIO_OUTPUT_MODEL, response_modalities=[Modality.AUDIO]
     )
 
-    result = llm.invoke(
+    result = await llm.ainvoke(
         "Please say The quick brown fox jumps over the lazy dog",
     )
     assert isinstance(result, AIMessage)
@@ -259,7 +259,7 @@ def test_chat_google_genai_invoke_with_audio() -> None:
         (100, "explicit thinking budget"),
     ],
 )
-def test_chat_google_genai_invoke_thinking(
+async def test_chat_google_genai_invoke_thinking(
     thinking_budget: int | None, test_description: str
 ) -> None:
     """Test invoke a thinking model with different thinking budget configurations."""
@@ -269,7 +269,7 @@ def test_chat_google_genai_invoke_thinking(
 
     llm = ChatGoogleGenerativeAI(**llm_kwargs)
 
-    result = llm.invoke(
+    result = await llm.ainvoke(
         "How many O's are in Google? Please tell me how you double checked the result",
     )
 
@@ -728,14 +728,14 @@ def test_chat_google_genai_invoke_media_resolution(message: BaseMessage) -> None
     )
 
 
-def test_chat_google_genai_single_call_with_history() -> None:
+async def test_chat_google_genai_single_call_with_history() -> None:
     model = ChatGoogleGenerativeAI(model=_MODEL)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model.invoke([message1, message2, message3])
+    response = await model.ainvoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         text_content = "".join(
@@ -752,7 +752,7 @@ def test_chat_google_genai_single_call_with_history() -> None:
     "model_name",
     [_MODEL, _PRO_MODEL],
 )
-def test_chat_google_genai_system_message(
+async def test_chat_google_genai_system_message(
     model_name: str,
 ) -> None:
     """Test system message handling.
@@ -769,7 +769,7 @@ def test_chat_google_genai_system_message(
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model.invoke([system_message, message1, message2, message3])
+    response = await model.ainvoke([system_message, message1, message2, message3])
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         text_content = "".join(
@@ -815,7 +815,7 @@ def test_safety_settings_gemini(use_streaming: bool) -> None:
         assert len(output.content) > 0
 
 
-def test_chat_function_calling_with_multiple_parts() -> None:
+async def test_chat_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
         question: str,
@@ -849,7 +849,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
             "sparrow, hawk, crow by using search tool."
         )
     )
-    response = llm_with_search_force.invoke([request])
+    response = await llm_with_search_force.ainvoke([request])
 
     assert isinstance(response, AIMessage)
     assert len(response.tool_calls) > 0
@@ -873,7 +873,7 @@ def test_chat_function_calling_with_multiple_parts() -> None:
             "colors?"
         )
     )
-    result = llm_with_search.invoke([request, response, *tool_messages, follow_up])
+    result = await llm_with_search.ainvoke([request, response, *tool_messages, follow_up])
 
     assert isinstance(result, AIMessage)
 

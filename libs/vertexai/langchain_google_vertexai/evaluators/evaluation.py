@@ -240,6 +240,36 @@ class VertexStringEvaluator(_EvaluatorBase, StringEvaluator):
         response = await self._async_client.evaluate_instances(request)
         return _parse_response(response, metric=self._metric)[0]
 
+    async def aevaluate(
+        self,
+        examples: Sequence[dict[str, str]],
+        predictions: Sequence[dict[str, str]],
+        *,
+        question_key: str = "context",
+        answer_key: str = "reference",
+        prediction_key: str = "prediction",
+        instruction_key: str = "instruction",
+        **kwargs: Any,
+    ) -> list[dict]:
+        instances: list[dict] = []
+        for example, prediction in zip(examples, predictions, strict=False):
+            row = {"prediction": prediction[prediction_key]}
+            if answer_key in example:
+                row["reference"] = example[answer_key]
+            if question_key in example:
+                row["context"] = example[question_key]
+            if instruction_key in example:
+                row["instruction"] = example[instruction_key]
+            instances.append(row)
+
+        if self._metric in _METRICS_MULTIPLE_INSTANCES:
+            request = _prepare_request(
+                instances, metric=self._metric, location=self._location
+            )
+            response = await self._async_client.evaluate_instances(request)
+            return _parse_response(response, metric=self._metric)
+        return [await self._aevaluate_strings(**i) for i in instances]
+
 
 class VertexPairWiseStringEvaluator(_EvaluatorBase, PairwiseStringEvaluator):
     """Evaluate the perplexity of a predicted string."""

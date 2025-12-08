@@ -123,7 +123,7 @@ def datastore_vector_store(
 
 
 @pytest.mark.extended
-def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager) -> None:
+async def test_vector_search_sdk_manager(sdk_manager: VectorSearchSDKManager) -> None:
     gcs_client = sdk_manager.get_gcs_client()
     assert isinstance(gcs_client, storage.Client)
 
@@ -176,7 +176,7 @@ def test_gcs_document_storage_valid_user_input(
         "datastore_document_storage",
     ],
 )
-def test_document_storage(
+async def test_document_storage(
     storage_class: str,
     request: pytest.FixtureRequest,
 ) -> None:
@@ -207,8 +207,8 @@ def test_document_storage(
     ids = [str(uuid4()) for i in range(N * len(weirdly_encoded_texts))]
 
     # Test batch storage and retrieval
-    document_storage.mset(list(zip(ids, documents, strict=False)))
-    retrieved_documents = document_storage.mget(ids)
+    await document_storage.amset(list(zip(ids, documents, strict=False)))
+    retrieved_documents = await document_storage.amget(ids)
 
     for og_document, retrieved_document in zip(
         documents, retrieved_documents, strict=False
@@ -216,16 +216,16 @@ def test_document_storage(
         assert og_document == retrieved_document
 
     # Test key yielding
-    keys = list(document_storage.yield_keys())
+    keys = [k async for k in document_storage.ayield_keys()]
     assert all(id in keys for id in ids)
 
     # Test deletion
-    document_storage.mdelete(ids)
-    assert all(item is None for item in document_storage.mget(ids))
+    await document_storage.amdelete(ids)
+    assert all(item is None for item in await document_storage.amget(ids))
 
 
 @pytest.mark.extended
-def test_public_endpoint_vector_searcher(
+async def test_public_endpoint_vector_searcher(
     embeddings: VertexAIEmbeddings, sdk_manager: VectorSearchSDKManager
 ) -> None:
     vertexai.init(api_transport="grpc")
@@ -236,7 +236,7 @@ def test_public_endpoint_vector_searcher(
 
     texts = ["What's your favourite animal", "What's your favourite city"]
 
-    embeddings_vector = embeddings.embed_documents(texts=texts)
+    embeddings_vector = await embeddings.aembed_documents(texts=texts)
 
     matching_neighbors_list = searcher.find_neighbors(embeddings=embeddings_vector, k=4)
 
@@ -247,18 +247,18 @@ def test_public_endpoint_vector_searcher(
 @pytest.mark.parametrize(
     "vector_store_class", ["vector_store", "datastore_vector_store"]
 )
-def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest) -> None:
+async def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest) -> None:
     vertexai.init(api_transport="grpc")
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
     query = "What are your favourite animals?"
-    docs_with_scores = vector_store.similarity_search_with_score(query, k=1)
+    docs_with_scores = await vector_store.asimilarity_search_with_score(query, k=1)
     assert len(docs_with_scores) == 1
     for doc, score in docs_with_scores:
         assert isinstance(doc, Document)
         assert isinstance(score, float)
 
-    docs = vector_store.similarity_search(query, k=2)
+    docs = await vector_store.asimilarity_search(query, k=2)
     assert len(docs) == 2
     for doc in docs:
         assert isinstance(doc, Document)
@@ -268,7 +268,7 @@ def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest) -
 @pytest.mark.parametrize(
     "vector_store_class", ["vector_store", "datastore_vector_store"]
 )
-def test_vector_store_hybrid_search(
+async def test_vector_store_hybrid_search(
     vector_store_class: str,
     request: pytest.FixtureRequest,
     embeddings: VertexAIEmbeddings,
@@ -277,13 +277,13 @@ def test_vector_store_hybrid_search(
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
     query = "What are your favourite animals?"
-    embedding = embeddings.embed_query(query)
+    embedding = await embeddings.aembed_query(query)
     sparse_embedding: dict[str, list[int] | list[float]] = {
         "values": [0.5, 0.7],
         "dimensions": [2, 4],
     }
 
-    docs_with_scores = vector_store.similarity_search_by_vector_with_score(
+    docs_with_scores = await vector_store.asimilarity_search_by_vector_with_score(
         embedding=embedding, sparse_embedding=sparse_embedding, k=1
     )
     assert len(docs_with_scores) == 1
@@ -298,7 +298,7 @@ def test_vector_store_hybrid_search(
 
 @pytest.mark.extended
 @pytest.mark.parametrize("vector_store_class", ["datastore_vector_store"])
-def test_add_texts_with_embeddings(
+async def test_add_texts_with_embeddings(
     vector_store_class: str,
     request: pytest.FixtureRequest,
     embeddings: VertexAIEmbeddings,
@@ -307,8 +307,8 @@ def test_add_texts_with_embeddings(
 
     texts = ["my favourite animal is the elephant", "my favourite animal is the lion"]
     ids = ["idx1", "idx2"]
-    embs = embeddings.embed_documents(texts)
-    ids1 = vector_store.add_texts_with_embeddings(
+    embs = await embeddings.aembed_documents(texts)
+    ids1 = await vector_store.aadd_texts_with_embeddings(
         texts=texts, embeddings=embs, ids=ids, is_complete_overwrite=True
     )
     assert len(ids1) == 2
@@ -316,7 +316,7 @@ def test_add_texts_with_embeddings(
     sparse_embeddings: list[dict[str, list[int] | list[float]]] = [
         {"values": [0.5, 0.7], "dimensions": [2, 4]}
     ] * 2
-    ids2 = vector_store.add_texts_with_embeddings(
+    ids2 = await vector_store.aadd_texts_with_embeddings(
         texts=texts,
         embeddings=embs,
         sparse_embeddings=sparse_embeddings,
@@ -335,11 +335,11 @@ def test_add_texts_with_embeddings(
         # "datastore_vector_store" Waiting for the bug to be fixed as its stream
     ],
 )
-def test_vector_store_filtering(
+async def test_vector_store_filtering(
     vector_store_class: str, request: pytest.FixtureRequest
 ) -> None:
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
-    documents = vector_store.similarity_search(
+    documents = await vector_store.asimilarity_search(
         "I want some pants",
         filter=[Namespace(name="color", allow_tokens=["blue"])],
         numeric_filter=[NumericNamespace(name="price", value_float=20.0, op="LESS")],
@@ -351,18 +351,18 @@ def test_vector_store_filtering(
 
 
 @pytest.mark.long
-def test_vector_store_update_index(
+async def test_vector_store_update_index(
     vector_store: VectorSearchVectorStore, sample_documents: list[Document]
 ) -> None:
-    vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
+    await vector_store.aadd_documents(documents=sample_documents, is_complete_overwrite=True)
 
 
 @pytest.mark.extended
-def test_vector_store_stream_update_index(
+async def test_vector_store_stream_update_index(
     datastore_vector_store: VectorSearchVectorStoreDatastore,
     sample_documents: list[Document],
 ) -> None:
-    datastore_vector_store.add_documents(
+    await datastore_vector_store.aadd_documents(
         documents=sample_documents, is_complete_overwrite=True
     )
 

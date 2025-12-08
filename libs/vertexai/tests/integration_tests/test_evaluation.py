@@ -9,11 +9,12 @@ from langchain_google_vertexai import (
 
 
 @pytest.mark.extended
-def test_evaluate() -> None:
+@pytest.mark.extended
+async def test_evaluate() -> None:
     evaluator = VertexStringEvaluator(
         metric="bleu", project_id=os.environ["PROJECT_ID"]
     )
-    result = evaluator.evaluate(
+    result = await evaluator.aevaluate(
         examples=[
             {"reference": "This is a test."},
             {"reference": "This is another test."},
@@ -30,11 +31,13 @@ def test_evaluate() -> None:
 
 @pytest.mark.extended
 @pytest.mark.flaky(retries=3)
-def test_evaluate_strings() -> None:
+@pytest.mark.extended
+@pytest.mark.flaky(retries=3)
+async def test_evaluate_strings() -> None:
     evaluator = VertexStringEvaluator(
         metric="safety", project_id=os.environ["PROJECT_ID"]
     )
-    result = evaluator._evaluate_strings(prediction="This is a test")
+    result = await evaluator._aevaluate_strings(prediction="This is a test")
     assert isinstance(result, dict)
     assert "score" in result
     assert "explanation" in result
@@ -58,12 +61,14 @@ async def test_aevaluate_strings() -> None:
 
 @pytest.mark.extended
 @pytest.mark.xfail(reason="TODO: investigate (started failing 2025-03-25).")
+@pytest.mark.extended
+@pytest.mark.xfail(reason="TODO: investigate (started failing 2025-03-25).")
 async def test_evaluate_pairwise() -> None:
     evaluator = VertexPairWiseStringEvaluator(
         metric="pairwise_question_answering_quality",
         project_id=os.environ["PROJECT_ID"],
     )
-    result = evaluator.evaluate_string_pairs(
+    result = await evaluator.aevaluate_string_pairs(
         prediction="London",
         prediction_b="Berlin",
         input="What is the capital of Great Britain?",

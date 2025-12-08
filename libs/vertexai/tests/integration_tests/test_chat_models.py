@@ -126,7 +126,7 @@ def test_init_from_credentials_obj() -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
-def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> None:
+async def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> None:
     """Test making a single invoke call."""
     model = ChatVertexAI(
         model_name=model_name,
@@ -134,7 +134,7 @@ def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> 
         endpoint_version=endpoint_version,
     )
     message = HumanMessage(content="Hello")
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     _check_usage_metadata(response)
@@ -142,7 +142,9 @@ def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> 
 
 @pytest.mark.release
 @pytest.mark.xfail(reason="vertex api doesn't respect n/candidate_count")
-def test_candidates() -> None:
+@pytest.mark.release
+@pytest.mark.xfail(reason="vertex api doesn't respect n/candidate_count")
+async def test_candidates() -> None:
     """Test making a single invoke call with `n>1`.
 
     # TODO: what is chat-bison@001? is it marked for deprecation?
@@ -151,7 +153,7 @@ def test_candidates() -> None:
         model_name="chat-bison@001", temperature=0.3, n=2, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
-    response = model.generate(messages=[[message]])
+    response = await model.agenerate(messages=[[message]])
     assert isinstance(response, LLMResult)
     assert len(response.generations) == 1
     assert len(response.generations[0]) == 2
@@ -238,7 +240,7 @@ async def test_vertexai_astream() -> None:
 
 
 @pytest.mark.release
-def test_multimodal() -> None:
+async def test_multimodal() -> None:
     """Test multimodal input with a gcs image URL in chat completions format."""
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     gcs_url = (
@@ -253,13 +255,13 @@ def test_multimodal() -> None:
         "text": "What is shown in this image?",
     }
     message = HumanMessage(content=[text_message, image_message])
-    output = llm.invoke([message])
+    output = await llm.ainvoke([message])
     assert isinstance(output.content, str)
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
     llm = ChatVertexAI(model_name="gemini-2.5-pro", rate_limiter=RATE_LIMITER)
-    for chunk in llm.stream([message]):
+    async for chunk in llm.astream([message]):
         assert isinstance(chunk, AIMessageChunk)
 
 
@@ -283,7 +285,9 @@ MULTIMODAL_INPUTS = [
 
 @pytest.mark.release
 @pytest.mark.parametrize(("file_uri", "mime_type"), MULTIMODAL_INPUTS)
-def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
+@pytest.mark.release
+@pytest.mark.parametrize(("file_uri", "mime_type"), MULTIMODAL_INPUTS)
+async def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
     """Test multimodal input with gcs file URIs (video, audio, image)."""
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     media_message = {
@@ -296,14 +300,17 @@ def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
         "text": "Describe the attached media in 5 words!",
     }
     message = HumanMessage(content=[text_message, media_message])
-    output = llm.invoke([message])
+    output = await llm.ainvoke([message])
     assert isinstance(output.content, str)
 
 
 @pytest.mark.release
 @pytest.mark.parametrize(("file_uri", "mime_type"), MULTIMODAL_INPUTS)
 @pytest.mark.first
-def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
+@pytest.mark.release
+@pytest.mark.parametrize(("file_uri", "mime_type"), MULTIMODAL_INPUTS)
+@pytest.mark.first
+async def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
     """Test multimodal input with base64 encoded media content (video, audio, image)."""
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     storage_client = storage.Client()
@@ -319,13 +326,15 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
         "text": "Describe the attached media in 5 words!",
     }
     message = HumanMessage(content=[text_message, media_message])
-    output = llm.invoke([message])
+    output = await llm.ainvoke([message])
     assert isinstance(output.content, str)
 
 
 @pytest.mark.release
 @pytest.mark.first
-def test_multimodal_media_inline_base64_template() -> None:
+@pytest.mark.release
+@pytest.mark.first
+async def test_multimodal_media_inline_base64_template() -> None:
     """Test multimodal input with base64 encoded media content using prompt template."""
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
     prompt_template = ChatPromptTemplate(
@@ -354,12 +363,13 @@ def test_multimodal_media_inline_base64_template() -> None:
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     chain = prompt_template | llm
-    output = chain.invoke({"media_base64": media_base64, "mime_type": mime_type})
+    output = await chain.ainvoke({"media_base64": media_base64, "mime_type": mime_type})
     assert isinstance(output.content, str)
 
 
 @pytest.mark.extended
-def test_multimodal_media_inline_base64_agent() -> None:
+@pytest.mark.extended
+async def test_multimodal_media_inline_base64_agent() -> None:
     """Test multimodal input with base64 encoded media content using a ReAct agent."""
     from langchain import agents
 
@@ -393,7 +403,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
         model=llm,
         tools=tools,
     )
-    output = agent.invoke(
+    output = await agent.ainvoke(
         {"messages": [{"role": "user", "content": [text_message, media_message]}]}
     )
     assert "messages" in output
@@ -401,7 +411,8 @@ def test_multimodal_media_inline_base64_agent() -> None:
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_audio_timestamp() -> None:
+@pytest.mark.flaky(retries=3, delay=1)
+async def test_audio_timestamp() -> None:
     storage_client = storage.Client()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
 
@@ -422,7 +433,7 @@ def test_audio_timestamp() -> None:
     text_message = {"type": "text", "text": instruction}
 
     message = HumanMessage(content=[media_message, text_message])
-    output = llm.invoke([message], audio_timestamp=True)
+    output = await llm.ainvoke([message], audio_timestamp=True)
 
     assert isinstance(output.content, str)
     assert re.search(r"(\d{2}:\d{2}:?|\[\d{2}:\d{2}:\d{2}\])", output.content)
@@ -464,7 +475,10 @@ def test_parse_history_gemini_multimodal_FC() -> None:
 @pytest.mark.xfail(reason="investigating")
 @pytest.mark.release
 @pytest.mark.parametrize(("file_uri", "mime_type"), [VIDEO_PARAM])
-def test_multimodal_video_metadata(file_uri, mime_type) -> None:
+@pytest.mark.xfail(reason="investigating")
+@pytest.mark.release
+@pytest.mark.parametrize(("file_uri", "mime_type"), [VIDEO_PARAM])
+async def test_multimodal_video_metadata(file_uri, mime_type) -> None:
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     media_message = {
         "type": "media",
@@ -481,32 +495,35 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
     }
 
     message = HumanMessage(content=[text_message, media_message])
-    output = llm.invoke([message])
+    output = await llm.ainvoke([message])
     assert isinstance(output.content, str)
 
 
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
-def test_vertexai_single_call_with_history(model_name: str | None) -> None:
+@pytest.mark.release
+@pytest.mark.parametrize("model_name", model_names_to_test)
+async def test_vertexai_single_call_with_history(model_name: str | None) -> None:
     model = ChatVertexAI(model_name=model_name, rate_limiter=RATE_LIMITER)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model.invoke([message1, message2, message3])
+    response = await model.ainvoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
 
 @pytest.mark.release
-def test_vertexai_system_message() -> None:
+@pytest.mark.release
+async def test_vertexai_system_message() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     system_instruction = """CymbalBank is a bank located in London"""
     text_question1 = "Where is Cymbal located? Provide only the name of the city."
     sys_message = SystemMessage(content=system_instruction)
     message1 = HumanMessage(content=text_question1)
-    response = model.invoke([sys_message, message1])
+    response = await model.ainvoke([sys_message, message1])
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -514,20 +531,22 @@ def test_vertexai_system_message() -> None:
 
 
 @pytest.mark.release
-def test_vertexai_single_call_with_no_system_messages() -> None:
+@pytest.mark.release
+async def test_vertexai_single_call_with_no_system_messages() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model.invoke([message1, message2, message3])
+    response = await model.ainvoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
 
 @pytest.mark.release
-def test_vertexai_single_call_previous_blocked_response() -> None:
+@pytest.mark.release
+async def test_vertexai_single_call_previous_blocked_response() -> None:
     """If a previous call was blocked, the AIMessage will have empty content.
 
     Empty content should be ignored.
@@ -554,7 +573,7 @@ def test_vertexai_single_call_previous_blocked_response() -> None:
         },
     )
     message2 = HumanMessage(content=text_question2)
-    response = model.invoke([message1, message2])
+    response = await model.ainvoke([message1, message2])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
@@ -573,7 +592,9 @@ def test_get_num_tokens_from_messages(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
-def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
+@pytest.mark.extended
+@pytest.mark.parametrize("endpoint_version", endpoint_versions)
+async def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -589,7 +610,7 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
         rate_limiter=RATE_LIMITER,
         endpoint_version=endpoint_version,
     ).bind_tools([MyModel])
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     _check_tool_calls(response, "MyModel")
 
     # Test .bind_tools with function
@@ -601,7 +622,7 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
         safety_settings=safety,
         rate_limiter=RATE_LIMITER,
     ).bind_tools([my_model])
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     _check_tool_calls(response, "my_model")
 
     # Test .bind_tools with tool
@@ -612,13 +633,13 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME, safety_settings=safety
     ).bind_tools([my_tool])
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     _check_tool_calls(response, "my_tool")
 
     # Test streaming
-    stream = model.stream([message])
+    stream = model.astream([message])
     first = True
-    for chunk in stream:
+    async for chunk in stream:
         if first:
             gathered = chunk
             first = False
@@ -633,7 +654,8 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
 
 
 @pytest.mark.release
-def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
+@pytest.mark.release
+async def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -655,7 +677,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
         },
     )
     message = HumanMessage(content="My name is Erick and I am 27 years old")
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert response.content == ""
@@ -672,7 +694,8 @@ def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
 
 
 @pytest.mark.release
-def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
+@pytest.mark.release
+async def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
     class MyModel(BaseModel):
         name: str
         age: int
@@ -689,7 +712,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
         },
     )
     message = HumanMessage(content="My name is Erick and I am 27 years old")
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert response.content != ""
@@ -698,9 +721,10 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
 
 
 @pytest.mark.release
-def test_chat_model_multiple_system_message() -> None:
+@pytest.mark.release
+async def test_chat_model_multiple_system_message() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
-    response = model.invoke(
+    response = await model.ainvoke(
         [
             SystemMessage("Be helpful"),
             AIMessage("Hi, I'm LeoAI. How can I help?"),
@@ -712,7 +736,9 @@ def test_chat_model_multiple_system_message() -> None:
 
 @pytest.mark.release
 @pytest.mark.parametrize("method", [None, "json_mode"])
-def test_chat_vertexai_gemini_with_structured_output(
+@pytest.mark.release
+@pytest.mark.parametrize("method", [None, "json_mode"])
+async def test_chat_vertexai_gemini_with_structured_output(
     method: Literal["json_mode"] | None,
 ) -> None:
     class MyModel(BaseModel):
@@ -730,7 +756,7 @@ def test_chat_vertexai_gemini_with_structured_output(
     model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert isinstance(response, MyModel)
     assert response == MyModel(name="Erick", age=27)
 
@@ -743,7 +769,7 @@ def test_chat_vertexai_gemini_with_structured_output(
             },
             method=method,
         )
-        response = model.invoke([message])
+        response = await model.ainvoke([message])
         assert response == {
             "name": "Erick",
             "age": 27,
@@ -762,7 +788,7 @@ def test_chat_vertexai_gemini_with_structured_output(
         },
         method=method,
     )
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert response == {
         "name": "Erick",
         "age": 27,
@@ -770,7 +796,8 @@ def test_chat_vertexai_gemini_with_structured_output(
 
 
 @pytest.mark.release
-def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
+@pytest.mark.release
+async def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
     class Argument(BaseModel):
         description: str
 
@@ -786,14 +813,16 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
         Response, method="json_mode"
     )
 
-    response = model.invoke("Why is Real Madrid better than Barcelona?")
+    response = await model.ainvoke("Why is Real Madrid better than Barcelona?")
 
     assert isinstance(response, Response)
 
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
-def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.release
+async def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
     def search(
         question: str,
@@ -828,7 +857,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     request = HumanMessage(
         content="Please tell the primary color of following birds: sparrow, hawk, crow",
     )
-    response = llm_with_search_force.invoke([request])
+    response = await llm_with_search_force.ainvoke([request])
 
     assert isinstance(response, AIMessage)
     tool_calls = response.tool_calls
@@ -846,7 +875,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
         )
         tool_messages.append(tool_message)
 
-    result = llm_with_search.invoke([request, response, *tool_messages])
+    result = await llm_with_search.ainvoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
     assert "brown" in result.content
@@ -856,12 +885,14 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
 # Image Generation is knwown to be flaky.
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
-def test_chat_vertexai_gemini_image_output() -> None:
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.release
+async def test_chat_vertexai_gemini_image_output() -> None:
     model = ChatVertexAI(
         model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME,
         response_modalities=[Modality.TEXT, Modality.IMAGE],
     )
-    result = model.invoke("Generate an image of a cat. Then, say meow!")
+    result = await model.ainvoke("Generate an image of a cat. Then, say meow!")
 
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, list)
@@ -884,9 +915,11 @@ def test_chat_vertexai_gemini_image_output() -> None:
 # Image Generation is knwown to be flaky.
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
-def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.release
+async def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_IMAGE_GENERATION_MODEL_NAME)
-    result = model.invoke(
+    result = await model.ainvoke(
         "Generate an image of a cat. Then, say meow!",
         response_modalities=[Modality.TEXT, Modality.IMAGE],
     )
@@ -918,9 +951,11 @@ def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
-def test_chat_vertexai_gemini_thinking_auto() -> None:
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.release
+async def test_chat_vertexai_gemini_thinking_auto() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
-    response = model.invoke("How many O's are in Google? Think before you answer.")
+    response = await model.ainvoke("How many O's are in Google? Think before you answer.")
     assert isinstance(response, AIMessage)
     assert response.usage_metadata is not None
     assert response.usage_metadata["output_token_details"]["reasoning"] > 0
@@ -933,9 +968,11 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
-def test_chat_vertexai_gemini_thinking_configured() -> None:
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.release
+async def test_chat_vertexai_gemini_thinking_configured() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=100)
-    response = model.invoke("How many O's are in Google? Think before you answer.")
+    response = await model.ainvoke("How many O's are in Google? Think before you answer.")
     assert isinstance(response, AIMessage)
     assert response.usage_metadata is not None
     assert response.usage_metadata["output_token_details"]["reasoning"] > 0
@@ -973,7 +1010,10 @@ def _check_thinking_output(content: list, output_version: str) -> None:
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.release
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
+@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.release
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+async def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
     output_version: str,
 ) -> None:
     model = ChatVertexAI(
@@ -988,7 +1028,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
     }
 
     full: AIMessageChunk | None = None
-    for chunk in model.stream([input_message]):
+    async for chunk in model.astream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
@@ -1004,11 +1044,12 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
 
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
-    _ = model.invoke([input_message, full, next_message])
+    _ = await model.ainvoke([input_message, full, next_message])
 
 
 @pytest.mark.release
-def test_thought_signatures() -> None:
+@pytest.mark.release
+async def test_thought_signatures() -> None:
     """Test Gemini thought signatures.
 
     Verifies that thought signature byte blobs flow correctly through the entire Gemini
@@ -1032,19 +1073,19 @@ def test_thought_signatures() -> None:
     }
 
     full: BaseMessageChunk | None = None
-    for chunk in llm_with_tools.stream([input_message]):
+    async for chunk in llm_with_tools.astream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
 
     next_message = {"role": "user", "content": "Thanks!"}
-    _ = llm_with_tools.invoke([input_message, full, next_message])
+    _ = await llm_with_tools.ainvoke([input_message, full, next_message])
 
 
 @pytest.mark.release
-def test_chat_vertexai_gemini_thinking_disabled() -> None:
+async def test_chat_vertexai_gemini_thinking_disabled() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME, thinking_budget=0)
-    response = model.invoke("How many O's are in Google?")
+    response = await model.ainvoke("How many O's are in Google?")
     assert isinstance(response, AIMessage)
     assert (
         response.usage_metadata["total_tokens"]  # type: ignore
@@ -1055,12 +1096,12 @@ def test_chat_vertexai_gemini_thinking_disabled() -> None:
 
 
 @pytest.mark.release
-def test_chat_vertexai_gemini_thinking_configurable() -> None:
+async def test_chat_vertexai_gemini_thinking_configurable() -> None:
     model = ChatVertexAI(model_name=_DEFAULT_THINKING_MODEL_NAME)
     configurable_model = model.configurable_fields(
         thinking_budget=ConfigurableField(id="thinking_budget")
     )
-    response = configurable_model.invoke(
+    response = await configurable_model.ainvoke(
         "How many O's are in Google?", {"configurable": {"thinking_budget": 0}}
     )
     assert isinstance(response, AIMessage)
@@ -1092,7 +1133,7 @@ def test_prediction_client_transport() -> None:
 
 
 @pytest.mark.extended
-def test_structured_output_schema_json() -> None:
+async def test_structured_output_schema_json() -> None:
     model = ChatVertexAI(
         rate_limiter=RATE_LIMITER,
         model_name=_DEFAULT_MODEL_NAME,
@@ -1111,7 +1152,7 @@ def test_structured_output_schema_json() -> None:
         },
     )
 
-    response = model.invoke("List a few popular cookie recipes")
+    response = await model.ainvoke("List a few popular cookie recipes")
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -1137,11 +1178,11 @@ def test_structured_output_schema_json() -> None:
         rate_limiter=RATE_LIMITER,
     )
     with pytest.raises(ValueError, match="response_mime_type"):
-        response = model.invoke("List a few popular cookie recipes")
+        response = await model.ainvoke("List a few popular cookie recipes")
 
 
 @pytest.mark.release
-def test_json_mode_typeddict() -> None:
+async def test_json_mode_typeddict() -> None:
     class MyModel(TypedDict):
         name: str
         age: int
@@ -1153,19 +1194,19 @@ def test_json_mode_typeddict() -> None:
     model = llm.with_structured_output(MyModel, method="json_mode")
     message = HumanMessage(content="My name is Erick and I am 28 years old")
 
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert isinstance(response, dict)
     assert response == {"name": "Erick", "age": 28}
 
     # Test stream
-    for chunk in model.stream([message]):
+    async for chunk in model.astream([message]):
         assert isinstance(chunk, dict)
         assert all(key in ["name", "age"] for key in chunk)
     assert chunk == {"name": "Erick", "age": 28}
 
 
 @pytest.mark.extended
-def test_structured_output_schema_enum() -> None:
+async def test_structured_output_schema_enum() -> None:
     model = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         response_schema={"type": "STRING", "enum": ["drama", "comedy", "documentary"]},
@@ -1173,7 +1214,7 @@ def test_structured_output_schema_enum() -> None:
         rate_limiter=RATE_LIMITER,
     )
 
-    response = model.invoke(
+    response = await model.ainvoke(
         """
         The film aims to educate and inform viewers about real-life subjects, events, or
         people. It offers a factual record of a particular topic by combining interviews
@@ -1190,7 +1231,7 @@ def test_structured_output_schema_enum() -> None:
 
 @pytest.mark.extended
 @pytest.mark.first
-def test_context_catching() -> None:
+async def test_context_catching() -> None:
     system_instruction = """
 
     You are an expert researcher. You always stick to the facts in the sources provided,
@@ -1235,14 +1276,14 @@ def test_context_catching() -> None:
         rate_limiter=RATE_LIMITER,
     )
 
-    response = chat.invoke("What is the secret number?")
+    response = await chat.ainvoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
 
     # Using cached content in request
     chat = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
-    response = chat.invoke("What is the secret number?", cached_content=cached_content)
+    response = await chat.ainvoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -1250,7 +1291,7 @@ def test_context_catching() -> None:
 
 @pytest.mark.extended
 @pytest.mark.first
-def test_context_catching_tools() -> None:
+async def test_context_catching_tools() -> None:
     from langchain import agents
 
     @tool
@@ -1304,7 +1345,7 @@ def test_context_catching_tools() -> None:
         model=chat,
         tools=tools,
     )
-    response = agent.invoke(
+    response = await agent.ainvoke(
         {"messages": [{"role": "user", "content": "what is the secret number?"}]}
     )
     assert "messages" in response
@@ -1324,7 +1365,7 @@ def test_json_serializable() -> None:
 
 
 @pytest.mark.release
-def test_langgraph_example() -> None:
+async def test_langgraph_example() -> None:
     llm = ChatVertexAI(
         model_name=_DEFAULT_MODEL_NAME,
         max_output_tokens=8192,
@@ -1367,11 +1408,11 @@ def test_langgraph_example() -> None:
         HumanMessage(content="Multiply 2 and 3"),
         HumanMessage(content="No, actually multiply 3 and 3!"),
     ]
-    step1 = llm.invoke(
+    step1 = await llm.ainvoke(
         messages,
         tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
     )
-    step2 = llm.invoke(
+    step2 = await llm.ainvoke(
         [
             *messages,
             step1,
@@ -1441,7 +1482,7 @@ async def test_astream_events_langgraph_example() -> None:
 
 @pytest.mark.xfail(reason="can't add labels to the gemini content")
 @pytest.mark.release
-def test_label_metadata() -> None:
+async def test_label_metadata() -> None:
     llm = ChatVertexAI(
         model=_DEFAULT_MODEL_NAME,
         labels={
@@ -1449,14 +1490,14 @@ def test_label_metadata() -> None:
             "environment": "testing",
         },
     )
-    llm.invoke("hey! how are you")
+    await llm.ainvoke("hey! how are you")
 
 
 @pytest.mark.xfail(reason="can't add labels to the gemini content using invoke method")
 @pytest.mark.release
-def test_label_metadata_invoke_method() -> None:
+async def test_label_metadata_invoke_method() -> None:
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
-    llm.invoke(
+    await llm.ainvoke(
         "hello! invoke method",
         labels={
             "task": "labels_using_invoke",
@@ -1489,25 +1530,25 @@ def multimodal_pdf_chain() -> RunnableSerializable:
 
 
 @pytest.mark.release
-def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) -> None:
+async def test_multimodal_pdf_input_gcs(multimodal_pdf_chain: RunnableSerializable) -> None:
     # TODO: parallelize with url and b64 tests
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2312.11805v3.pdf"
     # GCS URI
-    response = multimodal_pdf_chain.invoke({"image": gcs_uri})
+    response = await multimodal_pdf_chain.ainvoke({"image": gcs_uri})
     assert isinstance(response, AIMessage)
 
 
 @pytest.mark.release
-def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) -> None:
+async def test_multimodal_pdf_input_url(multimodal_pdf_chain: RunnableSerializable) -> None:
     # TODO: parallelize with gcs and b64 tests
     url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     # URL
-    response = multimodal_pdf_chain.invoke({"image": url})
+    response = await multimodal_pdf_chain.ainvoke({"image": url})
     assert isinstance(response, AIMessage)
 
 
 @pytest.mark.release
-def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) -> None:
+async def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) -> None:
     # TODO: parallelize with gcs and url tests
     url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     request_response = requests.get(url, allow_redirects=True)
@@ -1516,14 +1557,14 @@ def test_multimodal_pdf_input_b64(multimodal_pdf_chain: RunnableSerializable) ->
         stream.write(request_response.content)
         image_data = base64.b64encode(stream.getbuffer()).decode("utf-8")
         image = f"data:application/pdf;base64,{image_data}"
-        response = multimodal_pdf_chain.invoke({"image": image})
+        response = await multimodal_pdf_chain.ainvoke({"image": image})
         assert isinstance(response, AIMessage)
 
 
 @pytest.mark.release
-def test_response_metadata_avg_logprobs() -> None:
+async def test_response_metadata_avg_logprobs() -> None:
     llm = ChatVertexAI(model="gemini-2.0-flash-001")
-    response = llm.invoke("Hello!")
+    response = await llm.ainvoke("Hello!")
     probs = response.response_metadata.get("avg_logprobs")
     if probs is not None:
         assert isinstance(probs, float)
@@ -1531,9 +1572,11 @@ def test_response_metadata_avg_logprobs() -> None:
 
 @pytest.mark.xfail(reason="logprobs are subject to daily quotas")
 @pytest.mark.release
-def test_logprobs() -> None:
+@pytest.mark.xfail(reason="logprobs are subject to daily quotas")
+@pytest.mark.release
+async def test_logprobs() -> None:
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=2)
-    msg = llm.invoke("hey")
+    msg = await llm.ainvoke("hey")
     tokenprobs = msg.response_metadata.get("logprobs_result")
     assert tokenprobs is None or isinstance(tokenprobs, list)
     if tokenprobs:
@@ -1550,11 +1593,11 @@ def test_logprobs() -> None:
                 stack.extend(token.get("top_logprobs", []))
 
     llm2 = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=True)
-    msg2 = llm2.invoke("how are you")
+    msg2 = await llm2.ainvoke("how are you")
     assert msg2.response_metadata["logprobs_result"]
 
     llm3 = ChatVertexAI(model=_DEFAULT_MODEL_NAME, logprobs=False)
-    msg3 = llm3.invoke("howdy")
+    msg3 = await llm3.ainvoke("howdy")
     assert msg3.response_metadata.get("logprobs_result") is None
 
 
@@ -1640,7 +1683,7 @@ def test_location_init() -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
-def test_vertexai_global_location_single_call(
+async def test_vertexai_global_location_single_call(
     model_name: str | None, endpoint_version: str
 ) -> None:
     """Test ChatVertexAI single call with global location."""
@@ -1652,13 +1695,13 @@ def test_vertexai_global_location_single_call(
     )
     assert model.location == "global"
     message = HumanMessage(content="Hello")
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     _check_usage_metadata(response)
 
 
-def test_nested_bind_tools() -> None:
+async def test_nested_bind_tools() -> None:
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
 
     class Person(BaseModel):
@@ -1671,7 +1714,7 @@ def test_nested_bind_tools() -> None:
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
     llm_with_tools = llm.bind_tools([People], tool_choice="People")
 
-    response = llm_with_tools.invoke("Chester, no hair color provided.")
+    response = await llm_with_tools.ainvoke("Chester, no hair color provided.")
     assert isinstance(response, AIMessage)
     assert response.tool_calls[0]["name"] == "People"
 
@@ -1694,7 +1737,7 @@ def _check_web_search_output(message: AIMessage, output_version: str) -> None:
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_search_builtin(output_version: str) -> None:
+async def test_search_builtin(output_version: str) -> None:
     """Test the built-in search tool."""
     llm = ChatVertexAI(
         model=_DEFAULT_MODEL_NAME, output_version=output_version
@@ -1706,7 +1749,7 @@ def test_search_builtin(output_version: str) -> None:
 
     # Test streaming
     full: AIMessageChunk | None = None
-    for chunk in llm.stream([input_message]):
+    async for chunk in llm.astream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
@@ -1717,7 +1760,7 @@ def test_search_builtin(output_version: str) -> None:
         "role": "user",
         "content": "Tell me more about that last story.",
     }
-    response = llm.invoke([input_message, full, next_message])
+    response = await llm.ainvoke([input_message, full, next_message])
     _check_web_search_output(response, output_version)
 
 
@@ -1738,7 +1781,7 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_code_execution_builtin(output_version: str) -> None:
+async def test_code_execution_builtin(output_version: str) -> None:
     llm = ChatVertexAI(
         model=_DEFAULT_MODEL_NAME, output_version=output_version
     ).bind_tools([{"code_execution": {}}])
@@ -1748,7 +1791,7 @@ def test_code_execution_builtin(output_version: str) -> None:
     }
 
     full: AIMessageChunk | None = None
-    for chunk in llm.stream([input_message]):
+    async for chunk in llm.astream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
@@ -1760,7 +1803,7 @@ def test_code_execution_builtin(output_version: str) -> None:
         "role": "user",
         "content": "Can you show me the calculation again with comments?",
     }
-    response = llm.invoke([input_message, full, next_message])
+    response = await llm.ainvoke([input_message, full, next_message])
     _check_code_execution_output(response, output_version)
 
 
