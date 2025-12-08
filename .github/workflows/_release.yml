@@ -14,7 +14,7 @@ on:
         required: true
         type: string
         description: "From which folder this pipeline executes"
-        default: "libs/vertexai"
+        default: "libs/genai"
       release-version:
         required: true
         type: string
