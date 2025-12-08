@@ -1369,7 +1369,8 @@ def test_chat_google_genai_with_structured_output(
             "name": "MyModel",
             "description": "MyModel",
             "parameters": MyModel.model_json_schema(),
-        }
+        },
+        method="function_calling",
     )
     response = model.invoke([message])
     assert response is not None, "Structured output with schema dict returned None"

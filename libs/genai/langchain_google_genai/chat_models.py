@@ -1525,12 +1525,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
 
-        # Default method uses function calling
+        # Default method uses json_schema for reliable structured output
         structured_model = model.with_structured_output(Joke)
+        structured_model.invoke("Tell me a joke about cats")
 
-        # For more reliable output, use json_schema with native responseSchema
-        structured_model_json = model.with_structured_output(Joke, method="json_schema")
-        structured_model_json.invoke("Tell me a joke about cats")
+        # Alternative: use function_calling method (less reliable)
+        structured_model_fc = model.with_structured_output(
+            Joke, method="function_calling"
+        )
         ```
 
         ```python
@@ -1543,9 +1545,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Two methods are supported for structured output:
 
-        * `method='function_calling'` (default): Uses tool calling to extract
-            structured data. Compatible with all models.
-        * `method='json_schema'`: Uses Gemini's native structured output API.
+        * `method='json_schema'` (default): Uses Gemini's native structured output API.
 
             The Google GenAI SDK automatically transforms schemas to ensure
             compatibility with Gemini. This includes:
@@ -1557,11 +1557,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             Uses Gemini's `response_json_schema` API param. Refer to the Gemini API
             [docs](https://ai.google.dev/gemini-api/docs/structured-output) for more
-            details.
+            details. This method is recommended for better reliability as it
+            constrains the model's generation process directly.
 
-        The `json_schema` method is recommended for better reliability as it
-        constrains the model's generation process directly rather than relying on
-        post-processing tool calls.
+        * `method='function_calling'`: Uses tool calling to extract structured data.
+            Less reliable than `json_schema` but compatible with all models.
 
     ???+ example "Image input"
 
@@ -3123,7 +3123,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self,
         schema: dict | type[BaseModel],
         method: Literal["function_calling", "json_mode", "json_schema"]
-        | None = "function_calling",
+        | None = "json_schema",
         *,
         include_raw: bool = False,
         **kwargs: Any,
