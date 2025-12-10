@@ -1,13 +1,14 @@
-
-
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from google.oauth2.service_account import Credentials
 
-try:
+if TYPE_CHECKING:
     from google.cloud import vectorsearch_v1beta
-except ImportError:
-    vectorsearch_v1beta = None
+else:
+    try:
+        from google.cloud import vectorsearch_v1beta
+    except ImportError:
+        vectorsearch_v1beta = None  # type: ignore[assignment]
 
 
 def upsert_datapoints(
@@ -67,8 +68,8 @@ def upsert_datapoints(
         # Add sparse vector if provided
         if sparse_embedding is not None:
             vector_obj.sparse = vectorsearch_v1beta.SparseVector(
-                indices=sparse_embedding["indices"],  # type: ignore
-                values=sparse_embedding["values"],  # type: ignore
+                indices=sparse_embedding["indices"],
+                values=sparse_embedding["values"],
             )
 
         # Build data object
@@ -78,10 +79,7 @@ def upsert_datapoints(
         )
 
         # Add as dictionary (not as CreateDataObjectRequest)
-        batch_requests.append({
-            "data_object_id": data_id,
-            "data_object": data_object
-        })
+        batch_requests.append({"data_object_id": data_id, "data_object": data_object})
 
     # Batch create data objects
     batch_size = 100
@@ -173,8 +171,8 @@ def find_neighbors(
         # Add sparse vector if provided for hybrid search
         if sparse_query is not None:
             vector_search.sparse_vector = vectorsearch_v1beta.SparseVector(
-                indices=sparse_query["indices"],  # type: ignore
-                values=sparse_query["values"],  # type: ignore
+                indices=sparse_query["indices"],
+                values=sparse_query["values"],
             )
 
         search_request = vectorsearch_v1beta.SearchDataObjectsRequest(
@@ -259,7 +257,9 @@ def get_datapoints_by_filter(
     filter_dict: dict,
     credentials: Optional[Credentials] = None,
 ) -> List[str]:
-    """Gets datapoint IDs that match a filter in a Vertex AI Vector Search 2.0 Collection.
+    """Gets datapoint IDs that match a filter in a Vertex AI Vector Search 2.0.
+
+    Retrieves IDs from the Collection matching the given filter.
 
     Args:
         project_id: The GCP project ID.

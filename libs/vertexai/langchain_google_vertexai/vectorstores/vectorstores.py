@@ -184,8 +184,8 @@ class _BaseVertexAIVectorStore(VectorStore):
 
         # V2: Documents stored in collection metadata, reconstruct from search results
         # V1: Documents in GCS, retrieve from document storage
-        if self._searcher._api_version == "v2" and self._document_storage is None:
-            documents = []
+        if self._searcher._api_version == "v2" and self._document_storage is None:  # type: ignore[attr-defined]
+            documents = []  # type: ignore[unreachable]
             for elem in neighbors_list[0]:
                 metadata = elem.get("metadata", {})
                 page_content = metadata.pop("page_content", "")
@@ -195,7 +195,7 @@ class _BaseVertexAIVectorStore(VectorStore):
                     metadata=metadata,
                 )
                 documents.append(doc)
-        elif self._searcher._api_version == "v1" and self._document_storage is not None:
+        else:
             # V1: Retrieve documents from GCS storage
             documents = self._document_storage.mget(keys)
 
@@ -206,13 +206,12 @@ class _BaseVertexAIVectorStore(VectorStore):
                 pass
             else:
                 missing_docs = [
-                    key for key, doc in zip(keys, documents, strict=False) if doc is None
+                    key
+                    for key, doc in zip(keys, documents, strict=False)
+                    if doc is None
                 ]
                 message = f"Documents with ids: {missing_docs} not found in the storage"
                 raise ValueError(message)
-        else:
-            msg = f"Invalid configuration: api_version={self._searcher._api_version}, document_storage={'None' if self._document_storage is None else 'present'}"
-            raise ValueError(msg)
 
         return list(zip(documents, distances, strict=False))  # type: ignore
 
@@ -244,9 +243,12 @@ class _BaseVertexAIVectorStore(VectorStore):
                 return False
         try:
             self._searcher.remove_datapoints(datapoint_ids=ids)  # type: ignore[arg-type]
-            # V1: Also delete from GCS document storage
             # V2: No separate storage to delete from
-            if self._searcher._api_version == "v1" and self._document_storage is not None:
+            # V1 and others: Also delete from GCS document storage
+            if self._searcher._api_version == "v2":  # type: ignore[attr-defined]
+                pass  # V2 doesn't use separate document storage
+            else:
+                # Original V1 behavior
                 self._document_storage.mdelete(ids)  # type: ignore[arg-type]
             return True
         except Exception as e:
@@ -387,8 +389,8 @@ class _BaseVertexAIVectorStore(VectorStore):
             metadata_copy["id"] = id_
             # V2: Store page_content in metadata (no separate document storage)
             # V1: page_content stored separately in GCS
-            if self._searcher._api_version == "v2" and self._document_storage is None:
-                metadata_copy["page_content"] = text
+            if self._searcher._api_version == "v2" and self._document_storage is None:  # type: ignore[attr-defined]
+                metadata_copy["page_content"] = text  # type: ignore[unreachable]
             metadatas_with_ids.append(metadata_copy)
 
         documents = [
@@ -396,9 +398,12 @@ class _BaseVertexAIVectorStore(VectorStore):
             for id_, text, metadata in zip(ids, texts, metadatas_with_ids, strict=False)
         ]
 
-        # V1: Store documents in GCS
         # V2: No separate storage needed (stored in collection data objects)
-        if self._searcher._api_version == "v1" and self._document_storage is not None:
+        # V1 and others: Store documents in GCS
+        if self._searcher._api_version == "v2":  # type: ignore[attr-defined]
+            pass  # V2 stores in collection data objects
+        else:
+            # Original V1 behavior
             self._document_storage.mset(list(zip(ids, documents, strict=False)))
 
         self._searcher.add_to_index(
@@ -491,10 +496,14 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
             region: The default location making the API calls. It must have
                 the same location as the GCS bucket and must be regional.
             gcs_bucket_name: The location where the vectors will be stored in
-                order for the index to be created. Required for V1, not used in V2.
-            index_id: The id of the created index. Required for V1, not used in V2.
-            endpoint_id: The id of the created endpoint. Required for V1, not used in V2.
-            collection_id: The id of the created collection. Required for V2, not used in V1.
+                order for the index to be created. Required for V1, not used
+                in V2.
+            index_id: The id of the created index. Required for V1, not used
+                in V2.
+            endpoint_id: The id of the created endpoint. Required for V1, not
+                used in V2.
+            collection_id: The id of the created collection. Required for V2,
+                not used in V1.
             credentials: Google cloud `Credentials` object.
             embedding: The `Embeddings` that will be used for embedding the texts.
             stream_update: Whether to update with streaming or batching. `VectorSearch`
@@ -572,9 +581,9 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         )
 
         if api_version == "v1":
-            bucket = sdk_manager.get_gcs_bucket(bucket_name=gcs_bucket_name)
-            index = sdk_manager.get_index(index_id=index_id)
-            endpoint = sdk_manager.get_endpoint(endpoint_id=endpoint_id)
+            bucket = sdk_manager.get_gcs_bucket(bucket_name=gcs_bucket_name)  # type: ignore[arg-type]
+            index = sdk_manager.get_index(index_id=index_id)  # type: ignore[arg-type]
+            endpoint = sdk_manager.get_endpoint(endpoint_id=endpoint_id)  # type: ignore[arg-type]
             searcher = VectorSearchSearcher(
                 endpoint=endpoint,
                 index=index,
@@ -588,7 +597,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
                 embeddings=embedding,
             )
         else:  # v2
-            collection = sdk_manager.get_collection(collection_id=collection_id)
+            collection = sdk_manager.get_collection(collection_id=collection_id)  # type: ignore[arg-type]
             searcher = VectorSearchSearcher(
                 endpoint=None,
                 index=None,
@@ -601,9 +610,10 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
                 credentials=credentials,
                 vector_field_name=vector_field_name,
             )
-            # V2 stores documents directly in collection metadata - no separate storage needed
+            # V2 stores documents directly in collection metadata
+            # No separate storage needed
             return cls(
-                document_storage=None,
+                document_storage=None,  # type: ignore[arg-type]
                 searcher=searcher,
                 embeddings=embedding,
             )
@@ -617,9 +627,7 @@ class VectorSearchVectorStore(_BaseVertexAIVectorStore):
         Returns:
             A list of the requested datapoints.
         """
-        return self.searcher.get_datapoints(datapoint_ids=ids)
-
-
+        return self._searcher.get_datapoints(datapoint_ids=ids)  # type: ignore[attr-defined]
 
 
 class VectorSearchVectorStoreGCS(VectorSearchVectorStore):
@@ -655,9 +663,12 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
             region: The default location making the API calls.
 
                 Must have the same location as the GCS bucket and must be regional.
-            index_id: The ID of the created index. Required for V1, not used in V2.
-            endpoint_id: The ID of the created endpoint. Required for V1, not used in V2.
-            collection_id: The ID of the created collection. Required for V2, not used in V1.
+            index_id: The ID of the created index. Required for V1, not used
+                in V2.
+            endpoint_id: The ID of the created endpoint. Required for V1, not
+                used in V2.
+            collection_id: The ID of the created collection. Required for V2,
+                not used in V1.
             index_staging_bucket_name: If the index is updated by batch,
                 bucket where the data will be staged before updating the index.
                 Only used in V1.
@@ -734,8 +745,8 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
             bucket = sdk_manager.get_gcs_bucket(bucket_name=index_staging_bucket_name)
 
         if api_version == "v1":
-            index = sdk_manager.get_index(index_id=index_id)
-            endpoint = sdk_manager.get_endpoint(endpoint_id=endpoint_id)
+            index = sdk_manager.get_index(index_id=index_id)  # type: ignore[arg-type]
+            endpoint = sdk_manager.get_endpoint(endpoint_id=endpoint_id)  # type: ignore[arg-type]
             searcher = VectorSearchSearcher(
                 endpoint=endpoint,
                 index=index,
@@ -744,7 +755,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
                 api_version=api_version,
             )
         elif api_version == "v2":
-            collection = sdk_manager.get_collection(collection_id=collection_id)
+            collection = sdk_manager.get_collection(collection_id=collection_id)  # type: ignore[arg-type]
             searcher = VectorSearchSearcher(
                 endpoint=None,
                 index=None,
@@ -768,7 +779,7 @@ class VectorSearchVectorStoreDatastore(_BaseVertexAIVectorStore):
 
         document_storage = DataStoreDocumentStorage(
             datastore_client=datastore_client,
-            **kwargs,
+            **kwargs,  # type: ignore[arg-type]
         )
 
         return cls(

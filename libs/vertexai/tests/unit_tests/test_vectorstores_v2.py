@@ -19,9 +19,13 @@ remove_datapoints_mock = mock.patch(
 @pytest.fixture
 def mock_searcher_v1():
     mock_index = mock.MagicMock()
-    mock_index.resource_name = "projects/test-project/locations/test-region/indexes/test-index"
+    mock_index.resource_name = (
+        "projects/test-project/locations/test-region/indexes/test-index"
+    )
     mock_endpoint = mock.MagicMock()
-    mock_endpoint.resource_name = "projects/test-project/locations/test-region/indexEndpoints/test-endpoint"
+    mock_endpoint.resource_name = (
+        "projects/test-project/locations/test-region/indexEndpoints/test-endpoint"
+    )
     mock_deployed = mock.MagicMock()
     mock_deployed.index = mock_index.resource_name
     mock_deployed.deployed_index_id = "deployed_index_123"
@@ -89,7 +93,7 @@ def test_add_to_index_v2(mock_upsert_datapoints, mock_searcher_v2):
 def test_find_neighbors_v1(mock_find_neighbors_class, mock_searcher_v1):
     """Test that find_neighbors calls the V1 operations and passes V1 filters."""
     embeddings = [[0.1, 0.2]]
-    filter_ = []
+    filter_: list = []
     numeric_filter = mock.MagicMock()
     mock_searcher_v1._endpoint.find_neighbors = mock_find_neighbors_class
     mock_searcher_v1.find_neighbors(
@@ -124,6 +128,8 @@ def test_find_neighbors_v2_dense_search(mock_find_neighbors, mock_searcher_v2):
         sparse_queries=None,
         rrf_ranking_alpha=1,
     )
+
+
 @pytest.mark.skipif(
     _v2_operations.vectorsearch_v1beta is None, reason="V2 SDK not installed"
 )

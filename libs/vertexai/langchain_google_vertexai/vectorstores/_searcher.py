@@ -16,16 +16,12 @@ from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint impo
 )
 
 from langchain_google_vertexai._utils import get_user_agent
-from langchain_google_vertexai.vectorstores._sdk_manager import (
-    VectorSearchSDKManager,
-)
+from langchain_google_vertexai.vectorstores import _v2_operations
 from langchain_google_vertexai.vectorstores._utils import (
     batch_update_index,
     stream_update_index,
     to_data_points,
 )
-
-from langchain_google_vertexai.vectorstores import _v2_operations
 
 MAX_DATA_POINTS = 10000
 
@@ -168,7 +164,8 @@ class VectorSearchSearcher(Searcher):
         elif self._api_version == "v2":
             if collection is None:
                 raise ValueError("collection is required for v2")
-            self._index = collection  # Store in _index for compatibility
+            # Store collection in _index for compatibility
+            self._index = collection  # type: ignore[assignment]
             self._collection = collection
             # Store v2-specific parameters
             self._project_id = project_id
@@ -203,6 +200,7 @@ class VectorSearchSearcher(Searcher):
                 raise ValueError(msg)
             self._index.remove_datapoints(datapoint_ids=datapoint_ids)
         elif self._api_version == "v2":
+            assert self._project_id is not None and self._region is not None
             _v2_operations.remove_datapoints(
                 project_id=self._project_id,
                 region=self._region,
@@ -237,7 +235,10 @@ class VectorSearchSearcher(Searcher):
                 stream_update_index(index=self._index, data_points=data_points)
             else:
                 if self._staging_bucket is None:
-                    msg = "A staging bucket must be defined to update a Vector Search index."
+                    msg = (
+                        "A staging bucket must be defined to update a "
+                        "Vector Search index."
+                    )
                     raise ValueError(msg)
                 batch_update_index(
                     index=self._index,
@@ -247,6 +248,7 @@ class VectorSearchSearcher(Searcher):
                 )
         elif self._api_version == "v2":
             # v2 uses raw ids, embeddings, and metadatas
+            assert self._project_id is not None and self._region is not None
             _v2_operations.upsert_datapoints(
                 project_id=self._project_id,
                 region=self._region,
@@ -280,8 +282,9 @@ class VectorSearchSearcher(Searcher):
                 else:
                     if len(sparse_embeddings) != len(embeddings):
                         msg = (
-                            "The number of `sparse_embeddings` should match the number of "
-                            f"`embeddings` {len(sparse_embeddings)} != {len(embeddings)}"
+                            "The number of `sparse_embeddings` should match "
+                            "the number of `embeddings` "
+                            f"{len(sparse_embeddings)} != {len(embeddings)}"
                         )
                         raise ValueError(msg)
                     queries = []
@@ -299,9 +302,13 @@ class VectorSearchSearcher(Searcher):
 
                 # v1 only accepts list of Namespace for filters
                 if isinstance(filter_, dict):
-                    msg = "Dict filters are not supported in v1. Use list[Namespace] instead."
+                    msg = (
+                        "Dict filters are not supported in v1. "
+                        "Use list[Namespace] instead."
+                    )
                     raise ValueError(msg)
 
+                assert self._endpoint is not None
                 response = self._endpoint.find_neighbors(
                     deployed_index_id=self._deployed_index_id,
                     queries=queries,
@@ -319,9 +326,12 @@ class VectorSearchSearcher(Searcher):
                 if isinstance(filter_, dict):
                     filter_dict = filter_
                 else:
-                    msg = "v2 requires dict filters. Example: {'genre': {'$eq': 'Drama'}}"
+                    msg = (
+                        "v2 requires dict filters. Example: {'genre': {'$eq': 'Drama'}}"
+                    )
                     raise ValueError(msg)
 
+            assert self._project_id is not None and self._region is not None
             return _v2_operations.find_neighbors(
                 project_id=self._project_id,
                 region=self._region,
@@ -376,7 +386,10 @@ class VectorSearchSearcher(Searcher):
             if index.index == self._index.resource_name:
                 return index.id
 
-        msg = f"Index {self._index.resource_name} is not deployed to endpoint {self._endpoint.resource_name}"
+        msg = (
+            f"Index {self._index.resource_name} is not deployed to "
+            f"endpoint {self._endpoint.resource_name}"
+        )
         raise ValueError(msg)
 
     def _parse_v2_resource_name(self, resource_name: str) -> Tuple[str, str, str]:
@@ -448,6 +461,7 @@ class VectorSearchSearcher(Searcher):
 
             # Use get_datapoints_by_filter to query matching IDs
             # Note: max_datapoints is not currently enforced by the v2 API
+            assert self._project_id is not None and self._region is not None
             results = _v2_operations.get_datapoints_by_filter(
                 project_id=self._project_id,
                 region=self._region,

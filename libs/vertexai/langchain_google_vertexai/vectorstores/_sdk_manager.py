@@ -118,7 +118,8 @@ class VectorSearchSDKManager:
 
         collection = SimpleNamespace()
         collection.resource_name = (
-            f"projects/{self._project_id}/locations/{self._region}/collections/{collection_id}"
+            f"projects/{self._project_id}/locations/{self._region}/"
+            f"collections/{collection_id}"
         )
         collection.location = self._region
         return collection
@@ -180,10 +181,14 @@ class VectorSearchSDKManager:
             raise ImportError(msg) from e
 
         return {
-            "data_object_service_client": vectorsearch_v1beta.DataObjectServiceClient(
-                credentials=self._credentials
+            "data_object_service_client": (
+                vectorsearch_v1beta.DataObjectServiceClient(
+                    credentials=self._credentials
+                )
             ),
-            "data_object_search_service_client": vectorsearch_v1beta.DataObjectSearchServiceClient(
-                credentials=self._credentials
+            "data_object_search_service_client": (
+                vectorsearch_v1beta.DataObjectSearchServiceClient(
+                    credentials=self._credentials
+                )
             ),
         }
