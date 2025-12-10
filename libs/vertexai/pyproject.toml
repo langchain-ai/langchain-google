@@ -22,6 +22,8 @@ dependencies = [
     "bottleneck>=1.4.0,<2.0.0",
     "numexpr>=2.8.6,<3.0.0",
     "pyarrow>=19.0.1,<23.0.0",
+    "langchain-tests>=1.0.1",
+    "google-cloud-vectorsearch>=0.2.0",
 ]
 
 [project.urls]
@@ -36,6 +38,20 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.35.0,<1.0.0"]
 mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
+testing = [
+  "pytest",
+  "pytest-mock",
+  "pytest-asyncio",
+  "pytest-retry",
+  "pytest-recording",
+  "langchain-core[testing]",
+]
+vectorsearch_v2 = [
+  "google-cloud-vectorsearch",
+]
+all = [
+  "langchain-google-vertexai[testing,vectorsearch_v2]",
+]
 
 [dependency-groups]
 lint = ["ruff>=0.13.1,<0.14.0"]
