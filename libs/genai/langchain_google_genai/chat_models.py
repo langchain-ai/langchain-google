@@ -228,6 +228,22 @@ def _convert_to_parts(
                             )
                         )
                     )
+                elif part["type"] == "video":
+                    # Handle video URLs (YouTube, etc.)
+                    # Docs show: {"type": "video", "url": "...", "mime_type": "video/mp4"}
+                    if "url" not in part:
+                        msg = f"Video part must have 'url' field: {part}"
+                        raise ValueError(msg)
+                    mime_type = part.get("mime_type", "video/mp4")
+                    # Convert video URL to FileData format (Google API expects file_uri)
+                    # Match the format used by "type": "media" handler
+                    parts.append(
+                        Part(
+                            file_data=FileData(
+                                file_uri=part["url"], mime_type=mime_type
+                            )
+                        )
+                    )
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
