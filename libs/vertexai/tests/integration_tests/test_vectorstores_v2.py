@@ -4,9 +4,9 @@ Your end-user credentials would be used to make the calls (make sure you've run
 Additionally in order to run the test you must have set the following environment
 variables:
 - PROJECT_ID: Id of the Google Cloud Project
-- REGION: Region of the Bucket, Index and Endpoint
-- VECTOR_SEARCH_STAGING_BUCKET: Name of a Google Cloud Storage Bucket
-- VECTOR_SEARCH_V2_COLLECTION_ID: Id of the Vector Search V2 Collection.
+- REGION (optional): Region of the Bucket, Index and Endpoint (default: us-central1)
+- VECTOR_SEARCH_V2_COLLECTION_ID (optional): Id of the Vector Search V2 Collection
+  (default: langchain-test-collection)
 """
 
 import os
@@ -34,7 +34,9 @@ def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
     return VectorSearchVectorStore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
-        collection_id=os.environ["VECTOR_SEARCH_V2_COLLECTION_ID"],
+        collection_id=os.environ.get(
+            "VECTOR_SEARCH_V2_COLLECTION_ID", "langchain-test-collection"
+        ),
         embedding=embeddings,
         api_version="v2",
         stream_update=False,
@@ -49,7 +51,9 @@ def datastore_vector_store_v2(
     return VectorSearchVectorStoreDatastore.from_components(
         project_id=os.environ["PROJECT_ID"],
         region=os.environ.get("REGION", "us-central1"),
-        collection_id=os.environ["VECTOR_SEARCH_V2_COLLECTION_ID"],
+        collection_id=os.environ.get(
+            "VECTOR_SEARCH_V2_COLLECTION_ID", "langchain-test-collection"
+        ),
         embedding=embeddings,
         api_version="v2",
         stream_update=True,
