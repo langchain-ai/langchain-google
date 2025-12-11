@@ -107,17 +107,102 @@ class Searcher(ABC):
     def get_datapoints_by_filter(
         self,
         metadata: dict,
-        max_datapoints: int = MAX_DATA_POINTS,
         **kwargs: Any,
     ) -> list[str]:
         """Gets datapoint IDs that match the given metadata filter.
 
+        Note: The V2 API does not support limiting the number of results returned.
+        All matching datapoints will be returned.
+
         Args:
             metadata: Dictionary of metadata key-value pairs to filter by.
-            max_datapoints: Maximum number of datapoints to return.
 
         Returns:
             List of datapoint IDs matching the filter.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def semantic_search(
+        self,
+        search_text: str,
+        search_field: str,
+        k: int = 4,
+        task_type: str = "RETRIEVAL_QUERY",
+        filter_: dict | None = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Performs semantic search using auto-generated embeddings.
+
+        Args:
+            search_text: Natural language query text.
+            search_field: Name of the vector field to search (must have auto-embedding
+                config).
+            k: Number of neighbors to return.
+            task_type: Embedding task type (e.g., "RETRIEVAL_QUERY",
+                "RETRIEVAL_DOCUMENT").
+            filter_: Filter dict (v2 only).
+
+        Returns:
+            List of records with doc_id, score, and metadata.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def text_search(
+        self,
+        search_text: str,
+        data_field_names: list[str],
+        k: int = 4,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Performs keyword/full-text search on data fields.
+
+        Note: Text search does not support filters. Use semantic_search or
+        vector_search if you need filtering.
+
+        Args:
+            search_text: Keyword search query text.
+            data_field_names: List of data field names to search in.
+            k: Number of neighbors to return.
+
+        Returns:
+            List of records with doc_id, score, and metadata.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def hybrid_search(
+        self,
+        search_text: str,
+        search_field: str,
+        data_field_names: list[str],
+        k: int = 4,
+        task_type: str = "RETRIEVAL_QUERY",
+        filter_: dict | None = None,
+        semantic_weight: float = 1.0,
+        text_weight: float = 1.0,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Performs hybrid search combining semantic and text search with RRF.
+
+        Hybrid search runs both semantic search (with auto-generated embeddings) and
+        text search (keyword matching) in parallel, then combines results using
+        Reciprocal Rank Fusion (RRF) algorithm for optimal ranking.
+
+        Args:
+            search_text: Query text used for both semantic and text search.
+            search_field: Name of the vector field to search (must have auto-embedding
+                config).
+            data_field_names: List of data field names to search in for text search.
+            k: Number of neighbors to return from each search before fusion.
+            task_type: Embedding task type for semantic search.
+            filter_: Optional filter dict for semantic search only (v2 only).
+            semantic_weight: Weight for semantic search results in RRF.
+            text_weight: Weight for text search results in RRF.
+
+        Returns:
+            List of records with doc_id, score, and metadata ranked by RRF.
         """
         raise NotImplementedError
 
@@ -157,7 +242,7 @@ class VectorSearchSearcher(Searcher):
 
         if self._api_version == "v1":
             if index is None:
-                raise ValueError("index is required for v1")
+                raise ValueError("`index` is required for V1.")
             self._index = index
             self._endpoint = endpoint
             self._deployed_index_id = self._get_deployed_index_id()
@@ -196,11 +281,13 @@ class VectorSearchSearcher(Searcher):
     ) -> None:
         if self._api_version == "v1":
             if not self._index:
-                msg = "`index` is required for v1."
+                msg = "`index` is required for V1."
                 raise ValueError(msg)
             self._index.remove_datapoints(datapoint_ids=datapoint_ids)
         elif self._api_version == "v2":
-            assert self._project_id is not None and self._region is not None
+            if self._project_id is None or self._region is None:
+                msg = "`project_id` and `region` are required for V2 operations."
+                raise ValueError(msg)
             _v2_operations.remove_datapoints(
                 project_id=self._project_id,
                 region=self._region,
@@ -229,7 +316,7 @@ class VectorSearchSearcher(Searcher):
                 metadatas=metadatas,
             )
             if not self._index:
-                msg = "`index` is required for v1."
+                msg = "`index` is required for V1."
                 raise ValueError(msg)
             if self._stream_update:
                 stream_update_index(index=self._index, data_points=data_points)
@@ -248,7 +335,9 @@ class VectorSearchSearcher(Searcher):
                 )
         elif self._api_version == "v2":
             # v2 uses raw ids, embeddings, and metadatas
-            assert self._project_id is not None and self._region is not None
+            if self._project_id is None or self._region is None:
+                msg = "`project_id` and `region` are required for V2 operations."
+                raise ValueError(msg)
             _v2_operations.upsert_datapoints(
                 project_id=self._project_id,
                 region=self._region,
@@ -308,7 +397,9 @@ class VectorSearchSearcher(Searcher):
                     )
                     raise ValueError(msg)
 
-                assert self._endpoint is not None
+                if self._endpoint is None:
+                    msg = "`endpoint` is required for V1 operations."
+                    raise ValueError(msg)
                 response = self._endpoint.find_neighbors(
                     deployed_index_id=self._deployed_index_id,
                     queries=queries,
@@ -321,24 +412,22 @@ class VectorSearchSearcher(Searcher):
             return self._postprocess_response(response)
         elif self._api_version == "v2":
             # v2 implementation - accepts dict filters
-            filter_dict = None
-            if filter_:
-                if isinstance(filter_, dict):
-                    filter_dict = filter_
-                else:
-                    msg = (
-                        "v2 requires dict filters. Example: {'genre': {'$eq': 'Drama'}}"
-                    )
-                    raise ValueError(msg)
+            if filter_ is not None and not isinstance(filter_, dict):
+                msg = (
+                    "v2 requires dict filters. Example: {'genre': {'$eq': 'Drama'}}"
+                )
+                raise ValueError(msg)
 
-            assert self._project_id is not None and self._region is not None
+            if self._project_id is None or self._region is None:
+                msg = "`project_id` and `region` are required for V2 operations."
+                raise ValueError(msg)
             return _v2_operations.find_neighbors(
                 project_id=self._project_id,
                 region=self._region,
                 collection_id=self._collection_id,
                 queries=embeddings,
                 num_neighbors=k,
-                filter_dict=filter_dict,
+                filter_=filter_,
                 credentials=self._credentials,
                 vector_field_name=self._vector_field_name,
                 sparse_queries=sparse_embeddings,
@@ -437,14 +526,15 @@ class VectorSearchSearcher(Searcher):
     def get_datapoints_by_filter(
         self,
         metadata: dict,
-        max_datapoints: int = MAX_DATA_POINTS,
         **kwargs: Any,
     ) -> list[str]:
         """Gets datapoint IDs that match the given metadata filter.
 
+        Note: The V2 API does not support limiting the number of results returned.
+        All matching datapoints will be returned.
+
         Args:
             metadata: Dictionary of metadata key-value pairs to filter by.
-            max_datapoints: Maximum number of datapoints to return.
 
         Returns:
             List of datapoint IDs matching the filter.
@@ -454,23 +544,165 @@ class VectorSearchSearcher(Searcher):
             raise NotImplementedError(msg)
         elif self._api_version == "v2":
             # Convert metadata to filter dict
-            filter_dict = self._metadata_to_filter_dict(metadata)
+            filter_ = self._metadata_to_filter_dict(metadata)
 
-            if not filter_dict:
+            if not filter_:
                 return []
 
-            # Use get_datapoints_by_filter to query matching IDs
-            # Note: max_datapoints is not currently enforced by the v2 API
-            assert self._project_id is not None and self._region is not None
+            if self._project_id is None or self._region is None:
+                msg = "`project_id` and `region` are required for V2 operations."
+                raise ValueError(msg)
             results = _v2_operations.get_datapoints_by_filter(
                 project_id=self._project_id,
                 region=self._region,
                 collection_id=self._collection_id,
-                filter_dict=filter_dict,
+                filter_=filter_,
                 credentials=self._credentials,
             )
 
             return results
+        else:
+            msg = f"Unsupported API version: {self._api_version}"
+            raise ValueError(msg)
+
+    def semantic_search(
+        self,
+        search_text: str,
+        search_field: str,
+        k: int = 4,
+        task_type: str = "RETRIEVAL_QUERY",
+        filter_: dict | None = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Performs semantic search using auto-generated embeddings.
+
+        Args:
+            search_text: Natural language query text.
+            search_field: Name of the vector field to search (must have auto-embedding
+                config).
+            k: Number of neighbors to return.
+            task_type: Embedding task type (e.g., "RETRIEVAL_QUERY",
+                "RETRIEVAL_DOCUMENT").
+            filter_: Filter dict (v2 only).
+
+        Returns:
+            List of records with doc_id, score, and metadata.
+        """
+        if self._api_version == "v1":
+            msg = "Semantic search is only supported in v2."
+            raise NotImplementedError(msg)
+        elif self._api_version == "v2":
+            if self._project_id is None or self._region is None:
+                msg = "`project_id` and `region` are required for V2 operations."
+                raise ValueError(msg)
+            return _v2_operations.semantic_search(
+                project_id=self._project_id,
+                region=self._region,
+                collection_id=self._collection_id,
+                search_text=search_text,
+                search_field=search_field,
+                num_neighbors=k,
+                task_type=task_type,
+                filter_=filter_,
+                credentials=self._credentials,
+            )
+        else:
+            msg = f"Unsupported API version: {self._api_version}"
+            raise ValueError(msg)
+
+    def text_search(
+        self,
+        search_text: str,
+        data_field_names: list[str],
+        k: int = 4,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Performs keyword/full-text search on data fields.
+
+        Note: Text search does not support filters. Use semantic_search or
+        vector_search if you need filtering.
+
+        Args:
+            search_text: Keyword search query text.
+            data_field_names: List of data field names to search in.
+            k: Number of neighbors to return.
+
+        Returns:
+            List of records with doc_id, score, and metadata.
+        """
+        if self._api_version == "v1":
+            msg = "Text search is only supported in v2."
+            raise NotImplementedError(msg)
+        elif self._api_version == "v2":
+            if self._project_id is None or self._region is None:
+                msg = "`project_id` and `region` are required for V2 operations."
+                raise ValueError(msg)
+            return _v2_operations.text_search(
+                project_id=self._project_id,
+                region=self._region,
+                collection_id=self._collection_id,
+                search_text=search_text,
+                data_field_names=data_field_names,
+                num_neighbors=k,
+                credentials=self._credentials,
+            )
+        else:
+            msg = f"Unsupported API version: {self._api_version}"
+            raise ValueError(msg)
+
+    def hybrid_search(
+        self,
+        search_text: str,
+        search_field: str,
+        data_field_names: list[str],
+        k: int = 4,
+        task_type: str = "RETRIEVAL_QUERY",
+        filter_: dict | None = None,
+        semantic_weight: float = 1.0,
+        text_weight: float = 1.0,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Performs hybrid search combining semantic and text search with RRF.
+
+        Hybrid search runs both semantic search (with auto-generated embeddings) and
+        text search (keyword matching) in parallel, then combines results using
+        Reciprocal Rank Fusion (RRF) algorithm for optimal ranking.
+
+        Args:
+            search_text: Query text used for both semantic and text search.
+            search_field: Name of the vector field to search (must have auto-embedding
+                config).
+            data_field_names: List of data field names to search in for text search.
+            k: Number of neighbors to return from each search before fusion.
+            task_type: Embedding task type for semantic search.
+            filter_: Optional filter dict for semantic search only (v2 only).
+            semantic_weight: Weight for semantic search results in RRF.
+            text_weight: Weight for text search results in RRF.
+
+        Returns:
+            List of records with doc_id, score, and metadata ranked by RRF.
+        """
+        if self._api_version == "v1":
+            msg = "Hybrid search is only supported in v2."
+            raise NotImplementedError(msg)
+        elif self._api_version == "v2":
+            if self._project_id is None or self._region is None:
+                msg = "`project_id` and `region` are required for V2 operations."
+                raise ValueError(msg)
+            return _v2_operations.hybrid_search(
+                project_id=self._project_id,
+                region=self._region,
+                collection_id=self._collection_id,
+                search_text=search_text,
+                search_field=search_field,
+                data_field_names=data_field_names,
+                num_neighbors=k,
+                task_type=task_type,
+                filter_=filter_,
+                semantic_weight=semantic_weight,
+                text_weight=text_weight,
+                credentials=self._credentials,
+            )
         else:
             msg = f"Unsupported API version: {self._api_version}"
             raise ValueError(msg)

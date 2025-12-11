@@ -296,6 +296,172 @@ class _BaseVertexAIVectorStore(VectorStore):
             )
         ]
 
+    def semantic_search(
+        self,
+        query: str,
+        k: int = 4,
+        search_field: str = "embedding",
+        task_type: str = "RETRIEVAL_QUERY",
+        filter: dict | None = None,
+        **kwargs: Any,
+    ) -> list[Document]:
+        """Performs semantic search using auto-generated embeddings.
+
+        Semantic search automatically generates embeddings from the query text using
+        Vertex AI models, so you don't need to manually create embeddings. This is
+        only supported in Vector Search 2.0.
+
+        Args:
+            query: Natural language query text.
+            k: Number of documents to return.
+            search_field: Name of the vector field to search (must have auto-embedding
+                config in the collection schema).
+            task_type: Embedding task type. Options:
+                - "RETRIEVAL_QUERY": For search queries (default)
+                - "RETRIEVAL_DOCUMENT": For document indexing
+                - "SEMANTIC_SIMILARITY": For semantic similarity
+                - "CLASSIFICATION": For classification tasks
+                - "CLUSTERING": For clustering tasks
+            filter: Filter dict (v2 only).
+                Example: `{"color": {"$eq": "blue"}}` or
+                `{"$and": [{"year": {"$gte": 1990}}, {"genre": {"$eq": "Action"}}]}`
+
+        Returns:
+            List of matching documents.
+        """
+        results = self._searcher.semantic_search(
+            search_text=query,
+            search_field=search_field,
+            k=k,
+            task_type=task_type,
+            filter_=filter,
+            **kwargs,
+        )
+
+        return self._results_to_documents(results)
+
+    def text_search(
+        self,
+        query: str,
+        k: int = 4,
+        data_field_names: list[str] | None = None,
+        **kwargs: Any,
+    ) -> list[Document]:
+        """Performs keyword/full-text search on data fields.
+
+        Text search performs traditional keyword matching on data fields without using
+        embeddings. This is only supported in Vector Search 2.0.
+
+        Note: Text search does not support filters. Use `semantic_search()` or
+        `similarity_search()` if you need filtering.
+
+        Args:
+            query: Keyword search query text.
+            k: Number of documents to return.
+            data_field_names: List of data field names to search in
+                (e.g., `["page_content", "title"]`).
+                If `None`, defaults to `["page_content"]`.
+
+        Returns:
+            List of matching documents.
+        """
+        if data_field_names is None:
+            data_field_names = ["page_content"]
+
+        results = self._searcher.text_search(
+            search_text=query,
+            data_field_names=data_field_names,
+            k=k,
+            **kwargs,
+        )
+
+        return self._results_to_documents(results)
+
+    def hybrid_search(
+        self,
+        query: str,
+        k: int = 4,
+        search_field: str = "embedding",
+        data_field_names: list[str] | None = None,
+        task_type: str = "RETRIEVAL_QUERY",
+        filter: dict | None = None,
+        semantic_weight: float = 1.0,
+        text_weight: float = 1.0,
+        **kwargs: Any,
+    ) -> list[Document]:
+        """Performs hybrid search combining semantic and text search with RRF.
+
+        Hybrid search automatically combines semantic search (with auto-generated
+        embeddings) and text search (keyword matching) using Reciprocal Rank Fusion
+        (RRF) algorithm to produce optimally ranked results. This is only supported
+        in Vector Search 2.0.
+
+        Products appearing high in both semantic and text search results will rank
+        highest in the final merged results.
+
+        Args:
+            query: Query text used for both semantic and text search.
+            k: Number of documents to return from each search before fusion.
+            search_field: Name of the vector field to search (must have auto-embedding
+                config in the collection schema).
+            data_field_names: List of data field names to search in for text search
+                (e.g., `["page_content", "title"]`).
+                If `None`, defaults to `["page_content"]`.
+            task_type: Embedding task type for semantic search. Options:
+                - "RETRIEVAL_QUERY": For search queries (default)
+                - "RETRIEVAL_DOCUMENT": For document indexing
+                - "SEMANTIC_SIMILARITY": For semantic similarity
+                - "CLASSIFICATION": For classification tasks
+                - "CLUSTERING": For clustering tasks
+            filter: Filter dict for semantic search only (v2 only).
+                Example: `{"color": {"$eq": "blue"}}` or
+                `{"$and": [{"year": {"$gte": 1990}}, {"genre": {"$eq": "Action"}}]}`
+            semantic_weight: Weight for semantic search results in RRF (default: 1.0).
+                Higher values give more importance to semantic similarity.
+            text_weight: Weight for text search results in RRF (default: 1.0).
+                Higher values give more importance to keyword matches.
+
+        Returns:
+            List of documents ranked by RRF combining semantic and text search.
+
+        Example:
+            ```python
+            # Equal weighting (default)
+            results = vector_store.hybrid_search("Men's outfit for beach", k=10)
+
+            # Prefer semantic understanding over keyword matching
+            results = vector_store.hybrid_search(
+                "beach wear",
+                k=10,
+                semantic_weight=2.0,
+                text_weight=1.0
+            )
+
+            # With filtering on semantic search
+            results = vector_store.hybrid_search(
+                "summer dress",
+                k=10,
+                filter={"price": {"$lt": 100}}
+            )
+            ```
+        """
+        if data_field_names is None:
+            data_field_names = ["page_content"]
+
+        results = self._searcher.hybrid_search(
+            search_text=query,
+            search_field=search_field,
+            data_field_names=data_field_names,
+            k=k,
+            task_type=task_type,
+            filter_=filter,
+            semantic_weight=semantic_weight,
+            text_weight=text_weight,
+            **kwargs,
+        )
+
+        return self._results_to_documents(results)
+
     def add_texts(
         self,
         texts: Iterable[str],
@@ -466,6 +632,28 @@ class _BaseVertexAIVectorStore(VectorStore):
             List of unique ids.
         """
         return [str(uuid.uuid4()) for _ in range(number)]
+
+    def _results_to_documents(self, results: list[dict[str, Any]]) -> list[Document]:
+        """Converts search results to Document objects.
+
+        Args:
+            results: List of result dictionaries from search operations.
+                Each result should have doc_id, and optionally metadata.
+
+        Returns:
+            List of Document objects.
+        """
+        documents = []
+        for result in results:
+            metadata = result.get("metadata", {})
+            page_content = metadata.pop("page_content", "")
+            doc = Document(
+                id=result["doc_id"],
+                page_content=page_content,
+                metadata=metadata,
+            )
+            documents.append(doc)
+        return documents
 
 
 class VectorSearchVectorStore(_BaseVertexAIVectorStore):
