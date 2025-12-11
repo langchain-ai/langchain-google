@@ -191,7 +191,7 @@ class GCSDocumentStorage(DocumentStorage):
 
         Args:
             key: Id of the document to be stored.
-            document: Document to be stored.
+            value: Document to be stored.
         """
         blob_name = self._get_blob_name(key)
         new_blow = self._bucket.blob(blob_name)
