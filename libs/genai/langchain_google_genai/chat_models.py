@@ -236,14 +236,54 @@ def _convert_to_parts(
                         raise ValueError(msg)
                     mime_type = part.get("mime_type", "video/mp4")
                     # Convert video URL to FileData format (Google API expects file_uri)
-                    # Match the format used by "type": "media" handler
-                    parts.append(
-                        Part(
-                            file_data=FileData(
-                                file_uri=part["url"], mime_type=mime_type
-                            )
+                    video_part_kwargs: dict[str, Any] = {
+                        "file_data": FileData(file_uri=part["url"], mime_type=mime_type)
+                    }
+
+                    # Handle video_metadata if provided (clipping intervals, fps)
+                    if "video_metadata" in part:
+                        video_part_kwargs["video_metadata"] = (
+                            VideoMetadata.model_validate(part["video_metadata"])
                         )
-                    )
+
+                    # Handle media_resolution if provided (gemini-3 only)
+                    if "media_resolution" in part:
+                        if model and _is_gemini_25_model(model):
+                            warnings.warn(
+                                "Setting per-part media resolution requests to "
+                                "Gemini 2.5 models and older is not supported. The "
+                                "media_resolution parameter will be ignored.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
+                        elif model and _is_gemini_3_or_later(model):
+                            from google.genai.types import MediaResolution
+
+                            media_res = part["media_resolution"]
+                            # Convert to enum: support string or dict with "level" key
+                            if isinstance(media_res, str):
+                                level_upper = media_res.upper()
+                                if hasattr(MediaResolution, level_upper):
+                                    video_part_kwargs["media_resolution"] = getattr(
+                                        MediaResolution, level_upper
+                                    )
+                                else:
+                                    msg = f"Invalid media_resolution: {media_res}"
+                                    raise ValueError(msg)
+                            elif isinstance(media_res, dict) and "level" in media_res:
+                                level_upper = media_res["level"].upper()
+                                if hasattr(MediaResolution, level_upper):
+                                    video_part_kwargs["media_resolution"] = getattr(
+                                        MediaResolution, level_upper
+                                    )
+                                else:
+                                    msg = f"Invalid media_resolution level: {media_res['level']}"
+                                    raise ValueError(msg)
+                            else:
+                                msg = f"media_resolution must be a string or dict with 'level' key: {media_res}"
+                                raise ValueError(msg)
+
+                    parts.append(Part(**video_part_kwargs))
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
@@ -2354,11 +2394,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
 
+        # Use v1alpha API for gemini-3 models to support media_resolution
+        # media_resolution parameter is only available in v1alpha API version
+        api_version = None
+        if self.model and _is_gemini_3_or_later(self.model):
+            api_version = "v1alpha"
+
         http_options = HttpOptions(
             base_url=cast("str", base_url),
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
+            api_version=api_version,
         )
 
         if self._use_vertexai:  # type: ignore[attr-defined]
@@ -2956,12 +3003,27 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if max_retries is not None:
             retry_options = HttpRetryOptions(attempts=max_retries)
 
+        # Preserve api_version from client's http_options if set (needed for media_resolution)
+        api_version = None
+        if (
+            self.client
+            and hasattr(self.client, "_api_client")
+            and hasattr(self.client._api_client, "http_options")
+        ):
+            client_http_options = self.client._api_client.http_options
+            if client_http_options and hasattr(client_http_options, "api_version"):
+                api_version = client_http_options.api_version
+
         http_options = None
-        if timeout is not None or retry_options is not None:
-            http_options = HttpOptions(
-                timeout=timeout,
-                retry_options=retry_options,
-            )
+        if timeout is not None or retry_options is not None or api_version is not None:
+            http_options_kwargs: dict[str, Any] = {}
+            if timeout is not None:
+                http_options_kwargs["timeout"] = timeout
+            if retry_options is not None:
+                http_options_kwargs["retry_options"] = retry_options
+            if api_version is not None:
+                http_options_kwargs["api_version"] = api_version
+            http_options = HttpOptions(**http_options_kwargs)
 
         image_config_dict = (
             image_config if image_config is not None else self.image_config
