@@ -464,7 +464,7 @@ def test_vector_store_v2_text_search(
     assert python_found, "Should find document containing 'Python'"
 
 
-def test_vector_store_v2_hybrid_search(
+def test_vector_store_v2_semantic_text_hybrid_search(
     semantic_search_collection, embeddings: VertexAIEmbeddings
 ):
     """Tests hybrid search (semantic + text with RRF) in V2."""
@@ -564,6 +564,6 @@ def test_vector_store_v2_hybrid_search(
     )
     assert beach_or_short_found, "Should find beach or short related items"
 
-    print(f"\n Hybrid search results for 'Men's short for beach':")
+    print("\n Hybrid search results for 'Men's short for beach':")
     for i, doc in enumerate(results[:5], 1):
         print(f"  {i}. {doc.page_content}")

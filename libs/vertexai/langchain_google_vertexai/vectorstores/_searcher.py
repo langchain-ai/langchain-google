@@ -413,9 +413,7 @@ class VectorSearchSearcher(Searcher):
         elif self._api_version == "v2":
             # v2 implementation - accepts dict filters
             if filter_ is not None and not isinstance(filter_, dict):
-                msg = (
-                    "v2 requires dict filters. Example: {'genre': {'$eq': 'Drama'}}"
-                )
+                msg = "v2 requires dict filters. Example: {'genre': {'$eq': 'Drama'}}"
                 raise ValueError(msg)
 
             if self._project_id is None or self._region is None:

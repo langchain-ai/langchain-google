@@ -431,17 +431,12 @@ class _BaseVertexAIVectorStore(VectorStore):
 
             # Prefer semantic understanding over keyword matching
             results = vector_store.hybrid_search(
-                "beach wear",
-                k=10,
-                semantic_weight=2.0,
-                text_weight=1.0
+                "beach wear", k=10, semantic_weight=2.0, text_weight=1.0
             )
 
             # With filtering on semantic search
             results = vector_store.hybrid_search(
-                "summer dress",
-                k=10,
-                filter={"price": {"$lt": 100}}
+                "summer dress", k=10, filter={"price": {"$lt": 100}}
             )
             ```
         """
