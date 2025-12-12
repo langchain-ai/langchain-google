@@ -481,6 +481,84 @@ def test_response_sanitization_input_types(
     not os.environ.get("PROJECT_ID"),
     reason="PROJECT_ID env var not set. Skipping integration test.",
 )
+def test_multimodal_content_blocks(
+    all_filter_template: str,
+    project_id: str,
+    location_id: str,
+) -> None:
+    """
+    Test sanitization with LangChain v1 multimodal content blocks.
+    """
+    runnable = ModelArmorSanitizePromptRunnable(
+        project=project_id,
+        location=location_id,
+        template_id=all_filter_template,
+        fail_open=True,
+    )
+
+    # Test with message containing content blocks (simulating LangChain v1)
+    class MockMultimodalMessage:
+        """Mock message with content_blocks attribute."""
+
+        def __init__(self) -> None:
+            self.content_blocks = [
+                {"type": "text", "text": "Describe this image:"},
+                {"type": "image", "url": "https://example.com/test.jpg"},
+                {"type": "text", "text": "What do you see?"},
+            ]
+            self.content = "fallback content"
+
+    # Create mock message
+    message = MockMultimodalMessage()
+
+    # Extract text using the runnable's method
+    content_blocks = getattr(message, "content_blocks", None)
+    extracted_text = runnable._content_blocks_to_text(content_blocks)
+
+    # Verify only text blocks are extracted
+    assert extracted_text == "Describe this image:\nWhat do you see?"
+    assert "example.com" not in extracted_text  # Image URL should not be in text
+
+
+@pytest.mark.extended
+@pytest.mark.skipif(
+    not os.environ.get("PROJECT_ID"),
+    reason="PROJECT_ID env var not set. Skipping integration test.",
+)
+def test_message_with_list_content_integration(
+    all_filter_template: str,
+    project_id: str,
+    location_id: str,
+) -> None:
+    """
+    Test sanitization with messages that have list content (pre-v1 multimodal).
+    """
+    runnable = ModelArmorSanitizePromptRunnable(
+        project=project_id,
+        location=location_id,
+        template_id=all_filter_template,
+        fail_open=True,
+    )
+
+    # Test with HumanMessage containing list content
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": "How to make cheesecake?"},
+            {"type": "image_url", "image_url": "https://example.com/recipe.jpg"},
+        ]
+    )
+
+    # Invoke should work and extract text content
+    result = runnable.invoke(message)
+    assert result == message  # Returns original message
+    assert isinstance(result, HumanMessage)
+
+
+@pytest.mark.extended
+@pytest.mark.skipif(
+    not os.environ.get("PROJECT_ID"),
+    reason="PROJECT_ID env var not set. Skipping integration test.",
+)
 @pytest.mark.parametrize(
     "prompt_fail_open,response_fail_open,test_input,should_raise",
     [
