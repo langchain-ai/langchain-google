@@ -84,6 +84,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             base_url=self.base_url,
             additional_headers=self.additional_headers,
             safety_settings=self.safety_settings,
+            seed=self.seed,
         )
 
         return self
