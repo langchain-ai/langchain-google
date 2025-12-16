@@ -4665,3 +4665,148 @@ def test_image_config_no_instance_config_with_override() -> None:
 
     assert config.image_config is not None
     assert config.image_config.aspect_ratio == "16:9"
+
+
+# ============================================================================
+# OpenAI-style response_format and strict kwarg handling
+# Compatibility with langchain.agents.create_agent
+# ============================================================================
+
+
+def test_openai_style_response_format_json_object() -> None:
+    """Test OpenAI-style `response_format={'type': 'json_object'}` is converted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages, response_format={"type": "json_object"})
+    config = request["config"]
+
+    # Should convert to response_mime_type="application/json"
+    # (default is "text/plain")
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema is None
+
+
+def test_openai_style_response_format_json_schema() -> None:
+    """Test OpenAI-style `response_format={'type': 'json_schema', ...}` is converted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+        "required": ["name", "age"],
+    }
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(
+        messages,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "PersonSchema",
+                "schema": schema,
+                "strict": True,  # (This nested strict should be ignored)
+            },
+        },
+    )
+    config = request["config"]
+
+    # Should convert to response_mime_type + response_json_schema
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == schema
+
+
+def test_openai_style_response_format_with_strict() -> None:
+    """Test combined `response_format` and `strict` kwargs (like `create_agent`)."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    schema = {
+        "type": "object",
+        "properties": {"result": {"type": "string"}},
+    }
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    # This combination is what langchain.agents.create_agent uses with ProviderStrategy
+    request = llm._prepare_request(
+        messages,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "Result", "schema": schema},
+        },
+        strict=True,
+    )
+    config = request["config"]
+
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == schema
+
+
+def test_openai_style_response_format_explicit_params_take_precedence() -> None:
+    """Test explicit `response_mime_type`/`response_json_schema` takes precedence."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    explicit_schema = {"type": "object", "properties": {"explicit": {"type": "string"}}}
+    response_format_schema = {
+        "type": "object",
+        "properties": {"from_response_format": {"type": "string"}},
+    }
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(
+        messages,
+        response_mime_type="application/json",
+        response_json_schema=explicit_schema,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "Test", "schema": response_format_schema},
+        },
+    )
+    config = request["config"]
+
+    # Explicit params should take precedence over response_format
+    assert config.response_json_schema == explicit_schema
+
+
+def test_openai_style_bind_with_response_format() -> None:
+    """Test that `bind()` works with OpenAI-style `response_format`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    # These should not raise ValidationError
+    bound1 = llm.bind(response_format={"type": "json_object"})
+    assert bound1 is not None
+
+    bound2 = llm.bind(
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "Test",
+                "schema": {"type": "object"},
+            },
+        }
+    )
+    assert bound2 is not None
+
+    bound3 = llm.bind(strict=True)
+    assert bound3 is not None
+
+    bound4 = llm.bind(
+        response_format={"type": "json_object"},
+        strict=True,
+    )
+    assert bound4 is not None

@@ -2726,6 +2726,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if max_retries is None:
             max_retries = self.max_retries
 
+        # Handle OpenAI-style `strict` kwarg (used by langchain.agents.create_agent)
+        # Google's json_schema is inherently strict, so we just consume this.
+        kwargs.pop("strict", None)
+
+        # Handle OpenAI-style `response_format` kwarg
+        # Ref: https://platform.openai.com/docs/guides/structured-outputs
+        # Compatible with langchain.agents.create_agent ProviderStrategy
+        response_format = kwargs.pop("response_format", None)
+        if response_format is not None and isinstance(response_format, dict):
+            rf_type = response_format.get("type")
+            if rf_type in ("json_object", "json_schema"):
+                if "response_mime_type" not in kwargs:
+                    kwargs["response_mime_type"] = "application/json"
+                json_schema = response_format.get("json_schema", {})
+                schema = json_schema.get("schema")
+                if schema and "response_json_schema" not in kwargs:
+                    kwargs["response_json_schema"] = schema
+
         # Get generation parameters
         # (consumes thinking kwargs into params.thinking_config)
         params: GenerationConfig = self._prepare_params(
