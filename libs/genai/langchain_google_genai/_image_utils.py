@@ -9,18 +9,30 @@ from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
 import requests
-from google.genai.types import Blob, Part
+from google.genai.types import Blob, FileData, Part
 
 # Note: noticed the previous generativelanguage_v1beta Part has a `part_metadata` field
 # that is not present in the genai.types.Part.
 
 
 class Route(Enum):
-    """Image Loading Route."""
+    """Image loading route.
 
-    BASE64 = 1
-    LOCAL_FILE = 2
-    URL = 3
+    Determines how media content is loaded and processed based on the input
+    string format.
+    """
+
+    URL = 1
+    """HTTP/HTTPS URL. Downloads content via HTTP request."""
+
+    BASE64 = 2
+    """Base64 encoded data URI (e.g., `data:image/png;base64,...`)."""
+
+    GCS_URI = 3
+    """Google Cloud Storage URI (e.g., `gs://bucket/path`)."""
+
+    LOCAL_FILE = 4
+    """Local file path. Deprecated for security reasons."""
 
 
 class ImageBytesLoader:
@@ -34,7 +46,8 @@ class ImageBytesLoader:
     - Base64 encoded data URIs (e.g., `data:image/jpeg;base64,...` or
         `data:application/pdf;base64,...`)
     - HTTP/HTTPS URLs
-    - Google Cloud Storage URIs (gs://) via URL download, not direct URI passing
+    - Google Cloud Storage URIs (gs://) passed directly to the API as file
+        references
     """
 
     def load_bytes(self, image_string: str) -> bytes:
@@ -58,6 +71,14 @@ class ImageBytesLoader:
         if route == Route.URL:
             return self._bytes_from_url(image_string)
 
+        if route == Route.GCS_URI:
+            msg = (
+                "Cannot load raw bytes from GCS URIs. "
+                "Use `load_part()` instead, which returns a Part with file_data "
+                "that references the GCS URI directly."
+            )
+            raise ValueError(msg)
+
         if route == Route.LOCAL_FILE:
             msg = (
                 "Loading from local files is no longer supported for security reasons. "
@@ -66,7 +87,6 @@ class ImageBytesLoader:
                 "data:application/pdf;base64,...), or valid HTTP/HTTPS URL."
             )
             raise ValueError(msg)
-            return self._bytes_from_file(image_string)
 
         msg = (
             "Media string must be one of: Google Cloud Storage URI, "
@@ -85,12 +105,18 @@ class ImageBytesLoader:
                 - Base64 encoded data URI (e.g., `data:image/jpeg;base64,...` or
                     `data:application/pdf;base64,...`)
                 - HTTP/HTTPS URL
+                - Google Cloud Storage URI (gs://bucket/path)
 
         Returns:
-            Part object with `inline_data` containing the media bytes and detected mime
-                type.
+            Part object with either `inline_data` containing the media bytes, or
+                `file_data` for GCS URIs.
         """
         route = self._route(image_string)
+
+        if route == Route.GCS_URI:
+            # For GCS URIs, pass directly to the API as a file reference
+            mime_type, _ = mimetypes.guess_type(image_string)
+            return Part(file_data=FileData(file_uri=image_string, mime_type=mime_type))
 
         if route == Route.BASE64:
             bytes_ = self._bytes_from_b64(image_string)
@@ -123,6 +149,9 @@ class ImageBytesLoader:
         if image_string.startswith("data:"):
             return Route.BASE64
 
+        if image_string.startswith("gs://"):
+            return Route.GCS_URI
+
         if self._is_url(image_string):
             return Route.URL
 
@@ -131,8 +160,10 @@ class ImageBytesLoader:
 
         msg = (
             "Media string must be one of: "
+            "valid HTTP/HTTPS URL, "
             "base64 encoded data URI (e.g., data:image/..., "
-            "data:application/pdf;base64,...) or valid HTTP/HTTPS URL. "
+            "data:application/pdf;base64,...), or "
+            "Google Cloud Storage URI (gs://...). "
             f"Instead got '{image_string}'."
         )
         raise ValueError(msg)

@@ -290,6 +290,10 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            part_kwargs["thought_signature"] = base64.b64decode(sig)
 
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
@@ -300,7 +304,17 @@ def _convert_to_parts(
                             msg = f"Unrecognized message image format: {img_url}"
                             raise ValueError(msg)
                         img_url = img_url["url"]
-                    parts.append(image_loader.load_part(img_url))
+                    # Check for thought_signature in extras
+                    # (needed for multi-turn image editing/usage)
+                    thought_sig = None
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            thought_sig = base64.b64decode(sig)
+                    image_part = image_loader.load_part(img_url)
+                    if thought_sig:
+                        image_part.thought_signature = thought_sig
+                    parts.append(image_part)
                 elif part["type"] == "media":
                     # Handle `media` following pattern established in LangChain.js
                     # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
@@ -340,6 +354,12 @@ def _convert_to_parts(
                             media_part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            media_part_kwargs["thought_signature"] = base64.b64decode(
+                                sig
+                            )
 
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
@@ -969,7 +989,7 @@ def _parse_response_candidate(
 
             if part.inline_data.mime_type.startswith("image/"):
                 image_format = part.inline_data.mime_type[6:]
-                image_message = {
+                image_message: dict[str, Any] = {
                     "type": "image_url",
                     "image_url": {
                         "url": image_bytes_to_b64_string(
@@ -978,6 +998,8 @@ def _parse_response_candidate(
                         )
                     },
                 }
+                if thought_sig:
+                    image_message["extras"] = {"signature": thought_sig}
                 content = _append_to_content(content, image_message)
 
         if part.function_call:
@@ -1809,8 +1831,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         Gemini 3+ models use [`thinking_level`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_level]
-        (`'low'` or `'high'`) to control reasoning depth. If not specified, defaults to
-        `'high'`.
+        (`'low'`, `'medium'`, or `'high'`) to control reasoning depth. If not specified,
+        defaults to `'high'`.
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -2189,13 +2211,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    thinking_level: Literal["low", "high"] | None = Field(
+    thinking_level: Literal["low", "medium", "high"] | None = Field(
         default=None,
     )
     """Indicates the thinking level.
 
     Supported values:
         * `'low'`: Minimizes latency and cost.
+        * `'medium'`: Balances latency/cost with reasoning depth.
         * `'high'`: Maximizes reasoning depth.
 
     !!! note "Replaces `thinking_budget`"
@@ -2564,6 +2587,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "response_modalities": kwargs.get(
                 "response_modalities", self.response_modalities
             ),
+            "seed": kwargs.get("seed", self.seed),
         }
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:

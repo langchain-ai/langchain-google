@@ -50,6 +50,7 @@ _MODEL = "gemini-2.5-flash"
 _PRO_MODEL = "gemini-2.5-flash"
 _VISION_MODEL = "gemini-2.5-flash"
 _IMAGE_OUTPUT_MODEL = "gemini-2.5-flash-image"
+_IMAGE_EDITING_MODEL = "gemini-3-pro-image-preview"
 _AUDIO_OUTPUT_MODEL = "gemini-2.5-flash-preview-tts"
 _THINKING_MODEL = "gemini-2.5-flash"
 _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV8/xCIVQTuIKGSoTi2IijhqFYpQIdQKrTqYXPoFTRqSFBdHwbXg4Mdi1cHFWVcHV0EQ/ABxdXFSdJES/5cUWsR4cNyPd/ced+8Af6PCVDM4DqiaZaSTCSGbWxW6XxHECPoRQ0hipj4niil4jq97+Ph6F+dZ3uf+HL1K3mSATyCeZbphEW8QT29aOud94ggrSQrxOXHMoAsSP3JddvmNc9FhP8+MGJn0PHGEWCh2sNzBrGSoxFPEUUXVKN+fdVnhvMVZrdRY6578heG8trLMdZrDSGIRSxAhQEYNZVRgIU6rRoqJNO0nPPxDjl8kl0yuMhg5FlCFCsnxg//B727NwuSEmxROAF0vtv0xCnTvAs26bX8f23bzBAg8A1da219tADOfpNfbWvQI6NsGLq7bmrwHXO4Ag0+6ZEiOFKDpLxSA9zP6phwwcAv0rLm9tfZx+gBkqKvUDXBwCIwVKXvd492hzt7+PdPq7wdzbXKn5swsVgAAA8lJREFUeJx90dtPHHUUB/Dz+81vZhb2wrDI3soUKBSRcisF21iqqCRNY01NTE0k8aHpi0k18VJfjOFvUF9M44MmGrHFQqSQiKSmFloL5c4CXW6Fhb0vO3ufvczMzweiBGI9+eW8ffI95/yQqqrwv4UxBgCfJ9w/2NfSVB+Nyn6/r+vdLo7H6FkYY6yoABR2PJujj34MSo/d/nHeVLYbydmIp/bEO0fEy/+NMcbTU4/j4Vs6Lr0ccKeYuUKWS4ABVCVHmRdszbfvTgfjR8kz5Jjs+9RREl9Zy2lbVK9wU3/kWLJLCXnqza1bfVe7b9jLbIeTMcYu13Jg/aMiPrCwVFcgtDiMhnxwJ/zXVDwSdVCVMRV7nqzl2i9e/fKrw8mqSp84e2sFj3Oj8/SrF/MaicmyYhAaXu58NPAbeAeyzY0NLecmh2+ODN3BewYBAkAY43giI3kebrnsRmvV9z2D4ciOa3EBAf31Tp9sMgdxMTFm6j74/Ogb70VCYQKAAIDCXkOAIC6pkYBWdwwnpHEdf6L9dJtJKPh95DZhzFKMEWRAGL927XpWTmMA+s8DAOBYAoR483l/iHZ/8bXoODl8b9UfyH72SXepzbyRJNvjFGHKMlhvMBze+cH9+4lEuOOlU2X1tVkFTU7Om03q080NDGXV1cflRpHwaaoiiiildB8jhDLZ7HDfz2Yidba6Vn2L4fhzFrNRKy5OZ2QOZ1U5W8VtqlVH/iUHcM933zZYWS7Wtj66zZr65bzGJQt0glHgudi9XVzEl4vKw2kUPhO020oPYI1qYc+2Xc0bRXFwTLY0VXa2VibD/lBaIXm1UChN5JSRUcQQ1Tk/47Cf3x8bY7y17Y17PVYTG1UkLPBFcqik7Zoa9JcLYoHBqHhXNgd6gS1k9EJ1TQ2l9EDy1saErmQ2kGpwGC2MLOtCM8nZEV1K0tKJtEksSm26J/rHg2zzmabKisq939nHzqUH7efzd4f/nPGW6NP8ybNFrOsWQhpoCuuhnJ4hAnPhFam01K4oQMjBg/mzBjVhuvw2O++KKT+BIVxJKzQECBDLF2qu2WTMmCovtDQ1f8iyoGkUADBCCGPsdnvTW2OtFm01VeB06msvdWlpPZU0wJRG85ns84umU3k+VyxeEcWqvYUBAGsUrbvme4be99HFeisP/pwUOIZaOqQX31ISgrKmZhLHtXNXuJq68orrr5/9mBCglCLAGGPyy81votEbcjlKLrC9E8mhH3wdHRdcyyvjidSlxjftPJpD+o25JYvRHGFoZDdks1mBQhxJu9uxvwEiXuHnHbLd1AAAAABJRU5ErkJggg=="""  # noqa: E501
@@ -2914,3 +2915,44 @@ def test_multimodal_function_response() -> None:
         assert len(response.content) > 0, "Expected text response from model"
 
     # Test successful - multimodal function response is working
+
+
+@pytest.mark.flaky(retries=3, delay=1)
+def test_chat_google_genai_image_editing_multi_turn(backend_config: dict) -> None:
+    """Test multi-turn image editing.
+
+    The model generates an image, and then the response is passed back to request
+    modifications to that image. The `thought_signature` metadata must be preserved on
+    image parts for this to work.
+    """
+    llm = ChatGoogleGenerativeAI(model=_IMAGE_EDITING_MODEL, **backend_config)
+
+    messages: list = [HumanMessage(content="generate a simple frog image")]
+    first_response = None
+
+    # Retry loop since image generation is not guaranteed
+    for _ in range(3):
+        result = llm.invoke(messages)
+        assert isinstance(result, AIMessage)
+
+        # Check if we got an image back
+        if isinstance(result.content, list):
+            for block in result.content:
+                if isinstance(block, dict) and block.get("type") == "image_url":
+                    first_response = result
+                    break
+        if first_response:
+            break
+
+    if first_response is None:
+        pytest.fail("Model did not generate an image after 3 attempts")
+
+    # Pass the response back and ask to modify the image
+    messages.append(first_response)
+    messages.append(HumanMessage(content="make the frog yellow"))
+
+    second_response = llm.invoke(messages)
+
+    assert isinstance(second_response, AIMessage)
+    # The response should contain either text or an image (or both)
+    assert second_response.content is not None
