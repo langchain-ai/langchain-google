@@ -11,7 +11,6 @@ from langchain_google_genai._enums import (
     HarmCategory,
     MediaResolution,
     Modality,
-    SafetySetting,
 )
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
@@ -26,6 +25,9 @@ except metadata.PackageNotFoundError:
 
 class GoogleGenerativeAIError(Exception):
     """Custom exception class for errors associated with the `Google GenAI` API."""
+
+
+SafetySettingDict = dict[HarmCategory, HarmBlockThreshold]
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
@@ -435,7 +437,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         `0`. for supported models. See the `thinking_budget` parameter for more details.
     """
 
-    safety_settings: dict[HarmCategory, HarmBlockThreshold] | None = None
+    safety_settings: SafetySettingDict | None = None
     """Default safety settings to use for all generations.
 
         !!! example
@@ -534,6 +536,3 @@ def get_user_agent(module: str | None = None) -> tuple[str, str]:
     if os.environ.get(_TELEMETRY_ENV_VARIABLE_NAME):
         client_library_version += f"+{_TELEMETRY_TAG}"
     return client_library_version, f"langchain-google-genai/{client_library_version}"
-
-
-SafetySettingDict = SafetySetting
