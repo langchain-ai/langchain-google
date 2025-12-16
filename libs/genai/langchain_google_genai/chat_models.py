@@ -2738,7 +2738,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         # Process safety settings
-        formatted_safety_settings = self._format_safety_settings(safety_settings)
+        formatted_safety_settings = self._format_safety_settings(
+            safety_settings if safety_settings is not None else self.safety_settings
+        )
 
         timeout = kwargs.pop("timeout", None)
         if timeout is not None:
@@ -2930,17 +2932,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if not safety_settings:
             return []
         if isinstance(safety_settings, dict):
-            # Handle dictionary format: {HarmCategory: HarmBlockThreshold}
             return [
                 SafetySetting(category=category, threshold=threshold)
                 for category, threshold in safety_settings.items()
             ]
-        if isinstance(safety_settings, list):
-            # Handle list format: [SafetySetting, ...]
-            return safety_settings
-
-        # Handle single SafetySetting object
-        return [safety_settings]
+        msg = "safety_settings must be: dict[HarmCategory, HarmBlockThreshold]"
+        raise TypeError(msg)
 
     def _build_request_config(
         self,

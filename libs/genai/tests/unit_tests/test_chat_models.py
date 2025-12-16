@@ -168,6 +168,46 @@ def test_safety_settings_initialization() -> None:
     assert llm.model == f"{MODEL_NAME}"
 
 
+def test_safety_settings_passed_to_api_from_instance() -> None:
+    """Test that instance `safety_settings` are passed forward."""
+    safety_settings_dict: dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    }
+
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            safety_settings=safety_settings_dict,
+        )
+
+    # This should use instance settings
+    response = llm.invoke("test query")
+    assert response.content == "test response"
+
+    # Verify safety settings were included in API call
+    mock_generate_content.assert_called_once()
+    call_kwargs = mock_generate_content.call_args
+    config = call_kwargs.kwargs.get("config")
+
+    assert config is not None
+    assert config.safety_settings is not None
+    invoked_safety_settings_dict = {
+        s.category: s.threshold for s in config.safety_settings
+    }
+    assert invoked_safety_settings_dict == safety_settings_dict
+
+
 def test_initialization_inside_threadpool() -> None:
     # new threads don't have a running event loop,
     # thread pool executor easiest way to create one
