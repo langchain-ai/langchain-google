@@ -129,6 +129,25 @@ def test_integration_initialization() -> None:
         assert "Did you mean: 'safety_settings'?" in call_args
 
 
+def test_seed_initialization() -> None:
+    """Test chat model initialization with `seed` parameter."""
+    # Test with explicit seed
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        seed=42,
+    )
+    assert llm.seed == 42
+    assert llm.model == MODEL_NAME
+
+    # Test without seed (should default to None)
+    llm_no_seed = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_no_seed.seed is None
+
+
 def test_safety_settings_initialization() -> None:
     """Test chat model initialization with `safety_settings` parameter."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {

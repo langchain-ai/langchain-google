@@ -2565,6 +2565,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "response_modalities": kwargs.get(
                 "response_modalities", self.response_modalities
             ),
+            "seed": kwargs.get("seed", self.seed),
         }
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
