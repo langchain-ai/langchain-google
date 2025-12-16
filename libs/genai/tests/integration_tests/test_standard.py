@@ -141,6 +141,30 @@ for backend_name, backend_config in _get_backend_configs():
                 **backend_config,
             }
 
+        @pytest.mark.flaky(retries=3, delay=1)
+        @pytest.mark.parametrize(
+            "schema_type", ["pydantic", "typeddict", "json_schema"]
+        )
+        def test_structured_output(
+            self,
+            model: BaseChatModel,
+            schema_type: Literal["pydantic", "typeddict", "json_schema"],
+        ) -> None:
+            """Override to add retry for transient API failures."""
+            super().test_structured_output(model, schema_type)
+
+        @pytest.mark.flaky(retries=3, delay=1)
+        @pytest.mark.parametrize(
+            "schema_type", ["pydantic", "typeddict", "json_schema"]
+        )
+        async def test_structured_output_async(
+            self,
+            model: BaseChatModel,
+            schema_type: Literal["pydantic", "typeddict", "json_schema"],
+        ) -> None:
+            """Override to add retry for transient API failures."""
+            await super().test_structured_output_async(model, schema_type)
+
         @property
         def supports_image_inputs(self) -> bool:
             return True
