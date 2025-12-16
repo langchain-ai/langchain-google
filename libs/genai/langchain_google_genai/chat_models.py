@@ -2584,8 +2584,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         if not has_thinking_params:
             return None
-        if not self._supports_thinking():
-            return None
 
         config: dict[str, Any] = {}
 
@@ -2928,9 +2926,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # Auto-set audio output for TTS models if not explicitly configured
         if response_modalities is None and self.model.endswith("-tts"):
             response_modalities = ["AUDIO"]
-        # Create thinking config if supported
+        # Create thinking config if provided
         thinking_config = None
-        if params.thinking_config is not None and self._supports_thinking():
+        if params.thinking_config is not None:
             thinking_config = ThinkingConfig(
                 include_thoughts=params.thinking_config.include_thoughts,
                 thinking_budget=params.thinking_config.thinking_budget,
