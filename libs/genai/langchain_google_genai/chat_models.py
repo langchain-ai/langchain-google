@@ -290,6 +290,10 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            part_kwargs["thought_signature"] = base64.b64decode(sig)
 
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
@@ -300,7 +304,17 @@ def _convert_to_parts(
                             msg = f"Unrecognized message image format: {img_url}"
                             raise ValueError(msg)
                         img_url = img_url["url"]
-                    parts.append(image_loader.load_part(img_url))
+                    # Check for thought_signature in extras
+                    # (needed for multi-turn image editing/usage)
+                    thought_sig = None
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            thought_sig = base64.b64decode(sig)
+                    image_part = image_loader.load_part(img_url)
+                    if thought_sig:
+                        image_part.thought_signature = thought_sig
+                    parts.append(image_part)
                 elif part["type"] == "media":
                     # Handle `media` following pattern established in LangChain.js
                     # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
@@ -340,6 +354,12 @@ def _convert_to_parts(
                             media_part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            media_part_kwargs["thought_signature"] = base64.b64decode(
+                                sig
+                            )
 
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
@@ -969,7 +989,7 @@ def _parse_response_candidate(
 
             if part.inline_data.mime_type.startswith("image/"):
                 image_format = part.inline_data.mime_type[6:]
-                image_message = {
+                image_message: dict[str, Any] = {
                     "type": "image_url",
                     "image_url": {
                         "url": image_bytes_to_b64_string(
@@ -978,6 +998,8 @@ def _parse_response_candidate(
                         )
                     },
                 }
+                if thought_sig:
+                    image_message["extras"] = {"signature": thought_sig}
                 content = _append_to_content(content, image_message)
 
         if part.function_call:
