@@ -380,7 +380,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.1.2"
+version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -392,14 +392,14 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/8d/99652acb7feaa4e16c9162429bc7a446f04749ef438aa02fce74b4319a00/langchain_core-1.1.2.tar.gz", hash = "sha256:75456c5cc10c3b53b80488bf5c6a4bcc3447b53e011533a8744bb0638b85dd78", size = 802560, upload-time = "2025-12-08T15:28:17.689Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/45/3d63fd7dc873abd9a0b1960775554dcc2a45dd4905937ec0b3d101dd5f10/langchain_core-1.2.2.tar.gz", hash = "sha256:3f9c28ec6d0fe47636d28b19799794458d55da81f37309832b2b9d11c93c5e95", size = 803123, upload-time = "2025-12-16T20:25:53.788Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/68/2caf612e4b5e25d7938c96809b7ccbafb5906958bcad8c18d9211f092679/langchain_core-1.1.2-py3-none-any.whl", hash = "sha256:74dfd4dcc10a290e3701a64e35e0bea3f68420f5b7527820ced9414f5b2dc281", size = 475847, upload-time = "2025-12-08T15:28:16.467Z" },
+    { url = "https://files.pythonhosted.org/packages/59/97/57497c8b26829e38c8dd4abe972d75e38fc3904324a3042bb01d9e0753b8/langchain_core-1.2.2-py3-none-any.whl", hash = "sha256:3a83dc14217de5cba11b1a0bd43c48702401bbd18dc25cac2ffab5ac83a61cd0", size = 476125, upload-time = "2025-12-16T20:25:52.581Z" },
 ]
 
 [[package]]
 name = "langchain-google-genai"
-version = "4.0.0"
+version = "4.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "filetype" },
@@ -443,7 +443,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-genai", specifier = ">=1.53.0,<2.0.0" },
-    { name = "langchain-core", specifier = ">=1.1.2,<2.0.0" },
+    { name = "langchain-core", specifier = ">=1.2.2,<2.0.0" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
 ]
 
@@ -451,7 +451,7 @@ requires-dist = [
 lint = [{ name = "ruff", specifier = ">=0.13.1,<0.14.0" }]
 test = [
     { name = "freezegun", specifier = ">=1.5.0,<2.0.0" },
-    { name = "langchain-tests", specifier = ">=1.0.0,<2.0.0" },
+    { name = "langchain-tests", specifier = ">=1.1.1,<2.0.0" },
     { name = "numpy", marker = "python_full_version < '3.13'", specifier = ">=1.26.4" },
     { name = "numpy", marker = "python_full_version >= '3.13'", specifier = ">=2.1.0" },
     { name = "protobuf", specifier = ">=4.25.0,<7.0.0" },
@@ -474,7 +474,7 @@ typing = [
 
 [[package]]
 name = "langchain-tests"
-version = "1.0.2"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -490,9 +490,9 @@ dependencies = [
     { name = "syrupy" },
     { name = "vcrpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/81/73/29ff92b758e49c967b6816ca8ca7ad091b77bbf113741a9f628335d8373b/langchain_tests-1.0.2.tar.gz", hash = "sha256:7e96d82499ee32ab141e93bdeb122c942db41ff326bcc87ca27290ede92f0f78", size = 159564, upload-time = "2025-11-22T23:37:09.015Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/63/7b9198ff67a9bac8af06d1a00a975e973565b0988e3785372ec9eec2c64e/langchain_tests-1.1.1.tar.gz", hash = "sha256:f7ebaa9329f1f61b5a18e7397f516f214b4ae4524c77a947f491c4add704f7c6", size = 178525, upload-time = "2025-12-16T20:28:04.698Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/b6/96434f4a01f7270ed29918c37c2e6b82ce208780f94c43a5ea133bd94a95/langchain_tests-1.0.2-py3-none-any.whl", hash = "sha256:713936d9e474ba39eeade95ee8e9d2e237b15a74d4896cae66ef1a9bd0a44d48", size = 50796, upload-time = "2025-11-22T23:37:07.612Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/00/140cb1ce6f531981d1393993ec04a6fa55b826737f82392c9f0513bd2585/langchain_tests-1.1.1-py3-none-any.whl", hash = "sha256:26dc53366e6e7ae18856dad6095f52d13452355933af12372969f28dc240c713", size = 52128, upload-time = "2025-12-16T20:28:03.344Z" },
 ]
 
 [[package]]
