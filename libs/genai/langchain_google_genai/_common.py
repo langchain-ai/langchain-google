@@ -454,6 +454,18 @@ class _BaseGoogleGenerativeAI(BaseModel):
             ```
     """  # noqa: E501
 
+    seed: int | None = Field(default=None)
+    """Seed used in decoding for reproducible generations.
+
+    By default, a random number is used.
+
+    !!! note
+
+        Using the same seed does not guarantee identical outputs, but makes them more
+        deterministic. Reproducibility is "best effort" based on the model and
+        infrastructure.
+    """
+
     @model_validator(mode="after")
     def _resolve_project_from_credentials(self) -> Self:
         """Extract project from credentials if not explicitly set.
