@@ -169,7 +169,7 @@ def test_safety_settings_initialization() -> None:
 
 
 def test_safety_settings_passed_to_api_from_instance() -> None:
-    """Test that instance safety_settings are passed forward."""
+    """Test that instance `safety_settings` are passed forward."""
     safety_settings_dict: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
         HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
