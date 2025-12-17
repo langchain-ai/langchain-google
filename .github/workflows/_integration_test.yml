@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       working-directory:
-        required: true
+        required: false
         type: string
+        default: "libs/genai"
       python-version:
         required: false
         type: string
