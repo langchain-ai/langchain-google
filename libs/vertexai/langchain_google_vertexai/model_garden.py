@@ -279,7 +279,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             params["model"] = kwargs["model"]
         if kwargs.get("betas"):
             params["betas"] = kwargs["betas"]
-        labels = kwargs.get("labels") or self.label
+        labels = kwargs.get("labels") or self.labels
         if labels:
             params["labels"] = labels
         params.pop("model_name", None)
