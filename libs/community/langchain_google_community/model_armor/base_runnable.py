@@ -135,7 +135,7 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
         client_options: Optional[Any] = None,
         client_info: Optional[Any] = None,
         template_id: Optional[str] = None,
-        fail_open: bool = True,
+        fail_open: bool = False,
         **kwargs: Any,
     ) -> None:
         # Initialize the ModelArmorParams base class.

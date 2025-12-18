@@ -6,10 +6,11 @@ into LangChain agents created with the create_agent API.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import hook_config
 from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
 
@@ -110,11 +111,12 @@ class ModelArmorMiddleware(AgentMiddleware):
         self.prompt_sanitizer = prompt_sanitizer
         self.response_sanitizer = response_sanitizer
 
+    @hook_config(can_jump_to=["end"])
     def before_model(
         self,
         state: AgentState,
         runtime: Runtime,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Sanitize user prompts before sending to the model.
 
@@ -165,11 +167,12 @@ class ModelArmorMiddleware(AgentMiddleware):
                 "jump_to": "end",
             }
 
+    @hook_config(can_jump_to=["end"])
     def after_model(
         self,
         state: AgentState,
         runtime: Runtime,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Sanitize model responses before returning to the user.
 
