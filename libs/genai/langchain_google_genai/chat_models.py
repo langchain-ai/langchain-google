@@ -2211,7 +2211,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    thinking_level: Literal["low", "medium", "high"] | None = Field(
+    thinking_level: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
     )
     """Indicates the thinking level.
