@@ -2783,6 +2783,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_level",
             "include_thoughts",
             "response_modalities",
+            "max_output_tokens",
         }
         # Filter out kwargs already consumed by _prepare_params.
         # These are handled via params and aren't direct fields
@@ -3002,6 +3003,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             stop_sequences=stop,
             http_options=http_options,
             image_config=image_config_obj,
+            max_output_tokens=params.max_output_tokens,
             **kwargs,
         )
 
