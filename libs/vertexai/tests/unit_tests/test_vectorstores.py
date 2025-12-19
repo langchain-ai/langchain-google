@@ -133,6 +133,7 @@ def test_add_texts_with_custom_ids(mocker) -> None:
     vectorstore._document_storage = MagicMock()
     vectorstore._embeddings = MagicMock()
     vectorstore._searcher = MagicMock()
+    vectorstore._searcher._api_version = "v1"  # Set V1 API version
 
     mocker.patch.object(vectorstore, "_generate_unique_ids")
 
@@ -198,6 +199,7 @@ def test_similarity_search_by_vector_with_score_output_shape() -> None:
     vectorstore._document_storage = MagicMock()
     vectorstore._embeddings = MagicMock()
     vectorstore._searcher = MagicMock()
+    vectorstore._searcher._api_version = "v1"  # Set V1 API version
 
     # Mock the searcher to return some sample neighbors
     sample_neighbors = [{"doc_id": "doc1", "dense_score": 0.8, "sparse_score": 0.5}]
