@@ -4871,8 +4871,6 @@ def test_openai_style_bind_with_response_format() -> None:
     assert bound4 is not None
 
 
-
-
 def test_max_output_tokens_passed_to_api_from_instance() -> None:
     """Test that instance `max_output_tokens` are passed forward."""
 
@@ -4903,6 +4901,7 @@ def test_max_output_tokens_passed_to_api_from_instance() -> None:
 
     assert config is not None
     assert config.max_output_tokens == 20
+
 
 def test_max_output_tokens_override_in_invoke() -> None:
     """Test that `max_output_tokens` passed to invoke overrides instance setting."""
