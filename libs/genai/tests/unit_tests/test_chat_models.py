@@ -3949,13 +3949,13 @@ def test_thinking_level_parameter() -> None:
     assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
 
-def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
-    """Test that `thinking_level` takes precedence when both are provided."""
+def test_thinking_level_takes_precedence_over_thinking_budget_for_gemini_3() -> None:
+    """Test that `thinking_level` takes precedence over `thinking_budget` when both are provided for Gemini 3 models."""
     with warnings.catch_warnings(record=True) as warning_list:
         warnings.simplefilter("always")
 
         llm = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
+            model="gemini-3.0-pro",
             google_api_key=SecretStr(FAKE_API_KEY),
             thinking_level="low",
             thinking_budget=128,
@@ -4869,3 +4869,49 @@ def test_openai_style_bind_with_response_format() -> None:
         strict=True,
     )
     assert bound4 is not None
+
+
+def test_thinking_config_gemini_2_preference() -> None:
+    """
+    Test that thinking_budget is prioritized for Gemini 2.x models
+    when both thinking_budget and thinking_level are provided.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-preview-05-20",
+        api_key=SecretStr("fake-key"),
+        thinking_budget=1024,
+        thinking_level="low",
+    )
+
+    # We inspect the internal method to see what config is generated
+    config = llm._build_thinking_config()
+
+    # For Gemini 2.x, thinking_budget should be used
+    assert config is not None
+    assert "thinking_budget" in config, "thinking_budget should be present for Gemini 2.x"
+    assert config["thinking_budget"] == 1024
+
+    # thinking_level should ideally be ignored or at least thinking_budget must be present
+    # The current bug is that thinking_budget is ignored.
+
+
+def test_thinking_config_gemini_3_preference() -> None:
+    """
+    Test that thinking_level is prioritized for Gemini 3+ models
+    when both thinking_budget and thinking_level are provided.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.0-flash-preview", # Hypothetical Gemini 3 model
+        api_key=SecretStr("fake-key"),
+        thinking_budget=1024,
+        thinking_level="low",
+    )
+
+    config = llm._build_thinking_config()
+
+    assert config is not None
+    assert "thinking_level" in config, "thinking_level should be present for Gemini 3+"
+    assert config["thinking_level"] == "low"
+    # thinking_budget should be ignored (or at least level takes precedence if both passed to API?
+    # The user says 'thinking_budget' will be ignored for Gemini 3+)
+    assert "thignking_budet" not in config
