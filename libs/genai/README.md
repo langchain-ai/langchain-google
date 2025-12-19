@@ -15,6 +15,32 @@ This package provides access to Google Gemini's chat, vision, embeddings, and ot
 pip install langchain-google-genai
 ```
 
+## ⚡️ Quick Start
+
+```python
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+# export GOOGLE_API_KEY="your-api-key"
+
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",  # Fast, cost-effective, and capable model
+    temperature=0,
+    max_retries=2,
+)
+
+messages = [
+    (
+        "system",
+        "You are a helpful assistant that translates English to French.",
+    ),
+    ("human", "I love programming."),
+]
+
+ai_msg = llm.invoke(messages)
+print(ai_msg.content)
+# Example output: J'adore la programmation.
+```
+
 ## 📖 Documentation
 
 For full documentation, see the [API reference](https://reference.langchain.com/python/integrations/langchain_google_genai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-generative-ai).
