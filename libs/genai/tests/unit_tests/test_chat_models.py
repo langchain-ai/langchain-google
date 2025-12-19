@@ -4907,7 +4907,7 @@ def test_thinking_config_gemini_3_preference() -> None:
     when both thinking_budget and thinking_level are provided.
     """
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3.0-flash-preview", # Hypothetical Gemini 3 model
+        model="gemini-3.0-flash-preview",  # Hypothetical Gemini 3 model
         api_key=SecretStr("fake-key"),
         thinking_budget=1024,
         thinking_level="low",
