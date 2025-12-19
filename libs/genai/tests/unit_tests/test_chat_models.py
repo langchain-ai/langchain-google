@@ -4869,3 +4869,68 @@ def test_openai_style_bind_with_response_format() -> None:
         strict=True,
     )
     assert bound4 is not None
+
+
+
+
+def test_max_output_tokens_passed_to_api_from_instance() -> None:
+    """Test that instance `max_output_tokens` are passed forward."""
+
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_output_tokens=20,
+        )
+
+    # This should use instance settings
+    response = llm.invoke("test query")
+    assert response.content == "test response"
+
+    # Verify max_output_tokens was included in API call
+    mock_generate_content.assert_called_once()
+    call_kwargs = mock_generate_content.call_args
+    config = call_kwargs.kwargs.get("config")
+
+    assert config is not None
+    assert config.max_output_tokens == 20
+
+def test_max_output_tokens_override_in_invoke() -> None:
+    """Test that `max_output_tokens` passed to invoke overrides instance setting."""
+
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_output_tokens=20,
+        )
+
+    # This should use invoke settings (10) instead of instance settings (20)
+    response = llm.invoke("test query", max_output_tokens=10)
+    assert response.content == "test response"
+
+    # Verify max_output_tokens was included in API call
+    mock_generate_content.assert_called_once()
+    call_kwargs = mock_generate_content.call_args
+    config = call_kwargs.kwargs.get("config")
+
+    assert config is not None
+    assert config.max_output_tokens == 10
