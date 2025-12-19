@@ -3950,7 +3950,10 @@ def test_thinking_level_parameter() -> None:
 
 
 def test_thinking_level_takes_precedence_over_thinking_budget_for_gemini_3() -> None:
-    """Test that `thinking_level` takes precedence over `thinking_budget` when both are provided for Gemini 3 models."""
+    """Test that `thinking_level` takes precedence over `thinking_budget`.
+
+    This applies when both are provided for Gemini 3 models.
+    """
     with warnings.catch_warnings(record=True) as warning_list:
         warnings.simplefilter("always")
 
@@ -4888,10 +4891,13 @@ def test_thinking_config_gemini_2_preference() -> None:
 
     # For Gemini 2.x, thinking_budget should be used
     assert config is not None
-    assert "thinking_budget" in config, "thinking_budget should be present for Gemini 2.x"
+    assert "thinking_budget" in config, (
+        "thinking_budget should be present for Gemini 2.x"
+    )
     assert config["thinking_budget"] == 1024
 
-    # thinking_level should ideally be ignored or at least thinking_budget must be present
+    # thinking_level should ideally be ignored or at least thinking_budget
+    # must be present
     # The current bug is that thinking_budget is ignored.
 
 
@@ -4912,6 +4918,7 @@ def test_thinking_config_gemini_3_preference() -> None:
     assert config is not None
     assert "thinking_level" in config, "thinking_level should be present for Gemini 3+"
     assert config["thinking_level"] == "low"
-    # thinking_budget should be ignored (or at least level takes precedence if both passed to API?
+    # thinking_budget should be ignored (or at least level takes precedence
+    # if both passed to API?
     # The user says 'thinking_budget' will be ignored for Gemini 3+)
     assert "thignking_budet" not in config
