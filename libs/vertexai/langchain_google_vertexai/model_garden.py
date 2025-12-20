@@ -487,7 +487,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool],
+        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool| str],
         *,
         tool_choice: dict[str, str] | Literal["any", "auto"] | str | None = None,
         **kwargs: Any,
@@ -495,7 +495,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         """Bind tool-like objects to this chat model."""
         # Check if web_search is in tools
         has_web_search = False
-        processed_tools = []
+        processed_tools: list[dict[str, Any] | type[BaseModel] | Callable | BaseTool] = []
 
         for tool in tools:
             # Check for string "web_search"
@@ -509,7 +509,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 has_web_search = True
                 processed_tools.append(tool)
             else:
-                processed_tools.append(tool)
+                processed_tools.append(tool)  # type: ignore[arg-type]
 
         # Auto-inject the beta header if web_search detected
         if has_web_search:
@@ -519,9 +519,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
                 kwargs["additional_headers"]["anthropic-beta"] = "web-search-2025-03-05"
 
             # Use processed_tools instead of tools for formatting
-        tools_to_format = processed_tools if has_web_search else tools
+        tools_to_format = processed_tools if has_web_search else list(tools)
 
-        formatted_tools = []
+        formatted_tools = list[Any] = []
         for tool in tools_to_format:
             if isinstance(tool, dict) and tool.get("type") == "web_search_20250305":
                 formatted_tools.append(tool)
