@@ -495,7 +495,8 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         """Bind tool-like objects to this chat model."""
         # Check if web_search is in tools
         has_web_search = False
-        processed_tools: list[dict[str, Any] | type[BaseModel] | Callable | BaseTool] = []
+        processed_tools: list[dict[str, Any] | type[BaseModel] | Callable |
+         BaseTool] = []
 
         for tool in tools:
             # Check for string "web_search"
