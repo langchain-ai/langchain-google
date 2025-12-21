@@ -4019,6 +4019,18 @@ def test_kwargs_override_max_output_tokens() -> None:
     assert config.max_output_tokens == 500
 
 
+def test_kwargs_override_stop() -> None:
+    """Test that stop can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY), stop=["you"]
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop=["me"])
+    config = request["config"]
+    assert config.stop_sequences == ["me"]
+
+
 def test_kwargs_override_thinking_budget() -> None:
     """Test that thinking_budget can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
