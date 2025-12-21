@@ -3941,7 +3941,9 @@ def test_thinking_level_parameter() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         thinking_level="low",
     )
-    config = llm._prepare_params(stop=None)
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == ThinkingLevel.LOW
     # Pydantic models define all fields; check value is None rather than hasattr
@@ -3953,7 +3955,9 @@ def test_thinking_level_parameter() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         thinking_level="high",
     )
-    config = llm._prepare_params(stop=None)
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
@@ -3969,7 +3973,9 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
             thinking_level="low",
             thinking_budget=128,
         )
-        config = llm._prepare_params(stop=None)
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
 
         # Check that warning was issued
         assert len(warning_list) == 1
@@ -3990,7 +3996,9 @@ def test_thinking_budget_alone_still_works() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         thinking_budget=64,
     )
-    config = llm._prepare_params(stop=None)
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_budget == 64
     # Pydantic models define all fields; check value is None rather than hasattr
@@ -4005,7 +4013,9 @@ def test_kwargs_override_max_output_tokens() -> None:
         max_output_tokens=100,
     )
 
-    config = llm._prepare_params(stop=None, max_output_tokens=500)
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], max_output_tokens=500)
+    config = request["config"]
     assert config.max_output_tokens == 500
 
 
@@ -4017,7 +4027,9 @@ def test_kwargs_override_thinking_budget() -> None:
         thinking_budget=64,
     )
 
-    config = llm._prepare_params(stop=None, thinking_budget=128)
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], thinking_budget=128)
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_budget == 128
 
@@ -4030,7 +4042,9 @@ def test_kwargs_override_thinking_level() -> None:
         thinking_level="low",
     )
 
-    config = llm._prepare_params(stop=None, thinking_level="high")
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], thinking_level="high")
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
