@@ -2602,7 +2602,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         gen_config = self._build_base_generation_config(stop, **kwargs)
         if generation_config:
             normalized_config = dict(generation_config)
-            if "thinking" in normalized_config and "thinking_config" not in normalized_config:
+            if (
+                "thinking" in normalized_config
+                and "thinking_config" not in normalized_config
+            ):
                 normalized_config["thinking_config"] = _normalize_thinking_config(
                     normalized_config.pop("thinking")
                 )
