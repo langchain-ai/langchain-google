@@ -88,6 +88,10 @@ def test_integration_initialization() -> None:
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.temperature == 0.7
 
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
@@ -102,6 +106,11 @@ def test_integration_initialization() -> None:
         "ls_temperature": 0.7,
         "ls_max_tokens": 10,
     }
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.temperature == 0.7
+    assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
         model=MODEL_NAME,
