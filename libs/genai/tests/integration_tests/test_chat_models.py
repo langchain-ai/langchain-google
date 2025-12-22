@@ -2611,6 +2611,12 @@ def test_audio_timestamp(backend_config: dict) -> None:
     The `audio_timestamp` parameter enables timestamp generation in the format
     `[HH:MM:SS]` within the transcribed output.
     """
+    # Skip if backend is not Vertex AI, as this param is only supported on Vertex AI.
+    if not backend_config.get("vertexai"):
+        pytest.skip(
+            "The `audio_timestamp` parameter is only supported on Vertex AI backend."
+        )
+
     llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     audio_url = (
         "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3"
