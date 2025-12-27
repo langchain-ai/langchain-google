@@ -290,6 +290,10 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            part_kwargs["thought_signature"] = base64.b64decode(sig)
 
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
@@ -300,7 +304,17 @@ def _convert_to_parts(
                             msg = f"Unrecognized message image format: {img_url}"
                             raise ValueError(msg)
                         img_url = img_url["url"]
-                    parts.append(image_loader.load_part(img_url))
+                    # Check for thought_signature in extras
+                    # (needed for multi-turn image editing/usage)
+                    thought_sig = None
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            thought_sig = base64.b64decode(sig)
+                    image_part = image_loader.load_part(img_url)
+                    if thought_sig:
+                        image_part.thought_signature = thought_sig
+                    parts.append(image_part)
                 elif part["type"] == "media":
                     # Handle `media` following pattern established in LangChain.js
                     # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
@@ -340,6 +354,12 @@ def _convert_to_parts(
                             media_part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "extras" in part and isinstance(part["extras"], dict):
+                        sig = part["extras"].get("signature")
+                        if sig and isinstance(sig, str):
+                            media_part_kwargs["thought_signature"] = base64.b64decode(
+                                sig
+                            )
 
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
@@ -969,7 +989,7 @@ def _parse_response_candidate(
 
             if part.inline_data.mime_type.startswith("image/"):
                 image_format = part.inline_data.mime_type[6:]
-                image_message = {
+                image_message: dict[str, Any] = {
                     "type": "image_url",
                     "image_url": {
                         "url": image_bytes_to_b64_string(
@@ -978,6 +998,8 @@ def _parse_response_candidate(
                         )
                     },
                 }
+                if thought_sig:
+                    image_message["extras"] = {"signature": thought_sig}
                 content = _append_to_content(content, image_message)
 
         if part.function_call:
@@ -1809,8 +1831,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         Gemini 3+ models use [`thinking_level`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_level]
-        (`'low'` or `'high'`) to control reasoning depth. If not specified, defaults to
-        `'high'`.
+        (`'low'`, `'medium'`, or `'high'`) to control reasoning depth. If not specified,
+        defaults to `'high'`.
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -2189,13 +2211,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    thinking_level: Literal["low", "high"] | None = Field(
+    thinking_level: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
     )
     """Indicates the thinking level.
 
     Supported values:
         * `'low'`: Minimizes latency and cost.
+        * `'medium'`: Balances latency/cost with reasoning depth.
         * `'high'`: Maximizes reasoning depth.
 
     !!! note "Replaces `thinking_budget`"
@@ -2564,6 +2587,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "response_modalities": kwargs.get(
                 "response_modalities", self.response_modalities
             ),
+            "seed": kwargs.get("seed", self.seed),
         }
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
@@ -2714,7 +2738,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         # Process safety settings
-        formatted_safety_settings = self._format_safety_settings(safety_settings)
+        formatted_safety_settings = self._format_safety_settings(
+            safety_settings if safety_settings is not None else self.safety_settings
+        )
 
         timeout = kwargs.pop("timeout", None)
         if timeout is not None:
@@ -2725,6 +2751,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         max_retries = kwargs.pop("max_retries", None)
         if max_retries is None:
             max_retries = self.max_retries
+
+        # Handle OpenAI-style `strict` kwarg (used by langchain.agents.create_agent)
+        # Google's json_schema is inherently strict, so we just consume this.
+        kwargs.pop("strict", None)
+
+        # Handle OpenAI-style `response_format` kwarg
+        # Ref: https://platform.openai.com/docs/guides/structured-outputs
+        # Compatible with langchain.agents.create_agent ProviderStrategy
+        response_format = kwargs.pop("response_format", None)
+        if response_format is not None and isinstance(response_format, dict):
+            rf_type = response_format.get("type")
+            if rf_type in ("json_object", "json_schema"):
+                if "response_mime_type" not in kwargs:
+                    kwargs["response_mime_type"] = "application/json"
+                json_schema = response_format.get("json_schema", {})
+                schema = json_schema.get("schema")
+                if schema and "response_json_schema" not in kwargs:
+                    kwargs["response_json_schema"] = schema
 
         # Get generation parameters
         # (consumes thinking kwargs into params.thinking_config)
@@ -2888,17 +2932,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if not safety_settings:
             return []
         if isinstance(safety_settings, dict):
-            # Handle dictionary format: {HarmCategory: HarmBlockThreshold}
             return [
                 SafetySetting(category=category, threshold=threshold)
                 for category, threshold in safety_settings.items()
             ]
-        if isinstance(safety_settings, list):
-            # Handle list format: [SafetySetting, ...]
-            return safety_settings
-
-        # Handle single SafetySetting object
-        return [safety_settings]
+        msg = "safety_settings must be: dict[HarmCategory, HarmBlockThreshold]"
+        raise TypeError(msg)
 
     def _build_request_config(
         self,

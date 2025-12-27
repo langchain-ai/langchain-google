@@ -79,11 +79,13 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             top_p=self.top_p,
             top_k=self.top_k,
             max_tokens=self.max_output_tokens,
+            max_retries=self.max_retries,
             timeout=self.timeout,
             model=self.model,
             base_url=self.base_url,
             additional_headers=self.additional_headers,
             safety_settings=self.safety_settings,
+            seed=self.seed,
         )
 
         return self
