@@ -932,6 +932,12 @@ def _parse_response_candidate(
             if thought_sig or _is_gemini_3_or_later(effective_model_name or ""):
                 # append blocks if there's a signature or new Gemini model
                 content = _append_to_content(content, text_block)
+            elif isinstance(content, list) and any(
+                isinstance(item, dict) and item.get("type") == "thinking"
+                for item in content
+            ):
+                # if there's thinking blocks, keep content as dicts
+                content = _append_to_content(content, text_block)
             else:
                 # otherwise, append text
                 content = _append_to_content(content, text or "")
