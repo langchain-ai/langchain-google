@@ -228,6 +228,16 @@ def _convert_to_parts(
                             )
                         )
                     )
+                elif part.get("type") == "file" and "id" in part:
+                    # Translation layer: Convert FileContentBlock to media format
+                    # This handles the case where FileContentBlock uses "id" instead of
+                    # "file_id"
+                    mime_type = part.get("mime_type", "application/octet-stream")
+                    parts.append(
+                        Part(
+                            file_data=FileData(file_uri=part["id"], mime_type=mime_type)
+                        )
+                    )
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
