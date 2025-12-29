@@ -181,7 +181,7 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
-        return self.embed(texts, embeddings_task_type)
+        return self.embed(texts, embeddings_task_type, dimensions=self.dimensions)
 
     def embed_query(
         self,
@@ -198,4 +198,4 @@ class VertexAIEmbeddings(BaseModel, Embeddings):
         Returns:
             Embedding for the text.
         """
-        return self.embed([text], embeddings_task_type)[0]
+        return self.embed([text], embeddings_task_type, dimensions=self.dimensions)[0]

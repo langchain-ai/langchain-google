@@ -129,6 +129,25 @@ def test_integration_initialization() -> None:
         assert "Did you mean: 'safety_settings'?" in call_args
 
 
+def test_seed_initialization() -> None:
+    """Test chat model initialization with `seed` parameter."""
+    # Test with explicit seed
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        seed=42,
+    )
+    assert llm.seed == 42
+    assert llm.model == MODEL_NAME
+
+    # Test without seed (should default to None)
+    llm_no_seed = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_no_seed.seed is None
+
+
 def test_safety_settings_initialization() -> None:
     """Test chat model initialization with `safety_settings` parameter."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
@@ -147,6 +166,46 @@ def test_safety_settings_initialization() -> None:
     assert llm.safety_settings == safety_settings
     assert llm.temperature == 0.7
     assert llm.model == f"{MODEL_NAME}"
+
+
+def test_safety_settings_passed_to_api_from_instance() -> None:
+    """Test that instance `safety_settings` are passed forward."""
+    safety_settings_dict: dict[HarmCategory, HarmBlockThreshold] = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    }
+
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            safety_settings=safety_settings_dict,
+        )
+
+    # This should use instance settings
+    response = llm.invoke("test query")
+    assert response.content == "test response"
+
+    # Verify safety settings were included in API call
+    mock_generate_content.assert_called_once()
+    call_kwargs = mock_generate_content.call_args
+    config = call_kwargs.kwargs.get("config")
+
+    assert config is not None
+    assert config.safety_settings is not None
+    invoked_safety_settings_dict = {
+        s.category: s.threshold for s in config.safety_settings
+    }
+    assert invoked_safety_settings_dict == safety_settings_dict
 
 
 def test_initialization_inside_threadpool() -> None:
@@ -1877,8 +1936,9 @@ def test_thinking_config_merging_with_generation_config() -> None:
         assert content[0]["thinking"] == "Let me think about this..."
 
         # Should have regular text content second
-        assert isinstance(content[1], str)
-        assert content[1] == "There are 2 O's in Google."
+        assert isinstance(content[1], dict)
+        assert content[1].get("type") == "text"
+        assert content[1].get("text") == "There are 2 O's in Google."
 
         # Verify usage metadata
         assert result.usage_metadata is not None
@@ -4665,3 +4725,148 @@ def test_image_config_no_instance_config_with_override() -> None:
 
     assert config.image_config is not None
     assert config.image_config.aspect_ratio == "16:9"
+
+
+# ============================================================================
+# OpenAI-style response_format and strict kwarg handling
+# Compatibility with langchain.agents.create_agent
+# ============================================================================
+
+
+def test_openai_style_response_format_json_object() -> None:
+    """Test OpenAI-style `response_format={'type': 'json_object'}` is converted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages, response_format={"type": "json_object"})
+    config = request["config"]
+
+    # Should convert to response_mime_type="application/json"
+    # (default is "text/plain")
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema is None
+
+
+def test_openai_style_response_format_json_schema() -> None:
+    """Test OpenAI-style `response_format={'type': 'json_schema', ...}` is converted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+        "required": ["name", "age"],
+    }
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(
+        messages,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "PersonSchema",
+                "schema": schema,
+                "strict": True,  # (This nested strict should be ignored)
+            },
+        },
+    )
+    config = request["config"]
+
+    # Should convert to response_mime_type + response_json_schema
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == schema
+
+
+def test_openai_style_response_format_with_strict() -> None:
+    """Test combined `response_format` and `strict` kwargs (like `create_agent`)."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    schema = {
+        "type": "object",
+        "properties": {"result": {"type": "string"}},
+    }
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    # This combination is what langchain.agents.create_agent uses with ProviderStrategy
+    request = llm._prepare_request(
+        messages,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "Result", "schema": schema},
+        },
+        strict=True,
+    )
+    config = request["config"]
+
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == schema
+
+
+def test_openai_style_response_format_explicit_params_take_precedence() -> None:
+    """Test explicit `response_mime_type`/`response_json_schema` takes precedence."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    explicit_schema = {"type": "object", "properties": {"explicit": {"type": "string"}}}
+    response_format_schema = {
+        "type": "object",
+        "properties": {"from_response_format": {"type": "string"}},
+    }
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(
+        messages,
+        response_mime_type="application/json",
+        response_json_schema=explicit_schema,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "Test", "schema": response_format_schema},
+        },
+    )
+    config = request["config"]
+
+    # Explicit params should take precedence over response_format
+    assert config.response_json_schema == explicit_schema
+
+
+def test_openai_style_bind_with_response_format() -> None:
+    """Test that `bind()` works with OpenAI-style `response_format`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    # These should not raise ValidationError
+    bound1 = llm.bind(response_format={"type": "json_object"})
+    assert bound1 is not None
+
+    bound2 = llm.bind(
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "Test",
+                "schema": {"type": "object"},
+            },
+        }
+    )
+    assert bound2 is not None
+
+    bound3 = llm.bind(strict=True)
+    assert bound3 is not None
+
+    bound4 = llm.bind(
+        response_format={"type": "json_object"},
+        strict=True,
+    )
+    assert bound4 is not None
