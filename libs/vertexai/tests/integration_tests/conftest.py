@@ -1,6 +1,6 @@
 import pytest
 
-_DEFAULT_MODEL_NAME = "gemini-2.0-flash-001"
+_DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 _DEFAULT_THINKING_MODEL_NAME = "gemini-2.5-flash"
 _DEFAULT_IMAGE_GENERATION_MODEL_NAME = "gemini-2.5-flash-image"
 
