@@ -20,7 +20,7 @@ from langchain_core.utils.function_calling import (
     convert_to_openai_tool,
 )
 from pydantic import BaseModel, Field
-
+from enum import Enum
 from langchain_google_genai import Environment
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
@@ -309,6 +309,184 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
         "inactive",
         "pending",
     ], "Expected 'status' to have enum values."
+
+
+def test_tool_with_optional_nested_pydantic_field() -> None:
+    """Test Optional field in nested Pydantic model
+
+    A tool with a nested Pydantic model containing Optional[int] would cause a
+    NULL parsing error.
+    The fix ensures the schema is properly converted without crashing.
+    """
+
+    class NestedModel(BaseModel):
+        """A nested model with optional field."""
+
+        arg: int | None = Field(None, description="optional integer argument")
+
+    @tool(parse_docstring=True)
+    def tool_with_nested_optional(
+        data: NestedModel,
+    ) -> str:
+        """A tool with nested optional field.
+
+        Args:
+            data: Nested data with optional field.
+        """
+        return "success"
+
+    # This should not raise ValueError about NULL (the main bug fix)
+    oai_tool = convert_to_openai_tool(tool_with_nested_optional)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    data_property = properties.get("data")
+    assert isinstance(data_property, dict), "Expected a dict."
+
+    assert_property_type(data_property, Type.OBJECT, "data")
+
+    data_properties = data_property.get("properties")
+    assert isinstance(data_properties, dict), "Expected nested properties."
+
+    arg_property = data_properties.get("arg")
+    assert isinstance(arg_property, dict), "Expected arg property."
+
+    assert_property_type(arg_property, Type.INTEGER, "arg")
+
+    assert "anyOf" not in arg_property or arg_property.get("anyOf") is None, (
+        "Expected anyOf to be removed/flattened for Optional[int]. "
+        "This is the core fix for issue #1225."
+    )
+
+
+def test_tool_with_multiple_optional_nested_fields() -> None:
+    """Test multiple Optional fields in nested Pydantic model
+
+    Verifies that the fix works when multiple optional fields are present
+    in the same nested model without causing NULL parsing errors.
+    """
+
+    class ComplexModel(BaseModel):
+        """A model with multiple optional fields."""
+
+        opt_int: int | None = Field(None, description="optional integer")
+        opt_str: str | None = Field(None, description="optional string")
+        required_field: str = Field(description="required field")
+
+    @tool(parse_docstring=True)
+    def tool_with_complex_nested(
+        config: ComplexModel,
+    ) -> str:
+        """A tool with complex nested model.
+
+        Args:
+            config: Configuration with multiple optional fields.
+        """
+        return "success"
+
+    # Should not raise ValueError about NULL
+    oai_tool = convert_to_openai_tool(tool_with_complex_nested)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    fn_decl = function_declarations[0]
+    parameters = fn_decl.get("parameters")
+    properties = parameters.get("properties")
+    config_property = properties.get("config")
+
+    # Check nested properties
+    config_properties = config_property.get("properties")
+
+    # Check opt_int - should be INTEGER without anyOf
+    opt_int = config_properties.get("opt_int")
+    assert_property_type(opt_int, Type.INTEGER, "opt_int")
+    assert "anyOf" not in opt_int or opt_int.get("anyOf") is None, (
+        "Expected anyOf to be removed for Optional[int]"
+    )
+
+    # Check opt_str - should be STRING without anyOf
+    opt_str = config_properties.get("opt_str")
+    assert_property_type(opt_str, Type.STRING, "opt_str")
+    assert "anyOf" not in opt_str or opt_str.get("anyOf") is None, (
+        "Expected anyOf to be removed for Optional[str]"
+    )
+
+    # Check required field
+    required = config_properties.get("required_field")
+    assert_property_type(required, Type.STRING, "required_field")
+
+
+def test_tool_with_optional_enum_field() -> None:
+    """Test Optional enum field in Pydantic model
+
+    The same NULL bug occurred with enum types.
+    This verifies the fix works for optional enums without NULL parsing errors.
+    """
+
+    class Region(str, Enum):
+        US = "us"
+        EU = "eu"
+        ASIA = "asia"
+
+    class DataWithEnum(BaseModel):
+        """Model with optional enum."""
+
+        region: Region | None = Field(None, description="optional region")
+
+    @tool(parse_docstring=True)
+    def tool_with_optional_enum(
+        payload: DataWithEnum,
+    ) -> str:
+        """A tool with optional enum field.
+
+        Args:
+            payload: Data with optional enum.
+        """
+        return "success"
+
+    # Should not raise ValueError about NULL
+    oai_tool = convert_to_openai_tool(tool_with_optional_enum)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    fn_decl = function_declarations[0]
+    parameters = fn_decl.get("parameters")
+    properties = parameters.get("properties")
+    payload_property = properties.get("payload")
+
+    # Check nested properties
+    payload_properties = payload_property.get("properties")
+    region_property = payload_properties.get("region")
+
+    # Should be STRING type
+    assert_property_type(region_property, Type.STRING, "region")
+
+    assert "anyOf" not in region_property or region_property.get("anyOf") is None, (
+        "Expected anyOf to be removed for Optional[Enum]"
+    )
+
+    # Should preserve enum values
+    enum_values = region_property.get("enum")
+    assert enum_values is not None, "Expected enum values to be present."
+    assert "us" in enum_values
+    assert "eu" in enum_values
+    assert "asia" in enum_values
 
 
 # reusable test inputs
