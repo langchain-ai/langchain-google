@@ -1,5 +1,6 @@
 import datetime
 from collections.abc import Generator
+from enum import Enum
 from typing import Annotated, Any, Literal
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +21,7 @@ from langchain_core.utils.function_calling import (
     convert_to_openai_tool,
 )
 from pydantic import BaseModel, Field
-from enum import Enum
+
 from langchain_google_genai import Environment
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
@@ -312,10 +313,10 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
 
 
 def test_tool_with_optional_nested_pydantic_field() -> None:
-    """Test Optional field in nested Pydantic model
+    """Test Optional field in nested Pydantic model (issue #1225).
 
     A tool with a nested Pydantic model containing Optional[int] would cause a
-    NULL parsing error.
+    NULL parsing error: ValueError: invalid literal for int() with base 10: 'NULL'
     The fix ensures the schema is properly converted without crashing.
     """
 
@@ -335,7 +336,7 @@ def test_tool_with_optional_nested_pydantic_field() -> None:
         """
         return "success"
 
-    # This should not raise ValueError about NULL (the main bug fix)
+    # This should not raise ValueError about NULL
     oai_tool = convert_to_openai_tool(tool_with_nested_optional)
     genai_tools = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tools[0])
@@ -374,7 +375,7 @@ def test_tool_with_optional_nested_pydantic_field() -> None:
 
 
 def test_tool_with_multiple_optional_nested_fields() -> None:
-    """Test multiple Optional fields in nested Pydantic model
+    """Test multiple Optional fields in nested Pydantic model (issue #1225).
 
     Verifies that the fix works when multiple optional fields are present
     in the same nested model without causing NULL parsing errors.
@@ -403,17 +404,30 @@ def test_tool_with_multiple_optional_nested_fields() -> None:
     genai_tools = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tools[0])
 
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
     function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
     fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
     parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
     properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
     config_property = properties.get("config")
+    assert isinstance(config_property, dict), "Expected a dict."
 
     # Check nested properties
     config_properties = config_property.get("properties")
+    assert isinstance(config_properties, dict), "Expected nested properties."
 
     # Check opt_int - should be INTEGER without anyOf
     opt_int = config_properties.get("opt_int")
+    assert isinstance(opt_int, dict), "Expected opt_int to be a dict."
     assert_property_type(opt_int, Type.INTEGER, "opt_int")
     assert "anyOf" not in opt_int or opt_int.get("anyOf") is None, (
         "Expected anyOf to be removed for Optional[int]"
@@ -421,6 +435,7 @@ def test_tool_with_multiple_optional_nested_fields() -> None:
 
     # Check opt_str - should be STRING without anyOf
     opt_str = config_properties.get("opt_str")
+    assert isinstance(opt_str, dict), "Expected opt_str to be a dict."
     assert_property_type(opt_str, Type.STRING, "opt_str")
     assert "anyOf" not in opt_str or opt_str.get("anyOf") is None, (
         "Expected anyOf to be removed for Optional[str]"
@@ -428,13 +443,14 @@ def test_tool_with_multiple_optional_nested_fields() -> None:
 
     # Check required field
     required = config_properties.get("required_field")
+    assert isinstance(required, dict), "Expected required_field to be a dict."
     assert_property_type(required, Type.STRING, "required_field")
 
 
 def test_tool_with_optional_enum_field() -> None:
-    """Test Optional enum field in Pydantic model
+    """Test Optional enum field in Pydantic model (issue #1225).
 
-    The same NULL bug occurred with enum types.
+    From @hishamkaram's comment, the same NULL bug occurred with enum types.
     This verifies the fix works for optional enums without NULL parsing errors.
     """
 
@@ -464,15 +480,30 @@ def test_tool_with_optional_enum_field() -> None:
     genai_tools = convert_to_genai_function_declarations([oai_tool])
     genai_tool_dict = tool_to_dict(genai_tools[0])
 
+    # Add type check here
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
     function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
     fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
     parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
     properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
     payload_property = properties.get("payload")
+    assert isinstance(payload_property, dict), "Expected a dict."
 
     # Check nested properties
     payload_properties = payload_property.get("properties")
+    assert isinstance(payload_properties, dict), "Expected nested properties."
+
     region_property = payload_properties.get("region")
+    assert isinstance(region_property, dict), "Expected region property."
 
     # Should be STRING type
     assert_property_type(region_property, Type.STRING, "region")
