@@ -467,8 +467,11 @@ def test_tool_with_optional_enum_field() -> None:
     function_declarations = genai_tool_dict.get("function_declarations")
     fn_decl = function_declarations[0]
     parameters = fn_decl.get("parameters")
+    if isinstance(fn_decl, dict) else None
     properties = parameters.get("properties")
+    if isinstance(parameters, dict) else None
     payload_property = properties.get("payload")
+    if isinstance(properties, dict) else None
 
     # Check nested properties
     payload_properties = payload_property.get("properties")
