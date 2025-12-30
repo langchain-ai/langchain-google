@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 import google.cloud.aiplatform_v1beta1.types as gapic
+from langchain_core._api import deprecated
 from langchain_core.output_parsers import (
     BaseGenerationOutputParser,
     BaseOutputParser,
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 from langchain_google_vertexai.functions_utils import PydanticFunctionsOutputParser
 
 
+@deprecated("3.2.1", removal="3.2.2")
 def get_output_parser(
     functions: Sequence[type[BaseModel]],
 ) -> BaseOutputParser | BaseGenerationOutputParser:
@@ -83,6 +85,7 @@ def _create_structured_runnable_extra_step(
     return initial_chain | output_parser
 
 
+@deprecated("3.2.1", alternative="with_structured_output", removal="3.2.2")
 def create_structured_runnable(
     function: type[BaseModel] | Sequence[type[BaseModel]],
     llm: Runnable,
