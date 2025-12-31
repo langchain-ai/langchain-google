@@ -1118,7 +1118,7 @@ test = [
     { name = "freezegun", specifier = ">=1.5.0,<2.0.0" },
     { name = "google-api-python-client", specifier = ">=2.117.0,<3.0.0" },
     { name = "langchain", specifier = ">=1.0.0rc2,<2.0.0" },
-    { name = "langchain-tests", specifier = ">=1.0.0,<2.0.0" },
+    { name = "langchain-tests", specifier = ">=1.1.2,<2.0.0" },
     { name = "pytest", specifier = ">=8.4.0,<9.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.21.0,<2.0.0" },
     { name = "pytest-mock", specifier = ">=3.14.0,<4.0.0" },
@@ -1167,7 +1167,7 @@ wheels = [
 
 [[package]]
 name = "langchain-tests"
-version = "1.0.2"
+version = "1.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -1183,9 +1183,9 @@ dependencies = [
     { name = "syrupy" },
     { name = "vcrpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/81/73/29ff92b758e49c967b6816ca8ca7ad091b77bbf113741a9f628335d8373b/langchain_tests-1.0.2.tar.gz", hash = "sha256:7e96d82499ee32ab141e93bdeb122c942db41ff326bcc87ca27290ede92f0f78", size = 159564, upload-time = "2025-11-22T23:37:09.015Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/be/c4380da2e674d828bae323bf1d69d715f20007dda9f1711d932f3b371f5b/langchain_tests-1.1.2.tar.gz", hash = "sha256:064eca975439f74971c828dd853d6fc41b1f100c18111b92d0a2b432a153ecac", size = 178516, upload-time = "2025-12-27T09:03:50.024Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/b6/96434f4a01f7270ed29918c37c2e6b82ce208780f94c43a5ea133bd94a95/langchain_tests-1.0.2-py3-none-any.whl", hash = "sha256:713936d9e474ba39eeade95ee8e9d2e237b15a74d4896cae66ef1a9bd0a44d48", size = 50796, upload-time = "2025-11-22T23:37:07.612Z" },
+    { url = "https://files.pythonhosted.org/packages/05/1a/7543d03550444052b825bbd88bbc4935293a58fe4875b959e4420a266d0c/langchain_tests-1.1.2-py3-none-any.whl", hash = "sha256:5ef2469c44f6ebc72fe2a0c305801a37e43327db271a0f6d0150cf0fdfe450af", size = 52163, upload-time = "2025-12-27T09:03:48.803Z" },
 ]
 
 [[package]]
