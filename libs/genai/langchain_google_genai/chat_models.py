@@ -2407,7 +2407,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # This prevents the 10-12s timeout/hang on local machines.
             client_credentials = self.credentials
             if google_api_key and not client_credentials:
-                client_credentials = AnonymousCredentials()
+                client_credentials = AnonymousCredentials() # type: ignore
 
             # 2. Prepare Project ID
             # Vertex AI requires a project ID to build the URL. If the user
