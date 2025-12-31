@@ -2163,6 +2163,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
     """Holds any unexpected initialization parameters."""
 
+    profile: ModelProfile | None = None
+    """Model profile containing model capabilities and configuration.
+
+    Automatically set based on the model name if not explicitly provided.
+    """
+
     streaming: bool | None = None
     """Whether to stream responses from the model."""
 
@@ -2403,24 +2409,38 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # 1. Prepare Credentials
             client_credentials = self.credentials
 
-            # FIX: Only force Anonymous (skipping ADC search) if user has NO standard credentials.
+            # FIX: Only force Anonymous (skipping ADC search) if user has NO
+            # standard credentials. This prevents the 10-12s timeout/hang on
+            # local machines when relying solely on API keys.
             if google_api_key and client_credentials is None:
                 # Check 1: Env Var
                 has_env_var = "GOOGLE_APPLICATION_CREDENTIALS" in os.environ
-                
+
                 # Check 2: Default File Path
-                if os.name == "nt": # Windows
-                    default_path = os.path.join(os.environ.get("APPDATA", ""), "gcloud", "application_default_credentials.json")
-                else: # Mac/Linux
-                    default_path = os.path.join(os.path.expanduser("~"), ".config", "gcloud", "application_default_credentials.json")
-                
+                if os.name == "nt":  # Windows
+                    default_path = os.path.join(
+                        os.environ.get("APPDATA", ""),
+                        "gcloud",
+                        "application_default_credentials.json",
+                    )
+                else:  # Mac/Linux
+                    default_path = os.path.join(
+                        os.path.expanduser("~"),
+                        ".config",
+                        "gcloud",
+                        "application_default_credentials.json",
+                    )
+
                 has_default_file = os.path.exists(default_path)
 
                 # Only force Anonymous if absolutely NO standard credentials exist
                 if not has_env_var and not has_default_file:
-                    client_credentials = AnonymousCredentials()
+                    client_credentials = AnonymousCredentials()  # type: ignore
 
             # 2. Prepare Project ID
+            # Vertex AI requires a project ID to build the URL. If the user
+            # didn't provide one, the SDK attempts a slow lookup. We provide a
+            # dummy ID to skip that lookup.
             client_project = self.project
             if google_api_key and not client_project:
                 client_project = "missing-project-id"
@@ -2448,6 +2468,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
             self.client = Client(api_key=google_api_key, http_options=http_options)
+        return self
+
+    @model_validator(mode="after")
+    def _set_model_profile(self) -> Self:
+        """Set model profile if not overridden."""
+        if self.profile is None:
+            # Strip version suffix (e.g. -001) and 'models/' prefix
+            model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
+            self.profile = _get_default_model_profile(model_id)
         return self
 
     def __del__(self) -> None:
