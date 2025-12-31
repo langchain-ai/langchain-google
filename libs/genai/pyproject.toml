@@ -49,7 +49,7 @@ test = [
     "pytest-socket>=0.7.0,<1.0.0",
     "numpy>=1.26.4; python_version<'3.13'",
     "numpy>=2.1.0; python_version>='3.13'",
-    "langchain-tests>=1.1.1,<2.0.0",
+    "langchain-tests>=1.1.2,<2.0.0",
     "protobuf>=4.25.0,<7.0.0",
 ]
 test_integration = [
