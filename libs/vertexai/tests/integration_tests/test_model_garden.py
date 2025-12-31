@@ -422,3 +422,42 @@ async def test_anthropic_async_stream_with_betas() -> None:
         assert isinstance(chunk, AIMessageChunk)
 
     assert len(chunks) > 0
+
+
+@pytest.mark.extended
+def test_anthropic_label_metadata() -> None:
+    """Test labels set during model declaration."""
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+
+    llm = ChatAnthropicVertex(
+        project=project,
+        location=location,
+        labels={
+            "task": "labels_using_declaration",
+            "environment": "testing",
+        },
+    )
+
+    response = llm.invoke("hey! how are you", model=_ANTHROPIC_CLAUDE_MODEL_NAME)
+    assert isinstance(response, AIMessage)
+
+
+@pytest.mark.extended
+def test_anthropic_label_metadata_invoke_method() -> None:
+    """Test labels set during invoke method call."""
+    project = os.environ["PROJECT_ID"]
+    location = _ANTHROPIC_LOCATION
+
+    llm = ChatAnthropicVertex(
+        project=project, location=location, model=_ANTHROPIC_CLAUDE_MODEL_NAME
+    )
+
+    response = llm.invoke(
+        "hello! invoke method",
+        labels={
+            "task": "labels_using_invoke",
+            "environment": "testing",
+        },
+    )
+    assert isinstance(response, AIMessage)
