@@ -2425,7 +2425,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     location=self.location,
                     credentials=client_credentials,
                     http_options=http_options,
-                    
                 )
             finally:
                 # Clean up the temporary environment variable if we set it
