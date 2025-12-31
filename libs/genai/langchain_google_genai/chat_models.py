@@ -46,6 +46,7 @@ from google.genai.types import (
     ToolConfig,
     VideoMetadata,
 )
+from google.auth.credentials import AnonymousCredentials
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
@@ -2398,13 +2399,31 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 os.environ["GOOGLE_API_KEY"] = google_api_key
                 api_key_env_set = True
 
+            # --- START FIX ---
+            # 1. Prepare Credentials
+            # If we have an API key but no explicit credentials, we use AnonymousCredentials.
+            # This tells the SDK: "Do not search the system for ADC (Application Default Credentials)."
+            # This prevents the 10-12s timeout/hang on local machines.
+            client_credentials = self.credentials
+            if google_api_key and not client_credentials:
+                client_credentials = AnonymousCredentials()
+
+            # 2. Prepare Project ID
+            # Vertex AI requires a project ID to build the URL. If the user didn't provide one,
+            # the SDK attempts a slow lookup. We provide a dummy ID to skip that lookup.
+            client_project = self.project
+            if google_api_key and not client_project:
+                client_project = "missing-project-id"
+            # --- END FIX ---
+
             try:
                 self.client = Client(
                     vertexai=True,
-                    project=self.project,
+                    project=client_project,
                     location=self.location,
-                    credentials=self.credentials,
+                    credentials=client_credentials,
                     http_options=http_options,
+                    
                 )
             finally:
                 # Clean up the temporary environment variable if we set it
