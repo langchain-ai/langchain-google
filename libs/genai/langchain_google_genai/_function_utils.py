@@ -69,6 +69,7 @@ _FunctionDeclarationLike = (
 _GoogleSearchRetrievalLike = types.GoogleSearchRetrieval | dict[str, Any]
 
 _GoogleSearchLike = types.GoogleSearch | dict[str, Any]
+_FileSearchLike = types.FileSearch | dict[str, Any]
 _GoogleMapsLike = types.GoogleMaps | dict[str, Any]
 _CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
 _UrlContextLike = types.UrlContext | dict[str, Any]
@@ -79,6 +80,7 @@ class _ToolDict(TypedDict):
     function_declarations: Sequence[_FunctionDeclarationLike]
     google_search_retrieval: _GoogleSearchRetrievalLike | None
     google_search: NotRequired[_GoogleSearchLike]
+    file_search: NotRequired[_FileSearchLike]
     google_maps: NotRequired[_GoogleMapsLike]
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
@@ -228,6 +230,7 @@ def convert_to_genai_function_declarations(
     special_tool_types = [
         "google_search_retrieval",
         "google_search",
+        "file_search",
         "google_maps",
         "code_execution",
         "url_context",
@@ -276,6 +279,13 @@ def convert_to_genai_function_declarations(
                         )
                     else:
                         tool_obj = types.Tool(google_search=tool["google_search"])
+                elif special_key == "file_search":
+                    if isinstance(tool["file_search"], dict):
+                        tool_obj = types.Tool(
+                            file_search=types.FileSearch(**tool["file_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(file_search=tool["file_search"])
                 elif special_key == "google_maps":
                     if isinstance(tool["google_maps"], dict):
                         tool_obj = types.Tool(
