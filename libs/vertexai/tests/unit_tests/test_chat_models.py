@@ -2111,3 +2111,72 @@ def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> 
         call_kwargs = mock_generate.call_args.kwargs
         # When timeout=None is explicitly passed, it uses None (not constructor default)
         assert call_kwargs.get("timeout") is None
+
+
+def test_convert_modality_to_string() -> None:
+    """Test that modality integers are converted to human-readable strings."""
+    from langchain_google_vertexai.chat_models import _convert_modality_to_string
+
+    # Test with typical usage metadata containing integer modality values
+    usage_dict = {
+        "prompt_token_count": 4,
+        "candidates_token_count": 15,
+        "total_token_count": 559,
+        "prompt_tokens_details": [{"modality": 1, "token_count": 4}],
+        "candidates_tokens_details": [{"modality": 1, "token_count": 15}],
+        "cache_tokens_details": [],
+    }
+
+    result = _convert_modality_to_string(usage_dict)
+
+    # Verify modality values are converted to strings
+    assert result["prompt_tokens_details"][0]["modality"] == "TEXT"
+    assert result["candidates_tokens_details"][0]["modality"] == "TEXT"
+
+    # Test with other modality values
+    usage_dict_multimodal = {
+        "prompt_tokens_details": [
+            {"modality": 1, "token_count": 4},
+            {"modality": 2, "token_count": 100},
+            {"modality": 3, "token_count": 200},
+            {"modality": 4, "token_count": 50},
+        ],
+        "candidates_tokens_details": [{"modality": 0, "token_count": 15}],
+        "cache_tokens_details": [{"modality": 5, "token_count": 10}],
+    }
+
+    result = _convert_modality_to_string(usage_dict_multimodal)
+
+    assert result["prompt_tokens_details"][0]["modality"] == "TEXT"
+    assert result["prompt_tokens_details"][1]["modality"] == "IMAGE"
+    assert result["prompt_tokens_details"][2]["modality"] == "VIDEO"
+    assert result["prompt_tokens_details"][3]["modality"] == "AUDIO"
+    assert result["candidates_tokens_details"][0]["modality"] == "MODALITY_UNSPECIFIED"
+    assert result["cache_tokens_details"][0]["modality"] == "DOCUMENT"
+
+
+def test_convert_modality_unknown_value() -> None:
+    """Test that unknown modality values are handled gracefully."""
+    from langchain_google_vertexai.chat_models import _convert_modality_to_string
+
+    usage_dict = {
+        "prompt_tokens_details": [{"modality": 999, "token_count": 4}],
+    }
+
+    result = _convert_modality_to_string(usage_dict)
+
+    # Unknown values should be converted to a descriptive string
+    assert result["prompt_tokens_details"][0]["modality"] == "UNKNOWN(999)"
+
+
+def test_convert_modality_empty_dict() -> None:
+    """Test that empty usage dicts are handled gracefully."""
+    from langchain_google_vertexai.chat_models import _convert_modality_to_string
+
+    # Test with empty dict
+    result = _convert_modality_to_string({})
+    assert result == {}
+
+    # Test with missing detail fields
+    result = _convert_modality_to_string({"prompt_token_count": 4})
+    assert result == {"prompt_token_count": 4}
