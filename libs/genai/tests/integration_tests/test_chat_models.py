@@ -46,8 +46,8 @@ from langchain_google_genai import (
     create_context_cache,
 )
 
-_MODEL = "gemini-2.5-flash"
-_PRO_MODEL = "gemini-2.5-flash"
+_MODEL = "gemini-3-flash-preview"
+_PRO_MODEL = "gemini-3-pro-preview"
 _VISION_MODEL = "gemini-2.5-flash"
 _IMAGE_OUTPUT_MODEL = "gemini-2.5-flash-image"
 _IMAGE_EDITING_MODEL = "gemini-3-pro-image-preview"
@@ -1537,6 +1537,7 @@ def _check_web_search_output(message: AIMessage, output_version: str) -> None:
         assert v1_text_block.get("annotations")
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_search_builtin(output_version: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(
