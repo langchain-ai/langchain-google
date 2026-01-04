@@ -182,6 +182,43 @@ def _is_gemini_25_model(model_name: str) -> bool:
     return "gemini-2.5" in model_name
 
 
+def _normalize_thinking_config(thinking: Any) -> dict[str, Any]:
+    """Normalize legacy thinking config into thinking_config kwargs."""
+    if isinstance(thinking, ThinkingConfig):
+        return {
+            "thinking_level": thinking.thinking_level,
+            "thinking_budget": thinking.thinking_budget,
+            "include_thoughts": thinking.include_thoughts,
+        }
+
+    if isinstance(thinking, Mapping):
+        config: dict[str, Any] = {}
+        if "thinking_level" in thinking:
+            config["thinking_level"] = thinking["thinking_level"]
+        if "level" in thinking and "thinking_level" not in config:
+            config["thinking_level"] = thinking["level"]
+        if "thinking_budget" in thinking:
+            config["thinking_budget"] = thinking["thinking_budget"]
+        if "budget_tokens" in thinking and "thinking_budget" not in config:
+            config["thinking_budget"] = thinking["budget_tokens"]
+        if "include_thoughts" in thinking:
+            config["include_thoughts"] = thinking["include_thoughts"]
+        if "type" in thinking and "thinking_budget" not in config:
+            if thinking["type"] == "disabled":
+                config["thinking_budget"] = 0
+            elif thinking["type"] == "enabled" and "thinking_level" not in config:
+                config["thinking_budget"] = -1
+
+        if config:
+            return config
+
+    msg = (
+        "Invalid `thinking` config. Use `thinking_level`, `thinking_budget`, or "
+        "`include_thoughts`, or pass a ThinkingConfig instance."
+    )
+    raise ValueError(msg)
+
+
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
     model: str | None = None,
@@ -2570,7 +2607,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Prepare generation parameters with config logic."""
         gen_config = self._build_base_generation_config(stop, **kwargs)
         if generation_config:
-            gen_config = self._merge_generation_config(gen_config, generation_config)
+            normalized_config = dict(generation_config)
+            if (
+                "thinking" in normalized_config
+                and "thinking_config" not in normalized_config
+            ):
+                normalized_config["thinking_config"] = _normalize_thinking_config(
+                    normalized_config.pop("thinking")
+                )
+            gen_config = self._merge_generation_config(gen_config, normalized_config)
 
         # Handle response-specific kwargs (MIME type and structured output)
         gen_config = self._add_response_parameters(gen_config, **kwargs)
@@ -2602,9 +2647,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _build_thinking_config(self, **kwargs: Any) -> dict[str, Any] | None:
         """Build thinking configuration if supported by the model."""
-        thinking_level = kwargs.get("thinking_level", self.thinking_level)
-        thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
-        include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
+        thinking_overrides: dict[str, Any] = {}
+        if "thinking" in kwargs:
+            thinking_overrides = _normalize_thinking_config(kwargs["thinking"])
+
+        thinking_level = kwargs.get(
+            "thinking_level",
+            thinking_overrides.get("thinking_level", self.thinking_level),
+        )
+        thinking_budget = kwargs.get(
+            "thinking_budget",
+            thinking_overrides.get("thinking_budget", self.thinking_budget),
+        )
+        include_thoughts = kwargs.get(
+            "include_thoughts",
+            thinking_overrides.get("include_thoughts", self.include_thoughts),
+        )
 
         has_thinking_params = (
             thinking_level is not None
@@ -2788,6 +2846,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget",
             "thinking_level",
             "include_thoughts",
+            "thinking",
             "response_modalities",
         }
         # Filter out kwargs already consumed by _prepare_params.

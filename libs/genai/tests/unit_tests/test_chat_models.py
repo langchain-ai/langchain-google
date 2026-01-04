@@ -4028,6 +4028,44 @@ def test_kwargs_override_thinking_level() -> None:
     assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
 
+def test_thinking_alias_parameter() -> None:
+    """Test that legacy `thinking` kwargs are mapped into thinking_config."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    config = llm._prepare_params(
+        stop=None,
+        thinking={"thinking_level": "low", "include_thoughts": True},
+    )
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    assert config.thinking_config.include_thoughts is True
+
+    config = llm._prepare_params(
+        stop=None,
+        thinking={"budget_tokens": 128},
+    )
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 128
+
+
+def test_thinking_alias_in_generation_config() -> None:
+    """Test that generation_config supports legacy `thinking` key."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    config = llm._prepare_params(
+        stop=None,
+        generation_config={"thinking": {"thinking_level": "high"}},
+    )
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
 def test_client_error_raises_descriptive_error() -> None:
     """Test `ClientError` from the API is properly converted to a descriptive error."""
     invalid_model_name = "gemini-invalid-model-name"
