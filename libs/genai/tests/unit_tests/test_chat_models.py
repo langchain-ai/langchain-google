@@ -1064,6 +1064,7 @@ def test_serialize() -> None:
         serialized,
         secrets_map={"GOOGLE_API_KEY": "test-key"},
         valid_namespaces=["langchain_google_genai"],
+        allowed_objects="all",
     )
     # Pydantic 2 equality will fail on complex attributes like clients with
     # different IDs
@@ -1936,8 +1937,9 @@ def test_thinking_config_merging_with_generation_config() -> None:
         assert content[0]["thinking"] == "Let me think about this..."
 
         # Should have regular text content second
-        assert isinstance(content[1], str)
-        assert content[1] == "There are 2 O's in Google."
+        assert isinstance(content[1], dict)
+        assert content[1].get("type") == "text"
+        assert content[1].get("text") == "There are 2 O's in Google."
 
         # Verify usage metadata
         assert result.usage_metadata is not None
