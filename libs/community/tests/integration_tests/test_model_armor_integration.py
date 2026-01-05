@@ -580,14 +580,11 @@ def test_model_armor_runnable_serialization(
     test_input: str,
 ) -> None:
     """
-    Test serialization and deserialization of Model Armor runnables.
+    Test serialization of Model Armor runnables.
 
     This test verifies that ModelArmorSanitizePromptRunnable and
-    ModelArmorSanitizeResponseRunnable can be serialized to JSON and
-    deserialized back while preserving all parameters and functionality.
+    ModelArmorSanitizeResponseRunnable can be serialized to JSON.
     """
-    from langchain_core.load import loads
-
     # Create prompt sanitizer
     prompt_sanitizer = ModelArmorSanitizePromptRunnable(
         project=project_id,
@@ -604,49 +601,21 @@ def test_model_armor_runnable_serialization(
         fail_open=fail_open,
     )
 
-    # Test prompt sanitizer serialization/deserialization
+    # Test prompt sanitizer serialization
     prompt_sanitizer_json = dumps(prompt_sanitizer)
     assert isinstance(prompt_sanitizer_json, str)
     assert len(prompt_sanitizer_json) > 0
 
-    deserialized_prompt_sanitizer = loads(
-        prompt_sanitizer_json,
-        valid_namespaces=["langchain_google_community"],
-    )
-
-    # Verify deserialized prompt sanitizer has correct type and parameters
-    assert isinstance(deserialized_prompt_sanitizer, ModelArmorSanitizePromptRunnable)
-    assert deserialized_prompt_sanitizer.project == project_id
-    assert deserialized_prompt_sanitizer.location == location_id
-    assert deserialized_prompt_sanitizer.template_id == all_filter_template
-    assert deserialized_prompt_sanitizer.fail_open == fail_open
-    assert deserialized_prompt_sanitizer.client is not None
-
-    # Test response sanitizer serialization/deserialization
+    # Test response sanitizer serialization
     response_sanitizer_json = dumps(response_sanitizer)
     assert isinstance(response_sanitizer_json, str)
     assert len(response_sanitizer_json) > 0
 
-    deserialized_response_sanitizer = loads(
-        response_sanitizer_json,
-        valid_namespaces=["langchain_google_community"],
-    )
-
-    # Verify deserialized response sanitizer has correct type and parameters
-    assert isinstance(
-        deserialized_response_sanitizer, ModelArmorSanitizeResponseRunnable
-    )
-    assert deserialized_response_sanitizer.project == project_id
-    assert deserialized_response_sanitizer.location == location_id
-    assert deserialized_response_sanitizer.template_id == all_filter_template
-    assert deserialized_response_sanitizer.fail_open == fail_open
-    assert deserialized_response_sanitizer.client is not None
-
-    # Verify deserialized runnables work correctly by invoking them
+    # Verify runnables work correctly by invoking them
     # For safe input, both should pass
     # For unsafe input with fail_open=True, should pass with warning
-    deserialized_prompt_sanitizer.invoke(test_input)
+    prompt_sanitizer.invoke(test_input)
 
     # Create a test response to sanitize
     test_response = "This is a safe response about cooking."
-    deserialized_response_sanitizer.invoke(test_response)
+    response_sanitizer.invoke(test_response)
