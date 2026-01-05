@@ -1,11 +1,11 @@
 """Unit tests for Model Armor Middleware."""
 
-from typing import Optional
+from typing import Any, Optional, cast
 from unittest.mock import MagicMock, patch
 
+import langchain.agents as lc_agents
 import pytest
 from google.cloud.modelarmor_v1 import FilterMatchState
-from langchain.agents import AgentState
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.runtime import Runtime
 
@@ -26,6 +26,10 @@ class DummySanitizationResult:
             else FilterMatchState.NO_MATCH_FOUND
         )
         self.filter_results: dict[str, str] = {}
+
+
+def _agent_state(messages: list[Any]) -> lc_agents.AgentState:
+    return cast(lc_agents.AgentState, {"messages": messages})
 
 
 @patch("langchain_google_community.model_armor._client_utils._get_model_armor_client")
@@ -117,7 +121,7 @@ def test_before_model_safe_content(mock_get_client: MagicMock) -> None:
     )
     middleware = ModelArmorMiddleware(prompt_sanitizer=prompt_sanitizer)
 
-    state = {"messages": [HumanMessage(content="What is the capital of France?")]}
+    state = _agent_state([HumanMessage(content="What is the capital of France?")])
     runtime = MagicMock(spec=Runtime)
 
     result = middleware.before_model(state, runtime)
@@ -143,7 +147,7 @@ def test_before_model_unsafe_content_strict(mock_get_client: MagicMock) -> None:
     )
     middleware = ModelArmorMiddleware(prompt_sanitizer=prompt_sanitizer)
 
-    state = {"messages": [HumanMessage(content="malicious content")]}
+    state = _agent_state([HumanMessage(content="malicious content")])
     runtime = MagicMock(spec=Runtime)
 
     result = middleware.before_model(state, runtime)
@@ -167,7 +171,7 @@ def test_before_model_empty_messages(mock_get_client: MagicMock) -> None:
     )
     middleware = ModelArmorMiddleware(prompt_sanitizer=prompt_sanitizer)
 
-    state: AgentState = {"messages": []}
+    state = _agent_state([])
     runtime = MagicMock(spec=Runtime)
 
     result = middleware.before_model(state, runtime)
@@ -189,7 +193,7 @@ def test_before_model_skipped_when_no_prompt_sanitizer(
     )
     middleware = ModelArmorMiddleware(response_sanitizer=response_sanitizer)
 
-    state = {"messages": [HumanMessage(content="test message")]}
+    state = _agent_state([HumanMessage(content="test message")])
     runtime = MagicMock(spec=Runtime)
 
     result = middleware.before_model(state, runtime)
@@ -215,7 +219,7 @@ def test_after_model_safe_content(mock_get_client: MagicMock) -> None:
     )
     middleware = ModelArmorMiddleware(response_sanitizer=response_sanitizer)
 
-    state = {"messages": [AIMessage(content="The capital of France is Paris.")]}
+    state = _agent_state([AIMessage(content="The capital of France is Paris.")])
     runtime = MagicMock(spec=Runtime)
 
     result = middleware.after_model(state, runtime)
@@ -241,7 +245,7 @@ def test_after_model_unsafe_content_strict(mock_get_client: MagicMock) -> None:
     )
     middleware = ModelArmorMiddleware(response_sanitizer=response_sanitizer)
 
-    state = {"messages": [AIMessage(content="malicious response")]}
+    state = _agent_state([AIMessage(content="malicious response")])
     runtime = MagicMock(spec=Runtime)
 
     # Should return jump_to="end" instead of raising exception
@@ -266,7 +270,7 @@ def test_after_model_empty_content(mock_get_client: MagicMock) -> None:
     )
     middleware = ModelArmorMiddleware(response_sanitizer=response_sanitizer)
 
-    state = {"messages": [AIMessage(content="")]}
+    state = _agent_state([AIMessage(content="")])
     runtime = MagicMock(spec=Runtime)
 
     result = middleware.after_model(state, runtime)
@@ -288,7 +292,7 @@ def test_after_model_skipped_when_no_response_sanitizer(
     )
     middleware = ModelArmorMiddleware(prompt_sanitizer=prompt_sanitizer)
 
-    state = {"messages": [AIMessage(content="test response")]}
+    state = _agent_state([AIMessage(content="test response")])
     runtime = MagicMock(spec=Runtime)
 
     result = middleware.after_model(state, runtime)
@@ -314,7 +318,7 @@ def test_middleware_fail_open_mode(mock_get_client: MagicMock) -> None:
     )
     middleware = ModelArmorMiddleware(prompt_sanitizer=prompt_sanitizer)
 
-    state = {"messages": [HumanMessage(content="malicious content")]}
+    state = _agent_state([HumanMessage(content="malicious content")])
     runtime = MagicMock(spec=Runtime)
 
     # Should not raise in fail-open mode

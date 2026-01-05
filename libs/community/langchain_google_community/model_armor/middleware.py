@@ -8,9 +8,9 @@ into LangChain agents created with the create_agent API.
 import logging
 from typing import Any, Optional
 
-from langchain.agents import AgentState
-from langchain.agents.middleware import AgentMiddleware
-from langchain.agents.middleware.types import hook_config
+import langchain.agents as lc_agents
+import langchain.agents.middleware as lc_agents_middleware
+import langchain.agents.middleware.types as lc_hook_types
 from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
 
@@ -22,7 +22,7 @@ from langchain_google_community.model_armor.runnable import (
 logger = logging.getLogger(__name__)
 
 
-class ModelArmorMiddleware(AgentMiddleware):
+class ModelArmorMiddleware(lc_agents_middleware.AgentMiddleware):
     """
     Middleware to integrate Model Armor sanitization into agent execution.
 
@@ -111,10 +111,10 @@ class ModelArmorMiddleware(AgentMiddleware):
         self.prompt_sanitizer = prompt_sanitizer
         self.response_sanitizer = response_sanitizer
 
-    @hook_config(can_jump_to=["end"])
+    @lc_hook_types.hook_config(can_jump_to=["end"])
     def before_model(
         self,
-        state: AgentState,
+        state: lc_agents.AgentState,
         runtime: Runtime,
     ) -> Optional[dict[str, Any]]:
         """
@@ -167,10 +167,10 @@ class ModelArmorMiddleware(AgentMiddleware):
                 "jump_to": "end",
             }
 
-    @hook_config(can_jump_to=["end"])
+    @lc_hook_types.hook_config(can_jump_to=["end"])
     def after_model(
         self,
-        state: AgentState,
+        state: lc_agents.AgentState,
         runtime: Runtime,
     ) -> Optional[dict[str, Any]]:
         """
