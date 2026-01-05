@@ -2801,6 +2801,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget",
             "thinking_level",
             "include_thoughts",
+            "response_schema",
+            "response_json_schema",
+            "response_mime_type",
         }
         _consumed_kwargs.update(params.model_fields_set)
         # Filter out kwargs already consumed by _prepare_params.
