@@ -359,7 +359,47 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """
 
     max_retries: int = Field(default=6, alias="retries")
-    """The maximum number of retries to make when generating."""
+    """The maximum number of retries to make when generating.
+
+    !!! warning "Disabling retries"
+
+        To disable retries, set `max_retries=1` (not `0`) due to a quirk in the
+        underlying Google SDK. `max_retries=0` is interpreted as "use the (Google)
+        default" (5 retries).
+
+        Setting `max_retries=1` means only the initial request is made with no retries.
+
+    !!! warning "Handling rate limits (429 errors)"
+
+        When you exceed quota limits, the API returns a 429 error with a suggested
+        `retry_delay`. The SDK's built-in retry logic ignores this value and uses fixed
+        exponential backoff instead. This is a known issue in Google's SDK and an issue
+        has been [raised upstream](https://github.com/googleapis/python-genai/issues/1875).
+        We plan to implement proper handling once it's supported.
+
+        If you need to respect the server's suggested retry delay, disable SDK retries
+        with `max_retries=1` and implement custom retry logic:
+
+        ```python
+        import re
+        import time
+
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
+
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", max_retries=1)
+
+        try:
+            response = llm.invoke("Hello")
+        except ChatGoogleGenerativeAIError as e:
+            if "429" in str(e):
+                # Parse retry_delay from error: "[retry_delay { seconds: N }]"
+                match = re.search(r"retry_delay\\s*\\{\\s*seconds:\\s*(\\d+)", str(e))
+                delay = int(match.group(1)) if match else 60
+                time.sleep(delay)
+                # Retry...
+        ```
+    """
 
     timeout: float | None = Field(default=None, alias="request_timeout")
     """The maximum number of seconds to wait for a response."""
