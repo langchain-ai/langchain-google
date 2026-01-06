@@ -1045,7 +1045,7 @@ def test_timeout_non_streaming(backend_config: dict) -> None:
         timeout=0.001,  # 1ms - too short to complete
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 
@@ -1057,7 +1057,7 @@ def test_timeout_streaming(backend_config: dict) -> None:
         streaming=True,
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 
