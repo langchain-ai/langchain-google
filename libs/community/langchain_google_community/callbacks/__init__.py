@@ -1,11 +1,4 @@
-"""**Callback handlers** allow listening to events in LangChain.
-
-**Class hierarchy:**
-
-.. code-block::
-
-    BaseCallbackHandler --> <name>CallbackHandler  # Example: AimCallbackHandler
-"""
+"""**Callback handlers** allow listening to events in LangChain."""
 
 import importlib
 from typing import TYPE_CHECKING, Any

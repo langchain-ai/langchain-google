@@ -24,7 +24,7 @@ from langchain_core.utils import guard_import
 
 
 def import_google_cloud_bigquery() -> Any:
-    """Import google-cloud-bigquery and its dependencies."""
+    """Import `google-cloud-bigquery` and its dependencies."""
     return (
         guard_import("google.cloud.bigquery"),
         guard_import("google.auth", pip_name="google-auth"),
@@ -619,7 +619,7 @@ class _GCSOffloader:
 
 
 class _SyncBatchProcessor:
-    """Internal. Synchronous version of _BatchProcessor using threading."""
+    """Internal. Synchronous version of `_BatchProcessor` using threading."""
 
     def __init__(
         self,
@@ -838,7 +838,7 @@ class _LangChainContentParser:
     async def parse_message_content(
         self, content: Union[str, List[Union[str, Dict]]]
     ) -> tuple[str, list[dict], bool]:
-        """Parses LangChain Message Content (str or list of dicts)."""
+        """Parses LangChain Message Content (string or list of dicts)."""
         content_parts = []
         summary_text = []
         is_truncated = False
@@ -992,8 +992,7 @@ class _LangChainContentParser:
 
 
 class _SyncLangChainContentParser:
-    """
-    Internal. A purely synchronous parser that re-implements the parsing logic
+    """Internal. A purely synchronous parser that re-implements the parsing logic
     without using asyncio. It uses a synchronous GCS offloader.
     """
 

@@ -1,4 +1,4 @@
-"""Integration tests for BigQueryCallbackHandler."""
+"""Integration tests for `BigQueryCallbackHandler`."""
 
 import asyncio
 import json
@@ -349,7 +349,7 @@ def expected_data() -> Tuple[List[Tuple[uuid.UUID, uuid.UUID]], List[Dict[str, A
 
 @pytest.mark.extended
 def test_bigquery_callback_handler(expected_data: tuple) -> None:
-    """Test BigQueryCallbackHandler."""  # type: ignore
+    """Test `BigQueryCallbackHandler`."""  # type: ignore
     project_id = os.environ.get("PROJECT_ID")
     dataset_id = os.environ.get("BIGQUERY_LOGGING_DATASET_ID")
     if not project_id or not dataset_id:
@@ -535,7 +535,7 @@ def test_bigquery_callback_handler(expected_data: tuple) -> None:
 @pytest.mark.extended
 @pytest.mark.asyncio
 async def test_async_bigquery_callback_handler(expected_data: tuple) -> None:  # type: ignore
-    """Test AsyncBigQueryCallbackHandler."""
+    """Test `AsyncBigQueryCallbackHandler`."""
     project_id = os.environ.get("PROJECT_ID")
     dataset_id = os.environ.get("BIGQUERY_LOGGING_DATASET_ID")
     if not project_id or not dataset_id:
