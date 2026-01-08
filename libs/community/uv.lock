@@ -1356,6 +1356,15 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+bigquery = [
+    { name = "google-auth" },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-bigquery-storage" },
+    { name = "google-cloud-core" },
+    { name = "google-cloud-storage", version = "3.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
+    { name = "google-cloud-storage", version = "3.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
+    { name = "pyarrow" },
+]
 calendar = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
@@ -1418,6 +1427,7 @@ lint = [
 test = [
     { name = "cloudpickle" },
     { name = "freezegun" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-discoveryengine" },
     { name = "google-cloud-documentai" },
     { name = "pytest" },
@@ -1447,6 +1457,7 @@ requires-dist = [
     { name = "gapic-google-longrunning", marker = "extra == 'docai'", specifier = ">=0.11.2,<1.0.0" },
     { name = "google-api-core", specifier = ">=2.25.0,<3.0.0" },
     { name = "google-api-python-client", specifier = ">=2.161.0,<3.0.0" },
+    { name = "google-auth", marker = "extra == 'bigquery'", specifier = ">=2.36.0,<3.0.0" },
     { name = "google-auth", marker = "extra == 'calendar'", specifier = ">=2.36.0,<3.0.0" },
     { name = "google-auth-httplib2", marker = "extra == 'drive'", specifier = ">=0.2.0,<1.0.0" },
     { name = "google-auth-httplib2", marker = "extra == 'gmail'", specifier = ">=0.2.0,<1.0.0" },
@@ -1454,13 +1465,17 @@ requires-dist = [
     { name = "google-auth-oauthlib", marker = "extra == 'drive'", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-auth-oauthlib", marker = "extra == 'gmail'", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-cloud-aiplatform", marker = "extra == 'featurestore'", specifier = ">=1.56.0,<2.0.0" },
+    { name = "google-cloud-bigquery", marker = "extra == 'bigquery'", specifier = ">=3.21.0,<4.0.0" },
+    { name = "google-cloud-bigquery-storage", marker = "extra == 'bigquery'", specifier = ">=2.25.0,<3.0.0" },
     { name = "google-cloud-bigquery-storage", marker = "extra == 'featurestore'", specifier = ">=2.6.0,<3.0.0" },
     { name = "google-cloud-contentwarehouse", marker = "extra == 'docai'", specifier = ">=0.7.7,<1.0.0" },
     { name = "google-cloud-core", specifier = ">=2.4.3,<3.0.0" },
+    { name = "google-cloud-core", marker = "extra == 'bigquery'", specifier = ">=2.4.3,<3.0.0" },
     { name = "google-cloud-discoveryengine", marker = "extra == 'vertexaisearch'", specifier = ">=0.11.14,<1.0.0" },
     { name = "google-cloud-documentai", marker = "extra == 'docai'", specifier = ">=2.26.0,<3.0.0" },
     { name = "google-cloud-modelarmor", specifier = ">=0.2.8,<1.0.0" },
     { name = "google-cloud-speech", marker = "extra == 'speech'", specifier = ">=2.26.0,<3.0.0" },
+    { name = "google-cloud-storage", marker = "extra == 'bigquery'", specifier = ">=2.16.0,<4.0.0" },
     { name = "google-cloud-storage", marker = "extra == 'gcs'", specifier = ">=2.16.0,<4.0.0" },
     { name = "google-cloud-texttospeech", marker = "extra == 'texttospeech'", specifier = ">=2.16.3,<3.0.0" },
     { name = "google-cloud-translate", marker = "extra == 'translate'", specifier = ">=3.15.3,<4.0.0" },
@@ -1471,10 +1486,11 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.2.5,<2.0.0" },
     { name = "pandas", marker = "python_full_version >= '3.12' and extra == 'featurestore'", specifier = ">=2.0.0,<3.0.0" },
     { name = "pandas", marker = "python_full_version < '3.12' and extra == 'featurestore'", specifier = ">=1.0.0" },
+    { name = "pyarrow", marker = "extra == 'bigquery'", specifier = ">=6.0.1" },
     { name = "pyarrow", marker = "extra == 'featurestore'", specifier = ">=6.0.1" },
     { name = "pydantic", marker = "extra == 'featurestore'", specifier = ">=2.7.4,<3.0.0" },
 ]
-provides-extras = ["calendar", "docai", "drive", "gcs", "speech", "places", "texttospeech", "translate", "vertexaisearch", "vision", "gmail", "featurestore"]
+provides-extras = ["bigquery", "calendar", "docai", "drive", "gcs", "speech", "places", "texttospeech", "translate", "vertexaisearch", "vision", "gmail", "featurestore"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1487,6 +1503,7 @@ lint = [{ name = "ruff", specifier = ">=0.14.0,<1" }]
 test = [
     { name = "cloudpickle", specifier = ">=3.0.0,<4.0.0" },
     { name = "freezegun", specifier = ">=1.2.2,<2.0.0" },
+    { name = "google-cloud-bigquery", specifier = ">=3.21.0,<4.0.0" },
     { name = "google-cloud-discoveryengine", specifier = ">=0.11.14,<1.0.0" },
     { name = "google-cloud-documentai", specifier = ">=2.24.2,<3.0.0" },
     { name = "pytest", specifier = ">=7.3.0,<8.0.0" },

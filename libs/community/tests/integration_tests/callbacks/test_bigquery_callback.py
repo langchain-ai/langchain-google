@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Tuple, cast
 
 import google.auth
 import pytest
-from google.cloud import bigquery
+from google.cloud import bigquery  # type: ignore[attr-defined]
 from google.cloud.exceptions import NotFound
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.documents import Document
