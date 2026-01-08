@@ -131,11 +131,11 @@ async def test_async_on_llm_start(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_llm_start` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
     run_id = uuid4()
     parent_run_id = uuid4()
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_llm_start(
         serialized={"name": "test_llm"},
         prompts=["test prompt"],
@@ -143,7 +143,7 @@ async def test_async_on_llm_start(
         parent_run_id=parent_run_id,
     )
 
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_llm_start(
@@ -170,15 +170,15 @@ async def test_async_on_llm_end(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_llm_end` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     response = LLMResult(
         generations=[[Generation(text="test generation")]],
         llm_output={"model_name": "test_model"},
     )
     await handler.on_llm_end(response, run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_llm_end(
@@ -201,13 +201,13 @@ async def test_async_on_chain_start(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_chain_start` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_chain_start(
         serialized={"name": "test_chain"}, inputs={"input": "test"}, run_id=uuid4()
     )
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_chain_start(
@@ -228,11 +228,11 @@ async def test_async_on_chain_end(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_chain_end` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_chain_end(outputs={"output": "test"}, run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_chain_end(
@@ -251,13 +251,13 @@ async def test_async_on_tool_start(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_tool_start` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_tool_start(
         serialized={"name": "test_tool"}, input_str="test", run_id=uuid4()
     )
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_tool_start(
@@ -278,12 +278,12 @@ async def test_async_on_agent_action(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_agent_action` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     action = AgentAction(tool="test_tool", tool_input="test", log="test log")
     await handler.on_agent_action(action, run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_agent_action(
@@ -303,12 +303,12 @@ async def test_async_on_agent_finish(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_agent_finish` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     finish = AgentFinish(return_values={"output": "test"}, log="test log")
     await handler.on_agent_finish(finish, run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_agent_finish(
@@ -328,11 +328,11 @@ async def test_async_on_llm_error(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_llm_error` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_llm_error(Exception("test error"), run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_llm_error(
@@ -351,15 +351,15 @@ async def test_async_on_chat_model_start(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_chat_model_start` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_chat_model_start(
         serialized={"name": "test_chat_model"},
         messages=[[HumanMessage(content="test")]],
         run_id=uuid4(),
     )
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_chat_model_start(
@@ -382,12 +382,12 @@ async def test_async_on_retriever_end(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_retriever_end` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     documents = [Document(page_content="test document")]
     await handler.on_retriever_end(documents, run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_retriever_end(
@@ -449,12 +449,12 @@ async def test_async_close(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that the shutdown method closes clients."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.shutdown = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.shutdown = AsyncMock()  # type: ignore[method-assign]
     await handler.shutdown()
-    if handler.batch_processor:
-        handler.batch_processor.shutdown.assert_called_once()
+    if handler.async_batch_processor:
+        handler.async_batch_processor.shutdown.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -462,11 +462,11 @@ async def test_async_on_tool_end(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_tool_end` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_tool_end(output="test output", run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_tool_end(
@@ -485,11 +485,11 @@ async def test_async_on_tool_error(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_tool_error` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_tool_error(Exception("tool error"), run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_tool_error(
@@ -508,11 +508,11 @@ async def test_async_on_chain_error(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_chain_error` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_chain_error(Exception("chain error"), run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_chain_error(
@@ -531,13 +531,13 @@ async def test_async_on_retriever_start(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_retriever_start` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_retriever_start(
         serialized={"name": "test_retriever"}, query="test query", run_id=uuid4()
     )
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_retriever_start(
@@ -558,11 +558,11 @@ async def test_async_on_retriever_error(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_retriever_error` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_retriever_error(Exception("retriever error"), run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_retriever_error(
@@ -581,11 +581,11 @@ async def test_async_on_text(
     handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
 ) -> None:
     """Test that `on_text` logs the correct event."""
-    if not handler.batch_processor:
+    if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
-    handler.batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_text("some text", run_id=uuid4())
-    handler.batch_processor.append.assert_called_once()
+    handler.async_batch_processor.append.assert_called_once()
 
 
 def test_sync_on_text(
@@ -609,3 +609,65 @@ def test_sync_close(
     sync_handler.shutdown()
     if sync_handler.batch_processor:
         sync_handler.batch_processor.shutdown.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_log_parsing_error(
+    handler: AsyncBigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
+) -> None:
+    """Test that a parsing error is handled gracefully in async handler."""
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    error_message = "Test parsing error"
+
+    with (
+        patch(
+            "langchain_google_community.callbacks.bigquery_callback._LangChainContentParser.parse_message_content",
+            side_effect=Exception(error_message),
+        ),
+        patch(
+            "langchain_google_community.callbacks.bigquery_callback.logger.warning"
+        ) as mock_warning,
+    ):
+        await handler.on_text("some text that will fail parsing", run_id=run_id)
+
+        mock_warning.assert_called_once()
+        handler.async_batch_processor.append.assert_called_once()
+        logged_row = handler.async_batch_processor.append.call_args[0][0]
+        assert logged_row["status"] == "ERROR"
+        assert (
+            f"Failed to parse content: {error_message}" in logged_row["error_message"]
+        )
+
+
+def test_sync_log_parsing_error(
+    sync_handler: BigQueryCallbackHandler, mock_bigquery_clients: Dict[str, Any]
+) -> None:
+    """Test that a parsing error is handled gracefully in sync handler."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    error_message = "Test parsing error"
+
+    with (
+        patch(
+            "langchain_google_community.callbacks.bigquery_callback._SyncLangChainContentParser.parse_message_content",
+            side_effect=Exception(error_message),
+        ),
+        patch(
+            "langchain_google_community.callbacks.bigquery_callback.logger.warning"
+        ) as mock_warning,
+    ):
+        sync_handler.on_text("some text that will fail parsing", run_id=run_id)
+        mock_warning.assert_called_once()
+        sync_handler.batch_processor.append.assert_called_once()
+        logged_row = sync_handler.batch_processor.append.call_args[0][0]
+        assert logged_row["status"] == "ERROR"
+        assert (
+            f"Failed to parse content: {error_message}" in logged_row["error_message"]
+        )

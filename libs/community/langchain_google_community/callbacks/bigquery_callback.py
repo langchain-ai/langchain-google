@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from queue import Empty, Full, Queue
 from types import MappingProxyType
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Callable, Dict, List, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.callbacks import AsyncCallbackHandler, BaseCallbackHandler
@@ -80,7 +80,7 @@ def _recursive_smart_truncate(obj: Any, max_len: int) -> tuple[Any, bool]:
 
 def _bigquery_schema_to_arrow_schema(
     bq_schema_list: list[Any], bq_schema_cls: Any, pa_module: Any
-) -> Optional[Any]:
+) -> Any:
     """Converts a BigQuery schema to a PyArrow schema."""
 
     # --- PyArrow Helper Functions ---
@@ -130,11 +130,11 @@ def _bigquery_schema_to_arrow_schema(
     }
     _STRUCT_TYPES = ("RECORD", "STRUCT")
 
-    def _bigquery_to_arrow_scalars(bigquery_scalar: str) -> Optional[Callable[[], Any]]:
+    def _bigquery_to_arrow_scalars(bigquery_scalar: str) -> Callable[[], Any] | None:
         return _BQ_TO_ARROW_SCALARS.get(bigquery_scalar)
 
-    def _bigquery_to_arrow_field(bigquery_field: Any) -> Optional[Any]:
-        arrow_type: Optional[Any] = _bigquery_to_arrow_data_type(bigquery_field)
+    def _bigquery_to_arrow_field(bigquery_field: Any) -> Any:
+        arrow_type: Any = _bigquery_to_arrow_data_type(bigquery_field)
         if arrow_type:
             metadata = _BQ_FIELD_TYPE_TO_ARROW_FIELD_METADATA.get(
                 bigquery_field.field_type.upper() if bigquery_field.field_type else ""
@@ -150,7 +150,7 @@ def _bigquery_schema_to_arrow_schema(
         )
         return None
 
-    def _bigquery_to_arrow_struct_data_type(field: Any) -> Optional[Any]:
+    def _bigquery_to_arrow_struct_data_type(field: Any) -> Any:
         arrow_fields = []
         for subfield in field.fields:
             arrow_subfield = _bigquery_to_arrow_field(subfield)
@@ -165,7 +165,7 @@ def _bigquery_schema_to_arrow_schema(
                 return None
         return pa_module.struct(arrow_fields)
 
-    def _bigquery_to_arrow_data_type(field: Any) -> Optional[Any]:
+    def _bigquery_to_arrow_data_type(field: Any) -> Any:
         if field.mode == "REPEATED":
             inner = _bigquery_to_arrow_data_type(
                 bq_schema_cls.SchemaField(
@@ -331,8 +331,76 @@ class BigQueryLoggerConfig:
     batch_flush_interval: float = 1.0
     shutdown_timeout: float = 10.0
     queue_max_size: int = 10000
-    gcs_bucket_name: Optional[str] = None
-    connection_id: Optional[str] = None
+    gcs_bucket_name: str | None = None
+    connection_id: str | None = None
+
+
+def _prepare_arrow_batch(rows: list[dict[str, Any]], arrow_schema: Any) -> Any:
+    """Prepares a PyArrow RecordBatch from a list of rows."""
+    import pyarrow as pa
+
+    data: Dict[str, List] = {schema_field.name: [] for schema_field in arrow_schema}
+    for row in rows:
+        for schema_field in arrow_schema:
+            value = row.get(schema_field.name)
+            # JSON Handling
+            field_metadata = arrow_schema.field(schema_field.name).metadata
+            is_json = False
+            if field_metadata and b"ARROW:extension:name" in field_metadata:
+                if (
+                    field_metadata[b"ARROW:extension:name"]  # type: ignore
+                    == b"google:sqlType:json"
+                ):
+                    is_json = True
+            arrow_field_type = arrow_schema.field(schema_field.name).type
+            is_struct = pa.types.is_struct(arrow_field_type)
+            is_list = pa.types.is_list(arrow_field_type)
+
+            if is_json:
+                if value is not None:
+                    if isinstance(value, (dict, list)):
+                        try:
+                            value = json.dumps(value)
+                        except (TypeError, ValueError):
+                            value = str(value)
+                    elif isinstance(value, (str, bytes)):
+                        if isinstance(value, bytes):
+                            try:
+                                value = value.decode("utf-8")
+                            except UnicodeDecodeError:
+                                value = str(value)
+
+                        is_already_json = False
+                        if isinstance(value, str):
+                            stripped = value.strip()
+                            if stripped.startswith(("{", "[")) and stripped.endswith(
+                                ("}", "]")
+                            ):
+                                try:
+                                    json.loads(value)
+                                    is_already_json = True
+                                except (ValueError, TypeError):
+                                    pass
+
+                        if not is_already_json:
+                            try:
+                                value = json.dumps(value)
+                            except (TypeError, ValueError):
+                                value = str(value)
+                    else:
+                        try:
+                            value = json.dumps(value)
+                        except (TypeError, ValueError):
+                            value = str(value)
+            elif isinstance(value, (dict, list)) and not is_struct and not is_list:
+                if value is not None and not isinstance(value, (str, bytes)):
+                    try:
+                        value = json.dumps(value)
+                    except (TypeError, ValueError):
+                        value = str(value)
+
+            data[schema_field.name].append(value)
+    return pa.RecordBatch.from_pydict(data, schema=arrow_schema)
 
 
 # ==============================================================================
@@ -340,7 +408,7 @@ class BigQueryLoggerConfig:
 # ==============================================================================
 
 
-class _BatchProcessor:
+class _AsyncBatchProcessor:
     """Internal. Handles asynchronous batching and writing of events to BigQuery."""
 
     def __init__(
@@ -364,7 +432,7 @@ class _BatchProcessor:
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
             maxsize=queue_max_size
         )
-        self._worker_task: Optional[asyncio.Task] = None
+        self._worker_task: asyncio.Task | None = None
         self._shutdown = False
         self.bq_storage_types = bq_storage_types
         self.service_unavailable_exception = service_unavailable_exception
@@ -378,74 +446,6 @@ class _BatchProcessor:
             self._queue.put_nowait(row)
         except asyncio.QueueFull:
             logger.warning("BigQuery log queue full, dropping event.")
-
-    def _prepare_arrow_batch(self, rows: list[dict[str, Any]]) -> Any:
-        import pyarrow as pa
-
-        data: Dict[str, List] = {
-            schema_field.name: [] for schema_field in self.arrow_schema
-        }
-        for row in rows:
-            for schema_field in self.arrow_schema:
-                value = row.get(schema_field.name)
-                # JSON Handling
-                field_metadata = self.arrow_schema.field(schema_field.name).metadata
-                is_json = False
-                if field_metadata and b"ARROW:extension:name" in field_metadata:
-                    if (
-                        field_metadata[b"ARROW:extension:name"]  # type: ignore
-                        == b"google:sqlType:json"
-                    ):
-                        is_json = True
-                arrow_field_type = self.arrow_schema.field(schema_field.name).type
-                is_struct = pa.types.is_struct(arrow_field_type)
-                is_list = pa.types.is_list(arrow_field_type)
-
-                if is_json:
-                    if value is not None:
-                        if isinstance(value, (dict, list)):
-                            try:
-                                value = json.dumps(value)
-                            except (TypeError, ValueError):
-                                value = str(value)
-                        elif isinstance(value, (str, bytes)):
-                            if isinstance(value, bytes):
-                                try:
-                                    value = value.decode("utf-8")
-                                except UnicodeDecodeError:
-                                    value = str(value)
-
-                            is_already_json = False
-                            if isinstance(value, str):
-                                stripped = value.strip()
-                                if stripped.startswith(
-                                    ("{", "[")
-                                ) and stripped.endswith(("}", "]")):
-                                    try:
-                                        json.loads(value)
-                                        is_already_json = True
-                                    except (ValueError, TypeError):
-                                        pass
-
-                            if not is_already_json:
-                                try:
-                                    value = json.dumps(value)
-                                except (TypeError, ValueError):
-                                    value = str(value)
-                        else:
-                            try:
-                                value = json.dumps(value)
-                            except (TypeError, ValueError):
-                                value = str(value)
-                elif isinstance(value, (dict, list)) and not is_struct and not is_list:
-                    if value is not None and not isinstance(value, (str, bytes)):
-                        try:
-                            value = json.dumps(value)
-                        except (TypeError, ValueError):
-                            value = str(value)
-
-                data[schema_field.name].append(value)
-        return pa.RecordBatch.from_pydict(data, schema=self.arrow_schema)
 
     async def _batch_writer(self) -> None:
         while not self._shutdown or not self._queue.empty():
@@ -491,7 +491,7 @@ class _BatchProcessor:
         attempt = 0
         delay = self.retry_config.initial_delay
         try:
-            arrow_batch = self._prepare_arrow_batch(rows)
+            arrow_batch = _prepare_arrow_batch(rows, self.arrow_schema)
             serialized_schema = self.arrow_schema.serialize().to_pybytes()
             serialized_batch = arrow_batch.serialize().to_pybytes()
             req = self.bq_storage_types.AppendRowsRequest(
@@ -618,8 +618,8 @@ class _GCSOffloader:
 # ==============================================================================
 
 
-class _SyncBatchProcessor:
-    """Internal. Synchronous version of `_BatchProcessor` using threading."""
+class _BatchProcessor:
+    """Internal. Synchronous version of `_AsyncBatchProcessor` using threading."""
 
     def __init__(
         self,
@@ -644,50 +644,7 @@ class _SyncBatchProcessor:
         self.service_unavailable_exception = service_unavailable_exception
         self._shutdown = False
         self._queue: Queue[dict[str, Any]] = Queue(maxsize=self.queue_max_size)
-        self._worker_task: Optional[threading.Thread] = None
-
-    def _prepare_arrow_batch(self, rows: list[dict[str, Any]]) -> Any:
-        import pyarrow as pa
-
-        data: Dict[str, List] = {
-            schema_field.name: [] for schema_field in self.arrow_schema
-        }
-        for row in rows:
-            for schema_field in self.arrow_schema:
-                value = row.get(schema_field.name)
-                # JSON Handling
-                field_metadata = self.arrow_schema.field(schema_field.name).metadata
-                is_json = False
-                if field_metadata and b"ARROW:extension:name" in field_metadata:
-                    if (
-                        field_metadata[b"ARROW:extension:name"]  # type: ignore
-                        == b"google:sqlType:json"
-                    ):
-                        is_json = True
-                arrow_field_type = self.arrow_schema.field(schema_field.name).type
-                is_struct = pa.types.is_struct(arrow_field_type)
-                is_list = pa.types.is_list(arrow_field_type)
-
-                if is_json:
-                    if value is not None:
-                        if isinstance(value, (dict, list)):
-                            try:
-                                value = json.dumps(value)
-                            except (TypeError, ValueError):
-                                value = str(value)
-                        elif not isinstance(value, (str, bytes)):
-                            try:
-                                value = json.dumps(value)
-                            except (TypeError, ValueError):
-                                value = str(value)
-                elif isinstance(value, (dict, list)) and not is_struct and not is_list:
-                    if value is not None and not isinstance(value, (str, bytes)):
-                        try:
-                            value = json.dumps(value)
-                        except (TypeError, ValueError):
-                            value = str(value)
-                data[schema_field.name].append(value)
-        return pa.RecordBatch.from_pydict(data, schema=self.arrow_schema)
+        self._worker_task: threading.Thread | None = None
 
     def start(self) -> None:
         """Starts the background worker thread."""
@@ -736,7 +693,7 @@ class _SyncBatchProcessor:
         attempt = 0
         delay = self.retry_config.initial_delay
         try:
-            arrow_batch = self._prepare_arrow_batch(rows)
+            arrow_batch = _prepare_arrow_batch(rows, self.arrow_schema)
             serialized_schema = self.arrow_schema.serialize().to_pybytes()
             serialized_batch = arrow_batch.serialize().to_pybytes()
             req = self.bq_storage_types.AppendRowsRequest(
@@ -807,9 +764,12 @@ class _SyncBatchProcessor:
         self._shutdown = True
         logger.info("BatchProcessor shutting down, draining queue...")
         if self._worker_task:
-            self._worker_task.join(timeout=timeout)
-            if self._worker_task.is_alive():
-                logger.warning("BatchProcessor shutdown timed out.")
+            try:
+                self._worker_task.join(timeout=timeout)
+                if self._worker_task.is_alive():
+                    logger.warning("BatchProcessor shutdown timed out.")
+            except Exception as e:
+                logger.error("Error during BatchProcessor shutdown: %s", e)
 
 
 class _LangChainContentParser:
@@ -817,11 +777,11 @@ class _LangChainContentParser:
 
     def __init__(
         self,
-        offloader: Optional[_GCSOffloader],
+        offloader: _GCSOffloader | None,
         trace_id: str,
         span_id: str,
         max_length: int = 20000,
-        connection_id: Optional[str] = None,
+        connection_id: str | None = None,
     ):
         self.offloader = offloader
         self.trace_id = trace_id
@@ -998,11 +958,11 @@ class _SyncLangChainContentParser:
 
     def __init__(
         self,
-        offloader: Optional[_GCSOffloader],
+        offloader: _GCSOffloader | None,
         trace_id: str,
         span_id: str,
         max_length: int = 20000,
-        connection_id: Optional[str] = None,
+        connection_id: str | None = None,
     ):
         # This class mirrors _LangChainContentParser but is fully synchronous.
         self.offloader = offloader
@@ -1197,8 +1157,8 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         self,
         project_id: str,
         dataset_id: str,
-        table_id: Optional[str] = None,
-        config: Optional[BigQueryLoggerConfig] = None,
+        table_id: str | None = None,
+        config: BigQueryLoggerConfig | None = None,
     ) -> None:
         super().__init__()
         (
@@ -1225,12 +1185,12 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         self._is_shutting_down: bool = False
         self._setup_lock: asyncio.Lock = asyncio.Lock()
 
-        self.client: Optional[Any] = None
-        self.write_client: Optional[Any] = None
-        self.batch_processor: Optional[_BatchProcessor] = None
+        self.client: Any = None
+        self.write_client: Any = None
+        self.async_batch_processor: _AsyncBatchProcessor | None = None
         self._executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
-        self.offloader: Optional[_GCSOffloader] = None
-        self._arrow_schema: Optional[Any] = None
+        self.offloader: _GCSOffloader | None = None
+        self._arrow_schema: Any = None
 
     async def _ensure_started(self) -> None:
         if self._started:
@@ -1280,7 +1240,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
                     self.storage.Client,
                 )
 
-            self.batch_processor = _BatchProcessor(
+            self.async_batch_processor = _AsyncBatchProcessor(
                 self.write_client,
                 arrow_schema,
                 write_stream,
@@ -1291,11 +1251,12 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
                 self.bq_storage_types,
                 self.api_core_exceptions.ServiceUnavailable,
             )
-            await self.batch_processor.start()
+            await self.async_batch_processor.start()
             self._started = True
 
     def _ensure_table_exists(self, table_id: str, schema: List[Any]) -> Any:
-        assert self.client is not None
+        if self.client is None:
+            raise ValueError("BigQuery client is not initialized.")
         try:
             self.client.get_table(table_id)
         except self.cloud_exceptions.NotFound:
@@ -1311,11 +1272,11 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         event_type: str,
         run_id: uuid.UUID,
         content: Any = None,
-        parent_run_id: Optional[uuid.UUID] = None,
-        attributes: Optional[dict] = None,
-        error: Optional[str] = None,
-        latency: Optional[int] = None,
-        metadata: Optional[dict] = None,
+        parent_run_id: uuid.UUID | None = None,
+        attributes: dict | None = None,
+        error: str | None = None,
+        latency: int | None = None,
+        metadata: dict | None = None,
     ) -> None:
         if not self.config.enabled:
             return
@@ -1340,45 +1301,54 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         summary_text = ""
         content_parts = []
         is_truncated = False
+        parsing_error = None
 
-        if isinstance(content, dict) and "messages" in content:
-            # Handle Chat Model Messages (Multi-Modal Potential)
-            all_parts = []
-            # Flatten all messages to find parts
-            for msg in content["messages"]:
-                msg_content = msg.get("content")
-                s, p, t = await parser.parse_message_content(msg_content)
-                if t:
-                    is_truncated = True
-                all_parts.extend(p)
-                if summary_text:
-                    summary_text += " | "
-                summary_text += s
-            content_parts = all_parts
+        try:
+            if isinstance(content, dict) and "messages" in content:
+                # Handle Chat Model Messages (Multi-Modal Potential)
+                all_parts = []
+                # Flatten all messages to find parts
+                for msg in content["messages"]:
+                    msg_content = msg.get("content")
+                    s, p, t = await parser.parse_message_content(msg_content)
+                    if t:
+                        is_truncated = True
+                    all_parts.extend(p)
+                    if summary_text:
+                        summary_text += " | "
+                    summary_text += s
+                content_parts = all_parts
 
-        elif isinstance(content, dict) and "prompts" in content:
-            # Legacy LLM (list of strings)
-            for p_str in content["prompts"]:
-                s, p, t = await parser.parse_message_content(p_str)
-                if t:
-                    is_truncated = True
-                content_parts.extend(p)
-                if summary_text:
-                    summary_text += " | "
-                summary_text += s
+            elif isinstance(content, dict) and "prompts" in content:
+                # Legacy LLM (list of strings)
+                for p_str in content["prompts"]:
+                    s, p, t = await parser.parse_message_content(p_str)
+                    if t:
+                        is_truncated = True
+                    content_parts.extend(p)
+                    if summary_text:
+                        summary_text += " | "
+                    summary_text += s
 
-        elif isinstance(content, str):
-            (
-                summary_text,
-                content_parts,
-                is_truncated,
-            ) = await parser.parse_message_content(content)
+            elif isinstance(content, str):
+                (
+                    summary_text,
+                    content_parts,
+                    is_truncated,
+                ) = await parser.parse_message_content(content)
 
-        else:
-            # Fallback
+            else:
+                # Fallback
+                summary_text, is_truncated = _recursive_smart_truncate(
+                    str(content), self.config.max_content_length
+                )
+        except Exception as e:
+            parsing_error = f"Failed to parse content: {e}"
+            logger.warning("%s for run_id %s", parsing_error, run_id)
             summary_text, is_truncated = _recursive_smart_truncate(
                 str(content), self.config.max_content_length
             )
+            content_parts = []
 
         row = {
             "timestamp": datetime.now(timezone.utc),
@@ -1396,20 +1366,21 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             else [],
             "attributes": attributes,
             "latency_ms": {"total_ms": latency} if latency else None,
-            "status": "ERROR" if error else "OK",
-            "error_message": error,
+            "status": "ERROR" if error or parsing_error else "OK",
+            "error_message": error or parsing_error,
             "is_truncated": is_truncated,
         }
-        assert self.batch_processor is not None
-        await self.batch_processor.append(row)
+        if self.async_batch_processor is None:
+            raise ValueError("Batch processor is not initialized.")
+        await self.async_batch_processor.append(row)
 
     async def shutdown(self) -> None:
         if self._is_shutting_down:
             return
         try:
             self._is_shutting_down = True
-            if self.batch_processor:
-                await self.batch_processor.shutdown(self.config.shutdown_timeout)
+            if self.async_batch_processor:
+                await self.async_batch_processor.shutdown(self.config.shutdown_timeout)
             self._executor.shutdown(wait=True)
         finally:
             self._is_shutting_down = False
@@ -1429,8 +1400,8 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         prompts: List[str],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
-        tags: Optional[List[str]] = None,
+        parent_run_id: uuid.UUID | None = None,
+        tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
@@ -1449,13 +1420,13 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         messages: List[List[BaseMessage]],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
-        tags: Optional[List[str]] = None,
+        parent_run_id: uuid.UUID | None = None,
+        tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
         # Serialize messages safely for parsing
-        flat_msgs = [m.dict() for sub in messages for m in sub]
+        flat_msgs = [m.model_dump() for sub in messages for m in sub]
         await self._log(
             "LLM_REQUEST",
             run_id,
@@ -1470,10 +1441,13 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         response: LLMResult,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
-        resp_text = response.generations[0][0].text if response.generations else ""
+        if response.generations and response.generations[0]:
+            resp_text = response.generations[0][0].text
+        else:
+            resp_text = ""
         usage = response.llm_output.get("token_usage") if response.llm_output else None
         await self._log(
             "LLM_RESPONSE",
@@ -1489,7 +1463,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1506,7 +1480,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         inputs: Dict[str, Any],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1522,7 +1496,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         outputs: Dict[str, Any],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1539,7 +1513,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         input_str: str,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1555,7 +1529,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         output: str,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1571,7 +1545,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1588,7 +1562,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         query: str,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1604,10 +1578,10 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         documents: Any,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
-        docs = [doc.dict() for doc in documents]
+        docs = [doc.model_dump() for doc in documents]
         await self._log(
             "RETRIEVER_END",
             run_id,
@@ -1621,7 +1595,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1637,7 +1611,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         text: str,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1653,7 +1627,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         action: AgentAction,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1671,7 +1645,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         finish: AgentFinish,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1687,7 +1661,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         await self._log(
@@ -1714,8 +1688,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self,
         project_id: str,
         dataset_id: str,
-        table_id: Optional[str] = None,
-        config: Optional[BigQueryLoggerConfig] = None,
+        table_id: str | None = None,
+        config: BigQueryLoggerConfig | None = None,
     ) -> None:
         super().__init__()
         (
@@ -1742,12 +1716,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._is_shutting_down: bool = False
         self._setup_lock: threading.Lock = threading.Lock()
 
-        self.client: Optional[Any] = None
-        self.write_client: Optional[Any] = None
-        self.batch_processor: Optional[_SyncBatchProcessor] = None
+        self.client: Any = None
+        self.write_client: Any = None
+        self.batch_processor: _BatchProcessor | None = None
         self._executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
-        self.offloader: Optional[_GCSOffloader] = None
-        self._arrow_schema: Optional[Any] = None
+        self.offloader: _GCSOffloader | None = None
+        self._arrow_schema: Any = None
 
     def _ensure_started(self) -> None:
         if self._started:
@@ -1790,7 +1764,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
                     self.storage.Client,
                 )
 
-            self.batch_processor = _SyncBatchProcessor(
+            self.batch_processor = _BatchProcessor(
                 self.write_client,
                 arrow_schema,
                 write_stream,
@@ -1801,12 +1775,14 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
                 self.bq_storage_types,
                 self.api_core_exceptions.ServiceUnavailable,
             )
-            assert self.batch_processor is not None
+            if self.batch_processor is None:
+                raise ValueError("Batch processor is not initialized.")
             self.batch_processor.start()
             self._started = True
 
     def _ensure_table_exists(self, table_id: str, schema: List[Any]) -> Any:
-        assert self.client is not None
+        if self.client is None:
+            raise ValueError("BigQuery client is not initialized.")
         try:
             self.client.get_table(table_id)
         except self.cloud_exceptions.NotFound:
@@ -1822,11 +1798,11 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         event_type: str,
         run_id: uuid.UUID,
         content: Any = None,
-        parent_run_id: Optional[uuid.UUID] = None,
-        attributes: Optional[dict] = None,
-        error: Optional[str] = None,
-        latency: Optional[int] = None,
-        metadata: Optional[dict] = None,
+        parent_run_id: uuid.UUID | None = None,
+        attributes: dict | None = None,
+        error: str | None = None,
+        latency: int | None = None,
+        metadata: dict | None = None,
     ) -> None:
         if not self.config.enabled:
             return
@@ -1851,41 +1827,52 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         summary_text = ""
         content_parts = []
         is_truncated = False
+        parsing_error = None
 
-        if isinstance(content, dict) and "messages" in content:
-            # Handle Chat Model Messages (Multi-Modal Potential)
-            all_parts = []
-            # Flatten all messages to find parts
-            for msg in content["messages"]:
-                msg_content = msg.get("content")
-                s, p, t = parser.parse_message_content(msg_content)
-                if t:
-                    is_truncated = True
-                all_parts.extend(p)
-                if summary_text:
-                    summary_text += " | "
-                summary_text += s
-            content_parts = all_parts
+        try:
+            if isinstance(content, dict) and "messages" in content:
+                # Handle Chat Model Messages (Multi-Modal Potential)
+                all_parts = []
+                # Flatten all messages to find parts
+                for msg in content["messages"]:
+                    msg_content = msg.get("content")
+                    s, p, t = parser.parse_message_content(msg_content)
+                    if t:
+                        is_truncated = True
+                    all_parts.extend(p)
+                    if summary_text:
+                        summary_text += " | "
+                    summary_text += s
+                content_parts = all_parts
 
-        elif isinstance(content, dict) and "prompts" in content:
-            # Legacy LLM (list of strings)
-            for p_str in content["prompts"]:
-                s, p, t = parser.parse_message_content(p_str)
-                if t:
-                    is_truncated = True
-                content_parts.extend(p)
-                if summary_text:
-                    summary_text += " | "
-                summary_text += s
+            elif isinstance(content, dict) and "prompts" in content:
+                # Legacy LLM (list of strings)
+                for p_str in content["prompts"]:
+                    s, p, t = parser.parse_message_content(p_str)
+                    if t:
+                        is_truncated = True
+                    content_parts.extend(p)
+                    if summary_text:
+                        summary_text += " | "
+                    summary_text += s
 
-        elif isinstance(content, str):
-            summary_text, content_parts, is_truncated = parser.parse_message_content(
-                content
-            )
-        else:
+            elif isinstance(content, str):
+                (
+                    summary_text,
+                    content_parts,
+                    is_truncated,
+                ) = parser.parse_message_content(content)
+            else:
+                summary_text, is_truncated = _recursive_smart_truncate(
+                    str(content), self.config.max_content_length
+                )
+        except Exception as e:
+            parsing_error = f"Failed to parse content: {e}"
+            logger.warning("%s for run_id %s", parsing_error, run_id)
             summary_text, is_truncated = _recursive_smart_truncate(
                 str(content), self.config.max_content_length
             )
+            content_parts = []
 
         row = {
             "timestamp": datetime.now(timezone.utc),
@@ -1903,21 +1890,24 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             else [],
             "attributes": attributes,
             "latency_ms": {"total_ms": latency} if latency else None,
-            "status": "ERROR" if error else "OK",
-            "error_message": error,
+            "status": "ERROR" if error or parsing_error else "OK",
+            "error_message": error or parsing_error,
             "is_truncated": is_truncated,
         }
-        assert self.batch_processor is not None
+        if self.batch_processor is None:
+            raise ValueError("Batch processor is not initialized.")
         self.batch_processor.append(row)
 
     def shutdown(self) -> None:
         if self._is_shutting_down:
             return
-        self._is_shutting_down = True
-        if self.batch_processor:
-            self.batch_processor.shutdown(self.config.shutdown_timeout)
-        self._executor.shutdown(wait=True)
-        self._is_shutting_down = False
+        try:
+            self._is_shutting_down = True
+            if self.batch_processor:
+                self.batch_processor.shutdown(self.config.shutdown_timeout)
+            self._executor.shutdown(wait=True)
+        finally:
+            self._is_shutting_down = False
 
     def on_llm_start(
         self,
@@ -1925,8 +1915,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         prompts: List[str],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
-        tags: Optional[List[str]] = None,
+        parent_run_id: uuid.UUID | None = None,
+        tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
@@ -1945,12 +1935,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         messages: List[List[BaseMessage]],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
-        tags: Optional[List[str]] = None,
+        parent_run_id: uuid.UUID | None = None,
+        tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
-        flat_msgs = [m.dict() for sub in messages for m in sub]
+        flat_msgs = [m.model_dump() for sub in messages for m in sub]
         self._log(
             "LLM_REQUEST",
             run_id,
@@ -1965,10 +1955,13 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         response: LLMResult,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
-        resp_text = response.generations[0][0].text if response.generations else ""
+        if response.generations and response.generations[0]:
+            resp_text = response.generations[0][0].text
+        else:
+            resp_text = ""
         usage = response.llm_output.get("token_usage") if response.llm_output else None
         self._log(
             "LLM_RESPONSE",
@@ -1985,7 +1978,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         inputs: Dict[str, Any],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2001,7 +1994,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         outputs: Union[Dict[str, Any], Any],
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2017,7 +2010,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2034,7 +2027,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         input_str: str,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2050,7 +2043,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         output: Any,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2066,7 +2059,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2082,7 +2075,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         text: str,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2098,7 +2091,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         action: AgentAction,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2116,7 +2109,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         finish: AgentFinish,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2133,7 +2126,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         query: str,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2149,10 +2142,10 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         documents: Any,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
-        docs = [doc.dict() for doc in documents]
+        docs = [doc.model_dump() for doc in documents]
         self._log(
             "RETRIEVER_END",
             run_id,
@@ -2166,7 +2159,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
@@ -2182,7 +2175,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         error: BaseException,
         *,
         run_id: uuid.UUID,
-        parent_run_id: Optional[uuid.UUID] = None,
+        parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
         self._log(
