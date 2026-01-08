@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 _GRPC_DEADLINE_EXCEEDED = 4
 _GRPC_INTERNAL = 13
 _GRPC_UNAVAILABLE = 14
+_DEFAULT_TRACE_ID = "langchain-bq-agent-analytics"
 
 
 def _recursive_smart_truncate(obj: Any, max_len: int) -> tuple[Any, bool]:
@@ -495,7 +496,7 @@ class _AsyncBatchProcessor:
             serialized_schema = self.arrow_schema.serialize().to_pybytes()
             serialized_batch = arrow_batch.serialize().to_pybytes()
             req = self.bq_storage_types.AppendRowsRequest(
-                write_stream=self.write_stream, trace_id="langchain-bq-callback"
+                write_stream=self.write_stream, trace_id=_DEFAULT_TRACE_ID
             )
             req.arrow_rows.writer_schema.serialized_schema = serialized_schema
             req.arrow_rows.rows.serialized_record_batch = serialized_batch
@@ -697,7 +698,7 @@ class _BatchProcessor:
             serialized_schema = self.arrow_schema.serialize().to_pybytes()
             serialized_batch = arrow_batch.serialize().to_pybytes()
             req = self.bq_storage_types.AppendRowsRequest(
-                write_stream=self.write_stream, trace_id="langchain-bq-callback"
+                write_stream=self.write_stream, trace_id=_DEFAULT_TRACE_ID
             )
             req.arrow_rows.writer_schema.serialized_schema = serialized_schema
             req.arrow_rows.rows.serialized_record_batch = serialized_batch
@@ -1219,7 +1220,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
                 ),
             )
             client_info = self.gapic_client_info.ClientInfo(
-                user_agent="langchain-bq-callback"
+                user_agent=_DEFAULT_TRACE_ID
             )
             self.write_client = self.async_client.BigQueryWriteAsyncClient(
                 credentials=creds, client_info=client_info
@@ -1742,7 +1743,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
             client_info = self.gapic_client_info.ClientInfo(
-                user_agent="langchain-bq-callback"
+                user_agent=_DEFAULT_TRACE_ID
             )
             # Use the synchronous BigQueryWriteClient
             self.write_client = self.sync_write_client_module.BigQueryWriteClient(
