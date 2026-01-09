@@ -25,20 +25,59 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 )
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def embeddings() -> VertexAIEmbeddings:
     return VertexAIEmbeddings(model_name="text-embedding-005")  # type: ignore
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
     """Initializes a VectorSearchVectorStore for V2 batch updates."""
+    project_id = os.environ["PROJECT_ID"]
+    region = os.environ.get("REGION", "us-central1")
+    collection_id = os.environ.get(
+        "VECTOR_SEARCH_V2_COLLECTION_ID", "langchain-test-collection"
+    )
+
+    # Create collection if it doesn't exist
+    client = vectorsearch_v1beta.VectorSearchServiceClient()
+    parent = f"projects/{project_id}/locations/{region}"
+    collection_name = f"{parent}/collections/{collection_id}"
+
+    try:
+        client.get_collection(name=collection_name)
+    except Exception:
+        # Collection doesn't exist, create it
+        request = vectorsearch_v1beta.CreateCollectionRequest(
+            parent=parent,
+            collection_id=collection_id,
+            collection={
+                "data_schema": {
+                    "type": "object",
+                    "properties": {
+                        "page_content": {"type": "string"},
+                        "source": {"type": "string"},
+                        "category": {"type": "string"},
+                        "color": {"type": "string"},
+                        "price": {"type": "number"},
+                    },
+                },
+                "vector_schema": {
+                    "embedding": {
+                        "dense_vector": {
+                            "dimensions": 768,
+                        },
+                    },
+                },
+            },
+        )
+        operation = client.create_collection(request=request)
+        operation.result()  # Wait for collection creation
+
     return VectorSearchVectorStore.from_components(
-        project_id=os.environ["PROJECT_ID"],
-        region=os.environ.get("REGION", "us-central1"),
-        collection_id=os.environ.get(
-            "VECTOR_SEARCH_V2_COLLECTION_ID", "langchain-test-collection"
-        ),
+        project_id=project_id,
+        region=region,
+        collection_id=collection_id,
         embedding=embeddings,
         api_version="v2",
         stream_update=False,
