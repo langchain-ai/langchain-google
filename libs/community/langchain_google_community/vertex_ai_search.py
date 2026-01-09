@@ -58,7 +58,9 @@ if TYPE_CHECKING:
 
 
 def _load(dump: Dict[str, Any]) -> Any:
-    return load(dump, valid_namespaces=["langchain_google_community"])
+    return load(
+        dump, valid_namespaces=["langchain_google_community"], allowed_objects="all"
+    )
 
 
 class _BaseVertexAISearchRetriever(Serializable):
