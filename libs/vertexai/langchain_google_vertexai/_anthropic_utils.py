@@ -360,7 +360,9 @@ def _clean_content_block(block: Any) -> Any:
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
-    return {k: v for k, v in block.items() if k not in ("index", "partial_json")}
+    return {
+        k: v for k, v in block.items() if k not in ("index", "partial_json", "caller")
+    }
 
 
 def _clean_content(content: Any) -> Any:
