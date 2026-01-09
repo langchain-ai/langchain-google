@@ -31,7 +31,14 @@ Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
-#bigquery = ["google-cloud-bigquery>=3.21.0,<4.0.0"]
+bigquery = [
+    "google-cloud-bigquery-storage>=2.25.0,<3.0.0",
+    "google-cloud-bigquery>=3.21.0,<4.0.0",
+    "google-cloud-core>=2.4.3,<3.0.0",
+    "google-auth>=2.36.0,<3.0.0",
+    "google-cloud-storage>=2.16.0,<4.0.0",
+    "pyarrow>=6.0.1",
+]
 calendar = ["google-auth>=2.36.0,<3.0.0", "google-auth-oauthlib>=1.2.0,<2.0.0"]
 docai = [
     "google-cloud-documentai>=2.26.0,<3.0.0",
@@ -62,7 +69,7 @@ test = [
     "pytest-socket>=0.7.0,<1.0.0",
     "google-cloud-documentai>=2.24.2,<3.0.0",
     #"google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0",
-    #"google-cloud-bigquery>=3.21.0,<4.0.0",
+    "google-cloud-bigquery>=3.21.0,<4.0.0",
     "google-cloud-discoveryengine>=0.11.14,<1.0.0",
     "cloudpickle>=3.0.0,<4.0.0",
 ]
