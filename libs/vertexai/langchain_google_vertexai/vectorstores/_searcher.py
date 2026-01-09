@@ -107,15 +107,15 @@ class Searcher(ABC):
     def get_datapoints_by_filter(
         self,
         metadata: dict,
+        max_datapoints: int = MAX_DATA_POINTS,
         **kwargs: Any,
     ) -> list[str]:
         """Gets datapoint IDs that match the given metadata filter.
 
-        Note: The V2 API does not support limiting the number of results returned.
-        All matching datapoints will be returned.
-
         Args:
             metadata: Dictionary of metadata key-value pairs to filter by.
+            max_datapoints: Maximum number of datapoints to return. Note: This
+                parameter is ignored in v2 as the API returns all matching results.
 
         Returns:
             List of datapoint IDs matching the filter.
@@ -227,9 +227,10 @@ class VectorSearchSearcher(Searcher):
         self,
         endpoint: MatchingEngineIndexEndpoint | None,
         index: MatchingEngineIndex | None = None,
-        collection: SimpleNamespace | None = None,
         staging_bucket: storage.Bucket | None = None,
         stream_update: bool = False,
+        *,
+        collection: SimpleNamespace | None = None,
         api_version: str = "v1",
         project_id: str | None = None,
         region: str | None = None,
@@ -524,15 +525,15 @@ class VectorSearchSearcher(Searcher):
     def get_datapoints_by_filter(
         self,
         metadata: dict,
+        max_datapoints: int = MAX_DATA_POINTS,
         **kwargs: Any,
     ) -> list[str]:
         """Gets datapoint IDs that match the given metadata filter.
 
-        Note: The V2 API does not support limiting the number of results returned.
-        All matching datapoints will be returned.
-
         Args:
             metadata: Dictionary of metadata key-value pairs to filter by.
+            max_datapoints: Maximum number of datapoints to return. Note: This
+                parameter is ignored in v2 as the API returns all matching results.
 
         Returns:
             List of datapoint IDs matching the filter.
@@ -550,6 +551,7 @@ class VectorSearchSearcher(Searcher):
             if self._project_id is None or self._region is None:
                 msg = "`project_id` and `region` are required for V2 operations."
                 raise ValueError(msg)
+            # Note: max_datapoints is ignored for v2 as the API returns all results
             results = _v2_operations.get_datapoints_by_filter(
                 project_id=self._project_id,
                 region=self._region,
