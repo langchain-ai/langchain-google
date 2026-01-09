@@ -15,6 +15,10 @@ from langchain_google_community.calendar.toolkit import (
     GetCalendarsInfo,
     GetCurrentDatetime,
 )
+from langchain_google_community.callbacks import (
+    AsyncBigQueryCallbackHandler,
+    BigQueryCallbackHandler,
+)
 from langchain_google_community.docai import DocAIParser, DocAIParsingResults
 from langchain_google_community.documentai_warehouse import DocumentAIWarehouseRetriever
 from langchain_google_community.drive import GoogleDriveLoader
@@ -74,6 +78,8 @@ from langchain_google_community.vertex_rank import VertexAIRank
 from langchain_google_community.vision import CloudVisionLoader, CloudVisionParser
 
 __all__ = [
+    "AsyncBigQueryCallbackHandler",
+    "BigQueryCallbackHandler",
     "BigQueryLoader",
     "BigQueryVectorStore",
     "CalendarCreateEvent",

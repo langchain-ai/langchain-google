@@ -10,7 +10,7 @@ pytestmark = pytest.mark.skipif(
     not os.getenv("GOOGLE_API_KEY"), reason="GOOGLE_API_KEY not set"
 )
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3-flash-preview"
 
 
 class SimpleResponse(BaseModel):
