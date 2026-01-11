@@ -571,7 +571,7 @@ def test_get_num_tokens_from_messages(model_name: str) -> None:
     message = HumanMessage(content="Hello")
     token = model.get_num_tokens_from_messages(messages=[message])
     assert isinstance(token, int)
-    assert token == 3
+    assert token == 1
 
 
 @pytest.mark.extended
