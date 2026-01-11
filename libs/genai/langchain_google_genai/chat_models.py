@@ -2595,12 +2595,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ),
             "seed": kwargs.get("seed", self.seed),
         }
+
+        # Convert response modalities
+        config["response_modalities"] = (
+            [m.value for m in config["response_modalities"]]
+            if config["response_modalities"]
+            else None
+        )
+
+        # Auto-set audio output for TTS models if not explicitly configured
+        if config["response_modalities"] is None and self.model.endswith("-tts"):
+            config["response_modalities"] = ["AUDIO"]
+
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
             config["thinking_config"] = thinking_config
+
         return {k: v for k, v in config.items() if v is not None}
 
-    def _build_thinking_config(self, **kwargs: Any) -> dict[str, Any] | None:
+    def _build_thinking_config(self, **kwargs: Any) -> ThinkingConfig | None:
         """Build thinking configuration if supported by the model."""
         thinking_level = kwargs.get("thinking_level", self.thinking_level)
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
@@ -2633,7 +2646,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
 
-        return config
+        return ThinkingConfig(**config)
 
     def _merge_generation_config(
         self, base_config: dict[str, Any], generation_config: dict[str, Any]
@@ -2788,8 +2801,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget",
             "thinking_level",
             "include_thoughts",
-            "response_modalities",
+            "response_schema",
+            "response_json_schema",
+            "response_mime_type",
         }
+        _consumed_kwargs.update(params.model_fields_set)
         # Filter out kwargs already consumed by _prepare_params.
         # These are handled via params and aren't direct fields
         # on GenerateContentConfig or would cause duplicate argument errors.
@@ -2805,7 +2821,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             params,
             cached_content,
             system_instruction,
-            stop,
             timeout=timeout,
             max_retries=max_retries,
             image_config=image_config,
@@ -2953,31 +2968,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         params: GenerationConfig,
         cached_content: str | None,
         system_instruction: Content | None,
-        stop: list[str] | None,
         timeout: int | None = None,
         max_retries: int | None = None,
         image_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
-        # Convert response modalities
-        response_modalities = (
-            [m.value for m in params.response_modalities]
-            if params.response_modalities
-            else None
-        )
-
-        # Auto-set audio output for TTS models if not explicitly configured
-        if response_modalities is None and self.model.endswith("-tts"):
-            response_modalities = ["AUDIO"]
-        # Create thinking config if provided
-        thinking_config = None
-        if params.thinking_config is not None:
-            thinking_config = ThinkingConfig(
-                include_thoughts=params.thinking_config.include_thoughts,
-                thinking_budget=params.thinking_config.thinking_budget,
-                thinking_level=params.thinking_config.thinking_level,
-            )
 
         retry_options = None
         if max_retries is not None:
@@ -3001,13 +2997,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
             safety_settings=formatted_safety_settings,
-            response_modalities=response_modalities if response_modalities else None,
-            thinking_config=thinking_config,
             cached_content=cached_content,
             system_instruction=system_instruction,
-            stop_sequences=stop,
             http_options=http_options,
             image_config=image_config_obj,
+            **params.model_dump(exclude_unset=True),
             **kwargs,
         )
 
