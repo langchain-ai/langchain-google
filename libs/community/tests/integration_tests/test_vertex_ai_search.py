@@ -140,7 +140,7 @@ def test_native_serialization(spec: Optional[Dict]) -> None:
     retriever_loaded = load(
         json.loads(serialized),
         valid_namespaces=["langchain_google_community"],
-        allowed_objects="all",
+        allowed_objects=[VertexAISearchRetriever],
     )
     assert retriever.model_dump() == retriever_loaded.model_dump()
 
