@@ -336,6 +336,132 @@ def test_input_types_sanitize_prompt_runnable(
 
 
 @pytest.mark.parametrize(
+    "content_blocks,expected_output",
+    [
+        # LangChain v1 text content block
+        ([{"type": "text", "text": "Hello world"}], "Hello world"),
+        # Multiple text blocks
+        (
+            [
+                {"type": "text", "text": "First part"},
+                {"type": "text", "text": "Second part"},
+            ],
+            "First part\nSecond part",
+        ),
+        # Mixed content blocks (text + image - only text extracted)
+        (
+            [
+                {"type": "text", "text": "Describe this image"},
+                {"type": "image", "url": "https://example.com/img.jpg"},
+                {"type": "text", "text": "What do you see?"},
+            ],
+            "Describe this image\nWhat do you see?",
+        ),
+        # Reasoning block (LangChain v1)
+        ([{"type": "reasoning", "reasoning": "Let me think..."}], "Let me think..."),
+        # Output block
+        ([{"type": "output", "output": "Final answer"}], "Final answer"),
+        # Tool result block
+        ([{"type": "tool_result", "output": "Tool output"}], "Tool output"),
+        # Empty content blocks
+        ([], None),
+        # None content blocks
+        (None, None),
+    ],
+    ids=[
+        "single_text_block",
+        "multiple_text_blocks",
+        "mixed_text_and_image",
+        "reasoning_block",
+        "output_block",
+        "tool_result_block",
+        "empty_blocks",
+        "none_blocks",
+    ],
+)
+@patch("langchain_google_community.model_armor._client_utils._get_model_armor_client")
+def test_content_blocks_extraction(
+    mock_get_client: MagicMock,
+    content_blocks: Any,
+    expected_output: Optional[str],
+) -> None:
+    """Test extraction of text from LangChain v1 content_blocks."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+
+    runnable = ModelArmorSanitizePromptRunnable(
+        project="test-project",
+        location="us-central1",
+        template_id="test-template",
+        fail_open=False,
+    )
+
+    result = runnable._content_blocks_to_text(content_blocks)
+    assert result == expected_output
+
+
+@patch("langchain_google_community.model_armor._client_utils._get_model_armor_client")
+def test_message_with_content_blocks(
+    mock_get_client: MagicMock,
+) -> None:
+    """Test extraction from messages with content_blocks attribute (LangChain v1)."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+
+    runnable = ModelArmorSanitizePromptRunnable(
+        project="test-project",
+        location="us-central1",
+        template_id="test-template",
+        fail_open=False,
+    )
+
+    # Create a mock message with content_blocks attribute
+    class MockMessageWithContentBlocks:
+        def __init__(self) -> None:
+            self.content_blocks = [
+                {"type": "text", "text": "Hello"},
+                {"type": "image", "url": "https://example.com/img.jpg"},
+                {"type": "text", "text": "World"},
+            ]
+            self.content = "fallback content"
+
+    # Mock isinstance check for BaseMessage
+
+    message = MockMessageWithContentBlocks()
+    # Manually test the extraction logic
+    content_blocks = getattr(message, "content_blocks", None)
+    result = runnable._content_blocks_to_text(content_blocks)
+    assert result == "Hello\nWorld"
+
+
+@patch("langchain_google_community.model_armor._client_utils._get_model_armor_client")
+def test_message_with_list_content(
+    mock_get_client: MagicMock,
+) -> None:
+    """Test extraction from messages with list content (pre-v1 multimodal)."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+
+    runnable = ModelArmorSanitizePromptRunnable(
+        project="test-project",
+        location="us-central1",
+        template_id="test-template",
+        fail_open=False,
+    )
+
+    # Test with HumanMessage that has list content
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": "Analyze this"},
+            {"type": "image_url", "image_url": "https://example.com/img.jpg"},
+        ]
+    )
+
+    result = runnable._extract_input(message)
+    assert "Analyze this" in result
+
+
+@pytest.mark.parametrize(
     "fail_open,should_be_in_json",
     [
         (False, False),  # Default value excluded from JSON
