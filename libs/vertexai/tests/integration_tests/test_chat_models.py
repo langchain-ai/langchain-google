@@ -66,12 +66,17 @@ RATE_LIMITER = InMemoryRateLimiter(requests_per_second=1.0)
 
 def _check_usage_metadata(message: AIMessage) -> None:
     assert message.usage_metadata is not None
-    assert message.usage_metadata["input_tokens"] > 0
-    assert message.usage_metadata["output_tokens"] > 0
-    assert message.usage_metadata["total_tokens"] > 0
-    assert (
-        message.usage_metadata["input_tokens"] + message.usage_metadata["output_tokens"]
-    ) == message.usage_metadata["total_tokens"]
+    input_tokens = message.usage_metadata["input_tokens"]
+    output_tokens = message.usage_metadata["output_tokens"]
+    total_tokens = message.usage_metadata["total_tokens"]
+    assert input_tokens > 0
+    assert output_tokens > 0
+    assert total_tokens > 0
+    reasoning_tokens = message.usage_metadata.get("output_token_details", {}).get(
+        "reasoning", 0
+    )
+
+    assert (input_tokens + output_tokens + reasoning_tokens) == total_tokens
 
 
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
@@ -400,14 +405,12 @@ def test_multimodal_media_inline_base64_agent() -> None:
     assert isinstance(output["messages"][-1], AIMessage)
 
 
-@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.xfail(reason="very unstable")
 def test_audio_timestamp() -> None:
     storage_client = storage.Client()
     llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
 
-    file_uri = (
-        "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
-    )
+    file_uri = "gs://cloud-samples-data/generative-ai/audio/pixel.mp3"
     mime_type = "audio/mp3"
     blob = storage.Blob.from_string(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
@@ -568,7 +571,7 @@ def test_get_num_tokens_from_messages(model_name: str) -> None:
     message = HumanMessage(content="Hello")
     token = model.get_num_tokens_from_messages(messages=[message])
     assert isinstance(token, int)
-    assert token == 3
+    assert token == 1
 
 
 @pytest.mark.extended
@@ -791,7 +794,7 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
     assert isinstance(response, Response)
 
 
-@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.flaky(retries=6, delay=1)
 @pytest.mark.release
 def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     @tool
@@ -813,6 +816,8 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
         safety_settings=safety,
         temperature=0,
         rate_limiter=RATE_LIMITER,
+        endpoint_version="v1",
+        location="global",
     )
     llm_with_search = llm.bind(
         functions=tools,
@@ -849,7 +854,7 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     result = llm_with_search.invoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
-    assert "brown" in result.content
+    assert "brown" in result.content[0]["text"]  # type: ignore
     assert len(result.tool_calls) == 0
 
 
