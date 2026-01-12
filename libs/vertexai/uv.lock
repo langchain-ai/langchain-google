@@ -579,6 +579,22 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-vectorsearch"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fd/27/05a707e8e6392059d30b89afde1025eb44095822a25f92c9bbe5294302fb/google_cloud_vectorsearch-0.2.0.tar.gz", hash = "sha256:8802c35382f608c5f20f99aceffe7f3171f55e22d77b7d4ffca935385f6ee9ef", size = 200717, upload-time = "2025-11-21T20:37:59.901Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ea/b1/58a2ce6acca3f4f9a011d91735388511d05996e04e63e9578ce355847bb8/google_cloud_vectorsearch-0.2.0-py3-none-any.whl", hash = "sha256:4a92bdba71e43d9c23f83cde081851179b6872f45f4d7512a3a9393430d1233a", size = 173608, upload-time = "2025-11-21T20:37:58.268Z" },
+]
+
+[[package]]
 name = "google-crc32c"
 version = "1.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1035,9 +1051,11 @@ dependencies = [
     { name = "bottleneck" },
     { name = "google-cloud-aiplatform" },
     { name = "google-cloud-storage" },
+    { name = "google-cloud-vectorsearch" },
     { name = "httpx" },
     { name = "httpx-sse" },
     { name = "langchain-core" },
+    { name = "langchain-tests" },
     { name = "numexpr" },
     { name = "pyarrow" },
     { name = "pydantic" },
@@ -1045,11 +1063,31 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "google-cloud-vectorsearch" },
+    { name = "langchain-core" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-recording" },
+    { name = "pytest-retry" },
+]
 anthropic = [
     { name = "anthropic" },
 ]
 mistral = [
     { name = "langchain-mistralai" },
+]
+testing = [
+    { name = "langchain-core" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-recording" },
+    { name = "pytest-retry" },
+]
+vectorsearch-v2 = [
+    { name = "google-cloud-vectorsearch" },
 ]
 
 [package.dev-dependencies]
@@ -1100,16 +1138,26 @@ requires-dist = [
     { name = "bottleneck", specifier = ">=1.4.0,<2.0.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.97.0,<2.0.0" },
     { name = "google-cloud-storage", specifier = ">=2.18.0,<4.0.0" },
+    { name = "google-cloud-vectorsearch", specifier = ">=0.2.0" },
+    { name = "google-cloud-vectorsearch", marker = "extra == 'vectorsearch-v2'" },
     { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "httpx-sse", specifier = ">=0.4.0,<1.0.0" },
     { name = "langchain-core", specifier = ">=1.2.5,<2.0.0" },
+    { name = "langchain-core", extras = ["testing"], marker = "extra == 'testing'" },
+    { name = "langchain-google-vertexai", extras = ["testing", "vectorsearch-v2"], marker = "extra == 'all'" },
     { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.0,<2.0.0" },
+    { name = "langchain-tests", specifier = ">=1.0.1" },
     { name = "numexpr", specifier = ">=2.8.6,<3.0.0" },
     { name = "pyarrow", specifier = ">=19.0.1,<23.0.0" },
     { name = "pydantic", specifier = ">=2.9.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'testing'" },
+    { name = "pytest-asyncio", marker = "extra == 'testing'" },
+    { name = "pytest-mock", marker = "extra == 'testing'" },
+    { name = "pytest-recording", marker = "extra == 'testing'" },
+    { name = "pytest-retry", marker = "extra == 'testing'" },
     { name = "validators", specifier = ">=0.22.0,<1.0.0" },
 ]
-provides-extras = ["anthropic", "mistral"]
+provides-extras = ["anthropic", "mistral", "testing", "vectorsearch-v2", "all"]
 
 [package.metadata.requires-dev]
 lint = [{ name = "ruff", specifier = ">=0.13.1,<0.14.0" }]
