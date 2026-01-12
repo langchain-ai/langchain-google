@@ -158,6 +158,66 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
+def _validate_video_offsets(metadata: Any, file_uri: str) -> None:
+    """Validate that video offsets are logically correct.
+
+    Args:
+        metadata: VideoMetadata object containing start/end offsets
+        file_uri: URI of the video file for error messages
+
+    Raises:
+        ValueError: If offsets are invalid
+    """
+
+    # Safely extract offset values
+    start_offset_sec: float | None = None
+    end_offset_sec: float | None = None
+
+    # Handle VideoMetadata structure
+    if hasattr(metadata, "start_offset_sec") and metadata.start_offset_sec is not None:
+        start_val: Any = metadata.start_offset_sec
+        if isinstance(start_val, dict) and "seconds" in start_val:
+            seconds_value: Any = start_val["seconds"]
+            start_offset_sec = float(seconds_value)
+        elif hasattr(start_val, "seconds"):
+            start_offset_sec = float(start_val.seconds)
+
+    if hasattr(metadata, "end_offset_sec") and metadata.end_offset_sec is not None:
+        end_val: Any = metadata.end_offset_sec
+        if isinstance(end_val, dict) and "seconds" in end_val:
+            seconds_value_end: Any = end_val["seconds"]
+            end_offset_sec = float(seconds_value_end)
+        elif hasattr(end_val, "seconds"):
+            end_offset_sec = float(end_val.seconds)
+
+    # Validate offsets
+    if start_offset_sec is not None and start_offset_sec < 0:
+        msg = (
+            f"Video offset validation failed: start_offset cannot be negative "
+            f"({start_offset_sec}s). Check your video metadata for {file_uri}"
+        )
+        raise ValueError(msg)
+
+    if end_offset_sec is not None and end_offset_sec < 0:
+        msg = (
+            f"Video offset validation failed: end_offset cannot be negative "
+            f"({end_offset_sec}s). Check your video metadata for {file_uri}"
+        )
+        raise ValueError(msg)
+
+    if (
+        start_offset_sec is not None
+        and end_offset_sec is not None
+        and start_offset_sec >= end_offset_sec
+    ):
+        msg = (
+            f"Video offset validation failed: start_offset ({start_offset_sec}s) "
+            f"must be less than end_offset ({end_offset_sec}s). This often means "
+            f"your offsets exceed the video duration. Video: {file_uri}"
+        )
+        raise ValueError(msg)
+
+
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Wrapper exception class for errors associated with the `Google GenAI` API.
 
@@ -339,6 +399,8 @@ def _convert_to_parts(
                         raise ValueError(msg)
                     if "video_metadata" in part:
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
+                        # Validate video offsets before adding to kwargs
+                        _validate_video_offsets(metadata, part.get("file_uri", ""))
                         media_part_kwargs["video_metadata"] = metadata
 
                     if "media_resolution" in part:
