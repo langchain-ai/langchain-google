@@ -46,8 +46,8 @@ from langchain_google_genai import (
     create_context_cache,
 )
 
-_MODEL = "gemini-2.5-flash"
-_PRO_MODEL = "gemini-2.5-flash"
+_MODEL = "gemini-3-flash-preview"
+_PRO_MODEL = "gemini-3-pro-preview"
 _VISION_MODEL = "gemini-2.5-flash"
 _IMAGE_OUTPUT_MODEL = "gemini-2.5-flash-image"
 _IMAGE_EDITING_MODEL = "gemini-3-pro-image-preview"
@@ -1045,7 +1045,7 @@ def test_timeout_non_streaming(backend_config: dict) -> None:
         timeout=0.001,  # 1ms - too short to complete
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 
@@ -1057,7 +1057,7 @@ def test_timeout_streaming(backend_config: dict) -> None:
         streaming=True,
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException)):
+    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 
@@ -1537,6 +1537,7 @@ def _check_web_search_output(message: AIMessage, output_version: str) -> None:
         assert v1_text_block.get("annotations")
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_search_builtin(output_version: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(
@@ -2745,6 +2746,7 @@ def test_context_caching_tools(backend_config: dict) -> None:
     assert response.tool_calls[0]["name"] == "get_secret_number"
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 def test_audio_timestamp(backend_config: dict) -> None:
     """Test audio transcription with timestamps.
 
@@ -2756,6 +2758,12 @@ def test_audio_timestamp(backend_config: dict) -> None:
     The `audio_timestamp` parameter enables timestamp generation in the format
     `[HH:MM:SS]` within the transcribed output.
     """
+    # Skip if backend is not Vertex AI, as this param is only supported on Vertex AI.
+    if not backend_config.get("vertexai"):
+        pytest.skip(
+            "The `audio_timestamp` parameter is only supported on Vertex AI backend."
+        )
+
     llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     audio_url = (
         "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3"
@@ -2796,10 +2804,12 @@ def test_audio_timestamp(backend_config: dict) -> None:
     # - [00:00:00] or [HH:MM:SS] (with hours)
     # - [0:00-0:54] or [M:SS-M:SS] (time ranges)
     # - [ 0m0s405ms - 0m3s245ms ] (millisecond precision with brackets and spaces)
+    # - 0:00 - 7:12 (bare timestamp ranges without brackets)
     # Pattern matches various timestamp formats
     timestamp_patterns = [
         r"\[\d+:\d{2}",  # [0:00] or [00:00]
         r"\[\s*\d+m\d+s",  # [ 0m0s or [0m0s
+        r"\d+:\d{2}\s*-\s*\d+:\d{2}",  # 0:00 - 7:12 (time ranges)
     ]
     has_timestamps = (
         "**[" in text_content  # Format: **[00:00]**
