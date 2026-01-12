@@ -506,6 +506,10 @@ class _BaseGoogleGenerativeAI(BaseModel):
         infrastructure.
     """
 
+    labels: dict[str, str] | None = Field(default=None)
+    """Labels with user-defined metadata to break down billed charges.
+    """
+
     @model_validator(mode="after")
     def _resolve_project_from_credentials(self) -> Self:
         """Extract project from credentials if not explicitly set.
