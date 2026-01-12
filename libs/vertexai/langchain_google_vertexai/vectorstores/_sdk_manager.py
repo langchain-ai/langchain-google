@@ -26,6 +26,7 @@ class VectorSearchSDKManager:
         *,
         project_id: str,
         region: str,
+        api_version: str = "v1",
         credentials: Credentials | None = None,
         credentials_path: str | None = None,
     ) -> None:
@@ -43,6 +44,7 @@ class VectorSearchSDKManager:
         """
         self._project_id = project_id
         self._region = region
+        self._api_version = api_version
 
         if credentials is not None:
             self._credentials: Credentials | None = credentials
@@ -103,6 +105,25 @@ class VectorSearchSDKManager:
                 credentials=self._credentials,
             )
 
+    def get_collection(self, collection_id: str) -> Any:
+        """Retrieves a Vector Search V2 Collection by ID.
+
+        Args:
+            collection_id: The ID of the collection.
+
+        Returns:
+            A SimpleNamespace object containing the collection's resource name.
+        """
+        from types import SimpleNamespace
+
+        collection = SimpleNamespace()
+        collection.resource_name = (
+            f"projects/{self._project_id}/locations/{self._region}/"
+            f"collections/{collection_id}"
+        )
+        collection.location = self._region
+        return collection
+
     def get_endpoint(self, endpoint_id: str) -> MatchingEngineIndexEndpoint:
         """Retrieves a `MatchingEngineIndexEndpoint` (`VectorSearchIndexEndpoint`) by ID.
 
@@ -138,3 +159,36 @@ class VectorSearchSDKManager:
             client_info=get_client_info(module="vertex-ai-matching-engine"),
             **kwargs,
         )
+
+    def get_v2_client(self) -> dict[str, Any]:
+        """Get V2 clients for Vector Search 2.0 operations.
+
+        Returns:
+            Dictionary containing V2 clients:
+                - data_object_service_client: For CRUD operations on data objects
+                - data_object_search_service_client: For search/query operations
+
+        Raises:
+            ImportError: If google-cloud-vectorsearch is not installed.
+        """
+        try:
+            from google.cloud import vectorsearch_v1beta
+        except ImportError as e:
+            msg = (
+                "google-cloud-vectorsearch is not installed. "
+                "Install it with: pip install google-cloud-vectorsearch"
+            )
+            raise ImportError(msg) from e
+
+        return {
+            "data_object_service_client": (
+                vectorsearch_v1beta.DataObjectServiceClient(
+                    credentials=self._credentials
+                )
+            ),
+            "data_object_search_service_client": (
+                vectorsearch_v1beta.DataObjectSearchServiceClient(
+                    credentials=self._credentials
+                )
+            ),
+        }
