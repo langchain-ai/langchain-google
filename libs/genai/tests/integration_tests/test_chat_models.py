@@ -1905,6 +1905,151 @@ def test_google_maps_grounding_invoke_direct(backend_config: dict) -> None:
     assert "grounding_metadata" in response_with_location.response_metadata
 
 
+def test_file_search_tool_binding(backend_config: dict) -> None:
+    """Test that file_search tool can be bound to a model.
+
+    This test verifies the tool binding mechanics work correctly.
+    Note: Actually using file_search requires a pre-configured file search store.
+    """
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+
+    # Test binding with empty dict (valid but won't work without store names)
+    model_with_file_search = model.bind_tools([{"file_search": {}}])
+    assert model_with_file_search is not None
+
+    # Test binding with explicit parameters
+    model_with_params = model.bind_tools(
+        [
+            {
+                "file_search": {
+                    "top_k": 5,
+                }
+            }
+        ]
+    )
+    assert model_with_params is not None
+
+
+@pytest.mark.extended
+def test_file_search_tool(backend_config: dict) -> None:
+    """Test file_search tool with a configured file search store.
+
+    This test requires a pre-configured file search store with indexed content.
+    Set the FILE_SEARCH_STORE_NAME environment variable to run this test.
+
+    Example store name format: `fileSearchStores/my-file-search-store-123`
+
+    To run:
+        FILE_SEARCH_STORE_NAME=fileSearchStores/your-store pytest --extended
+    """
+    store_name = os.environ.get("FILE_SEARCH_STORE_NAME")
+    if not store_name:
+        pytest.skip(
+            "File search test requires FILE_SEARCH_STORE_NAME env var to be set"
+        )
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    model_with_file_search = model.bind_tools(
+        [
+            {
+                "file_search": {
+                    "file_search_store_names": [store_name],
+                    "top_k": 5,
+                }
+            }
+        ]
+    )
+
+    # Query the file search store
+    response = model_with_file_search.invoke(
+        "What information do you have about the documents in the store?"
+    )
+
+    assert isinstance(response, AIMessage)
+    assert response.content is not None
+
+    # File search should populate grounding metadata when results are found
+    if "grounding_metadata" in response.response_metadata:
+        grounding = response.response_metadata["grounding_metadata"]
+        # Verify grounding structure exists (may or may not have chunks depending on
+        # store content)
+        assert isinstance(grounding, dict)
+
+
+@pytest.mark.extended
+def test_file_search_tool_with_metadata_filter(backend_config: dict) -> None:
+    """Test file_search tool with metadata filtering.
+
+    This test requires a pre-configured file search store with indexed content
+    and metadata.
+    Set the FILE_SEARCH_STORE_NAME environment variable to run this test.
+
+    To run:
+        FILE_SEARCH_STORE_NAME=fileSearchStores/your-store pytest --extended
+    """
+    store_name = os.environ.get("FILE_SEARCH_STORE_NAME")
+    if not store_name:
+        pytest.skip(
+            "File search test requires FILE_SEARCH_STORE_NAME env var to be set"
+        )
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+
+    # Test with metadata filter (AIP-160 filter syntax)
+    # Example filter: category = "technical" AND year >= 2024
+    model_with_filter = model.bind_tools(
+        [
+            {
+                "file_search": {
+                    "file_search_store_names": [store_name],
+                    "top_k": 3,
+                    "metadata_filter": 'category = "general"',
+                }
+            }
+        ]
+    )
+
+    response = model_with_filter.invoke("Summarize the filtered documents.")
+
+    assert isinstance(response, AIMessage)
+    assert response.content is not None
+
+
+@pytest.mark.extended
+def test_file_search_invoke_direct(backend_config: dict) -> None:
+    """Test passing file_search tool directly to invoke without binding.
+
+    This test requires a pre-configured file search store.
+    Set the FILE_SEARCH_STORE_NAME environment variable to run this test.
+
+    To run:
+        FILE_SEARCH_STORE_NAME=fileSearchStores/your-store pytest --extended
+    """
+    store_name = os.environ.get("FILE_SEARCH_STORE_NAME")
+    if not store_name:
+        pytest.skip(
+            "File search test requires FILE_SEARCH_STORE_NAME env var to be set"
+        )
+
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+
+    # Pass file_search tool directly to invoke
+    response = model.invoke(
+        "What documents are available?",
+        tools=[
+            {
+                "file_search": {
+                    "file_search_store_names": [store_name],
+                    "top_k": 5,
+                }
+            }
+        ],
+    )
+
+    assert isinstance(response, AIMessage)
+    assert response.content is not None
+
+
 def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
     if output_version == "v0":
         blocks = [block for block in message.content if isinstance(block, dict)]
