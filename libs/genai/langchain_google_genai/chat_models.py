@@ -3138,23 +3138,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
 
-                # normalize if instance of list
+                # Extract text for callback token parameter.
+                # We concatenate all text blocks but preserve the original gen/message
+                # so that non-text blocks (thinking, code execution, etc.) remain
+                # accessible via chunk.message.content_blocks in callbacks.
                 if isinstance(message.content, list):
-                    text_content = "".join(
-                        item.get("text", "")
-                        for item in message.content
-                        if isinstance(item, dict) and item.get("type") == "text"
+                    token_text = "".join(
+                        block.get("text", "")
+                        for block in message.content_blocks
+                        if isinstance(block, dict) and block.get("type") == "text"
                     )
-                    normalized_message = AIMessageChunk(
-                        content=text_content,
-                        additional_kwargs=message.additional_kwargs,
-                        response_metadata=message.response_metadata,
-                        tool_call_chunks=message.tool_call_chunks,
-                        id=message.id,
-                    )
-                    gen = ChatGenerationChunk(
-                        message=normalized_message,
-                        generation_info=gen.generation_info,
+                else:
+                    token_text = (
+                        message.content if isinstance(message.content, str) else ""
                     )
 
             # populate index if missing
@@ -3174,7 +3170,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             if run_manager:
-                run_manager.on_llm_new_token(gen.text, chunk=gen)
+                run_manager.on_llm_new_token(token_text, chunk=gen)
             yield gen
 
     async def _astream(
@@ -3225,24 +3221,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)
 
-            # normalize if instance of list
+            # Extract text for callback token parameter.
+            # We concatenate all text blocks but preserve the original gen/message
+            # so that non-text blocks (thinking, code execution, etc.) remain
+            # accessible via chunk.message.content_blocks in callbacks.
             if isinstance(message.content, list):
-                text_content = "".join(
-                    item.get("text", "")
-                    for item in message.content
-                    if isinstance(item, dict) and item.get("type") == "text"
+                token_text = "".join(
+                    block.get("text", "")
+                    for block in message.content_blocks
+                    if isinstance(block, dict) and block.get("type") == "text"
                 )
-                normalized_message = AIMessageChunk(
-                    content=text_content,
-                    additional_kwargs=message.additional_kwargs,
-                    response_metadata=message.response_metadata,
-                    tool_call_chunks=message.tool_call_chunks,
-                    id=message.id,
-                )
-                gen = ChatGenerationChunk(
-                    message=normalized_message,
-                    generation_info=gen.generation_info,
-                )
+            else:
+                token_text = message.content if isinstance(message.content, str) else ""
 
             # populate index if missing
             if isinstance(message.content, list):
@@ -3261,7 +3251,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
 
             if run_manager:
-                await run_manager.on_llm_new_token(gen.text, chunk=gen)
+                await run_manager.on_llm_new_token(token_text, chunk=gen)
             yield gen
 
     def get_num_tokens(self, text: str) -> int:
