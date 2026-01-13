@@ -193,6 +193,12 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     Example: `{'timeout': 10}`
     """
 
+    output_dimensionality: int | None = Field(default=None)
+    """Default output dimensionality for embeddings.
+
+    If set, all embed calls use this dimension unless explicitly overridden.
+    """
+
     model_config = ConfigDict(
         populate_by_name=True,
     )
@@ -396,6 +402,9 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         # Use RETRIEVAL_DOCUMENT as default for documents
         effective_task_type = task_type or self.task_type or "RETRIEVAL_DOCUMENT"
 
+        # Use instance default if no explicit value provided
+        effective_dimensionality = output_dimensionality or self.output_dimensionality
+
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
             # Handle titles for this batch
             if titles:
@@ -416,7 +425,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             config = self._build_config(
                 task_type=effective_task_type,
                 title=title,
-                output_dimensionality=output_dimensionality,
+                output_dimensionality=effective_dimensionality,
             )
 
             try:
@@ -459,10 +468,12 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         # Use RETRIEVAL_QUERY as default for queries
         effective_task_type = task_type or self.task_type or "RETRIEVAL_QUERY"
 
+        effective_dimensionality = output_dimensionality or self.output_dimensionality
+
         config = self._build_config(
             task_type=effective_task_type,
             title=title,
-            output_dimensionality=output_dimensionality,
+            output_dimensionality=effective_dimensionality,
         )
 
         try:
@@ -512,6 +523,8 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         # Use RETRIEVAL_DOCUMENT as default for documents
         effective_task_type = task_type or self.task_type or "RETRIEVAL_DOCUMENT"
 
+        effective_dimensionality = output_dimensionality or self.output_dimensionality
+
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
             # Handle titles for this batch
             if titles:
@@ -530,7 +543,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             config = self._build_config(
                 task_type=effective_task_type,
                 title=title,
-                output_dimensionality=output_dimensionality,
+                output_dimensionality=effective_dimensionality,
             )
 
             try:
@@ -573,10 +586,12 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         # Use RETRIEVAL_QUERY as default for queries
         effective_task_type = task_type or self.task_type or "RETRIEVAL_QUERY"
 
+        effective_dimensionality = output_dimensionality or self.output_dimensionality
+
         config = self._build_config(
             task_type=effective_task_type,
             title=title,
-            output_dimensionality=output_dimensionality,
+            output_dimensionality=effective_dimensionality,
         )
 
         try:
