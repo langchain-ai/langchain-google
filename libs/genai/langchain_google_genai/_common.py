@@ -16,6 +16,11 @@ from langchain_google_genai._enums import (
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
+# Maximum file size (100MB) supported for file_uri (external URLs and registered GCS files)
+# Files up to this size can be passed directly as file_uri without needing base64 encoding
+# or ephemeral uploads
+_MAX_FILE_URI_SIZE_BYTES = 100 * 1024 * 1024  # 100MB
+
 # Cache package version at module import time to avoid blocking I/O in async contexts
 try:
     LC_GOOGLE_GENAI_VERSION = metadata.version("langchain-google-genai")

@@ -82,3 +82,41 @@ class TestImageBytesLoader:
         assert part.inline_data is not None
         assert part.inline_data.mime_type == "image/png"
         assert part.file_data is None
+
+    def test_load_part_url_as_file_uri(self) -> None:
+        """Test that load_part returns Part with file_data for URLs (default behavior)."""
+        url = "https://example.com/image.png"
+        part = self.loader.load_part(url)
+
+        assert part.file_data is not None
+        assert part.file_data.file_uri == url
+        assert part.file_data.mime_type == "image/png"
+        assert part.inline_data is None
+
+    def test_load_part_url_as_file_uri_with_signed_url(self) -> None:
+        """Test that load_part handles signed URLs as file_uri."""
+        signed_url = (
+            "https://storage.googleapis.com/bucket/file.pdf?"
+            "X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=..."
+        )
+        part = self.loader.load_part(signed_url)
+
+        assert part.file_data is not None
+        assert part.file_data.file_uri == signed_url
+        assert part.file_data.mime_type == "application/pdf"
+        assert part.inline_data is None
+
+    def test_load_part_url_backward_compatibility(self) -> None:
+        """Test that load_part can download URLs for backward compatibility."""
+        url = "https://example.com/image.png"
+        # Mock the _bytes_from_url method to avoid actual HTTP request
+        original_method = self.loader._bytes_from_url
+        self.loader._bytes_from_url = lambda u: b"fake_image_data"
+
+        try:
+            part = self.loader.load_part(url, use_file_uri_for_urls=False)
+            assert part.inline_data is not None
+            assert part.inline_data.data == b"fake_image_data"
+            assert part.file_data is None
+        finally:
+            self.loader._bytes_from_url = original_method

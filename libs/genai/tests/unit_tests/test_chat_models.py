@@ -3002,6 +3002,74 @@ def test_convert_to_parts_media_missing_data_and_file_uri() -> None:
         _convert_to_parts(content)
 
 
+def test_convert_to_parts_data_content_block_url_as_file_uri() -> None:
+    """Test `_convert_to_parts` with data content block URL passed as file_uri."""
+    content = [
+        {
+            "type": "file",
+            "url": "https://example.com/document.pdf",
+            "mime_type": "application/pdf",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == "https://example.com/document.pdf"
+    assert result[0].file_data.mime_type == "application/pdf"
+    assert result[0].inline_data is None
+
+
+def test_convert_to_parts_data_content_block_url_with_signed_url() -> None:
+    """Test `_convert_to_parts` with signed URL passed as file_uri."""
+    signed_url = (
+        "https://storage.googleapis.com/bucket/file.pdf?"
+        "X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=test"
+    )
+    content = [
+        {
+            "type": "file",
+            "url": signed_url,
+            "mime_type": "application/pdf",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == signed_url
+    assert result[0].file_data.mime_type == "application/pdf"
+    assert result[0].inline_data is None
+
+
+def test_convert_to_parts_data_content_block_url_legacy_source_type() -> None:
+    """Test `_convert_to_parts` with legacy source_type='url' passed as file_uri."""
+    content = [
+        {
+            "type": "file",
+            "source_type": "url",
+            "url": "https://example.com/image.jpg",
+            "mime_type": "image/jpeg",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == "https://example.com/image.jpg"
+    assert result[0].file_data.mime_type == "image/jpeg"
+    assert result[0].inline_data is None
+
+
+def test_convert_to_parts_image_url_as_file_uri() -> None:
+    """Test `_convert_to_parts` with image_url URL passed as file_uri."""
+    url = "https://example.com/image.png"
+    content = [{"type": "image_url", "image_url": url}]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == url
+    assert result[0].file_data.mime_type == "image/png"
+    assert result[0].inline_data is None
+
+
 def test_convert_to_parts_missing_executable_code_keys() -> None:
     """Test `_convert_to_parts` with missing keys in `executable_code`."""
     content = [

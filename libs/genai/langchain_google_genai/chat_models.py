@@ -231,11 +231,12 @@ def _convert_to_parts(
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
+                    url_to_use = None
                     if "source_type" in part:
                         # Catch legacy v0 formats
                         # Safe since v1 content blocks don't have `source_type` key
                         if part["source_type"] == "url":
-                            bytes_ = image_loader._bytes_from_url(part["url"])
+                            url_to_use = part["url"]
                         elif part["source_type"] == "base64":
                             bytes_ = base64.b64decode(part["data"])
                         else:
@@ -244,7 +245,7 @@ def _convert_to_parts(
                             raise ValueError(msg)
                     elif "url" in part:
                         # v1 multimodal block w/ URL
-                        bytes_ = image_loader._bytes_from_url(part["url"])
+                        url_to_use = part["url"]
                     elif "base64" in part:
                         # v1 multimodal block w/ base64
                         bytes_ = base64.b64decode(part["base64"])
@@ -255,6 +256,44 @@ def _convert_to_parts(
                         )
                         raise ValueError(msg)
 
+                    # For URLs, pass directly as file_uri (supports files up to 100MB)
+                    if url_to_use:
+                        mime_type = part.get("mime_type")
+                        if not mime_type:
+                            mime_type, _ = mimetypes.guess_type(url_to_use)
+                        
+                        file_data_kwargs: dict[str, Any] = {
+                            "file_uri": url_to_use,
+                        }
+                        if mime_type:
+                            file_data_kwargs["mime_type"] = mime_type
+                        
+                        part_kwargs: dict[str, Any] = {
+                            "file_data": FileData(**file_data_kwargs),
+                        }
+                        
+                        if "media_resolution" in part:
+                            if model and _is_gemini_25_model(model):
+                                warnings.warn(
+                                    "Setting per-part media resolution requests to "
+                                    "Gemini 2.5 models and older is not supported. The "
+                                    "media_resolution parameter will be ignored.",
+                                    UserWarning,
+                                    stacklevel=2,
+                                )
+                            elif model and _is_gemini_3_or_later(model):
+                                part_kwargs["media_resolution"] = {
+                                    "level": part["media_resolution"]
+                                }
+                        if "extras" in part and isinstance(part["extras"], dict):
+                            sig = part["extras"].get("signature")
+                            if sig and isinstance(sig, str):
+                                part_kwargs["thought_signature"] = base64.b64decode(sig)
+                        
+                        parts.append(Part(**part_kwargs))
+                        continue
+
+                    # For base64 or other data, create inline_data
                     mime_type = part.get("mime_type")
                     if not mime_type:
                         # Guess MIME type based on data field if not provided
@@ -274,7 +313,7 @@ def _convert_to_parts(
                     if mime_type:
                         blob_kwargs["mime_type"] = mime_type
 
-                    part_kwargs: dict[str, Any] = {
+                    part_kwargs = {
                         "inline_data": Blob(**blob_kwargs),
                     }
                     if "media_resolution" in part:

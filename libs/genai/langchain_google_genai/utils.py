@@ -191,3 +191,76 @@ def create_context_cache(
         raise ValueError(msg)
 
     return cache.name
+
+
+def register_gcs_files(
+    model: ChatGoogleGenerativeAI,
+    gcs_uris: list[str],
+) -> list[Any]:
+    """Registers Google Cloud Storage files with the Gemini API.
+
+    Registered GCS files can be passed directly as `file_uri` in message content
+    without needing to upload them first. This is useful for files stored in GCS
+    that you want to reference in multiple requests.
+
+    Args:
+        model: `ChatGoogleGenerativeAI` model instance.
+        gcs_uris: List of GCS URIs (e.g., `["gs://bucket/file1.pdf", "gs://bucket/file2.jpg"]`)
+            to register with the API.
+
+    Returns:
+        List of registered file objects from the API.
+
+    Raises:
+        ValueError: If the model client is not initialized.
+
+    Example:
+        ```python
+        from langchain_google_genai import ChatGoogleGenerativeAI, register_gcs_files
+
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+
+        # Register GCS files
+        gcs_files = register_gcs_files(
+            model,
+            [
+                "gs://my-bucket/documents/file1.pdf",
+                "gs://my-bucket/images/file2.jpg",
+            ],
+        )
+
+        # Use registered files in messages
+        from langchain_core.messages import HumanMessage
+
+        response = model.invoke(
+            HumanMessage(
+                content=[
+                    {
+                        "type": "media",
+                        "file_uri": "gs://my-bucket/documents/file1.pdf",
+                        "mime_type": "application/pdf",
+                    }
+                ]
+            )
+        )
+        ```
+
+    Note:
+        Registered GCS files can be passed directly as `file_uri` in message content.
+        The files must be accessible by the API (proper IAM permissions required).
+    """
+    if model.client is None:
+        msg = "Model client must be initialized to register GCS files."
+        raise ValueError(msg)
+
+    # Check if register_files method exists on the client
+    if not hasattr(model.client.files, "register_files"):
+        msg = (
+            "The client.files.register_files() method is not available. "
+            "GCS URIs can be passed directly as file_uri without registration."
+        )
+        raise ValueError(msg)
+
+    # Register the files
+    registered_files = model.client.files.register_files(gcs_uris=gcs_uris)
+    return registered_files

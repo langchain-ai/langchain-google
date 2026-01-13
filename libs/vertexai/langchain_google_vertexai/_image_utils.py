@@ -29,10 +29,11 @@ class ImageBytesLoader:
 
     Currently supported:
 
-    - Google cloud storage URI
+    - Google cloud storage URI (including registered GCS files)
     - B64 Encoded image string
     - Local file path
-    - URL
+    - URL (public or signed HTTPS URLs can be passed directly as file_uri for files
+        up to 100MB, bypassing the need for manual base64 encoding)
     """
 
     def __init__(
@@ -91,7 +92,7 @@ class ImageBytesLoader:
         )
         raise ValueError(msg)
 
-    def load_part(self, image_string: str) -> Part:
+    def load_part(self, image_string: str, use_file_uri_for_urls: bool = True) -> Part:
         """Gets `Part` for loading from Gemini.
 
         Args:
@@ -100,7 +101,16 @@ class ImageBytesLoader:
                 - Google cloud storage URI
                 - B64 Encoded image string
                 - Local file path
-                - URL
+                - URL (public or signed HTTPS URLs can be passed directly as file_uri)
+
+            use_file_uri_for_urls: If True (default), passes HTTP/HTTPS URLs directly as
+                file_uri instead of downloading them. This supports files up to 100MB and
+                bypasses the need for manual base64 encoding. Set to False to maintain
+                backward compatibility by downloading URLs and embedding as inline_data.
+
+        Returns:
+            Part object with either inline_data or file_uri (for GCS URIs and URLs when
+                use_file_uri_for_urls=True).
         """
         route = self._route(image_string)
 
@@ -108,11 +118,18 @@ class ImageBytesLoader:
             blob = self._blob_from_gcs(image_string)
             return Part.from_uri(uri=image_string, mime_type=blob.content_type)
 
+        if route == Route.URL:
+            if use_file_uri_for_urls:
+                # Pass URL directly as file_uri (supports files up to 100MB)
+                # The API will handle downloading public or signed URLs
+                mime_type = self._has_known_mimetype(image_string)
+                return Part.from_uri(uri=image_string, mime_type=mime_type)
+            else:
+                # Backward compatibility: download and embed as inline_data
+                bytes_ = self._bytes_from_url(image_string)
+
         if route == Route.BASE64:
             bytes_ = self._bytes_from_b64(image_string)
-
-        if route == Route.URL:
-            bytes_ = self._bytes_from_url(image_string)
 
         if route == Route.LOCAL_FILE:
             msg = (
@@ -123,6 +140,7 @@ class ImageBytesLoader:
             )
             raise ValueError(msg)
 
+        # For BASE64 or URL (when use_file_uri_for_urls=False), create inline_data
         mime_type = self._has_known_mimetype(image_string)
         if mime_type:
             return Part.from_data(bytes_, mime_type=mime_type)

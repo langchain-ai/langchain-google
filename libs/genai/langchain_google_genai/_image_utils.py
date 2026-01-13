@@ -45,9 +45,10 @@ class ImageBytesLoader:
 
     - Base64 encoded data URIs (e.g., `data:image/jpeg;base64,...` or
         `data:application/pdf;base64,...`)
-    - HTTP/HTTPS URLs
+    - HTTP/HTTPS URLs (public or signed URLs can be passed directly as file_uri
+        for files up to 100MB, bypassing the need for manual base64 encoding)
     - Google Cloud Storage URIs (gs://) passed directly to the API as file
-        references
+        references (including registered GCS files)
     """
 
     def load_bytes(self, image_string: str) -> bytes:
@@ -96,7 +97,7 @@ class ImageBytesLoader:
         )
         raise ValueError(msg)
 
-    def load_part(self, image_string: str) -> Part:
+    def load_part(self, image_string: str, use_file_uri_for_urls: bool = True) -> Part:
         """Gets Part for loading from Gemini.
 
         Args:
@@ -104,12 +105,17 @@ class ImageBytesLoader:
 
                 - Base64 encoded data URI (e.g., `data:image/jpeg;base64,...` or
                     `data:application/pdf;base64,...`)
-                - HTTP/HTTPS URL
+                - HTTP/HTTPS URL (public or signed URLs can be passed directly as file_uri)
                 - Google Cloud Storage URI (gs://bucket/path)
+
+            use_file_uri_for_urls: If True (default), passes HTTP/HTTPS URLs directly as
+                file_uri instead of downloading them. This supports files up to 100MB and
+                bypasses the need for manual base64 encoding. Set to False to maintain
+                backward compatibility by downloading URLs and embedding as inline_data.
 
         Returns:
             Part object with either `inline_data` containing the media bytes, or
-                `file_data` for GCS URIs.
+                `file_data` for GCS URIs and URLs (when use_file_uri_for_urls=True).
         """
         route = self._route(image_string)
 
@@ -118,11 +124,18 @@ class ImageBytesLoader:
             mime_type, _ = mimetypes.guess_type(image_string)
             return Part(file_data=FileData(file_uri=image_string, mime_type=mime_type))
 
+        if route == Route.URL:
+            if use_file_uri_for_urls:
+                # Pass URL directly as file_uri (supports files up to 100MB)
+                # The API will handle downloading public or signed URLs
+                mime_type, _ = mimetypes.guess_type(image_string)
+                return Part(file_data=FileData(file_uri=image_string, mime_type=mime_type))
+            else:
+                # Backward compatibility: download and embed as inline_data
+                bytes_ = self._bytes_from_url(image_string)
+
         if route == Route.BASE64:
             bytes_ = self._bytes_from_b64(image_string)
-
-        if route == Route.URL:
-            bytes_ = self._bytes_from_url(image_string)
 
         if route == Route.LOCAL_FILE:
             msg = (
@@ -133,6 +146,7 @@ class ImageBytesLoader:
             )
             raise ValueError(msg)
 
+        # For BASE64 or URL (when use_file_uri_for_urls=False), create inline_data
         mime_type, _ = mimetypes.guess_type(image_string)
         if not mime_type:
             kind = filetype.guess(bytes_)
