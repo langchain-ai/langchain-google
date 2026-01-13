@@ -507,7 +507,13 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """
 
     labels: dict[str, str] | None = Field(default=None)
-    """Labels with user-defined metadata to break down billed charges.
+    """User-defined key-value metadata for organizing and filtering billing reports.
+
+    Attach labels to categorize API usage by team, environment, or feature.
+
+    Can be overridden per-request via invoke kwargs.
+
+    See: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls
     """
 
     @model_validator(mode="after")

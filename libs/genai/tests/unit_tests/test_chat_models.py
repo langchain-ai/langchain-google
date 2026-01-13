@@ -4951,3 +4951,21 @@ def test_labels_none_by_default() -> None:
     config = request["config"]
 
     assert config.labels is None
+
+
+def test_labels_override_in_invoke() -> None:
+    """Test that labels can be overridden at invocation time via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        labels={"env": "production", "team": "ml"},
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    # Override labels via kwargs
+    request = llm._prepare_request(
+        messages, labels={"env": "staging", "request_id": "123"}
+    )
+    config = request["config"]
+
+    assert config.labels == {"env": "staging", "request_id": "123"}
