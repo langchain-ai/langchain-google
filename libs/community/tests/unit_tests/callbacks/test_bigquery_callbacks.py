@@ -676,7 +676,7 @@ def test_sync_log_parsing_error(
 def test_sync_init_raises_if_dataset_missing(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Test that sync initialization raises ValueError if the dataset does not exist."""
+    """Test that sync init raises ValueError if the dataset does not exist."""
     mock_bq_client = mock_bigquery_clients["mock_bq_client"]
     mock_cloud_exceptions = mock_bigquery_clients["mock_cloud_exceptions"]
 
@@ -698,7 +698,7 @@ def test_sync_init_raises_if_dataset_missing(
 def test_async_init_raises_if_dataset_missing(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Test that async initialization raises ValueError if the dataset does not exist."""
+    """Test that async init raises ValueError if the dataset does not exist."""
     mock_bq_client = mock_bigquery_clients["mock_bq_client"]
     mock_cloud_exceptions = mock_bigquery_clients["mock_cloud_exceptions"]
 
