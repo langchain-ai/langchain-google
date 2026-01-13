@@ -671,3 +671,47 @@ def test_sync_log_parsing_error(
         assert (
             f"Failed to parse content: {error_message}" in logged_row["error_message"]
         )
+
+
+def test_sync_init_raises_if_dataset_missing(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that sync initialization raises ValueError if the dataset does not exist."""
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_cloud_exceptions = mock_bigquery_clients["mock_cloud_exceptions"]
+
+    # Simulate dataset not found
+    mock_bq_client.get_dataset.side_effect = mock_cloud_exceptions.NotFound(
+        "Dataset not found"
+    )
+
+    with pytest.raises(ValueError, match="Dataset 'test_dataset' does not exist"):
+        BigQueryCallbackHandler(
+            project_id="test-project",
+            dataset_id="test_dataset",
+            table_id="test_table",
+        )
+
+    mock_bq_client.get_dataset.assert_called_with("test_dataset")
+
+
+def test_async_init_raises_if_dataset_missing(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that async initialization raises ValueError if the dataset does not exist."""
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_cloud_exceptions = mock_bigquery_clients["mock_cloud_exceptions"]
+
+    # Simulate dataset not found
+    mock_bq_client.get_dataset.side_effect = mock_cloud_exceptions.NotFound(
+        "Dataset not found"
+    )
+
+    with pytest.raises(ValueError, match="Dataset 'test_dataset' does not exist"):
+        AsyncBigQueryCallbackHandler(
+            project_id="test-project",
+            dataset_id="test_dataset",
+            table_id="test_table",
+        )
+
+    mock_bq_client.get_dataset.assert_called_with("test_dataset")
