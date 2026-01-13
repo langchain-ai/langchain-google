@@ -261,6 +261,21 @@ def _get_bigquery_events_schema(bigquery_module: Any) -> list[Any]:
             fields=[
                 bigquery_module.SchemaField("mime_type", "STRING", mode="NULLABLE"),
                 bigquery_module.SchemaField("uri", "STRING", mode="NULLABLE"),
+                bigquery_module.SchemaField(
+                    "object_ref",
+                    "RECORD",
+                    mode="NULLABLE",
+                    fields=[
+                        bigquery_module.SchemaField("uri", "STRING", mode="NULLABLE"),
+                        bigquery_module.SchemaField(
+                            "version", "STRING", mode="NULLABLE"
+                        ),
+                        bigquery_module.SchemaField(
+                            "authorizer", "STRING", mode="NULLABLE"
+                        ),
+                        bigquery_module.SchemaField("details", "JSON", mode="NULLABLE"),
+                    ],
+                ),
                 bigquery_module.SchemaField("text", "STRING", mode="NULLABLE"),
                 bigquery_module.SchemaField("part_index", "INTEGER", mode="NULLABLE"),
                 bigquery_module.SchemaField(
