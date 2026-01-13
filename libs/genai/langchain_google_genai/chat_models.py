@@ -2618,6 +2618,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         thinking_level = kwargs.get("thinking_level", self.thinking_level)
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
+        model = kwargs.get("model", self.model)
 
         has_thinking_params = (
             thinking_level is not None
@@ -2639,7 +2640,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     UserWarning,
                     stacklevel=2,
                 )
-            config["thinking_level"] = thinking_level
+                if "gemini-3" in model:
+                    config["thinking_level"] = thinking_level
+                else:
+                    config["thinking_budget"] = thinking_budget
+            else:
+                config["thinking_level"] = thinking_level
         elif thinking_budget is not None:
             config["thinking_budget"] = thinking_budget
 
