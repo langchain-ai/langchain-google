@@ -304,10 +304,9 @@ def _get_bigquery_events_schema(bigquery_module: Any) -> list[Any]:
 
 
 def _ensure_dataset_exists(
-    client: Any, project_id: str, dataset_id: str, cloud_exceptions: Any
+    bigquery: Any, project_id: str, dataset_id: str, cloud_exceptions: Any
 ) -> None:
-    if client is None:
-        raise ValueError("BigQuery client is not initialized.")
+    client = bigquery.Client(project=project_id)
     try:
         client.get_dataset(dataset_id)
     except cloud_exceptions.NotFound:
@@ -1200,15 +1199,16 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         self._is_shutting_down: bool = False
         self._setup_lock: asyncio.Lock = asyncio.Lock()
 
-        self.client = self.bigquery.Client(project=self.project_id)
-        _ensure_dataset_exists(
-            self.client, self.project_id, self.dataset_id, self.cloud_exceptions
-        )
+        self.client: Any = None
         self.write_client: Any = None
         self.async_batch_processor: _AsyncBatchProcessor | None = None
         self._executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
         self.offloader: _GCSOffloader | None = None
         self._arrow_schema: Any = None
+
+        _ensure_dataset_exists(
+            self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
+        )
 
     async def _ensure_started(self) -> None:
         if self._started:
@@ -1217,6 +1217,11 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             if self._started:
                 return
             loop = asyncio.get_running_loop()
+
+            self.client = await loop.run_in_executor(
+                self._executor,
+                lambda: self.bigquery.Client(project=self.project_id),
+            )
 
             full_table_id = (
                 f"{self.project_id}.{self.dataset_id}.{self.config.table_id}"
@@ -1730,15 +1735,16 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._is_shutting_down: bool = False
         self._setup_lock: threading.Lock = threading.Lock()
 
-        self.client = self.bigquery.Client(project=self.project_id)
-        _ensure_dataset_exists(
-            self.client, self.project_id, self.dataset_id, self.cloud_exceptions
-        )
+        self.client: Any = None
         self.write_client: Any = None
         self.batch_processor: _BatchProcessor | None = None
         self._executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
         self.offloader: _GCSOffloader | None = None
         self._arrow_schema: Any = None
+
+        _ensure_dataset_exists(
+            self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
+        )
 
     def _ensure_started(self) -> None:
         if self._started:
@@ -1746,6 +1752,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         with self._setup_lock:
             if self._started:
                 return
+
+            self.client = self.bigquery.Client(project=self.project_id)
 
             full_table_id = (
                 f"{self.project_id}.{self.dataset_id}.{self.config.table_id}"
