@@ -360,9 +360,15 @@ def _clean_content_block(block: Any) -> Any:
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
-    return {
-        k: v for k, v in block.items() if k not in ("index", "partial_json", "caller")
-    }
+    # Remove known streaming metadata fields
+    keys_to_remove = {"index", "partial_json", "caller"}
+
+    # The id field is required for tool_use blocks and some image blocks,
+    # but forbidden in text blocks (specifically inside tool_results).
+    if block.get("type") not in ("tool_use", "image"):
+        keys_to_remove.add("id")
+
+    return {k: v for k, v in block.items() if k not in keys_to_remove}
 
 
 def _clean_content(content: Any) -> Any:
