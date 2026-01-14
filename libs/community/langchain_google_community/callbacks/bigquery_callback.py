@@ -1321,7 +1321,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         user_id = metadata.get("user_id")
         agent = metadata.get("agent")
 
-        trace_id = str(run_id)
+        trace_id = metadata.get("trace_id") or session_id or str(run_id)
         span_id = str(run_id)
 
         parser = _LangChainContentParser(
@@ -1851,7 +1851,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         user_id = metadata.get("user_id")
         agent = metadata.get("agent")
 
-        trace_id = str(run_id)
+        trace_id = metadata.get("trace_id") or session_id or str(run_id)
         span_id = str(run_id)
 
         parser = _SyncLangChainContentParser(
