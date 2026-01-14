@@ -2111,3 +2111,86 @@ def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> 
         call_kwargs = mock_generate.call_args.kwargs
         # When timeout=None is explicitly passed, it uses None (not constructor default)
         assert call_kwargs.get("timeout") is None
+
+
+def test_get_num_tokens_from_messages(clear_prediction_client_cache: Any) -> None:
+    """Test get_num_tokens_from_messages uses count_tokens API properly."""
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash",
+        project="test-project",
+    )
+
+    # Create a mock response for count_tokens
+    mock_count_response = MagicMock()
+    mock_count_response.total_tokens = 42
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        mock_count = mock_prediction_service.return_value.count_tokens
+        mock_count.return_value = mock_count_response
+
+        # Test with simple text message
+        messages = [HumanMessage(content="Hello, world!")]
+        token_count = llm.get_num_tokens_from_messages(messages)
+
+        assert token_count == 42
+        mock_count.assert_called_once()
+
+        # Verify the call included contents
+        call_args = mock_count.call_args
+        assert "contents" in call_args[0][0]
+
+
+def test_get_num_tokens_from_messages_multimodal(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """Test get_num_tokens_from_messages handles multi-modal messages.
+
+    This test verifies that multi-modal content (like images) is properly
+    passed to the count_tokens API rather than being converted to a string.
+    """
+    llm = ChatVertexAI(
+        model="gemini-2.5-flash",
+        project="test-project",
+    )
+
+    # Create a mock response for count_tokens
+    mock_count_response = MagicMock()
+    mock_count_response.total_tokens = 100
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        mock_count = mock_prediction_service.return_value.count_tokens
+        mock_count.return_value = mock_count_response
+
+        # Test with multi-modal message containing image
+        # Using a small base64 encoded image (1x1 red pixel PNG)
+        small_image_b64 = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
+            "YGD4DwABBAEAcCBlCQAAAABJRU5ErkJggg=="
+        )
+        messages = [
+            HumanMessage(
+                content=[
+                    {"type": "text", "text": "What is in this image?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{small_image_b64}"
+                        },
+                    },
+                ]
+            )
+        ]
+        token_count = llm.get_num_tokens_from_messages(messages)
+
+        assert token_count == 100
+        mock_count.assert_called_once()
+
+        # Verify the call was made with proper content structure
+        call_args = mock_count.call_args
+        request_dict = call_args[0][0]
+        assert "contents" in request_dict
+        assert len(request_dict["contents"]) > 0
