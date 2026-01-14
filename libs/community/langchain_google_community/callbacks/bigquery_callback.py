@@ -1404,7 +1404,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         user_id = metadata.get("user_id")
         agent = metadata.get("agent")
 
-        registry_trace_id = await self.trace_registry.register_run(run_id, parent_run_id)
+        registry_trace_id = await self.trace_registry.register_run(
+            run_id, parent_run_id
+        )
         trace_id = metadata.get("trace_id") or registry_trace_id or str(run_id)
         span_id = str(run_id)
 

@@ -1,6 +1,8 @@
 """Unit tests for `BigQueryCallbackHandler`."""
 
+import asyncio
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -13,13 +15,10 @@ from langchain_core.outputs import Generation, LLMResult
 
 from langchain_google_community.callbacks.bigquery_callback import (
     AsyncBigQueryCallbackHandler,
-    BigQueryCallbackHandler,
     AsyncTraceIdRegistry,
+    BigQueryCallbackHandler,
     TraceIdRegistry,
 )
-import asyncio
-import unittest
-from concurrent.futures import ThreadPoolExecutor
 
 
 @pytest.fixture(autouse=True)
@@ -721,6 +720,7 @@ def test_async_init_raises_if_dataset_missing(
 
     mock_bq_client.get_dataset.assert_called_with("test_dataset")
 
+
 def test_trace_id_registry_root_run() -> None:
     """Verify that a root run gets its own ID as the trace ID."""
     registry = TraceIdRegistry()
@@ -767,7 +767,7 @@ def test_trace_id_registry_child_run_propagation() -> None:
 
 
 def test_trace_id_registry_missing_parent_behavior() -> None:
-    """If parent is unknown, it should be treated as a new root (or distributed trace)."""
+    """If parent is unknown, it should be treated as a new root."""
     registry = TraceIdRegistry()
     run_id = uuid4()
     unknown_parent_id = uuid4()
@@ -825,7 +825,9 @@ async def test_async_trace_id_registry_child_run_propagation() -> None:
     assert root_trace_id == str(root_run_id)
 
     # 2. Start Child (linked to Root)
-    child_trace_id = await registry.register_run(child_run_id, parent_run_id=root_run_id)
+    child_trace_id = await registry.register_run(
+        child_run_id, parent_run_id=root_run_id
+    )
     assert child_trace_id == str(root_run_id)
 
     # 3. Start Grandchild (linked to Child)
@@ -844,7 +846,7 @@ async def test_async_trace_id_registry_child_run_propagation() -> None:
 
 @pytest.mark.asyncio
 async def test_async_trace_id_registry_missing_parent_behavior() -> None:
-    """If parent is unknown, it should be treated as a new root (or distributed trace)."""
+    """If parent is unknown, it should be treated as a new root."""
     registry = AsyncTraceIdRegistry()
     run_id = uuid4()
     unknown_parent_id = uuid4()
