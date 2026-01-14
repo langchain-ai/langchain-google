@@ -2538,7 +2538,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         schema: dict | type[BaseModel] | type,
         *,
         include_raw: bool = False,
-        method: Literal["json_mode"] | None = None,
+        method: Literal["json_mode"] | None = "json_mode",
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         """Model wrapper that returns outputs formatted to match the given schema.
