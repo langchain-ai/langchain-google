@@ -14,7 +14,12 @@ from langchain_core.outputs import Generation, LLMResult
 from langchain_google_community.callbacks.bigquery_callback import (
     AsyncBigQueryCallbackHandler,
     BigQueryCallbackHandler,
+    AsyncTraceIdRegistry,
+    TraceIdRegistry,
 )
+import asyncio
+import unittest
+from concurrent.futures import ThreadPoolExecutor
 
 
 @pytest.fixture(autouse=True)
@@ -715,3 +720,154 @@ def test_async_init_raises_if_dataset_missing(
         )
 
     mock_bq_client.get_dataset.assert_called_with("test_dataset")
+
+def test_trace_id_registry_root_run() -> None:
+    """Verify that a root run gets its own ID as the trace ID."""
+    registry = TraceIdRegistry()
+    run_id = uuid4()
+
+    # Register a root run (no parent)
+    trace_id = registry.register_run(run_id)
+
+    # Trace ID should match the run ID for root runs
+    assert trace_id == str(run_id)
+
+    # Cleanup
+    registry.end_run(run_id)
+    assert run_id not in registry._run_map
+
+
+def test_trace_id_registry_child_run_propagation() -> None:
+    """Verify that a root run gets its own ID as the trace ID."""
+    registry = TraceIdRegistry()
+    root_run_id = uuid4()
+    child_run_id = uuid4()
+    grandchild_run_id = uuid4()
+
+    # 1. Start Root
+    root_trace_id = registry.register_run(root_run_id)
+    assert root_trace_id == str(root_run_id)
+
+    # 2. Start Child (linked to Root)
+    child_trace_id = registry.register_run(child_run_id, parent_run_id=root_run_id)
+    assert child_trace_id == str(root_run_id)
+
+    # 3. Start Grandchild (linked to Child)
+    grandchild_trace_id = registry.register_run(
+        grandchild_run_id, parent_run_id=child_run_id
+    )
+    assert grandchild_trace_id == str(root_run_id)
+
+    # 4. End Root Run (should clean up all descendants in the map)
+    registry.end_run(root_run_id)
+
+    assert root_run_id not in registry._run_map
+    assert child_run_id not in registry._run_map
+    assert grandchild_run_id not in registry._run_map
+
+
+def test_trace_id_registry_missing_parent_behavior() -> None:
+    """If parent is unknown, it should be treated as a new root (or distributed trace)."""
+    registry = TraceIdRegistry()
+    run_id = uuid4()
+    unknown_parent_id = uuid4()
+
+    trace_id = registry.register_run(run_id, parent_run_id=unknown_parent_id)
+
+    # Should adopt the parent ID as trace ID even if parent wasn't explicitly registered
+    assert trace_id == str(unknown_parent_id)
+
+
+def test_trace_id_registry_concurrency() -> None:
+    """Verify thread safety."""
+    registry = TraceIdRegistry()
+    root_run_id = uuid4()
+    registry.register_run(root_run_id)
+
+    def register_child(_: int) -> str:
+        child_id = uuid4()
+        return registry.register_run(child_id, parent_run_id=root_run_id)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(register_child, range(100)))
+
+    for tid in results:
+        assert tid == str(root_run_id)
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_root_run() -> None:
+    """Verify that a root run gets its own ID as the trace ID."""
+    registry = AsyncTraceIdRegistry()
+    root_run_id = uuid4()
+
+    # Register a root run (no parent)
+    trace_id = await registry.register_run(root_run_id)
+
+    # Trace ID should match the run ID for root runs
+    assert trace_id == str(root_run_id)
+
+    # Cleanup
+    await registry.end_run(root_run_id)
+    assert root_run_id not in registry._run_map
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_child_run_propagation() -> None:
+    """Verify that child runs inherit the trace ID from the root."""
+    registry = AsyncTraceIdRegistry()
+    root_run_id = uuid4()
+    child_run_id = uuid4()
+    grandchild_run_id = uuid4()
+
+    # 1. Start Root
+    root_trace_id = await registry.register_run(root_run_id)
+    assert root_trace_id == str(root_run_id)
+
+    # 2. Start Child (linked to Root)
+    child_trace_id = await registry.register_run(child_run_id, parent_run_id=root_run_id)
+    assert child_trace_id == str(root_run_id)
+
+    # 3. Start Grandchild (linked to Child)
+    grandchild_trace_id = await registry.register_run(
+        grandchild_run_id, parent_run_id=child_run_id
+    )
+    assert grandchild_trace_id == str(root_run_id)
+
+    # 4. End Root Run (should clean up all descendants in the map)
+    await registry.end_run(root_run_id)
+
+    assert root_run_id not in registry._run_map
+    assert child_run_id not in registry._run_map
+    assert grandchild_run_id not in registry._run_map
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_missing_parent_behavior() -> None:
+    """If parent is unknown, it should be treated as a new root (or distributed trace)."""
+    registry = AsyncTraceIdRegistry()
+    run_id = uuid4()
+    unknown_parent_id = uuid4()
+
+    trace_id = await registry.register_run(run_id, parent_run_id=unknown_parent_id)
+
+    # Should adopt the parent ID as trace ID even if parent wasn't explicitly registered
+    assert trace_id == str(unknown_parent_id)
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_concurrency() -> None:
+    """Verify async concurrency safety."""
+    registry = AsyncTraceIdRegistry()
+    root_run_id = uuid4()
+    await registry.register_run(root_run_id)
+
+    async def register_child(_: int) -> str:
+        child_id = uuid4()
+        return await registry.register_run(child_id, parent_run_id=root_run_id)
+
+    tasks = [register_child(i) for i in range(100)]
+    results = await asyncio.gather(*tasks)
+
+    for tid in results:
+        assert tid == str(root_run_id)
