@@ -114,9 +114,9 @@ class ImageBytesLoader:
 
         if route == Route.URL:
             mime_type, _ = mimetypes.guess_type(image_string)
-            if mime_type:
-                return Part.from_uri(uri=image_string, mime_type=mime_type)
-            return Part.from_uri(uri=image_string)
+            if not mime_type:
+                mime_type = "application/octet-stream"
+            return Part.from_uri(uri=image_string, mime_type=mime_type)
 
         if route == Route.LOCAL_FILE:
             msg = (
