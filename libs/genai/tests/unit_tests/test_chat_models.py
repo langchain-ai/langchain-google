@@ -89,6 +89,12 @@ def test_integration_initialization() -> None:
         "ls_temperature": 0.7,
     }
 
+    # Ensure temperature is propagated to request config
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.temperature == 0.7
+
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -102,6 +108,13 @@ def test_integration_initialization() -> None:
         "ls_temperature": 0.7,
         "ls_max_tokens": 10,
     }
+
+    # Ensure temperature is propagated to request config
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.temperature == 0.7
+    assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
         model=MODEL_NAME,
@@ -3934,7 +3947,11 @@ def test_thinking_level_parameter() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         thinking_level="low",
     )
-    config = llm._prepare_params(stop=None)
+
+    # Ensure thinking config is propagated to request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == ThinkingLevel.LOW
     # Pydantic models define all fields; check value is None rather than hasattr
@@ -3946,7 +3963,11 @@ def test_thinking_level_parameter() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         thinking_level="high",
     )
-    config = llm._prepare_params(stop=None)
+
+    # Ensure thinking config is propagated to request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
@@ -3962,7 +3983,11 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
             thinking_level="low",
             thinking_budget=128,
         )
-        config = llm._prepare_params(stop=None)
+
+        # Ensure thinking config is propagated to request
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
 
         # Check that warning was issued
         assert len(warning_list) == 1
@@ -3983,7 +4008,11 @@ def test_thinking_budget_alone_still_works() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         thinking_budget=64,
     )
-    config = llm._prepare_params(stop=None)
+
+    # Ensure thinking config is propagated to request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_budget == 64
     # Pydantic models define all fields; check value is None rather than hasattr
@@ -3998,8 +4027,23 @@ def test_kwargs_override_max_output_tokens() -> None:
         max_output_tokens=100,
     )
 
-    config = llm._prepare_params(stop=None, max_output_tokens=500)
+    # Ensure thinking config is propagated to request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], max_output_tokens=500)
+    config = request["config"]
     assert config.max_output_tokens == 500
+
+
+def test_kwargs_override_stop() -> None:
+    """Test that `stop` can be overridden via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY), stop=["you"]
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop=["me"])
+    config = request["config"]
+    assert config.stop_sequences == ["me"]
 
 
 def test_kwargs_override_thinking_budget() -> None:
@@ -4010,7 +4054,10 @@ def test_kwargs_override_thinking_budget() -> None:
         thinking_budget=64,
     )
 
-    config = llm._prepare_params(stop=None, thinking_budget=128)
+    # Ensure thinking config is propagated to request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], thinking_budget=128)
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_budget == 128
 
@@ -4023,7 +4070,10 @@ def test_kwargs_override_thinking_level() -> None:
         thinking_level="low",
     )
 
-    config = llm._prepare_params(stop=None, thinking_level="high")
+    # Ensure thinking config is propagated to request
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], thinking_level="high")
+    config = request["config"]
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
 
@@ -4871,3 +4921,51 @@ def test_openai_style_bind_with_response_format() -> None:
         strict=True,
     )
     assert bound4 is not None
+
+
+def test_labels_passed_to_generate_content_config() -> None:
+    """Test that `labels` is properly passed to `GenerateContentConfig`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        labels={"env": "production", "team": "ml"},
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.labels is not None
+    assert config.labels == {"env": "production", "team": "ml"}
+
+
+def test_labels_none_by_default() -> None:
+    """Test that `labels` is `None` by default."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.labels is None
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.labels is None
+
+
+def test_labels_override_in_invoke() -> None:
+    """Test that labels can be overridden at invocation time via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        labels={"env": "production", "team": "ml"},
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    # Override labels via kwargs
+    request = llm._prepare_request(
+        messages, labels={"env": "staging", "request_id": "123"}
+    )
+    config = request["config"]
+
+    assert config.labels == {"env": "staging", "request_id": "123"}
