@@ -32,13 +32,13 @@ def register_gcs_files(
         ImportError: If 'google-genai' package is not installed.
         ValueError: If no API key or project is found.
     """
+    msg = (
+        "Could not import google-genai python package. "
+        "Please install it with `pip install google-genai`."
+    )
     try:
         from google.genai import Client
     except ImportError as e:
-        msg = (
-            "Could not import google-genai python package. "
-            "Please install it with `pip install google-genai`."
-        )
         raise ImportError(msg) from e
 
     # Resolve API Key
@@ -55,12 +55,15 @@ def register_gcs_files(
     ]
     credentials, _ = google.auth.default(scopes=scopes)
 
-    client = Client(
-        api_key=resolved_api_key,
-        project=project,
-        location=location,
-        credentials=credentials,
-    )
+    try:
+        client = Client(
+            api_key=resolved_api_key,
+            project=project,
+            location=location,
+            credentials=credentials,
+        )
+    except ImportError as e:
+        raise ImportError(msg) from e
 
     # Register the files
     response = client.files.register_files(uris=uris)  # type: ignore[attr-defined]
