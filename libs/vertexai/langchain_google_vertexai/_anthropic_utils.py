@@ -336,8 +336,6 @@ def _format_messages_anthropic(
         if not fm:
             continue
         formatted_messages.append(fm)
-
-    # --- FIX START: Sanitize trailing whitespace in prefill (last assistant message) ---
     if formatted_messages:
         last_msg = formatted_messages[-1]
         if last_msg["role"] == "assistant":
@@ -345,14 +343,11 @@ def _format_messages_anthropic(
                 last_msg["content"] = last_msg["content"].rstrip()
             elif isinstance(last_msg["content"], list):
                 for block in last_msg["content"]:
-                    # ✅ GOOD (Split into lines)
                     if (
                         isinstance(block, dict) 
                         and block.get("type") == "text"
                     ):
                         block["text"] = block["text"].rstrip()
-    # --- FIX END ---
-
     return system_messages, formatted_messages
 
 
