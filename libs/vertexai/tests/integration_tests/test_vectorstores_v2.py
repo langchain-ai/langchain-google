@@ -31,6 +31,7 @@ def embeddings() -> VertexAIEmbeddings:
 
 
 @pytest.fixture(scope="module")
+@pytest.mark.extended
 def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
     """Initializes a VectorSearchVectorStore for V2 batch updates."""
     project_id = os.environ["PROJECT_ID"]
@@ -85,6 +86,7 @@ def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
 
 
 @pytest.fixture
+@pytest.mark.extended
 def datastore_vector_store_v2(
     embeddings: VertexAIEmbeddings,
 ) -> VectorSearchVectorStoreDatastore:
@@ -102,6 +104,7 @@ def datastore_vector_store_v2(
 
 
 @pytest.fixture(scope="module")
+@pytest.mark.extended
 def semantic_search_collection():
     """Creates a collection with semantic search support and cleans up after tests."""
     project_id = os.environ["PROJECT_ID"]
@@ -159,6 +162,7 @@ def semantic_search_collection():
         print(f"Warning: Failed to delete collection {collection_id}: {e}")
 
 
+@pytest.mark.extended
 def test_vector_store_v2_add_texts_and_dense_search(
     vector_store_v2: VectorSearchVectorStore,
 ):
@@ -180,6 +184,7 @@ def test_vector_store_v2_add_texts_and_dense_search(
         "configuration in collection"
     )
 )
+@pytest.mark.extended
 def test_vector_store_v2_hybrid_search(
     vector_store_v2: VectorSearchVectorStore, embeddings: VertexAIEmbeddings
 ):
@@ -210,6 +215,7 @@ def test_vector_store_v2_hybrid_search(
         assert "sparse_score" in scores
 
 
+@pytest.mark.extended
 def test_vector_store_v2_advanced_filtering(
     vector_store_v2: VectorSearchVectorStore,
 ):
@@ -235,6 +241,7 @@ def test_vector_store_v2_advanced_filtering(
     assert all(doc.metadata["price"] < 15000 for doc in documents)
 
 
+@pytest.mark.extended
 def test_vector_store_v2_return_full_datapoint(
     vector_store_v2: VectorSearchVectorStore, embeddings: VertexAIEmbeddings
 ):
@@ -255,6 +262,7 @@ def test_vector_store_v2_return_full_datapoint(
     assert isinstance(score, float)
 
 
+@pytest.mark.extended
 def test_vector_store_v2_delete_by_ids(vector_store_v2: VectorSearchVectorStore):
     """Tests deleting documents by IDs in V2."""
     texts = ["doc to delete", "doc to keep"]
@@ -273,6 +281,7 @@ def test_vector_store_v2_delete_by_ids(vector_store_v2: VectorSearchVectorStore)
     assert delete_id not in result_ids
 
 
+@pytest.mark.extended
 def test_vector_store_v2_delete_by_filter(vector_store_v2: VectorSearchVectorStore):
     """Tests deleting documents by filter in V2 using the recommended workaround.
 
@@ -325,6 +334,7 @@ def test_vector_store_v2_delete_by_filter(vector_store_v2: VectorSearchVectorSto
         )
 
 
+@pytest.mark.extended
 def test_vector_store_v2_semantic_search(
     semantic_search_collection, embeddings: VertexAIEmbeddings
 ):
@@ -418,6 +428,7 @@ def test_vector_store_v2_semantic_search(
     assert len(animal_results) > 0, "Should find animal-related documents"
 
 
+@pytest.mark.extended
 def test_vector_store_v2_text_search(
     semantic_search_collection, embeddings: VertexAIEmbeddings
 ):
@@ -503,6 +514,7 @@ def test_vector_store_v2_text_search(
     assert python_found, "Should find document containing 'Python'"
 
 
+@pytest.mark.extended
 def test_vector_store_v2_semantic_text_hybrid_search(
     semantic_search_collection, embeddings: VertexAIEmbeddings
 ):
