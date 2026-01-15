@@ -66,5 +66,8 @@ def register_gcs_files(
         raise ImportError(msg) from e
 
     # Register the files
-    response = client.files.register_files(uris=uris)  # type: ignore[attr-defined]
-    return response.files
+    response = client.files.register_files(  # type: ignore[attr-defined]
+        uris=uris,
+        auth=None,
+    )
+    return response.files or []

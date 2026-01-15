@@ -9,7 +9,7 @@
 
 import os
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -345,7 +345,8 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
                 creds.refresh(Request())
             elif "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
                 creds, project = default()
-                creds = creds.with_scopes(self.scopes)
+                if hasattr(creds, "with_scopes"):
+                    creds = cast("Any", creds).with_scopes(self.scopes)
                 # no need to write to file
                 if creds:
                     return creds
