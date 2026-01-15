@@ -68,6 +68,6 @@ def register_gcs_files(
     # Register the files
     response = client.files.register_files(  # type: ignore[attr-defined]
         uris=uris,
-        auth=None,
+        auth=credentials,
     )
     return response.files or []
