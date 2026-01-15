@@ -343,11 +343,10 @@ def _format_messages_anthropic(
                 last_msg["content"] = last_msg["content"].rstrip()
             elif isinstance(last_msg["content"], list):
                 for block in last_msg["content"]:
-                    if (
-                        isinstance(block, dict) 
-                        and block.get("type") == "text"
-                    ):
-                        block["text"] = block["text"].rstrip()
+                    # ✅ GOOD: Nested ifs satisfy both Linter and Formatter
+                    if isinstance(block, dict):
+                        if block.get("type") == "text":
+                            block["text"] = block["text"].rstrip()
     return system_messages, formatted_messages
 
 
