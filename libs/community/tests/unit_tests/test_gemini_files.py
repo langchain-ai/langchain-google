@@ -26,7 +26,10 @@ def test_register_gcs_files_success() -> None:
                 location=None,
                 credentials=ANY,
             )
-            mock_client.files.register_files.assert_called_once_with(uris=mock_uris)
+            mock_client.files.register_files.assert_called_once_with(
+                uris=mock_uris,
+                auth=ANY,
+            )
 
 
 def test_register_gcs_files_import_error() -> None:
