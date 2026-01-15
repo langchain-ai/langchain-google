@@ -1174,12 +1174,45 @@ class _SyncLangChainContentParser:
         return full_summary, content_parts, is_truncated
 
 
-class TraceIdRegistry:
-    """Registry to manage run_id to root_run_id mapping for trace correlation."""
+class BaseTraceIdRegistry:
+    """Base Registry to manage run_id to root_run_id mapping for trace correlation."""
 
     def __init__(self) -> None:
         self._run_map: Dict[uuid.UUID, uuid.UUID] = {}
         self._root_map: Dict[uuid.UUID, set[uuid.UUID]] = {}
+
+    def _register_run(
+        self, run_id: uuid.UUID, parent_run_id: uuid.UUID | None = None
+    ) -> str:
+        """Core logic for registering a run."""
+        if run_id in self._run_map:
+            return str(self._run_map[run_id])
+
+        if parent_run_id is None:
+            root_id = run_id
+        else:
+            root_id = self._run_map.get(parent_run_id, parent_run_id)
+
+        self._run_map[run_id] = root_id
+
+        if root_id not in self._root_map:
+            self._root_map[root_id] = set()
+        self._root_map[root_id].add(run_id)
+        return str(root_id)
+
+    def _end_run(self, run_id: uuid.UUID) -> None:
+        """Core logic for ending a run."""
+        if run_id in self._root_map:
+            descendants = self._root_map.pop(run_id)
+            for desc_id in descendants:
+                self._run_map.pop(desc_id, None)
+
+
+class TraceIdRegistry(BaseTraceIdRegistry):
+    """Registry to manage run_id to root_run_id mapping for trace correlation."""
+
+    def __init__(self) -> None:
+        super().__init__()
         self._lock = threading.Lock()
 
     def register_run(
@@ -1191,36 +1224,19 @@ class TraceIdRegistry:
         Otherwise, a new trace is started with this run as the root.
         """
         with self._lock:
-            if run_id in self._run_map:
-                return str(self._run_map[run_id])
-
-            if parent_run_id is None:
-                root_id = run_id
-            else:
-                root_id = self._run_map.get(parent_run_id, parent_run_id)
-
-            self._run_map[run_id] = root_id
-
-            if root_id not in self._root_map:
-                self._root_map[root_id] = set()
-            self._root_map[root_id].add(run_id)
-            return str(root_id)
+            return self._register_run(run_id, parent_run_id)
 
     def end_run(self, run_id: uuid.UUID) -> None:
         """Cleans up resources for a trace when the root run completes."""
         with self._lock:
-            if run_id in self._root_map:
-                descendants = self._root_map.pop(run_id)
-                for desc_id in descendants:
-                    self._run_map.pop(desc_id, None)
+            self._end_run(run_id)
 
 
-class AsyncTraceIdRegistry:
+class AsyncTraceIdRegistry(BaseTraceIdRegistry):
     """Async Registry to manage run_id to root_run_id mapping for trace correlation."""
 
     def __init__(self) -> None:
-        self._run_map: Dict[uuid.UUID, uuid.UUID] = {}
-        self._root_map: Dict[uuid.UUID, set[uuid.UUID]] = {}
+        super().__init__()
         self._lock = asyncio.Lock()
 
     async def register_run(
@@ -1232,28 +1248,12 @@ class AsyncTraceIdRegistry:
         Otherwise, a new trace is started with this run as the root.
         """
         async with self._lock:
-            if run_id in self._run_map:
-                return str(self._run_map[run_id])
-
-            if parent_run_id is None:
-                root_id = run_id
-            else:
-                root_id = self._run_map.get(parent_run_id, parent_run_id)
-
-            self._run_map[run_id] = root_id
-
-            if root_id not in self._root_map:
-                self._root_map[root_id] = set()
-            self._root_map[root_id].add(run_id)
-            return str(root_id)
+            return self._register_run(run_id, parent_run_id)
 
     async def end_run(self, run_id: uuid.UUID) -> None:
         """Cleans up resources for a trace when the root run completes."""
         async with self._lock:
-            if run_id in self._root_map:
-                descendants = self._root_map.pop(run_id)
-                for desc_id in descendants:
-                    self._run_map.pop(desc_id, None)
+            self._end_run(run_id)
 
 
 # ==============================================================================
