@@ -345,6 +345,7 @@ def _format_messages_anthropic(
                 last_msg["content"] = last_msg["content"].rstrip()
             elif isinstance(last_msg["content"], list):
                 for block in last_msg["content"]:
+                    # ✅ GOOD (Split into lines)
                     if (
                         isinstance(block, dict) 
                         and block.get("type") == "text"
