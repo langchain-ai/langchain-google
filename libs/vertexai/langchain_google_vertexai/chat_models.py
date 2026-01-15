@@ -8,6 +8,7 @@ import ast
 import base64
 from functools import cached_property
 import json
+import mimetypes
 import logging
 import re
 from operator import itemgetter
@@ -302,6 +303,15 @@ def _parse_chat_history_gemini(
                 oai_content_block = convert_to_openai_image_block(part)
                 url = oai_content_block["image_url"]["url"]
                 return imageBytesLoader.load_gapic_part(url)
+            if part.get("source_type") == "url" or "url" in part:
+                url = part.get("url")
+                if not url:
+                    msg = "Data content block must contain 'url'."
+                    raise ValueError(msg)
+                mime_type = part.get("mime_type")
+                if not mime_type:
+                    mime_type, _ = mimetypes.guess_type(url)
+                return Part(file_data=FileData(file_uri=url, mime_type=mime_type))
             if "base64" in part or part.get("source_type") == "base64":
                 key_name = "base64" if "base64" in part else "data"
                 bytes_ = base64.b64decode(part[key_name])
