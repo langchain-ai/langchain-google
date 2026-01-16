@@ -55,3 +55,19 @@ def pytest_collection_modifyitems(
         if keywords and not any(config.getoption(f"--{kw}") for kw in keywords):
             skip = pytest.mark.skip(reason=f"need --{keywords[0]} option to run")
             item.add_marker(skip)
+
+
+def _is_quota_exhausted_error(error: BaseException) -> bool:
+    message = str(error)
+    return "RESOURCE_EXHAUSTED" in message or "Quota exceeded" in message
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or not report.failed:
+        return
+    if call.excinfo and _is_quota_exhausted_error(call.excinfo.value):
+        report.outcome = "skipped"
+        report.wasxfail = "Skipped due to Vertex AI/Gemini quota exhaustion"
