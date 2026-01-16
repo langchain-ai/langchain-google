@@ -74,6 +74,22 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         metafunc.parametrize("backend_config", backends, indirect=True)
 
 
+def _is_quota_exhausted_error(error: BaseException) -> bool:
+    message = str(error)
+    return "RESOURCE_EXHAUSTED" in message or "Quota exceeded" in message
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or not report.failed:
+        return
+    if call.excinfo and _is_quota_exhausted_error(call.excinfo.value):
+        report.outcome = "skipped"
+        report.wasxfail = "Skipped due to Gemini API quota exhaustion"
+
+
 @pytest.fixture
 def backend_config(request: pytest.FixtureRequest) -> dict:
     """Provide backend configuration.
