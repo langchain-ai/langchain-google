@@ -2745,15 +2745,12 @@ def test_convert_to_parts_file_data_url() -> None:
             "mime_type": "image/jpeg",
         }
     ]
-    with patch("langchain_google_genai.chat_models.ImageBytesLoader") as mock_loader:
-        mock_loader_instance = Mock()
-        mock_loader_instance._bytes_from_url.return_value = b"fake_image_data"
-        mock_loader.return_value = mock_loader_instance
-        result = _convert_to_parts(content)
-        assert len(result) == 1
-        assert result[0].inline_data is not None
-        assert result[0].inline_data.mime_type == "image/jpeg"
-        assert result[0].inline_data.data == b"fake_image_data"
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.file_uri == "https://example.com/image.jpg"
+    assert result[0].file_data.mime_type == "image/jpeg"
+    assert result[0].inline_data is None
 
 
 def test_convert_to_parts_file_data_base64() -> None:
