@@ -187,39 +187,19 @@ def _format_message_anthropic(
                         new_block[copy_attr] = block[copy_attr]
 
                 if block["type"] == "image":
-                    if "url" in block:
-                        url = block["url"]
-                        if url.startswith("data:"):
+                    if block["source_type"] == "url":
+                        if block["url"].startswith("data:"):
                             # Data URI
                             formatted_block = {
                                 "type": "image",
-                                "source": _format_image(url, project),
+                                "source": _format_image(block["url"], project),
                             }
                         else:
                             formatted_block = {
                                 "type": "image",
-                                "source": {"type": "url", "url": url},
+                                "source": {"type": "url", "url": block["url"]},
                             }
-                    elif "base64" in block:
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": block["mime_type"],
-                                "data": block["base64"],
-                            },
-                        }
-                    elif "file_id" in block:
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "file",
-                                "file_id": block["file_id"],
-                            },
-                        }
-                    # Backward compatibility for langchain < 1.X
-                    # where source_type was used
-                    elif "data" in block and block.get("source_type", None) == "base64":
+                    elif block["source_type"] == "base64":
                         formatted_block = {
                             "type": "image",
                             "source": {
@@ -228,7 +208,7 @@ def _format_message_anthropic(
                                 "data": block["data"],
                             },
                         }
-                    elif "id" in block and block.get("source_type", None) == "id":
+                    elif block["source_type"] == "id":
                         formatted_block = {
                             "type": "image",
                             "source": {
@@ -238,8 +218,8 @@ def _format_message_anthropic(
                         }
                     else:
                         msg = (
-                            "Image content blocks must have either 'url', 'base64', "
-                            "'file_id', 'id' or 'data' field."
+                            "Anthropic only supports 'url' and 'base64' source_type "
+                            "for image content blocks."
                         )
                         raise ValueError(msg)
                     content.append(formatted_block)
@@ -336,6 +316,8 @@ def _format_messages_anthropic(
         if not fm:
             continue
         formatted_messages.append(fm)
+
+    # --- FIX START: Sanitize trailing whitespace in prefill (last assistant message) ---
     if formatted_messages:
         last_msg = formatted_messages[-1]
         if last_msg["role"] == "assistant":
@@ -343,10 +325,9 @@ def _format_messages_anthropic(
                 last_msg["content"] = last_msg["content"].rstrip()
             elif isinstance(last_msg["content"], list):
                 for block in last_msg["content"]:
-                    # ✅ GOOD: Nested ifs satisfy both Linter and Formatter
-                    if isinstance(block, dict):
-                        if block.get("type") == "text":
-                            block["text"] = block["text"].rstrip()
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        block["text"] = block["text"].rstrip()
+    # --- FIX END ---
     return system_messages, formatted_messages
 
 
@@ -390,15 +371,9 @@ def _clean_content_block(block: Any) -> Any:
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
-    # Remove known streaming metadata fields
-    keys_to_remove = {"index", "partial_json", "caller"}
-
-    # The id field is required for tool_use blocks and some image blocks,
-    # but forbidden in text blocks (specifically inside tool_results).
-    if block.get("type") not in ("tool_use", "image"):
-        keys_to_remove.add("id")
-
-    return {k: v for k, v in block.items() if k not in keys_to_remove}
+    return {
+        k: v for k, v in block.items() if k not in ("index", "partial_json", "caller")
+    }
 
 
 def _clean_content(content: Any) -> Any:
