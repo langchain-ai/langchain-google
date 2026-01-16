@@ -317,7 +317,7 @@ def _format_messages_anthropic(
             continue
         formatted_messages.append(fm)
 
-    # --- FIX START: Sanitize trailing whitespace in prefill (last assistant message) ---
+    # --- FIX: Sanitize trailing whitespace in prefill ---
     if formatted_messages:
         last_msg = formatted_messages[-1]
         if last_msg["role"] == "assistant":
