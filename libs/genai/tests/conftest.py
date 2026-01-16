@@ -1,6 +1,7 @@
 """Tests configuration to be executed before tests execution."""
 
 from collections.abc import Generator
+from typing import Any
 import os
 
 import pytest
@@ -83,7 +84,7 @@ def _is_quota_exhausted_error(error: BaseException) -> bool:
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(
     item: pytest.Item, call: pytest.CallInfo
-) -> Generator[None, None, None]:
+) -> Generator[None, Any, None]:
     outcome = yield
     report = outcome.get_result()
     if report.when != "call" or not report.failed:
