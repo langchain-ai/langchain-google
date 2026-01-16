@@ -1243,14 +1243,30 @@ def test_context_catching() -> None:
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    if isinstance(response.content, str):
+        content_text = response.content
+    else:
+        content_text = " ".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    assert isinstance(content_text, str)
 
     # Using cached content in request
     chat = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    if isinstance(response.content, str):
+        content_text = response.content
+    else:
+        content_text = " ".join(
+            block.get("text", "")
+            for block in response.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    assert isinstance(content_text, str)
 
 
 @pytest.mark.extended
