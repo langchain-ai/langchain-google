@@ -2797,6 +2797,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         image_config = kwargs.pop("image_config", None)
 
+        labels = kwargs.pop("labels", None)
+        if labels is None:
+            labels = self.labels
+
         _consumed_kwargs = {
             "thinking_budget",
             "thinking_level",
@@ -2824,6 +2828,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             timeout=timeout,
             max_retries=max_retries,
             image_config=image_config,
+            labels=labels,
             **remaining_kwargs,
         )
 
@@ -2971,6 +2976,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         timeout: int | None = None,
         max_retries: int | None = None,
         image_config: dict[str, Any] | None = None,
+        labels: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
@@ -3001,6 +3007,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             system_instruction=system_instruction,
             http_options=http_options,
             image_config=image_config_obj,
+            labels=labels,
             **params.model_dump(exclude_unset=True),
             **kwargs,
         )
