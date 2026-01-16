@@ -362,21 +362,22 @@ def mock_search_response(
             SearchResponse as BetaSearchResponse,
         )
 
-        Document = BetaDocument
-        Response = BetaSearchResponse
+        document_cls = BetaDocument
+        response_cls = BetaSearchResponse
     else:
         from google.cloud.discoveryengine_v1 import (
             Document,
             SearchResponse,
         )
 
-        Response = SearchResponse
+        document_cls = Document
+        response_cls = SearchResponse
 
-    return Response(
+    return response_cls(
         results=[
-            Response.SearchResult(
+            response_cls.SearchResult(
                 id="mock-id-1",
-                document=Document(
+                document=document_cls(
                     name="mock-name-1",
                     id="mock-id-1",
                     struct_data={"url": "mock-url-1", "title": "Mock Title 1"},
@@ -402,9 +403,9 @@ def mock_search_response(
                     },
                 ),
             ),
-            Response.SearchResult(
+            response_cls.SearchResult(
                 id="mock-id-2",
-                document=Document(
+                document=document_cls(
                     name="mock-name-2",
                     id="mock-id-2",
                     struct_data={"url": "mock-url-2", "title": "Mock Title 2"},

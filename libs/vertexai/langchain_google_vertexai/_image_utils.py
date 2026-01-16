@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import mimetypes
 import os
 import re
 from enum import Enum
@@ -112,7 +113,10 @@ class ImageBytesLoader:
             bytes_ = self._bytes_from_b64(image_string)
 
         if route == Route.URL:
-            bytes_ = self._bytes_from_url(image_string)
+            mime_type, _ = mimetypes.guess_type(image_string)
+            if not mime_type:
+                mime_type = "application/octet-stream"
+            return Part.from_uri(uri=image_string, mime_type=mime_type)
 
         if route == Route.LOCAL_FILE:
             msg = (

@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 import aiohttp
-import requests
+import requests  # type: ignore[import-untyped]
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
