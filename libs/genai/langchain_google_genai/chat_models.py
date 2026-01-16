@@ -2216,6 +2216,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Refer to the Gemini API [docs](https://ai.google.dev/gemini-api/docs/structured-output)
     for more details on supported JSON Schema features.
     """
+    thinking_mode: str | None = None
+    """Optional. The thinking mode to use (e.g., 'enabled')."""
+
+    thinking_config: dict[str, Any] | None = None
+    """Optional. The configuration for the thinking model."""
 
     thinking_level: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
@@ -2560,7 +2565,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def _supports_thinking(self) -> bool:
         """Check if the current model supports thinking capabilities."""
         return self.profile.get("reasoning_output", False) if self.profile else False
-
     def _prepare_params(
         self,
         stop: list[str] | None,
@@ -2569,6 +2573,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> GenerationConfig:
         """Prepare generation parameters with config logic."""
         gen_config = self._build_base_generation_config(stop, **kwargs)
+        
+        # --- NEW LOGIC START ---
+        # Only inject thinking_config. thinking_mode is not valid in GenerationConfig.
+        if self.thinking_config:
+            gen_config["thinking_config"] = self.thinking_config
+        # --- NEW LOGIC END ---
+
         if generation_config:
             gen_config = self._merge_generation_config(gen_config, generation_config)
 
@@ -2576,7 +2587,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         gen_config = self._add_response_parameters(gen_config, **kwargs)
 
         return GenerationConfig.model_validate(gen_config)
-
     def _build_base_generation_config(
         self, stop: list[str] | None, **kwargs: Any
     ) -> dict[str, Any]:
