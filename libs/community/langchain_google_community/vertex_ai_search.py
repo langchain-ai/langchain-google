@@ -57,8 +57,12 @@ if TYPE_CHECKING:
     ]
 
 
-def _load(dump: Dict[str, Any]) -> Any:
-    return load(dump, valid_namespaces=["langchain_google_community"])
+def _load(dump: Dict[str, Any], retriever_cls: type) -> Any:
+    return load(
+        dump,
+        valid_namespaces=["langchain_google_community"],
+        allowed_objects=[retriever_cls],
+    )
 
 
 class _BaseVertexAISearchRetriever(Serializable):
@@ -77,14 +81,14 @@ class _BaseVertexAISearchRetriever(Serializable):
     credentials: Any = None
     """The default custom credentials (`google.auth.credentials.Credentials`) to use
     when making API calls.
-    
+
     If not provided, credentials will be ascertained from the environment.
     """
 
     engine_data_type: int = Field(default=0, ge=0, le=2)
     """ Defines the Vertex AI Search data type
-    
-    `0` - Unstructured data 
+
+    `0` - Unstructured data
     `1` - Structured data
     `2` - Website data
     """
@@ -113,7 +117,7 @@ class _BaseVertexAISearchRetriever(Serializable):
         return True
 
     def __reduce__(self) -> Any:
-        return _load, (self.to_json(),)
+        return _load, (self.to_json(), type(self))
 
     @model_validator(mode="before")
     @classmethod
@@ -308,42 +312,42 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
     return_extractive_segment_score: bool = False
     """If `True`, the relevance score for each extractive segment will be included in
     the search results.
-    
+
     This can be useful for ranking or filtering segments.
     """
 
     num_previous_segments: int = Field(default=1, ge=1, le=3)
     """Specifies the number of text segments preceding the matched segment to return.
-    
+
     This provides context before the relevant text.
-    
+
     Value must be between `1` and `3`.
     """
 
     num_next_segments: int = Field(default=1, ge=1, le=3)
     """Specifies the number of text segments following the matched segment to return.
-    
+
     This provides context after the relevant text.
-    
+
     Value must be between `1` and `3`.
     """
 
     query_expansion_condition: int = Field(default=1, ge=0, le=2)
     """Specification to determine under which conditions query expansion should occur.
-    
-    `0` - Unspecified query expansion condition. In this case, server behavior defaults 
+
+    `0` - Unspecified query expansion condition. In this case, server behavior defaults
         to disabled.
-    `1` - Disabled query expansion. Only the exact search query is used, even if 
+    `1` - Disabled query expansion. Only the exact search query is used, even if
         `SearchResponse.total_size` is zero.
     `2` - Automatic query expansion built by the Search API.
     """
 
     spell_correction_mode: int = Field(default=2, ge=0, le=2)
     """Specification to determine under which conditions query expansion should occur.
-    
-    `0` - Unspecified spell correction mode. In this case, server behavior defaults 
+
+    `0` - Unspecified spell correction mode. In this case, server behavior defaults
         to auto.
-    `1` - Suggestion only. Search API will try to find a spell suggestion if there is 
+    `1` - Suggestion only. Search API will try to find a spell suggestion if there is
         any and put in the `SearchResponse.corrected_query`.
         The spell suggestion will not be used as the search query.
     `2` - Automatic spell correction built by the Search API.
@@ -352,21 +356,21 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
     boost_spec: Optional[Dict[Any, Any]] = None
     """BoostSpec for boosting search results. A protobuf should be provided.
-    
+
     https://cloud.google.com/generative-ai-app-builder/docs/boost-search-results
     https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/BoostSpec
     """
 
     custom_embedding: Optional[Any] = None
     """Custom embedding model for the retriever. (Bring your own embedding)
-    
+
     It needs to match the embedding model that was used to embed docs in the datastore.
-    
+
     It needs to be a langchain embedding `VertexAIEmbeddings(project="{PROJECT}")`
-    
-    If you provide an embedding model, you also need to provide a ranking_expression 
+
+    If you provide an embedding model, you also need to provide a ranking_expression
         and a `custom_embedding_field_path`.
-    
+
     https://cloud.google.com/generative-ai-app-builder/docs/bring-embeddings
     """
 
@@ -376,11 +380,11 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
 
     custom_embedding_ratio: Optional[float] = Field(default=0.0, ge=0.0, le=1.0)
     """Controls the ranking of results.
-    
+
     Value should be between `0` and `1`.
-    
+
     Will generate the ranking_expression in the following manner:
-    
+
     `"{custom_embedding_ratio} * dotProduct({custom_embedding_field_path}) +
     {1 - custom_embedding_ratio} * relevance_score"`
     """

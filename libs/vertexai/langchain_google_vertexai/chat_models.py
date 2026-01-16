@@ -2340,6 +2340,69 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         )
         return response.total_tokens
 
+    def get_num_tokens_from_messages(
+        self,
+        messages: Sequence[BaseMessage],
+        tools: Sequence[Any] | None = None,
+    ) -> int:
+        """Get the number of tokens in the messages.
+
+        Uses the Vertex AI count_tokens API to accurately count tokens,
+        including multi-modal content like images and videos.
+
+        Args:
+            messages: The list of messages to count tokens for.
+            tools: Optional list of tools to include in token count.
+                Currently not supported and will be ignored.
+
+        Returns:
+            The total number of tokens in the messages.
+
+        Example:
+            ```python
+            from langchain_core.messages import HumanMessage
+            from langchain_google_vertexai import ChatVertexAI
+
+            llm = ChatVertexAI(model="gemini-2.0-flash")
+
+            # Text-only message
+            messages = [HumanMessage(content="Hello, world!")]
+            token_count = llm.get_num_tokens_from_messages(messages)
+
+            # Multi-modal message with image
+            messages = [
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "What is in this image?"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64,..."},
+                        },
+                    ]
+                )
+            ]
+            token_count = llm.get_num_tokens_from_messages(messages)
+            ```
+        """
+        if tools:
+            logger.warning(
+                "Tool token counting is not yet supported for ChatVertexAI. "
+                "The tools parameter will be ignored."
+            )
+        _, contents = _parse_chat_history_gemini(
+            list(messages),
+            self._image_bytes_loader_client,
+            perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
+        )
+        response = self.prediction_client.count_tokens(  # type: ignore[union-attr]
+            {
+                "endpoint": self.full_model_name,
+                "model": self.full_model_name,
+                "contents": contents,
+            }
+        )
+        return response.total_tokens
+
     def _tools_gemini(
         self,
         tools: _ToolsType | None = None,
