@@ -1032,7 +1032,7 @@ def test_python_literal_inputs() -> None:
                 )
             ),
             AIMessage(
-                content=["Mike age is 30", "Arthur age is 30"],
+                    content="Mike age is 30Arthur age is 30",
                 additional_kwargs={},
             ),
         ),
