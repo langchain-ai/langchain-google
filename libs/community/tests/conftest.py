@@ -3,7 +3,7 @@ Tests configuration to be executed before tests execution.
 """
 
 import asyncio
-from typing import List
+from typing import Generator, List
 
 import pytest
 
@@ -66,7 +66,7 @@ def pytest_collection_modifyitems(
 
 
 @pytest.fixture
-def event_loop() -> asyncio.AbstractEventLoop:
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     """Provide a clean event loop and ensure pending tasks are cancelled."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
