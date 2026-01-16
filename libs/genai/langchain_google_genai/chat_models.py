@@ -840,6 +840,22 @@ def _append_to_content(
     raise TypeError(msg)
 
 
+def _collapse_text_content(content: list[Any]) -> str | list[Any]:
+    """Collapse list content into a string when it only contains plain text."""
+    if not content:
+        return ""
+    if all(isinstance(item, str) for item in content):
+        return "".join(content)
+    if all(
+        isinstance(item, dict)
+        and item.get("type") == "text"
+        and set(item.keys()).issubset({"type", "text"})
+        for item in content
+    ):
+        return "".join(item.get("text", "") for item in content)
+    return content
+
+
 def _convert_integer_like_floats(obj: Any) -> Any:
     """Convert integer-like floats to integers recursively.
 
@@ -1088,6 +1104,8 @@ def _parse_response_candidate(
             content = []
         else:
             content = ""
+    if isinstance(content, list):
+        content = _collapse_text_content(content)
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
