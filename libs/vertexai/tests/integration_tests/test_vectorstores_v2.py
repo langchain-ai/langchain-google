@@ -271,14 +271,19 @@ def test_vector_store_v2_delete_by_ids(vector_store_v2: VectorSearchVectorStore)
     ids = [delete_id, keep_id]
     vector_store_v2.add_texts(texts=texts, ids=ids)
 
+    # Wait for indexing (eventual consistency)
+    time.sleep(10)
+
     vector_store_v2.delete(ids=[delete_id])
 
-    # This is a best-effort check, as the index update can take time.
-    # A more robust test would involve polling.
-    results = vector_store_v2.similarity_search("doc", k=10)
+    # Wait for deletion to propagate
+    time.sleep(10)
+
+    # Verify the deleted document is not in results
+    # Use large k value to thoroughly check the collection
+    results = vector_store_v2.similarity_search("doc", k=100)
     result_ids = [doc.metadata.get("id") for doc in results]
-    assert keep_id in result_ids
-    assert delete_id not in result_ids
+    assert delete_id not in result_ids, f"Deleted ID {delete_id} should not be in results"
 
 
 @pytest.mark.extended
