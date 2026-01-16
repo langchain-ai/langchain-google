@@ -106,4 +106,7 @@ def backend_config(request: pytest.FixtureRequest) -> dict:
             pytest.skip("Vertex AI requires GOOGLE_CLOUD_PROJECT env var")
         return {"vertexai": True, "project": project, "api_key": None}
     # Google AI backend (default)
-    return {}
+    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        pytest.skip("Google AI requires GOOGLE_API_KEY or GEMINI_API_KEY env var")
+    return {"api_key": api_key}
