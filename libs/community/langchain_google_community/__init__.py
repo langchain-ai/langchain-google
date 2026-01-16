@@ -18,6 +18,7 @@ from langchain_google_community.calendar.toolkit import (
 from langchain_google_community.callbacks import (
     AsyncBigQueryCallbackHandler,
     BigQueryCallbackHandler,
+    BigQueryLoggerConfig,
 )
 from langchain_google_community.docai import DocAIParser, DocAIParsingResults
 from langchain_google_community.documentai_warehouse import DocumentAIWarehouseRetriever
@@ -81,6 +82,7 @@ __all__ = [
     "AsyncBigQueryCallbackHandler",
     "BigQueryCallbackHandler",
     "BigQueryLoader",
+    "BigQueryLoggerConfig",
     "BigQueryVectorStore",
     "CalendarCreateEvent",
     "CalendarDeleteEvent",
