@@ -662,6 +662,22 @@ def _append_to_content(
     raise TypeError(msg)
 
 
+def _collapse_text_content(content: list[Any]) -> str | list[Any]:
+    """Collapse list content into a string when it only contains plain text."""
+    if not content:
+        return ""
+    if all(isinstance(item, str) for item in content):
+        return "".join(content)
+    if all(
+        isinstance(item, dict)
+        and item.get("type") == "text"
+        and set(item.keys()).issubset({"type", "text"})
+        for item in content
+    ):
+        return "".join(item.get("text", "") for item in content)
+    return content
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: Candidate | VertexCandidate,
@@ -814,6 +830,8 @@ def _parse_response_candidate(
 
     if content is None:
         content = ""
+    if isinstance(content, list):
+        content = _collapse_text_content(content)
 
     if streaming:
         return AIMessageChunk(
