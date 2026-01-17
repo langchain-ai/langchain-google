@@ -73,6 +73,9 @@ from langchain_core.messages import (
     is_data_content_block,
 )
 from langchain_core.messages import content as types
+from langchain_core.messages.block_translators.google_genai import (
+    translate_grounding_metadata_to_citations,
+)
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
@@ -856,6 +859,39 @@ def _collapse_text_content(content: list[Any]) -> str | list[Any]:
     return content
 
 
+def _add_grounding_citations_to_content(
+    message: AIMessage | AIMessageChunk, grounding_metadata: dict[str, Any]
+) -> None:
+    """Attach grounding citations to text content blocks when missing."""
+    if not grounding_metadata or not isinstance(message.content, list):
+        return
+
+    if any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and block.get("annotations")
+        for block in message.content
+    ):
+        return
+
+    citations = translate_grounding_metadata_to_citations(grounding_metadata)
+    if not citations:
+        return
+
+    for idx, block in enumerate(message.content):
+        if isinstance(block, dict) and block.get("type") == "text":
+            if not block.get("annotations"):
+                block["annotations"] = citations
+            return
+        if isinstance(block, str):
+            message.content[idx] = {
+                "type": "text",
+                "text": block,
+                "annotations": citations,
+            }
+            return
+
+
 def _convert_integer_like_floats(obj: Any) -> Any:
     """Convert integer-like floats to integers recursively.
 
@@ -1250,6 +1286,7 @@ def _response_to_result(
                     grounding_metadata["web_search_queries"] = []
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
+                _add_grounding_citations_to_content(message, grounding_metadata)
         except AttributeError:
             pass
 
