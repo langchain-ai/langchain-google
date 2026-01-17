@@ -283,7 +283,9 @@ def test_vector_store_v2_delete_by_ids(vector_store_v2: VectorSearchVectorStore)
     # Use large k value to thoroughly check the collection
     results = vector_store_v2.similarity_search("doc", k=100)
     result_ids = [doc.metadata.get("id") for doc in results]
-    assert delete_id not in result_ids, f"Deleted ID {delete_id} should not be in results"
+    assert delete_id not in result_ids, (
+        f"Deleted ID {delete_id} should not be in results"
+    )
 
 
 @pytest.mark.extended
