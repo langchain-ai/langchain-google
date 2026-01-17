@@ -956,10 +956,7 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
-        elif (
-            (text is not None and text)  # text part with non-empty string
-            or (part.text is not None and thought_sig)  # text part w/ thought sig
-        ):
+        elif text is not None and text:
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
