@@ -677,7 +677,7 @@ def test_default_metadata_field_alias() -> None:
                 }
             },
             AIMessage(
-                    content="Mike age is 30Arthur age is 30",
+                content="Mike age is 30Arthur age is 30",
                 additional_kwargs={},
             ),
         ),
