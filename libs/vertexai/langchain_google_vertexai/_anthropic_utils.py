@@ -45,16 +45,24 @@ _message_type_lookups = {
 
 
 def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
+    """Create `UsageMetadata` from Anthropic usage with proper cache token handling.
+
+    This matches the official `langchain_anthropic` implementation exactly.
+    """
     input_token_details: dict = {
         "cache_read": getattr(anthropic_usage, "cache_read_input_tokens", None),
         "cache_creation": getattr(anthropic_usage, "cache_creation_input_tokens", None),
     }
+
+    # Anthropic input_tokens exclude cached token counts.
     input_tokens = (
         (getattr(anthropic_usage, "input_tokens", 0) or 0)
         + (input_token_details["cache_read"] or 0)
         + (input_token_details["cache_creation"] or 0)
     )
     output_tokens = getattr(anthropic_usage, "output_tokens", 0) or 0
+
+    # Only add input_token_details if we have non-None cache values
     filtered_details = {k: v for k, v in input_token_details.items() if v is not None}
     if filtered_details:
         return UsageMetadata(
@@ -71,6 +79,7 @@ def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
 
 
 def _format_image(image_url: str, project: str | None) -> dict:
+    """Formats a message image to a dict for Anthropic API."""
     regex = r"^data:(?P<media_type>(?:image|application)/.+);base64,(?P<data>.+)$"
     match = re.match(regex, image_url)
     if match:
@@ -96,6 +105,7 @@ def _format_image(image_url: str, project: str | None) -> dict:
             "data": base64.b64encode(image_bytes).decode("ascii"),
         }
     if image_url.startswith("gs://"):
+        # Gets image and encodes to base64.
         loader = ImageBytesLoader(project=project)
         part = loader.load_part(image_url)
         if part.file_data.mime_type:
@@ -118,6 +128,7 @@ def _format_image(image_url: str, project: str | None) -> dict:
 
 
 def _get_cache_control(message: BaseMessage) -> dict[str, Any] | None:
+    """Extract cache control from message's `additional_kwargs` or content block."""
     return (
         message.additional_kwargs.get("cache_control")
         if isinstance(message.additional_kwargs, dict)
@@ -126,6 +137,7 @@ def _get_cache_control(message: BaseMessage) -> dict[str, Any] | None:
 
 
 def _format_text_content(text: str) -> dict[str, str | dict[str, Any]]:
+    """Format text content."""
     content: dict[str, str | dict[str, Any]] = {"type": "text", "text": text}
     return content
 
@@ -133,11 +145,21 @@ def _format_text_content(text: str) -> dict[str, str | dict[str, Any]]:
 def _format_message_anthropic(
     message: HumanMessage | AIMessage | SystemMessage, project: str | None
 ):
+    """Format a message for Anthropic API.
+
+    Args:
+        message: The message to format. Can be `HumanMessage`, `AIMessage`, or
+            `SystemMessage`.
+
+    Returns:
+        A `dict` with the formatted message, or `None` if the message is empty.
+    """
     content: list[dict[str, Any]] = []
 
     if isinstance(message.content, str):
         if not message.content.strip():
             if not (isinstance(message, AIMessage) and message.tool_calls):
+                # We still have tool calls to process
                 return None
         else:
             message_dict = _format_text_content(message.content)
@@ -147,6 +169,9 @@ def _format_message_anthropic(
     elif isinstance(message.content, list):
         for block in message.content:
             if isinstance(block, str):
+                # Only add non-empty strings for now as empty ones are not
+                # accepted.
+                # https://github.com/anthropics/anthropic-sdk-python/issues/461
                 if not block.strip():
                     continue
                 content.append(_format_text_content(block))
@@ -162,9 +187,11 @@ def _format_message_anthropic(
                         new_block[copy_attr] = block[copy_attr]
 
                 if block["type"] == "image":
+                    # Fixes KeyError by checking keys directly instead of source_type
                     if "url" in block:
                         url = block["url"]
                         if url.startswith("data:"):
+                            # Data URI
                             formatted_block = {
                                 "type": "image",
                                 "source": _format_image(url, project),
@@ -191,6 +218,8 @@ def _format_message_anthropic(
                                 "file_id": block["file_id"],
                             },
                         }
+                    # Backward compatibility for langchain < 1.X
+                    # where source_type was used
                     elif "data" in block and block.get("source_type", None) == "base64":
                         formatted_block = {
                             "type": "image",
@@ -219,6 +248,9 @@ def _format_message_anthropic(
 
                 if block["type"] == "text":
                     text: str = block.get("text", "")
+                    # Only add non-empty strings for now as empty ones are not
+                    # accepted.
+                    # https://github.com/anthropics/anthropic-sdk-python/issues/461
                     if text.strip():
                         new_block["text"] = text
                         content.append(new_block)
@@ -245,6 +277,7 @@ def _format_message_anthropic(
                     continue
 
                 if block["type"] == "image_url":
+                    # convert format
                     source = _format_image(block["image_url"]["url"], project)
                     if source["media_type"] == "application/pdf":
                         doc_type = "document"
@@ -254,6 +287,8 @@ def _format_message_anthropic(
                     continue
 
                 if block["type"] == "tool_use":
+                    # If a tool_call with the same id as a tool_use content block
+                    # exists, the tool_call is preferred.
                     if isinstance(message, AIMessage) and message.tool_calls:
                         is_unique = block["id"] not in [
                             tc["id"] for tc in message.tool_calls
@@ -263,7 +298,9 @@ def _format_message_anthropic(
 
                 content.append(block)
     else:
-        msg = "Message should be a str, list of str or list of dicts"
+        msg = (  # type: ignore[unreachable]
+            "Message should be a str, list of str or list of dicts"
+        )
         raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
@@ -283,6 +320,7 @@ def _format_messages_anthropic(
     messages: list[BaseMessage],
     project: str | None,
 ) -> tuple[dict[str, Any] | None, list[dict]]:
+    """Formats messages for Anthropic."""
     system_messages: dict[str, Any] | None = None
     formatted_messages: list[dict] = []
 
@@ -327,6 +365,7 @@ class AnthropicTool(TypedDict):
 def convert_to_anthropic_tool(
     tool: dict[str, Any] | type[BaseModel] | Callable | BaseTool,
 ) -> AnthropicTool:
+    # Already in Anthropic tool format
     if isinstance(tool, dict) and all(
         k in tool for k in ("name", "description", "input_schema")
     ):
@@ -340,11 +379,27 @@ def convert_to_anthropic_tool(
 
 
 def _clean_content_block(block: Any) -> Any:
+    """Remove streaming metadata fields from content blocks.
+
+    Anthropic's streaming API adds `index` and `partial_json` fields to content blocks
+    during streaming. These fields must be removed before sending back to the API.
+
+    Args:
+        block: Content block (`dict`, `str`, or other type)
+
+    Returns:
+        Cleaned content block with streaming metadata removed
+    """
     if not isinstance(block, dict):
         return block
 
+    # Remove known streaming metadata fields
+    # 'index' - added during streaming to track block position
+    # 'partial_json' - added during streaming for incremental JSON parsing
     keys_to_remove = {"index", "partial_json", "caller"}
 
+    # The id field is required for tool_use blocks and some image blocks,
+    # but forbidden in text blocks (specifically inside tool_results).
     if block.get("type") not in ("tool_use", "image"):
         keys_to_remove.add("id")
 
@@ -352,6 +407,14 @@ def _clean_content_block(block: Any) -> Any:
 
 
 def _clean_content(content: Any) -> Any:
+    """Recursively clean content (`str`, `list`, or `dict`).
+
+    Args:
+        content: Content to clean (can be `str`, `list`, `dict`, or other)
+
+    Returns:
+        Cleaned content with streaming metadata removed
+    """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -364,22 +427,27 @@ def _clean_content(content: Any) -> Any:
 def _merge_messages(
     messages: Sequence[BaseMessage],
 ) -> list[SystemMessage | AIMessage | HumanMessage]:
+    """Merge runs of human/tool messages into single human messages with content blocks."""  # noqa: E501
     merged: list = []
     for curr in messages:
         curr = curr.model_copy(deep=True)
         if isinstance(curr, ToolMessage):
+            # Check if already in tool_result format (backward compatibility)
             if isinstance(curr.content, list) and all(
                 isinstance(block, dict) and block.get("type") == "tool_result"
                 for block in curr.content
             ):
+                # Already formatted - just convert to HumanMessage and clean content
                 cleaned_content = _clean_content(curr.content)
                 curr = HumanMessage(cleaned_content)
             else:
+                # Convert to tool_result format
                 tool_result_block = {
                     "type": "tool_result",
                     "content": _clean_content(curr.content),
                     "tool_use_id": curr.tool_call_id,
                 }
+                # Add error flag if present
                 if curr.status == "error":
                     tool_result_block["is_error"] = True
 
@@ -391,6 +459,7 @@ def _merge_messages(
 
                 curr = HumanMessage([tool_result_block])
         elif isinstance(curr, AIMessage):
+            # Clean streaming metadata from AIMessage content blocks
             if isinstance(curr.content, list):
                 cleaned_content = _clean_content(curr.content)
                 if cleaned_content != curr.content:
@@ -436,9 +505,18 @@ def _make_message_chunk_from_anthropic_event(
     stream_usage: bool = True,
     coerce_content_to_string: bool,
 ) -> AIMessageChunk | None:
+    """Convert Anthropic event to `AIMessageChunk`.
+
+    Note that not all events will result in a message chunk. In these cases we return
+    `None`.
+    """
     message_chunk: AIMessageChunk | None = None
+    # See https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/lib/streaming/_messages.py  # noqa: E501
     if event.type == "message_start" and stream_usage:
+        # Follow official langchain_anthropic pattern exactly
         usage_metadata = _create_usage_metadata(event.message.usage)
+        # We pick up a cumulative count of output_tokens at the end of the stream,
+        # so here we zero out to avoid double counting.
         usage_metadata["total_tokens"] = (
             usage_metadata["total_tokens"] - usage_metadata["output_tokens"]
         )
@@ -503,6 +581,8 @@ def _make_message_chunk_from_anthropic_event(
                 tool_call_chunks=[tool_call_chunk],
             )
     elif event.type == "message_delta" and stream_usage:
+        # Follow official langchain_anthropic pattern - NO cache tokens for delta
+        # Only output tokens are provided in message_delta events
         usage_metadata = {
             "input_tokens": 0,
             "output_tokens": event.usage.output_tokens,
