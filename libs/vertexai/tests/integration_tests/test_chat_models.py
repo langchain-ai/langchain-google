@@ -1163,10 +1163,13 @@ def test_json_mode_typeddict() -> None:
     assert response == {"name": "Erick", "age": 28}
 
     # Test stream
+    last_non_empty: dict[str, object] | None = None
     for chunk in model.stream([message]):
         assert isinstance(chunk, dict)
         assert all(key in ["name", "age"] for key in chunk)
-    assert chunk == {"name": "Erick", "age": 28}
+        if chunk:
+            last_non_empty = chunk
+    assert last_non_empty == {"name": "Erick", "age": 28}
 
 
 @pytest.mark.extended
