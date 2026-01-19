@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 import pytest
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -9,8 +9,8 @@ def test_validate_response_modalities() -> None:
     llm = ChatGoogleGenerativeAI(model="gemini-fake", api_key="test_key")
 
     # Manually inject a profile to ensure deterministic testing
-    # type: ignore[assignment] used because we are assigning a partial dict to a TypedDict
-    llm.profile = {"output_modalities": ["TEXT", "AUDIO"]}  # type: ignore[assignment]
+    # Use cast(Any, ...) to bypass strict TypedDict assignment checks
+    llm.profile = cast(Any, {"output_modalities": ["TEXT", "AUDIO"]})
 
     # 2. Test VALID configuration (should pass)
     try:
@@ -33,7 +33,7 @@ def test_validate_response_modalities() -> None:
 def test_validate_no_modalities_set() -> None:
     """Test that nothing breaks if no modalities are requested."""
     llm = ChatGoogleGenerativeAI(model="gemini-fake", api_key="test_key")
-    llm.profile = {"output_modalities": ["TEXT"]}  # type: ignore[assignment]
+    llm.profile = cast(Any, {"output_modalities": ["TEXT"]})
 
     # Should not raise error
     llm._validate_response_modalities({})
