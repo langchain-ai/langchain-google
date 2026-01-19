@@ -239,7 +239,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
         # Build headers with user agent
         _, user_agent = get_user_agent("GoogleGenerativeAIEmbeddings")
-        headers = {"User-Agent": user_agent}
+        headers = {"user-agent": user_agent}
         if self.additional_headers:
             headers.update(self.additional_headers)
 
