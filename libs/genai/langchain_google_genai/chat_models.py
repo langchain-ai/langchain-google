@@ -73,6 +73,9 @@ from langchain_core.messages import (
     is_data_content_block,
 )
 from langchain_core.messages import content as types
+from langchain_core.messages.block_translators.google_genai import (
+    translate_grounding_metadata_to_citations,
+)
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
@@ -230,53 +233,71 @@ def _convert_to_parts(
                     )
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
+                    part_kwargs: dict[str, Any] = {}
+                    mime_type = part.get("mime_type")
 
                     if "source_type" in part:
                         # Catch legacy v0 formats
                         # Safe since v1 content blocks don't have `source_type` key
                         if part["source_type"] == "url":
-                            bytes_ = image_loader._bytes_from_url(part["url"])
+                            url = part.get("url")
+                            if not url:
+                                msg = "Data content block must contain 'url'."
+                                raise ValueError(msg)
+                            if not mime_type:
+                                mime_type, _ = mimetypes.guess_type(url)
+                            part_kwargs["file_data"] = FileData(
+                                file_uri=url, mime_type=mime_type
+                            )
                         elif part["source_type"] == "base64":
                             bytes_ = base64.b64decode(part["data"])
+                            if not mime_type:
+                                # Guess MIME type based on data field if not provided
+                                source = cast("str", part.get("data"))
+                                mime_type, _ = mimetypes.guess_type(source)
+                                if not mime_type:
+                                    # Last resort - try to guess based on file bytes
+                                    kind = filetype.guess(bytes_)
+                                    if kind:
+                                        mime_type = kind.mime
+                            blob_kwargs: dict[str, Any] = {"data": bytes_}
+                            if mime_type:
+                                blob_kwargs["mime_type"] = mime_type
+                            part_kwargs["inline_data"] = Blob(**blob_kwargs)
                         else:
                             # Unable to support IDContentBlock
                             msg = "source_type must be url or base64."
                             raise ValueError(msg)
                     elif "url" in part:
                         # v1 multimodal block w/ URL
-                        bytes_ = image_loader._bytes_from_url(part["url"])
+                        url = part["url"]
+                        if not mime_type:
+                            mime_type, _ = mimetypes.guess_type(url)
+                        part_kwargs["file_data"] = FileData(
+                            file_uri=url, mime_type=mime_type
+                        )
                     elif "base64" in part:
                         # v1 multimodal block w/ base64
                         bytes_ = base64.b64decode(part["base64"])
+                        if not mime_type:
+                            # Guess MIME type based on data field if not provided
+                            source = cast("str", part.get("base64"))
+                            mime_type, _ = mimetypes.guess_type(source)
+                            if not mime_type:
+                                # Last resort - try to guess based on file bytes
+                                kind = filetype.guess(bytes_)
+                                if kind:
+                                    mime_type = kind.mime
+                        blob_kwargs = {"data": bytes_}
+                        if mime_type:
+                            blob_kwargs["mime_type"] = mime_type
+                        part_kwargs["inline_data"] = Blob(**blob_kwargs)
                     else:
                         msg = (
                             "Data content block must contain 'url', 'base64', or "
                             "'data' field."
                         )
                         raise ValueError(msg)
-
-                    mime_type = part.get("mime_type")
-                    if not mime_type:
-                        # Guess MIME type based on data field if not provided
-                        source = cast(
-                            "str",
-                            part.get("url") or part.get("base64") or part.get("data"),
-                        )
-                        mime_type, _ = mimetypes.guess_type(source)
-                        if not mime_type:
-                            # Last resort - try to guess based on file bytes
-                            kind = filetype.guess(bytes_)
-                            if kind:
-                                mime_type = kind.mime
-                    blob_kwargs: dict[str, Any] = {
-                        "data": bytes_,
-                    }
-                    if mime_type:
-                        blob_kwargs["mime_type"] = mime_type
-
-                    part_kwargs: dict[str, Any] = {
-                        "inline_data": Blob(**blob_kwargs),
-                    }
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
                             warnings.warn(
@@ -822,6 +843,55 @@ def _append_to_content(
     raise TypeError(msg)
 
 
+def _collapse_text_content(content: list[Any]) -> str | list[Any]:
+    """Collapse list content into a string when it only contains plain text."""
+    if not content:
+        return ""
+    if all(isinstance(item, str) for item in content):
+        return "".join(content)
+    if all(
+        isinstance(item, dict)
+        and item.get("type") == "text"
+        and set(item.keys()).issubset({"type", "text"})
+        for item in content
+    ):
+        return "".join(item.get("text", "") for item in content)
+    return content
+
+
+def _add_grounding_citations_to_content(
+    message: AIMessage | AIMessageChunk, grounding_metadata: dict[str, Any]
+) -> None:
+    """Attach grounding citations to text content blocks when missing."""
+    if not grounding_metadata or not isinstance(message.content, list):
+        return
+
+    if any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and block.get("annotations")
+        for block in message.content
+    ):
+        return
+
+    citations = translate_grounding_metadata_to_citations(grounding_metadata)
+    if not citations:
+        return
+
+    for idx, block in enumerate(message.content):
+        if isinstance(block, dict) and block.get("type") == "text":
+            if not block.get("annotations"):
+                block["annotations"] = citations
+            return
+        if isinstance(block, str):
+            message.content[idx] = {
+                "type": "text",
+                "text": block,
+                "annotations": citations,
+            }
+            return
+
+
 def _convert_integer_like_floats(obj: Any) -> Any:
     """Convert integer-like floats to integers recursively.
 
@@ -922,10 +992,7 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
-        elif (
-            (text is not None and text)  # text part with non-empty string
-            or (part.text is not None and thought_sig)  # text part w/ thought sig
-        ):
+        elif text is not None and text:
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
@@ -1070,6 +1137,8 @@ def _parse_response_candidate(
             content = []
         else:
             content = ""
+    if isinstance(content, list):
+        content = _collapse_text_content(content)
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
@@ -1217,6 +1286,7 @@ def _response_to_result(
                     grounding_metadata["web_search_queries"] = []
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
+                _add_grounding_citations_to_content(message, grounding_metadata)
         except AttributeError:
             pass
 
