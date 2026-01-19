@@ -1,5 +1,8 @@
 """Tests configuration to be executed before tests execution."""
 
+from collections.abc import Generator
+from typing import Any
+
 import pytest
 
 _RELEASE_FLAG = "release"
@@ -55,3 +58,10 @@ def pytest_collection_modifyitems(
         if keywords and not any(config.getoption(f"--{kw}") for kw in keywords):
             skip = pytest.mark.skip(reason=f"need --{keywords[0]} option to run")
             item.add_marker(skip)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo
+) -> Generator[None, Any, None]:
+    yield
