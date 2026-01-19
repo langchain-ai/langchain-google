@@ -298,9 +298,7 @@ def _format_message_anthropic(
 
                 content.append(block)
     else:
-        msg = (  # type: ignore[unreachable]
-            "Message should be a str, list of str or list of dicts"
-        )
+        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable]  # noqa: E501
         raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
