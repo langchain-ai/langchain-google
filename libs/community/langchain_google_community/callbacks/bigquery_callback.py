@@ -261,6 +261,21 @@ def _get_bigquery_events_schema(bigquery_module: Any) -> list[Any]:
             fields=[
                 bigquery_module.SchemaField("mime_type", "STRING", mode="NULLABLE"),
                 bigquery_module.SchemaField("uri", "STRING", mode="NULLABLE"),
+                bigquery_module.SchemaField(
+                    "object_ref",
+                    "RECORD",
+                    mode="NULLABLE",
+                    fields=[
+                        bigquery_module.SchemaField("uri", "STRING", mode="NULLABLE"),
+                        bigquery_module.SchemaField(
+                            "version", "STRING", mode="NULLABLE"
+                        ),
+                        bigquery_module.SchemaField(
+                            "authorizer", "STRING", mode="NULLABLE"
+                        ),
+                        bigquery_module.SchemaField("details", "JSON", mode="NULLABLE"),
+                    ],
+                ),
                 bigquery_module.SchemaField("text", "STRING", mode="NULLABLE"),
                 bigquery_module.SchemaField("part_index", "INTEGER", mode="NULLABLE"),
                 bigquery_module.SchemaField(
@@ -301,6 +316,19 @@ def _get_bigquery_events_schema(bigquery_module: Any) -> list[Any]:
             description="Flag indicating if content was truncated.",
         ),
     ]
+
+
+def _ensure_dataset_exists(
+    bigquery: Any, project_id: str, dataset_id: str, cloud_exceptions: Any
+) -> None:
+    client = bigquery.Client(project=project_id)
+    try:
+        client.get_dataset(dataset_id)
+    except cloud_exceptions.NotFound:
+        raise ValueError(
+            f"Dataset '{dataset_id}' does not exist in project '{project_id}'. "
+            "Please create it before initializing the callback handler."
+        )
 
 
 # ==============================================================================
@@ -1146,6 +1174,88 @@ class _SyncLangChainContentParser:
         return full_summary, content_parts, is_truncated
 
 
+class BaseTraceIdRegistry:
+    """Base Registry to manage run_id to root_run_id mapping for trace correlation."""
+
+    def __init__(self) -> None:
+        self._run_map: Dict[uuid.UUID, uuid.UUID] = {}
+        self._root_map: Dict[uuid.UUID, set[uuid.UUID]] = {}
+
+    def _register_run(
+        self, run_id: uuid.UUID, parent_run_id: uuid.UUID | None = None
+    ) -> str:
+        """Core logic for registering a run."""
+        if run_id in self._run_map:
+            return str(self._run_map[run_id])
+
+        if parent_run_id is None:
+            root_id = run_id
+        else:
+            root_id = self._run_map.get(parent_run_id, parent_run_id)
+
+        self._run_map[run_id] = root_id
+
+        if root_id not in self._root_map:
+            self._root_map[root_id] = set()
+        self._root_map[root_id].add(run_id)
+        return str(root_id)
+
+    def _end_run(self, run_id: uuid.UUID) -> None:
+        """Core logic for ending a run."""
+        if run_id in self._root_map:
+            descendants = self._root_map.pop(run_id)
+            for desc_id in descendants:
+                self._run_map.pop(desc_id, None)
+
+
+class TraceIdRegistry(BaseTraceIdRegistry):
+    """Registry to manage run_id to root_run_id mapping for trace correlation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+
+    def register_run(
+        self, run_id: uuid.UUID, parent_run_id: uuid.UUID | None = None
+    ) -> str:
+        """Registers a run and returns its trace ID.
+
+        If parent_run_id is provided, the run is associated with the parent's trace.
+        Otherwise, a new trace is started with this run as the root.
+        """
+        with self._lock:
+            return self._register_run(run_id, parent_run_id)
+
+    def end_run(self, run_id: uuid.UUID) -> None:
+        """Cleans up resources for a trace when the root run completes."""
+        with self._lock:
+            self._end_run(run_id)
+
+
+class AsyncTraceIdRegistry(BaseTraceIdRegistry):
+    """Async Registry to manage run_id to root_run_id mapping for trace correlation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = asyncio.Lock()
+
+    async def register_run(
+        self, run_id: uuid.UUID, parent_run_id: uuid.UUID | None = None
+    ) -> str:
+        """Registers a run and returns its trace ID.
+
+        If parent_run_id is provided, the run is associated with the parent's trace.
+        Otherwise, a new trace is started with this run as the root.
+        """
+        async with self._lock:
+            return self._register_run(run_id, parent_run_id)
+
+    async def end_run(self, run_id: uuid.UUID) -> None:
+        """Cleans up resources for a trace when the root run completes."""
+        async with self._lock:
+            self._end_run(run_id)
+
+
 # ==============================================================================
 # ASYNC CALLBACK HANDLER
 # ==============================================================================
@@ -1191,7 +1301,12 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         self.async_batch_processor: _AsyncBatchProcessor | None = None
         self._executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
         self.offloader: _GCSOffloader | None = None
+        self.trace_registry = AsyncTraceIdRegistry()
         self._arrow_schema: Any = None
+
+        _ensure_dataset_exists(
+            self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
+        )
 
     async def _ensure_started(self) -> None:
         if self._started:
@@ -1201,8 +1316,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
                 return
             loop = asyncio.get_running_loop()
 
-            self.client = await loop.run_in_executor(  # type: ignore[func-returns-value]
-                self._executor, lambda: self.bigquery.Client(project=self.project_id)
+            self.client = await loop.run_in_executor(
+                self._executor,
+                lambda: self.bigquery.Client(project=self.project_id),
             )
 
             full_table_id = (
@@ -1288,7 +1404,10 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         user_id = metadata.get("user_id")
         agent = metadata.get("agent")
 
-        trace_id = str(run_id)
+        registry_trace_id = await self.trace_registry.register_run(
+            run_id, parent_run_id
+        )
+        trace_id = metadata.get("trace_id") or registry_trace_id or str(run_id)
         span_id = str(run_id)
 
         parser = _LangChainContentParser(
@@ -1458,6 +1577,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             attributes={"usage": usage},
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def on_llm_error(
         self,
@@ -1474,6 +1594,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def on_chain_start(
         self,
@@ -1507,6 +1628,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def on_tool_start(
         self,
@@ -1540,6 +1662,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def on_tool_error(
         self,
@@ -1556,6 +1679,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def on_retriever_start(
         self,
@@ -1590,6 +1714,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def on_retriever_error(
         self,
@@ -1606,6 +1731,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def on_text(
         self,
@@ -1672,6 +1798,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        await self.trace_registry.end_run(run_id)
 
     async def close(self) -> None:
         await self.shutdown()
@@ -1722,7 +1849,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self.batch_processor: _BatchProcessor | None = None
         self._executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
         self.offloader: _GCSOffloader | None = None
+        self.trace_registry = TraceIdRegistry()
         self._arrow_schema: Any = None
+
+        _ensure_dataset_exists(
+            self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
+        )
 
     def _ensure_started(self) -> None:
         if self._started:
@@ -1814,7 +1946,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         user_id = metadata.get("user_id")
         agent = metadata.get("agent")
 
-        trace_id = str(run_id)
+        registry_trace_id = self.trace_registry.register_run(run_id, parent_run_id)
+        trace_id = metadata.get("trace_id") or registry_trace_id or str(run_id)
         span_id = str(run_id)
 
         parser = _SyncLangChainContentParser(
@@ -1972,6 +2105,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             attributes={"usage": usage},
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def on_chain_start(
         self,
@@ -2005,6 +2139,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def on_chain_error(
         self,
@@ -2021,6 +2156,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def on_tool_start(
         self,
@@ -2054,6 +2190,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def on_tool_error(
         self,
@@ -2070,6 +2207,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def on_text(
         self,
@@ -2154,6 +2292,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def on_retriever_error(
         self,
@@ -2170,6 +2309,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def on_llm_error(
         self,
@@ -2186,6 +2326,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
+        self.trace_registry.end_run(run_id)
 
     def close(self) -> None:
         self.shutdown()
