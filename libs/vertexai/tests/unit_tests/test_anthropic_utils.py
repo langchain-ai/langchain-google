@@ -16,6 +16,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.messages.content import create_image_block, create_text_block
 from langchain_core.messages.tool import tool_call as create_tool_call
 
 from langchain_google_vertexai._anthropic_utils import (
@@ -780,6 +781,43 @@ def test_format_messages_anthropic_with_mixed_messages() -> None:
                         },
                     ],
                 },
+            ],
+        ),
+        (
+            [
+                AIMessage(
+                    content_blocks=[
+                        create_text_block(text="Text content"),
+                        create_image_block(url="https://example.com/image.png"),
+                        create_image_block(base64="/9j/4AAQSk", mime_type="image/png"),
+                        create_image_block(file_id="1"),
+                    ]
+                ),
+            ],
+            None,
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Text content"},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "url",
+                                "url": "https://example.com/image.png",
+                            },
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": "/9j/4AAQSk",
+                            },
+                        },
+                        {"type": "image", "source": {"type": "file", "file_id": "1"}},
+                    ],
+                }
             ],
         ),
         (
