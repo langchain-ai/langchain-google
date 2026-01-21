@@ -21,6 +21,7 @@ from typing import (
 )
 
 import filetype  # type: ignore[import-untyped]
+from google.genai import types as genai_types
 from google.genai.client import Client
 from google.genai.errors import ClientError
 from google.genai.types import (
@@ -821,6 +822,54 @@ def _parse_chat_history(
                             first_fc_seen = True
 
     return system_instruction, formatted_messages
+
+
+def _clone_cached_content_with_overrides(
+    client: Client,
+    *,
+    model: str,
+    cache_name: str,
+    tools: list | None,
+    system_instruction: Content | None,
+    tool_config: ToolConfig | None,
+) -> str:
+    """Clone cached content and apply tool/system overrides.
+
+    Raises if the cached content config cannot be read.
+    """
+    cached = client.caches.get(name=cache_name)
+    cached_config = getattr(cached, "config", None)
+    if cached_config is None:
+        msg = (
+            "Unable to read cached content configuration to attach tools or "
+            "system_instruction. Recreate the cache with create_context_cache()."
+        )
+        raise ValueError(msg)
+
+    if hasattr(cached_config, "model_dump"):
+        cache_config_dict = cached_config.model_dump(exclude_unset=True)
+    else:
+        cache_config_dict = {
+            key: value
+            for key, value in cached_config.__dict__.items()
+            if value is not None
+        }
+
+    if system_instruction is not None:
+        cache_config_dict["system_instruction"] = system_instruction
+    if tools is not None:
+        cache_config_dict["tools"] = tools
+    if tool_config is not None:
+        cache_config_dict["tool_config"] = tool_config
+
+    new_cache = client.caches.create(
+        model=model,
+        config=genai_types.CreateCachedContentConfig(**cache_config_dict),
+    )
+    if new_cache.name is None:
+        msg = "Cache name was not set after creation."
+        raise ValueError(msg)
+    return new_cache.name
 
 
 # Helper function to append content consistently
@@ -2885,6 +2934,37 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         formatted_tool_config = self._process_tool_config(
             tool_choice, tool_config, formatted_tools
         )
+
+        # If cached content is set, Gemini forbids tools/system_instruction/tool_config
+        # in the GenerateContent request. Clone the cache to include them instead.
+        cached_content_from_kwargs = cached_content
+        cache_name = cached_content or self.cached_content
+        if cache_name and (
+            formatted_tools or formatted_tool_config or system_instruction is not None
+        ):
+            if self.client is None:
+                msg = "Client not initialized."
+                raise ValueError(msg)
+            if not self.model:
+                msg = "Model name must be specified to create cached content."
+                raise ValueError(msg)
+
+            cache_name = _clone_cached_content_with_overrides(
+                self.client,
+                model=self.model,
+                cache_name=cache_name,
+                tools=formatted_tools,
+                system_instruction=system_instruction,
+                tool_config=formatted_tool_config,
+            )
+            cached_content = cache_name
+            if cached_content_from_kwargs is None:
+                object.__setattr__(self, "cached_content", cache_name)
+
+            # Ensure request does not include forbidden fields
+            formatted_tools = None
+            formatted_tool_config = None
+            system_instruction = None
 
         # Process safety settings
         formatted_safety_settings = self._format_safety_settings(
