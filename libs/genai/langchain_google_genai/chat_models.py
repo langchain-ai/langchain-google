@@ -2870,6 +2870,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             model=self.model,
         )
 
+        # Cached content cannot be combined with tools or system_instruction
+        if (cached_content or self.cached_content) and (
+            formatted_tools or tool_config or system_instruction is not None
+        ):
+            msg = (
+                "Cached content cannot be used with tools, tool_config, or "
+                "system_instruction in a GenerateContent request. "
+                "Move those settings into the cached content configuration."
+            )
+            raise ValueError(msg)
+
         # Process tool configuration
         formatted_tool_config = self._process_tool_config(
             tool_choice, tool_config, formatted_tools
