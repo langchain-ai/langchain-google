@@ -990,10 +990,11 @@ def _parse_response_candidate(
                 thought_sig = None
 
         if hasattr(part, "thought") and part.thought:
+            thought_text = part.text or ""
             if output_version == "v1":
                 reasoning_message = {
                     "type": "reasoning",
-                    "reasoning": part.text,
+                    "reasoning": thought_text,
                 }
                 if thought_sig:
                     reasoning_message["extras"] = {"signature": thought_sig}
@@ -1001,7 +1002,7 @@ def _parse_response_candidate(
             else:
                 thinking_message = {
                     "type": "thinking",
-                    "thinking": part.text,
+                    "thinking": thought_text,
                 }
                 # Include signature if present
                 if thought_sig:
@@ -1064,7 +1065,7 @@ def _parse_response_candidate(
                 execution_result = {
                     "type": "server_tool_result",
                     "name": "code_interpreter",
-                    "output": part.code_execution_result.output,
+                    "output": str(part.code_execution_result.output),
                     "status": "success" if outcome == 1 else "error",
                     "extras": {"outcome": outcome},
                 }
