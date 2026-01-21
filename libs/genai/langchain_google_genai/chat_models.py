@@ -919,6 +919,7 @@ def _parse_response_candidate(
     model_name: str | None = None,
     *,
     model_name_for_content: str | None = None,
+    output_version: str | None = None,
 ) -> AIMessage:
     """Parse a response candidate from Google into an `AIMessage`.
 
@@ -948,6 +949,8 @@ def _parse_response_candidate(
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
     if model_name:
         response_metadata["model_name"] = model_name
+    if output_version:
+        response_metadata["output_version"] = output_version
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
@@ -960,6 +963,9 @@ def _parse_response_candidate(
     )
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
+    preserve_list_content = output_version == "v1" or _is_gemini_3_or_later(
+        effective_model_name or ""
+    )
     for part in parts:
         text: str | None = None
         try:
@@ -996,7 +1002,7 @@ def _parse_response_candidate(
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
-            if thought_sig or _is_gemini_3_or_later(effective_model_name or ""):
+            if thought_sig or preserve_list_content:
                 # append blocks if there's a signature or new Gemini model
                 content = _append_to_content(content, text_block)
             elif isinstance(content, list) and any(
@@ -1133,11 +1139,11 @@ def _parse_response_candidate(
                 )
 
     if content is None:
-        if _is_gemini_3_or_later(effective_model_name or ""):
+        if preserve_list_content:
             content = []
         else:
             content = ""
-    if isinstance(content, list):
+    if isinstance(content, list) and not preserve_list_content:
         content = _collapse_text_content(content)
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
@@ -1172,6 +1178,9 @@ def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: UsageMetadata | None = None,
+    *,
+    output_version: str | None = None,
+    default_model_name: str | None = None,
 ) -> ChatResult:
     """Converts a Google AI response into a LangChain `ChatResult`."""
     llm_output = (
@@ -1254,11 +1263,13 @@ def _response_to_result(
         # consistent list-based content across all chunks), but only include
         # model_name in response_metadata for the final chunk to avoid duplication
         # when chunks are concatenated.
+        model_name_for_content = response.model_version or default_model_name
         message = _parse_response_candidate(
             candidate,
             streaming=stream,
             model_name=model_name_for_metadata,  # None for intermediate chunks
-            model_name_for_content=response.model_version,  # Always set
+            model_name_for_content=model_name_for_content,
+            output_version=output_version,
         )
 
         if not hasattr(message, "response_metadata"):
@@ -2287,6 +2298,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
+    output_version: Literal["v0", "v1"] | None = None
+    """Output format version for structured content blocks.
+
+    Supported values:
+        * `'v0'`: Legacy content blocks.
+        * `'v1'`: New content blocks with reasoning/annotations.
+    """
+
     thinking_level: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
     )
@@ -2859,6 +2878,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 if schema and "response_json_schema" not in kwargs:
                     kwargs["response_json_schema"] = schema
 
+        output_version = kwargs.get("output_version", self.output_version)
+        if output_version is not None:
+            kwargs["output_version"] = output_version
+
         # Get generation parameters
         # (consumes thinking kwargs into params.thinking_config)
         params: GenerationConfig = self._prepare_params(
@@ -2878,6 +2901,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "response_schema",
             "response_json_schema",
             "response_mime_type",
+            "output_version",
         }
         _consumed_kwargs.update(params.model_fields_set)
         # Filter out kwargs already consumed by _prepare_params.
@@ -3101,6 +3125,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
+        output_version = kwargs.get("output_version", self.output_version)
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -3120,7 +3146,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         except ClientError as e:
             _handle_client_error(e, request)
 
-        return _response_to_result(response)
+        return _response_to_result(
+            response,
+            output_version=output_version,
+            default_model_name=self.model,
+        )
 
     async def _agenerate(
         self,
@@ -3140,6 +3170,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
+        output_version = kwargs.get("output_version", self.output_version)
 
         request = self._prepare_request(
             messages,
@@ -3162,7 +3194,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         except ClientError as e:
             _handle_client_error(e, request)
 
-        return _response_to_result(response)
+        return _response_to_result(
+            response,
+            output_version=output_version,
+            default_model_name=self.model,
+        )
 
     def _stream(
         self,
@@ -3182,6 +3218,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
+        output_version = kwargs.get("output_version", self.output_version)
 
         request = self._prepare_request(
             messages,
@@ -3210,7 +3248,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for chunk in response:
             if chunk:
                 _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
+                    chunk,
+                    stream=True,
+                    prev_usage=prev_usage_metadata,
+                    output_version=output_version,
+                    default_model_name=self.model,
                 )
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
@@ -3254,6 +3296,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
+        output_version = kwargs.get("output_version", self.output_version)
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -3278,7 +3322,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         async for chunk in stream:
             _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
+                chunk,
+                stream=True,
+                prev_usage=prev_usage_metadata,
+                output_version=output_version,
+                default_model_name=self.model,
             )
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)
