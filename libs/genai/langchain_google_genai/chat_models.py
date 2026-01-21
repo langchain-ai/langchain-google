@@ -990,14 +990,23 @@ def _parse_response_candidate(
                 thought_sig = None
 
         if hasattr(part, "thought") and part.thought:
-            thinking_message = {
-                "type": "thinking",
-                "thinking": part.text,
-            }
-            # Include signature if present
-            if thought_sig:
-                thinking_message["signature"] = thought_sig
-            content = _append_to_content(content, thinking_message)
+            if output_version == "v1":
+                reasoning_message = {
+                    "type": "reasoning",
+                    "reasoning": part.text,
+                }
+                if thought_sig:
+                    reasoning_message["extras"] = {"signature": thought_sig}
+                content = _append_to_content(content, reasoning_message)
+            else:
+                thinking_message = {
+                    "type": "thinking",
+                    "thinking": part.text,
+                }
+                # Include signature if present
+                if thought_sig:
+                    thinking_message["signature"] = thought_sig
+                content = _append_to_content(content, thinking_message)
         elif text is not None and text:
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
@@ -1017,13 +1026,23 @@ def _parse_response_candidate(
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
-                code_id = str(uuid.uuid4())  # Generate ID if not present, needed later
-                code_message = {
-                    "type": "executable_code",
-                    "executable_code": part.executable_code.code,
-                    "language": part.executable_code.language,
-                    "id": code_id,
-                }
+                if output_version == "v1":
+                    code_message = {
+                        "type": "server_tool_call",
+                        "name": "code_interpreter",
+                        "args": {
+                            "code": part.executable_code.code,
+                            "language": part.executable_code.language,
+                        },
+                    }
+                else:
+                    code_id = str(uuid.uuid4())  # Generate ID if not present
+                    code_message = {
+                        "type": "executable_code",
+                        "executable_code": part.executable_code.code,
+                        "language": part.executable_code.language,
+                        "id": code_id,
+                    }
                 content = _append_to_content(content, code_message)
 
         if (
@@ -1041,12 +1060,21 @@ def _parse_response_candidate(
                 outcome = 1
             else:
                 outcome = 2
-            execution_result = {
-                "type": "code_execution_result",
-                "code_execution_result": part.code_execution_result.output,
-                "outcome": outcome,
-                "tool_call_id": "",  # Linked via block translator
-            }
+            if output_version == "v1":
+                execution_result = {
+                    "type": "server_tool_result",
+                    "name": "code_interpreter",
+                    "output": part.code_execution_result.output,
+                    "status": "success" if outcome == 1 else "error",
+                    "extras": {"outcome": outcome},
+                }
+            else:
+                execution_result = {
+                    "type": "code_execution_result",
+                    "code_execution_result": part.code_execution_result.output,
+                    "outcome": outcome,
+                    "tool_call_id": "",  # Linked via block translator
+                }
             content = _append_to_content(content, execution_result)
 
         if part.inline_data and part.inline_data.data and part.inline_data.mime_type:
