@@ -73,10 +73,10 @@ from langchain_core.messages import (
     is_data_content_block,
 )
 from langchain_core.messages import content as types
+from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.block_translators.google_genai import (
     translate_grounding_metadata_to_citations,
 )
-from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
@@ -992,7 +992,7 @@ def _parse_response_candidate(
         if hasattr(part, "thought") and part.thought:
             thought_text = part.text or ""
             if output_version == "v1":
-                reasoning_message = {
+                reasoning_message: dict[str, Any] = {
                     "type": "reasoning",
                     "reasoning": thought_text,
                 }
@@ -1000,7 +1000,7 @@ def _parse_response_candidate(
                     reasoning_message["extras"] = {"signature": thought_sig}
                 content = _append_to_content(content, reasoning_message)
             else:
-                thinking_message = {
+                thinking_message: dict[str, Any] = {
                     "type": "thinking",
                     "thinking": thought_text,
                 }
@@ -1061,6 +1061,7 @@ def _parse_response_candidate(
                 outcome = 1
             else:
                 outcome = 2
+            execution_result: dict[str, Any]
             if output_version == "v1":
                 execution_result = {
                     "type": "server_tool_result",
