@@ -82,6 +82,12 @@ def _format_json_schema_to_gapic_v1(schema: dict[str, Any]) -> dict[str, Any]:
                 converted_schema["properties"][pkey] = _format_json_schema_to_gapic_v1(
                     pvalue
                 )
+        elif key in ("anyOf", "oneOf"):
+            # Fix for Issue #1527: Filter out 'null' types for Pydantic V1
+            valid_candidates = [c for c in value if c.get("type") != "null"]
+            converted_schema[key] = [
+                _format_json_schema_to_gapic_v1(c) for c in valid_candidates
+            ]
             continue
         elif key in ["type", "_type"]:
             converted_schema["type"] = str(value).upper()
@@ -135,23 +141,33 @@ def _format_json_schema_to_gapic(
                 )
             return _format_json_schema_to_gapic(value[0], parent_key, required_fields)
         elif key == "anyOf":
-            if any(v.get("type") == "null" for v in value):
-                non_null_type = next(v for v in value if v.get("type") != "null")
-                converted_schema.update(
-                    _format_json_schema_to_gapic(
-                        non_null_type, parent_key, required_fields
-                    )
-                )
-                # Remove the field from required if it exists
+            # Filter out null types to identify valid candidates
+            valid_candidates = [v for v in value if v.get("type") != "null"]
+
+            # If we filtered out a null, it means this field is optional.
+            # We must remove it from the 'required' list of the parent.
+            if len(valid_candidates) < len(value):
                 if required_fields and parent_key in required_fields:
                     required_fields.remove(parent_key)
+
+            if not valid_candidates:
                 continue
-            converted_schema["anyOf"] = [
-                _format_json_schema_to_gapic(
-                    anyOf_type, "anyOf", schema.get("required", [])
+
+            # Case 1: Simple Optional (e.g., str | None) -> Unwrap the inner type
+            if len(valid_candidates) == 1:
+                converted_schema.update(
+                    _format_json_schema_to_gapic(
+                        valid_candidates[0], parent_key, required_fields
+                    )
                 )
-                for anyOf_type in value
-            ]
+            # Case 2: Union Optional (e.g., str | int | None) -> Keep anyOf
+            else:
+                converted_schema["anyOf"] = [
+                    _format_json_schema_to_gapic(
+                        candidate, "anyOf", schema.get("required", [])
+                    )
+                    for candidate in valid_candidates
+                ]
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
