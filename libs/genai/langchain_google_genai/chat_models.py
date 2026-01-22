@@ -1003,7 +1003,7 @@ def _parse_response_candidate(
 
         if hasattr(part, "thought") and part.thought:
             if output_version == "v1":
-                reasoning_message = {
+                reasoning_message: dict[str, Any] = {
                     "type": "reasoning",
                     "reasoning": part.text,
                 }
@@ -1039,7 +1039,7 @@ def _parse_response_candidate(
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 if output_version == "v1":
-                    code_message = {
+                    code_message: dict[str, Any] = {
                         "type": "server_tool_call",
                         "name": "code_interpreter",
                         "args": {
@@ -1074,14 +1074,14 @@ def _parse_response_candidate(
             else:
                 outcome = 2
             if output_version == "v1":
-                execution_result = {
+                execution_result: dict[str, Any] = {
                     "type": "server_tool_result",
                     "output": part.code_execution_result.output,
                     "status": "success" if outcome == 1 else "error",
                     "extras": {"outcome": outcome},
                 }
             else:
-                execution_result = {
+                execution_result: dict[str, Any] = {
                     "type": "code_execution_result",
                     "code_execution_result": part.code_execution_result.output,
                     "outcome": outcome,
