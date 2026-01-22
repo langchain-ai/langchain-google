@@ -328,9 +328,11 @@ def _parse_chat_history_gemini(
             path = part["image_url"]["url"]
             return imageBytesLoader.load_gapic_part(path)
 
-        # Handle media type like LangChain.js
+        # Handle `media` and `video` types
+        # `video` is supported as an alias for `media` for convenience
+        # Following pattern established in LangChain.js
         # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
-        if part["type"] == "media":
+        if part["type"] in ("media", "video"):
             if "mime_type" not in part:
                 msg = f"Missing mime_type in media part: {part}"  # type: ignore[unreachable, unused-ignore]
                 raise ValueError(msg)
@@ -339,10 +341,10 @@ def _parse_chat_history_gemini(
 
             if "data" in part:
                 proto_part.inline_data = Blob(data=part["data"], mime_type=mime_type)
-            elif "file_uri" in part:
-                proto_part.file_data = FileData(
-                    file_uri=part["file_uri"], mime_type=mime_type
-                )
+            elif "file_uri" in part or "url" in part:
+                # `url` is supported as an alias for `file_uri`
+                file_uri = part.get("file_uri") or part.get("url")
+                proto_part.file_data = FileData(file_uri=file_uri, mime_type=mime_type)
             else:
                 msg = f"Media part must have either data or file_uri: {part}"  # type: ignore[unreachable, unused-ignore]
                 raise ValueError(msg)

@@ -990,6 +990,46 @@ def test_parse_chat_history_gemini_without_literal_eval() -> None:
     assert expected == response
 
 
+def test_parse_chat_history_gemini_video_type_alias() -> None:
+    """Test that video type is accepted as alias for media."""
+    content = [
+        {
+            "type": "video",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+        }
+    ]
+    history: list[BaseMessage] = [HumanMessage(content=content)]  # type: ignore[arg-type]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+    )
+    assert len(response) == 1
+    assert response[0].parts[0].file_data.file_uri == "gs://bucket/video.mp4"
+    assert response[0].parts[0].file_data.mime_type == "video/mp4"
+
+
+def test_parse_chat_history_gemini_url_alias() -> None:
+    """Test that url is accepted as alias for file_uri."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "url": "gs://bucket/video.mp4",
+        }
+    ]
+    history: list[BaseMessage] = [HumanMessage(content=content)]  # type: ignore[arg-type]
+    image_bytes_loader = ImageBytesLoader()
+    _, response = _parse_chat_history_gemini(
+        history=history,
+        imageBytesLoader=image_bytes_loader,
+    )
+    assert len(response) == 1
+    assert response[0].parts[0].file_data.file_uri == "gs://bucket/video.mp4"
+    assert response[0].parts[0].file_data.mime_type == "video/mp4"
+
+
 def test_python_literal_inputs() -> None:
     """In relation to literal eval, ensure that inputs are not misinterpreted."""
     llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
