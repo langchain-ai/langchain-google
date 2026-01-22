@@ -387,7 +387,7 @@ def _convert_to_parts(
                         thought_sig = base64.b64decode(sig)
                     parts.append(
                         Part(
-                            text=part["reasoning"],
+                            text=part.get("reasoning", ""),
                             thought=True,
                             thought_signature=thought_sig,
                         )
