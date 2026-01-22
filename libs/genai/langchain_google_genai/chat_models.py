@@ -1048,7 +1048,8 @@ def _parse_response_candidate(
                         },
                     }
                 else:
-                    code_id = str(uuid.uuid4())  # Generate ID if not present, needed later
+                    # Generate ID if not present, needed later
+                    code_id = str(uuid.uuid4())
                     code_message = {
                         "type": "executable_code",
                         "executable_code": part.executable_code.code,
