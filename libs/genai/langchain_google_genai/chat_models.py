@@ -315,8 +315,10 @@ def _convert_to_parts(
                     if thought_sig:
                         image_part.thought_signature = thought_sig
                     parts.append(image_part)
-                elif part["type"] == "media":
-                    # Handle `media` following pattern established in LangChain.js
+                elif part["type"] in ("media", "video"):
+                    # Handle `media` and `video` types
+                    # `video` is supported as an alias for `media` for convenience
+                    # Following pattern established in LangChain.js
                     # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                     if "mime_type" not in part:
                         msg = f"Missing mime_type in media part: {part}"
@@ -329,10 +331,12 @@ def _convert_to_parts(
                         media_part_kwargs["inline_data"] = Blob(
                             data=part["data"], mime_type=mime_type
                         )
-                    elif "file_uri" in part:
+                    elif "file_uri" in part or "url" in part:
                         # Referenced files (e.g. stored in GCS)
+                        # `url` is supported as an alias for `file_uri`
+                        file_uri = part.get("file_uri") or part.get("url")
                         media_part_kwargs["file_data"] = FileData(
-                            file_uri=part["file_uri"], mime_type=mime_type
+                            file_uri=file_uri, mime_type=mime_type
                         )
                     else:
                         msg = f"Media part must have either data or file_uri: {part}"
