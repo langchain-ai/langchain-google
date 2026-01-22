@@ -1073,15 +1073,16 @@ def _parse_response_candidate(
                 outcome = 1
             else:
                 outcome = 2
+            execution_result: dict[str, Any]
             if output_version == "v1":
-                execution_result: dict[str, Any] = {
+                execution_result = {
                     "type": "server_tool_result",
                     "output": part.code_execution_result.output,
                     "status": "success" if outcome == 1 else "error",
                     "extras": {"outcome": outcome},
                 }
             else:
-                execution_result: dict[str, Any] = {
+                execution_result = {
                     "type": "code_execution_result",
                     "code_execution_result": part.code_execution_result.output,
                     "outcome": outcome,
