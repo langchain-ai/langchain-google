@@ -1277,9 +1277,7 @@ def test_langgraph_node_detection(
     # Regular chain (not a LangGraph node)
     serialized = {"name": "RunnableSequence"}
     metadata = {}
-    assert (
-        handler._is_langgraph_root_invocation(serialized, uuid4(), metadata) is False
-    )
+    assert handler._is_langgraph_root_invocation(serialized, uuid4(), metadata) is False
 
     # LangGraph root invocation
     serialized = {"name": "CompiledGraph"}
