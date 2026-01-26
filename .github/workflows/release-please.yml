@@ -1,0 +1,60 @@
+# Creates release PRs based on conventional commits.
+#
+# When commits land on main, release-please analyzes them and either:
+# - Creates/updates a release PR with changelog and version bump
+# - When a release PR is merged, triggers _release.yml for PyPI publishing
+#
+# GitHub Release creation is handled by _release.yml (mark-release job)
+# AFTER all tests pass and PyPI publishing succeeds.
+
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      genai_release_created: ${{ steps.release.outputs['libs/genai--release_created'] }}
+      vertexai_release_created: ${{ steps.release.outputs['libs/vertexai--release_created'] }}
+      community_release_created: ${{ steps.release.outputs['libs/community--release_created'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Trigger the release workflow for each released package
+  # GitHub Release is created by _release.yml AFTER tests pass and PyPI publish succeeds
+  release-genai:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.genai_release_created == 'true' }}
+    uses: ./.github/workflows/_release.yml
+    with:
+      working-directory: libs/genai
+    secrets: inherit
+
+  release-vertexai:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.vertexai_release_created == 'true' }}
+    uses: ./.github/workflows/_release.yml
+    with:
+      working-directory: libs/vertexai
+    secrets: inherit
+
+  release-community:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.community_release_created == 'true' }}
+    uses: ./.github/workflows/_release.yml
+    with:
+      working-directory: libs/community
+    secrets: inherit

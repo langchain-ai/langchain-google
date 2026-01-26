@@ -1,0 +1,5 @@
+{
+  "libs/genai": "4.2.0",
+  "libs/vertexai": "3.2.1",
+  "libs/community": "3.0.5"
+}
