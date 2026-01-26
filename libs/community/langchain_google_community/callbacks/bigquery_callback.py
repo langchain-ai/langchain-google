@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import json
 import logging
@@ -12,9 +13,10 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from queue import Empty, Full, Queue
 from types import MappingProxyType
-from typing import Any, AsyncIterator, Callable, Dict, List, Union
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.callbacks import AsyncCallbackHandler, BaseCallbackHandler
@@ -345,6 +347,33 @@ class RetryConfig:
 
 
 @dataclass
+class LatencyMeasurement:
+    """Represents a latency measurement with optional component breakdown."""
+
+    total_ms: int
+    component_ms: Optional[Dict[str, int]] = None
+
+
+@dataclass
+class SpanContext:
+    """Represents an OpenTelemetry-style span context."""
+
+    trace_id: str
+    span_id: str
+    parent_span_id: Optional[str] = None
+
+
+@dataclass
+class RunContext:
+    """Context information for a single run/operation."""
+
+    run_id: str
+    name: str
+    parent_run_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class BigQueryLoggerConfig:
     enabled: bool = True
     event_allowlist: list[str] | None = None
@@ -362,6 +391,459 @@ class BigQueryLoggerConfig:
     queue_max_size: int = 10000
     gcs_bucket_name: str | None = None
     connection_id: str | None = None
+
+
+# ==============================================================================
+# LATENCY TRACKING
+# ==============================================================================
+
+
+class LatencyTracker:
+    """Thread-safe latency tracker for synchronous operations."""
+
+    def __init__(self, stale_threshold_ms: int = 300000) -> None:
+        """Initialize the latency tracker.
+
+        Args:
+            stale_threshold_ms: Time in ms after which unfinished entries are
+                considered stale and cleaned up. Defaults to 5 minutes.
+        """
+        self._start_times: Dict[uuid.UUID, float] = {}
+        self._component_times: Dict[uuid.UUID, Dict[str, float]] = {}
+        self._lock = threading.Lock()
+        self._stale_threshold_ms = stale_threshold_ms
+
+    def start(self, run_id: uuid.UUID) -> None:
+        """Start timing for a run."""
+        with self._lock:
+            self._cleanup_stale()
+            self._start_times[run_id] = time.time()
+            self._component_times[run_id] = {}
+
+    def start_component(self, run_id: uuid.UUID, component_name: str) -> None:
+        """Start timing a specific component within a run."""
+        with self._lock:
+            if run_id in self._component_times:
+                self._component_times[run_id][f"{component_name}_start"] = time.time()
+
+    def end_component(self, run_id: uuid.UUID, component_name: str) -> None:
+        """End timing a specific component within a run."""
+        with self._lock:
+            if run_id in self._component_times:
+                start_key = f"{component_name}_start"
+                if start_key in self._component_times[run_id]:
+                    start_time = self._component_times[run_id].pop(start_key)
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._component_times[run_id][component_name] = elapsed_ms
+
+    def end(self, run_id: uuid.UUID) -> Optional[LatencyMeasurement]:
+        """End timing for a run and return the measurement.
+
+        Returns:
+            LatencyMeasurement with total_ms and component_ms, or None if
+            the run_id was not found.
+        """
+        with self._lock:
+            if run_id not in self._start_times:
+                return None
+
+            start_time = self._start_times.pop(run_id)
+            total_ms = int((time.time() - start_time) * 1000)
+
+            component_ms: Optional[Dict[str, int]] = None
+            if run_id in self._component_times:
+                components = self._component_times.pop(run_id)
+                # Filter out any unfinished component start markers
+                component_ms = {
+                    k: v for k, v in components.items() if not k.endswith("_start")
+                }
+                if not component_ms:
+                    component_ms = None
+
+            return LatencyMeasurement(total_ms=total_ms, component_ms=component_ms)
+
+    def _cleanup_stale(self) -> None:
+        """Remove entries older than the stale threshold."""
+        current_time = time.time()
+        stale_threshold_s = self._stale_threshold_ms / 1000.0
+        stale_ids = [
+            run_id
+            for run_id, start_time in self._start_times.items()
+            if current_time - start_time > stale_threshold_s
+        ]
+        for run_id in stale_ids:
+            self._start_times.pop(run_id, None)
+            self._component_times.pop(run_id, None)
+
+
+class AsyncLatencyTracker:
+    """Async-safe latency tracker for asynchronous operations."""
+
+    def __init__(self, stale_threshold_ms: int = 300000) -> None:
+        """Initialize the async latency tracker.
+
+        Args:
+            stale_threshold_ms: Time in ms after which unfinished entries are
+                considered stale and cleaned up. Defaults to 5 minutes.
+        """
+        self._start_times: Dict[uuid.UUID, float] = {}
+        self._component_times: Dict[uuid.UUID, Dict[str, float]] = {}
+        self._lock = asyncio.Lock()
+        self._stale_threshold_ms = stale_threshold_ms
+
+    async def start(self, run_id: uuid.UUID) -> None:
+        """Start timing for a run."""
+        async with self._lock:
+            self._cleanup_stale()
+            self._start_times[run_id] = time.time()
+            self._component_times[run_id] = {}
+
+    async def start_component(self, run_id: uuid.UUID, component_name: str) -> None:
+        """Start timing a specific component within a run."""
+        async with self._lock:
+            if run_id in self._component_times:
+                self._component_times[run_id][f"{component_name}_start"] = time.time()
+
+    async def end_component(self, run_id: uuid.UUID, component_name: str) -> None:
+        """End timing a specific component within a run."""
+        async with self._lock:
+            if run_id in self._component_times:
+                start_key = f"{component_name}_start"
+                if start_key in self._component_times[run_id]:
+                    start_time = self._component_times[run_id].pop(start_key)
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._component_times[run_id][component_name] = elapsed_ms
+
+    async def end(self, run_id: uuid.UUID) -> Optional[LatencyMeasurement]:
+        """End timing for a run and return the measurement.
+
+        Returns:
+            LatencyMeasurement with total_ms and component_ms, or None if
+            the run_id was not found.
+        """
+        async with self._lock:
+            if run_id not in self._start_times:
+                return None
+
+            start_time = self._start_times.pop(run_id)
+            total_ms = int((time.time() - start_time) * 1000)
+
+            component_ms: Optional[Dict[str, int]] = None
+            if run_id in self._component_times:
+                components = self._component_times.pop(run_id)
+                # Filter out any unfinished component start markers
+                component_ms = {
+                    k: v for k, v in components.items() if not k.endswith("_start")
+                }
+                if not component_ms:
+                    component_ms = None
+
+            return LatencyMeasurement(total_ms=total_ms, component_ms=component_ms)
+
+    def _cleanup_stale(self) -> None:
+        """Remove entries older than the stale threshold."""
+        current_time = time.time()
+        stale_threshold_s = self._stale_threshold_ms / 1000.0
+        stale_ids = [
+            run_id
+            for run_id, start_time in self._start_times.items()
+            if current_time - start_time > stale_threshold_s
+        ]
+        for run_id in stale_ids:
+            self._start_times.pop(run_id, None)
+            self._component_times.pop(run_id, None)
+
+
+# ==============================================================================
+# RUN CONTEXT REGISTRY
+# ==============================================================================
+
+
+class RunContextRegistry:
+    """Thread-safe registry for tracking run context (e.g., tool names)."""
+
+    def __init__(self) -> None:
+        self._contexts: Dict[uuid.UUID, RunContext] = {}
+        self._lock = threading.Lock()
+
+    def register(
+        self,
+        run_id: uuid.UUID,
+        name: str,
+        parent_run_id: Optional[uuid.UUID] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> RunContext:
+        """Register a run context.
+
+        Args:
+            run_id: Unique identifier for the run.
+            name: Name of the operation (e.g., tool name).
+            parent_run_id: Optional parent run identifier.
+            metadata: Optional additional metadata.
+
+        Returns:
+            The registered RunContext.
+        """
+        with self._lock:
+            context = RunContext(
+                run_id=str(run_id),
+                name=name,
+                parent_run_id=str(parent_run_id) if parent_run_id else None,
+                metadata=metadata or {},
+            )
+            self._contexts[run_id] = context
+            return context
+
+    def get(self, run_id: uuid.UUID) -> Optional[RunContext]:
+        """Get a run context without removing it."""
+        with self._lock:
+            return self._contexts.get(run_id)
+
+    def pop(self, run_id: uuid.UUID) -> Optional[RunContext]:
+        """Get and remove a run context."""
+        with self._lock:
+            return self._contexts.pop(run_id, None)
+
+    def update_metadata(
+        self, run_id: uuid.UUID, metadata: Dict[str, Any]
+    ) -> Optional[RunContext]:
+        """Update metadata for an existing run context."""
+        with self._lock:
+            if run_id in self._contexts:
+                self._contexts[run_id].metadata.update(metadata)
+                return self._contexts[run_id]
+            return None
+
+
+class AsyncRunContextRegistry:
+    """Async-safe registry for tracking run context (e.g., tool names)."""
+
+    def __init__(self) -> None:
+        self._contexts: Dict[uuid.UUID, RunContext] = {}
+        self._lock = asyncio.Lock()
+
+    async def register(
+        self,
+        run_id: uuid.UUID,
+        name: str,
+        parent_run_id: Optional[uuid.UUID] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> RunContext:
+        """Register a run context.
+
+        Args:
+            run_id: Unique identifier for the run.
+            name: Name of the operation (e.g., tool name).
+            parent_run_id: Optional parent run identifier.
+            metadata: Optional additional metadata.
+
+        Returns:
+            The registered RunContext.
+        """
+        async with self._lock:
+            context = RunContext(
+                run_id=str(run_id),
+                name=name,
+                parent_run_id=str(parent_run_id) if parent_run_id else None,
+                metadata=metadata or {},
+            )
+            self._contexts[run_id] = context
+            return context
+
+    async def get(self, run_id: uuid.UUID) -> Optional[RunContext]:
+        """Get a run context without removing it."""
+        async with self._lock:
+            return self._contexts.get(run_id)
+
+    async def pop(self, run_id: uuid.UUID) -> Optional[RunContext]:
+        """Get and remove a run context."""
+        async with self._lock:
+            return self._contexts.pop(run_id, None)
+
+    async def update_metadata(
+        self, run_id: uuid.UUID, metadata: Dict[str, Any]
+    ) -> Optional[RunContext]:
+        """Update metadata for an existing run context."""
+        async with self._lock:
+            if run_id in self._contexts:
+                self._contexts[run_id].metadata.update(metadata)
+                return self._contexts[run_id]
+            return None
+
+
+# ==============================================================================
+# OPENTELEMETRY TRACE MANAGER
+# ==============================================================================
+
+
+class SpanKind(Enum):
+    """Types of spans in the trace hierarchy."""
+
+    INTERNAL = "INTERNAL"
+    CLIENT = "CLIENT"
+    SERVER = "SERVER"
+    PRODUCER = "PRODUCER"
+    CONSUMER = "CONSUMER"
+    LLM = "LLM"
+    TOOL = "TOOL"
+    CHAIN = "CHAIN"
+    RETRIEVER = "RETRIEVER"
+    AGENT = "AGENT"
+    GRAPH = "GRAPH"
+    NODE = "NODE"
+
+
+class OpenTelemetryTraceManager:
+    """Manages OpenTelemetry-style trace context with fallback to UUID-based tracing.
+
+    This manager provides span stack management for proper trace hierarchy and
+    falls back to UUID-based trace/span IDs when OpenTelemetry is not available.
+    Each instance maintains its own isolated span stack using contextvars.
+    """
+
+    def __init__(self, use_otel: bool = False) -> None:
+        """Initialize the trace manager.
+
+        Args:
+            use_otel: Whether to use OpenTelemetry for tracing. If False or if
+                OpenTelemetry is not available, falls back to UUID-based tracing.
+        """
+        self._use_otel = use_otel
+        self._otel_available = False
+
+        if use_otel:
+            try:
+                from opentelemetry import trace as otel_trace
+
+                self._otel_trace = otel_trace
+                self._otel_available = True
+            except ImportError:
+                logger.debug(
+                    "OpenTelemetry not available, falling back to UUID-based tracing"
+                )
+
+        # Instance-scoped context variables for span stack
+        self._span_stack: contextvars.ContextVar[List[SpanContext]] = (
+            contextvars.ContextVar("span_stack", default=[])
+        )
+        self._current_trace_id: contextvars.ContextVar[Optional[str]] = (
+            contextvars.ContextVar("current_trace_id", default=None)
+        )
+
+    def _generate_trace_id(self) -> str:
+        """Generate a W3C-compliant 32-character trace ID."""
+        return uuid.uuid4().hex
+
+    def _generate_span_id(self) -> str:
+        """Generate a W3C-compliant 16-character span ID."""
+        return uuid.uuid4().hex[:16]
+
+    def start_span(
+        self,
+        name: str,
+        kind: SpanKind = SpanKind.INTERNAL,
+        parent_span_id: Optional[str] = None,
+    ) -> SpanContext:
+        """Start a new span and push it onto the stack.
+
+        Args:
+            name: Name of the span.
+            kind: The kind of span being created.
+            parent_span_id: Optional explicit parent span ID. If not provided,
+                uses the current span on the stack as parent.
+
+        Returns:
+            SpanContext with trace_id, span_id, and parent_span_id.
+        """
+        stack = self._span_stack.get().copy()
+        current_trace_id = self._current_trace_id.get()
+
+        # Determine trace ID
+        if current_trace_id:
+            trace_id = current_trace_id
+        else:
+            if self._otel_available:
+                current_span = self._otel_trace.get_current_span()
+                if current_span and current_span.get_span_context().is_valid:
+                    trace_id = format(
+                        current_span.get_span_context().trace_id, "032x"
+                    )
+                else:
+                    trace_id = self._generate_trace_id()
+            else:
+                trace_id = self._generate_trace_id()
+            self._current_trace_id.set(trace_id)
+
+        # Determine parent span ID
+        if parent_span_id is None and stack:
+            parent_span_id = stack[-1].span_id
+
+        # Generate new span ID
+        if self._otel_available:
+            current_span = self._otel_trace.get_current_span()
+            if current_span and current_span.get_span_context().is_valid:
+                span_id = format(current_span.get_span_context().span_id, "016x")
+            else:
+                span_id = self._generate_span_id()
+        else:
+            span_id = self._generate_span_id()
+
+        span_context = SpanContext(
+            trace_id=trace_id,
+            span_id=span_id,
+            parent_span_id=parent_span_id,
+        )
+
+        stack.append(span_context)
+        self._span_stack.set(stack)
+
+        return span_context
+
+    def end_span(self) -> Optional[SpanContext]:
+        """End the current span and pop it from the stack.
+
+        Returns:
+            The ended SpanContext, or None if the stack was empty.
+        """
+        stack = self._span_stack.get().copy()
+        if not stack:
+            return None
+
+        span_context = stack.pop()
+        self._span_stack.set(stack)
+
+        # Clear trace ID if stack is now empty
+        if not stack:
+            self._current_trace_id.set(None)
+
+        return span_context
+
+    def get_current_trace_id(self) -> Optional[str]:
+        """Get the current trace ID."""
+        return self._current_trace_id.get()
+
+    def get_current_span_id(self) -> Optional[str]:
+        """Get the current span ID from the top of the stack."""
+        stack = self._span_stack.get()
+        if stack:
+            return stack[-1].span_id
+        return None
+
+    def get_current_span_context(self) -> Optional[SpanContext]:
+        """Get the current span context from the top of the stack."""
+        stack = self._span_stack.get()
+        if stack:
+            return stack[-1]
+        return None
+
+    def get_stack_depth(self) -> int:
+        """Get the current depth of the span stack."""
+        return len(self._span_stack.get())
+
+    def reset(self) -> None:
+        """Reset the span stack and trace ID for this context."""
+        self._span_stack.set([])
+        self._current_trace_id.set(None)
 
 
 def _prepare_arrow_batch(rows: list[dict[str, Any]], arrow_schema: Any) -> Any:
@@ -1264,12 +1746,20 @@ class AsyncTraceIdRegistry(BaseTraceIdRegistry):
 class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     """Callback handler for logging LangChain events to Google BigQuery."""
 
+    # Execution order context variable (instance-scoped via ContextVar)
+    _execution_order_cv: contextvars.ContextVar[int] = contextvars.ContextVar(
+        "execution_order", default=0
+    )
+
     def __init__(
         self,
         project_id: str,
         dataset_id: str,
         table_id: str | None = None,
         config: BigQueryLoggerConfig | None = None,
+        *,
+        graph_name: str | None = None,
+        use_otel: bool = False,
     ) -> None:
         super().__init__()
         (
@@ -1292,6 +1782,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         if table_id:
             self.config.table_id = table_id
 
+        # LangGraph support
+        self.graph_name = graph_name
+
         self._started: bool = False
         self._is_shutting_down: bool = False
         self._setup_lock: asyncio.Lock = asyncio.Lock()
@@ -1304,9 +1797,174 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         self.trace_registry = AsyncTraceIdRegistry()
         self._arrow_schema: Any = None
 
+        # New tracking components
+        self._latency_tracker = AsyncLatencyTracker()
+        self._run_context_registry = AsyncRunContextRegistry()
+        self._trace_manager = OpenTelemetryTraceManager(use_otel=use_otel)
+
         _ensure_dataset_exists(
             self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
         )
+
+    def _should_log_event(self, event_type: str) -> bool:
+        """Check if an event type should be logged based on allowlist/denylist.
+
+        Args:
+            event_type: The type of event to check.
+
+        Returns:
+            True if the event should be logged, False otherwise.
+        """
+        if self.config.event_denylist and event_type in self.config.event_denylist:
+            return False
+        if (
+            self.config.event_allowlist
+            and event_type not in self.config.event_allowlist
+        ):
+            return False
+        return True
+
+    def _is_langgraph_root_invocation(
+        self,
+        serialized: Optional[Dict[str, Any]],
+        parent_run_id: Optional[uuid.UUID],
+        metadata: Optional[Dict[str, Any]],
+    ) -> bool:
+        """Detect if this is a LangGraph root graph invocation.
+
+        Args:
+            serialized: Serialized component data.
+            parent_run_id: Parent run ID if any.
+            metadata: Run metadata.
+
+        Returns:
+            True if this is a LangGraph root invocation.
+        """
+        # Handle None serialized
+        if serialized is None:
+            return False
+
+        # Check for "Graph" in the name
+        name = serialized.get("name", "") or ""
+        if "Graph" not in name:
+            return False
+
+        # Root invocation has no parent
+        if parent_run_id is not None:
+            return False
+
+        # Check for LangGraph-specific metadata keys
+        if metadata:
+            langgraph_keys = {"langgraph_step", "langgraph_node", "langgraph_triggers"}
+            if any(key in metadata for key in langgraph_keys):
+                return True
+
+        return True  # If name contains Graph and no parent, likely a root
+
+    def _build_langgraph_attributes(
+        self,
+        node_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Build LangGraph-specific attributes for logging.
+
+        Args:
+            node_name: The name of the current node.
+            metadata: Run metadata containing LangGraph info.
+            **kwargs: Additional attributes to include.
+
+        Returns:
+            Dict containing langgraph-specific attributes.
+        """
+        langgraph_attrs: Dict[str, Any] = {}
+
+        if self.graph_name:
+            langgraph_attrs["graph_name"] = self.graph_name
+
+        if node_name:
+            langgraph_attrs["node_name"] = node_name
+
+        if metadata:
+            if "langgraph_node" in metadata:
+                langgraph_attrs["node_name"] = metadata["langgraph_node"]
+            if "langgraph_step" in metadata:
+                langgraph_attrs["step"] = metadata["langgraph_step"]
+            if "langgraph_triggers" in metadata:
+                langgraph_attrs["triggers"] = metadata["langgraph_triggers"]
+            if "langgraph_path" in metadata:
+                langgraph_attrs["path"] = metadata["langgraph_path"]
+
+        # Add execution order
+        langgraph_attrs["execution_order"] = self._get_execution_order()
+
+        # Add any additional kwargs
+        langgraph_attrs.update(kwargs)
+
+        return {"langgraph": langgraph_attrs} if langgraph_attrs else {}
+
+    def _build_content(
+        self, event_type: str, raw_content: Any, metadata: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Build structured content for ADK alignment.
+
+        Args:
+            event_type: The type of event.
+            raw_content: The raw content to structure.
+            metadata: Additional metadata.
+
+        Returns:
+            Structured content dict.
+        """
+        content: Dict[str, Any] = {}
+
+        if event_type == "LLM_REQUEST":
+            if isinstance(raw_content, dict):
+                if "prompts" in raw_content:
+                    content["prompt"] = raw_content["prompts"]
+                elif "messages" in raw_content:
+                    content["messages"] = raw_content["messages"]
+                if metadata and "system_prompt" in metadata:
+                    content["system_prompt"] = metadata["system_prompt"]
+            else:
+                content["prompt"] = raw_content
+
+        elif event_type == "LLM_RESPONSE":
+            content["response"] = raw_content
+            if metadata and "usage" in metadata:
+                content["usage"] = metadata["usage"]
+
+        elif event_type in ("TOOL_STARTING", "NODE_STARTING"):
+            if isinstance(raw_content, dict):
+                content.update(raw_content)
+            else:
+                content["input"] = raw_content
+
+        elif event_type in ("TOOL_COMPLETED", "NODE_COMPLETED"):
+            if isinstance(raw_content, dict):
+                content.update(raw_content)
+            else:
+                content["result"] = raw_content
+
+        else:
+            content["data"] = raw_content
+
+        return content
+
+    def _get_execution_order(self) -> int:
+        """Get the current execution order."""
+        return self._execution_order_cv.get()
+
+    def _increment_execution_order(self) -> int:
+        """Increment and return the execution order."""
+        current = self._execution_order_cv.get()
+        new_order = current + 1
+        self._execution_order_cv.set(new_order)
+        return new_order
+
+    def _reset_execution_order(self) -> None:
+        """Reset the execution order to 0."""
+        self._execution_order_cv.set(0)
 
     async def _ensure_started(self) -> None:
         if self._started:
@@ -1394,9 +2052,16 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         error: str | None = None,
         latency: int | None = None,
         metadata: dict | None = None,
+        *,
+        latency_measurement: Optional[LatencyMeasurement] = None,
     ) -> None:
         if not self.config.enabled:
             return
+
+        # Event filtering based on allowlist/denylist
+        if not self._should_log_event(event_type):
+            return
+
         await self._ensure_started()
 
         metadata = metadata or {}
@@ -1470,6 +2135,15 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             )
             content_parts = []
 
+        # Build latency_ms from measurement or legacy parameter
+        latency_ms_value: Optional[Dict[str, Any]] = None
+        if latency_measurement:
+            latency_ms_value = {"total_ms": latency_measurement.total_ms}
+            if latency_measurement.component_ms:
+                latency_ms_value["component_ms"] = latency_measurement.component_ms
+        elif latency:
+            latency_ms_value = {"total_ms": latency}
+
         row = {
             "timestamp": datetime.now(timezone.utc),
             "event_type": event_type,
@@ -1485,7 +2159,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             if self.config.log_multi_modal_content
             else [],
             "attributes": attributes,
-            "latency_ms": {"total_ms": latency} if latency else None,
+            "latency_ms": latency_ms_value,
             "status": "ERROR" if error or parsing_error else "OK",
             "error_message": error or parsing_error,
             "is_truncated": is_truncated,
@@ -1524,6 +2198,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        await self._latency_tracker.start(run_id)
+
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
         await self._log(
             "LLM_REQUEST",
@@ -1544,6 +2221,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        await self._latency_tracker.start(run_id)
+
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
         # Serialize messages safely for parsing
         flat_msgs = [m.model_dump() for sub in messages for m in sub]
@@ -1564,6 +2244,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
         if response.generations and response.generations[0]:
             resp_text = response.generations[0][0].text
         else:
@@ -1576,6 +2259,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             parent_run_id=parent_run_id,
             attributes={"usage": usage},
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
 
@@ -1587,12 +2271,16 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
         await self._log(
             "LLM_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
 
@@ -1605,12 +2293,44 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        await self._latency_tracker.start(run_id)
+
+        metadata = kwargs.get("metadata") or {}
+
+        # Detect LangGraph node vs regular chain
+        langgraph_node = metadata.get("langgraph_node")
+        is_graph_root = self._is_langgraph_root_invocation(
+            serialized, parent_run_id, metadata
+        )
+
+        if is_graph_root:
+            # This is a graph root invocation
+            self._reset_execution_order()
+            event_type = "GRAPH_START"
+            attributes = self._build_langgraph_attributes(metadata=metadata)
+        elif langgraph_node:
+            # This is a LangGraph node
+            self._increment_execution_order()
+            event_type = "NODE_STARTING"
+            attributes = self._build_langgraph_attributes(
+                node_name=langgraph_node, metadata=metadata
+            )
+            # Register the node name for later retrieval
+            await self._run_context_registry.register(
+                run_id, langgraph_node, parent_run_id, metadata
+            )
+        else:
+            event_type = "CHAIN_START"
+            attributes = None
+
         await self._log(
-            "CHAIN_START",
+            event_type,
             run_id,
             content=json.dumps(inputs, default=str),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            attributes=attributes,
+            metadata=metadata,
         )
 
     async def on_chain_end(
@@ -1621,12 +2341,38 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
+        metadata = kwargs.get("metadata") or {}
+
+        # Check if this was a LangGraph node
+        context = await self._run_context_registry.pop(run_id)
+        langgraph_node = metadata.get("langgraph_node")
+
+        if context or langgraph_node:
+            # This was a LangGraph node
+            node_name = context.name if context else langgraph_node
+            event_type = "NODE_COMPLETED"
+            attributes = self._build_langgraph_attributes(
+                node_name=node_name, metadata=metadata
+            )
+        elif parent_run_id is None and self.graph_name:
+            # This might be graph end (no parent, graph_name set)
+            event_type = "GRAPH_END"
+            attributes = self._build_langgraph_attributes(metadata=metadata)
+        else:
+            event_type = "CHAIN_END"
+            attributes = None
+
         await self._log(
-            "CHAIN_END",
+            event_type,
             run_id,
             content=json.dumps(outputs, default=str),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            attributes=attributes,
+            metadata=metadata,
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
 
@@ -1639,11 +2385,21 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        await self._latency_tracker.start(run_id)
+
+        # Register tool name for later retrieval in on_tool_end
+        tool_name = serialized.get("name", "unknown_tool")
+        await self._run_context_registry.register(
+            run_id, tool_name, parent_run_id, kwargs.get("metadata")
+        )
+
         await self._log(
             "TOOL_STARTING",
             run_id,
-            content=input_str,
+            content={"tool": tool_name, "input": input_str},
             parent_run_id=parent_run_id,
+            attributes={"tool_name": tool_name},
             metadata=kwargs.get("metadata"),
         )
 
@@ -1655,12 +2411,21 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
+        # Retrieve tool name from registry
+        context = await self._run_context_registry.pop(run_id)
+        tool_name = context.name if context else "unknown_tool"
+
         await self._log(
             "TOOL_COMPLETED",
             run_id,
-            content=output,
+            content={"tool": tool_name, "result": output},
             parent_run_id=parent_run_id,
+            attributes={"tool_name": tool_name},
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
 
@@ -1672,12 +2437,21 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
+        # Retrieve tool name from registry
+        context = await self._run_context_registry.pop(run_id)
+        tool_name = context.name if context else "unknown_tool"
+
         await self._log(
             "TOOL_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
+            attributes={"tool_name": tool_name},
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
 
@@ -1690,6 +2464,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        await self._latency_tracker.start(run_id)
+
         await self._log(
             "RETRIEVER_START",
             run_id,
@@ -1706,6 +2483,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
         docs = [doc.model_dump() for doc in documents]
         await self._log(
             "RETRIEVER_END",
@@ -1713,6 +2493,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             content=json.dumps(docs, default=str),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
 
@@ -1724,12 +2505,16 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
         await self._log(
             "RETRIEVER_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
 
@@ -1791,14 +2576,60 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = await self._latency_tracker.end(run_id)
+
+        metadata = kwargs.get("metadata") or {}
+
+        # Check if this was a LangGraph node
+        context = await self._run_context_registry.pop(run_id)
+        langgraph_node = metadata.get("langgraph_node")
+
+        if context or langgraph_node:
+            # This was a LangGraph node
+            node_name = context.name if context else langgraph_node
+            event_type = "NODE_ERROR"
+            attributes = self._build_langgraph_attributes(
+                node_name=node_name, metadata=metadata
+            )
+        elif parent_run_id is None and self.graph_name:
+            # This might be graph error (no parent, graph_name set)
+            event_type = "GRAPH_ERROR"
+            attributes = self._build_langgraph_attributes(metadata=metadata)
+        else:
+            event_type = "CHAIN_ERROR"
+            attributes = None
+
         await self._log(
-            "CHAIN_ERROR",
+            event_type,
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            attributes=attributes,
+            metadata=metadata,
+            latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
+
+    def graph_context(
+        self,
+        graph_name: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> "AsyncGraphExecutionContext":
+        """Create an async context manager for graph execution.
+
+        Usage:
+            async with handler.graph_context("my_graph") as ctx:
+                result = await graph.ainvoke(inputs)
+
+        Args:
+            graph_name: Name of the graph being executed.
+            metadata: Optional metadata to include in events.
+
+        Returns:
+            AsyncGraphExecutionContext that emits GRAPH_START/GRAPH_END events.
+        """
+        return AsyncGraphExecutionContext(self, graph_name, metadata)
 
     async def close(self) -> None:
         await self.shutdown()
@@ -1812,12 +2643,20 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
 class BigQueryCallbackHandler(BaseCallbackHandler):
     """Callback handler for logging LangChain events to Google BigQuery."""
 
+    # Execution order context variable (instance-scoped via ContextVar)
+    _execution_order_cv: contextvars.ContextVar[int] = contextvars.ContextVar(
+        "sync_execution_order", default=0
+    )
+
     def __init__(
         self,
         project_id: str,
         dataset_id: str,
         table_id: str | None = None,
         config: BigQueryLoggerConfig | None = None,
+        *,
+        graph_name: str | None = None,
+        use_otel: bool = False,
     ) -> None:
         super().__init__()
         (
@@ -1840,6 +2679,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         if table_id:
             self.config.table_id = table_id
 
+        # LangGraph support
+        self.graph_name = graph_name
+
         self._started: bool = False
         self._is_shutting_down: bool = False
         self._setup_lock: threading.Lock = threading.Lock()
@@ -1852,9 +2694,174 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self.trace_registry = TraceIdRegistry()
         self._arrow_schema: Any = None
 
+        # New tracking components
+        self._latency_tracker = LatencyTracker()
+        self._run_context_registry = RunContextRegistry()
+        self._trace_manager = OpenTelemetryTraceManager(use_otel=use_otel)
+
         _ensure_dataset_exists(
             self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
         )
+
+    def _should_log_event(self, event_type: str) -> bool:
+        """Check if an event type should be logged based on allowlist/denylist.
+
+        Args:
+            event_type: The type of event to check.
+
+        Returns:
+            True if the event should be logged, False otherwise.
+        """
+        if self.config.event_denylist and event_type in self.config.event_denylist:
+            return False
+        if (
+            self.config.event_allowlist
+            and event_type not in self.config.event_allowlist
+        ):
+            return False
+        return True
+
+    def _is_langgraph_root_invocation(
+        self,
+        serialized: Optional[Dict[str, Any]],
+        parent_run_id: Optional[uuid.UUID],
+        metadata: Optional[Dict[str, Any]],
+    ) -> bool:
+        """Detect if this is a LangGraph root graph invocation.
+
+        Args:
+            serialized: Serialized component data.
+            parent_run_id: Parent run ID if any.
+            metadata: Run metadata.
+
+        Returns:
+            True if this is a LangGraph root invocation.
+        """
+        # Handle None serialized
+        if serialized is None:
+            return False
+
+        # Check for "Graph" in the name
+        name = serialized.get("name", "") or ""
+        if "Graph" not in name:
+            return False
+
+        # Root invocation has no parent
+        if parent_run_id is not None:
+            return False
+
+        # Check for LangGraph-specific metadata keys
+        if metadata:
+            langgraph_keys = {"langgraph_step", "langgraph_node", "langgraph_triggers"}
+            if any(key in metadata for key in langgraph_keys):
+                return True
+
+        return True  # If name contains Graph and no parent, likely a root
+
+    def _build_langgraph_attributes(
+        self,
+        node_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Build LangGraph-specific attributes for logging.
+
+        Args:
+            node_name: The name of the current node.
+            metadata: Run metadata containing LangGraph info.
+            **kwargs: Additional attributes to include.
+
+        Returns:
+            Dict containing langgraph-specific attributes.
+        """
+        langgraph_attrs: Dict[str, Any] = {}
+
+        if self.graph_name:
+            langgraph_attrs["graph_name"] = self.graph_name
+
+        if node_name:
+            langgraph_attrs["node_name"] = node_name
+
+        if metadata:
+            if "langgraph_node" in metadata:
+                langgraph_attrs["node_name"] = metadata["langgraph_node"]
+            if "langgraph_step" in metadata:
+                langgraph_attrs["step"] = metadata["langgraph_step"]
+            if "langgraph_triggers" in metadata:
+                langgraph_attrs["triggers"] = metadata["langgraph_triggers"]
+            if "langgraph_path" in metadata:
+                langgraph_attrs["path"] = metadata["langgraph_path"]
+
+        # Add execution order
+        langgraph_attrs["execution_order"] = self._get_execution_order()
+
+        # Add any additional kwargs
+        langgraph_attrs.update(kwargs)
+
+        return {"langgraph": langgraph_attrs} if langgraph_attrs else {}
+
+    def _build_content(
+        self, event_type: str, raw_content: Any, metadata: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Build structured content for ADK alignment.
+
+        Args:
+            event_type: The type of event.
+            raw_content: The raw content to structure.
+            metadata: Additional metadata.
+
+        Returns:
+            Structured content dict.
+        """
+        content: Dict[str, Any] = {}
+
+        if event_type == "LLM_REQUEST":
+            if isinstance(raw_content, dict):
+                if "prompts" in raw_content:
+                    content["prompt"] = raw_content["prompts"]
+                elif "messages" in raw_content:
+                    content["messages"] = raw_content["messages"]
+                if metadata and "system_prompt" in metadata:
+                    content["system_prompt"] = metadata["system_prompt"]
+            else:
+                content["prompt"] = raw_content
+
+        elif event_type == "LLM_RESPONSE":
+            content["response"] = raw_content
+            if metadata and "usage" in metadata:
+                content["usage"] = metadata["usage"]
+
+        elif event_type in ("TOOL_STARTING", "NODE_STARTING"):
+            if isinstance(raw_content, dict):
+                content.update(raw_content)
+            else:
+                content["input"] = raw_content
+
+        elif event_type in ("TOOL_COMPLETED", "NODE_COMPLETED"):
+            if isinstance(raw_content, dict):
+                content.update(raw_content)
+            else:
+                content["result"] = raw_content
+
+        else:
+            content["data"] = raw_content
+
+        return content
+
+    def _get_execution_order(self) -> int:
+        """Get the current execution order."""
+        return self._execution_order_cv.get()
+
+    def _increment_execution_order(self) -> int:
+        """Increment and return the execution order."""
+        current = self._execution_order_cv.get()
+        new_order = current + 1
+        self._execution_order_cv.set(new_order)
+        return new_order
+
+    def _reset_execution_order(self) -> None:
+        """Reset the execution order to 0."""
+        self._execution_order_cv.set(0)
 
     def _ensure_started(self) -> None:
         if self._started:
@@ -1936,9 +2943,16 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         error: str | None = None,
         latency: int | None = None,
         metadata: dict | None = None,
+        *,
+        latency_measurement: Optional[LatencyMeasurement] = None,
     ) -> None:
         if not self.config.enabled:
             return
+
+        # Event filtering based on allowlist/denylist
+        if not self._should_log_event(event_type):
+            return
+
         self._ensure_started()
 
         metadata = metadata or {}
@@ -2008,6 +3022,15 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             )
             content_parts = []
 
+        # Build latency_ms from measurement or legacy parameter
+        latency_ms_value: Optional[Dict[str, Any]] = None
+        if latency_measurement:
+            latency_ms_value = {"total_ms": latency_measurement.total_ms}
+            if latency_measurement.component_ms:
+                latency_ms_value["component_ms"] = latency_measurement.component_ms
+        elif latency:
+            latency_ms_value = {"total_ms": latency}
+
         row = {
             "timestamp": datetime.now(timezone.utc),
             "event_type": event_type,
@@ -2023,7 +3046,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             if self.config.log_multi_modal_content
             else [],
             "attributes": attributes,
-            "latency_ms": {"total_ms": latency} if latency else None,
+            "latency_ms": latency_ms_value,
             "status": "ERROR" if error or parsing_error else "OK",
             "error_message": error or parsing_error,
             "is_truncated": is_truncated,
@@ -2053,6 +3076,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        self._latency_tracker.start(run_id)
+
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
         self._log(
             "LLM_REQUEST",
@@ -2073,6 +3099,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         tags: List[str] | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        self._latency_tracker.start(run_id)
+
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
         flat_msgs = [m.model_dump() for sub in messages for m in sub]
         self._log(
@@ -2092,6 +3121,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
         if response.generations and response.generations[0]:
             resp_text = response.generations[0][0].text
         else:
@@ -2104,6 +3136,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             parent_run_id=parent_run_id,
             attributes={"usage": usage},
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
@@ -2116,12 +3149,44 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        self._latency_tracker.start(run_id)
+
+        metadata = kwargs.get("metadata") or {}
+
+        # Detect LangGraph node vs regular chain
+        langgraph_node = metadata.get("langgraph_node")
+        is_graph_root = self._is_langgraph_root_invocation(
+            serialized, parent_run_id, metadata
+        )
+
+        if is_graph_root:
+            # This is a graph root invocation
+            self._reset_execution_order()
+            event_type = "GRAPH_START"
+            attributes = self._build_langgraph_attributes(metadata=metadata)
+        elif langgraph_node:
+            # This is a LangGraph node
+            self._increment_execution_order()
+            event_type = "NODE_STARTING"
+            attributes = self._build_langgraph_attributes(
+                node_name=langgraph_node, metadata=metadata
+            )
+            # Register the node name for later retrieval
+            self._run_context_registry.register(
+                run_id, langgraph_node, parent_run_id, metadata
+            )
+        else:
+            event_type = "CHAIN_START"
+            attributes = None
+
         self._log(
-            "CHAIN_START",
+            event_type,
             run_id,
             content=json.dumps(inputs, default=str),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            attributes=attributes,
+            metadata=metadata,
         )
 
     def on_chain_end(
@@ -2132,12 +3197,38 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
+        metadata = kwargs.get("metadata") or {}
+
+        # Check if this was a LangGraph node
+        context = self._run_context_registry.pop(run_id)
+        langgraph_node = metadata.get("langgraph_node")
+
+        if context or langgraph_node:
+            # This was a LangGraph node
+            node_name = context.name if context else langgraph_node
+            event_type = "NODE_COMPLETED"
+            attributes = self._build_langgraph_attributes(
+                node_name=node_name, metadata=metadata
+            )
+        elif parent_run_id is None and self.graph_name:
+            # This might be graph end (no parent, graph_name set)
+            event_type = "GRAPH_END"
+            attributes = self._build_langgraph_attributes(metadata=metadata)
+        else:
+            event_type = "CHAIN_END"
+            attributes = None
+
         self._log(
-            "CHAIN_END",
+            event_type,
             run_id,
             content=json.dumps(outputs, default=str),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            attributes=attributes,
+            metadata=metadata,
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
@@ -2149,12 +3240,38 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
+        metadata = kwargs.get("metadata") or {}
+
+        # Check if this was a LangGraph node
+        context = self._run_context_registry.pop(run_id)
+        langgraph_node = metadata.get("langgraph_node")
+
+        if context or langgraph_node:
+            # This was a LangGraph node
+            node_name = context.name if context else langgraph_node
+            event_type = "NODE_ERROR"
+            attributes = self._build_langgraph_attributes(
+                node_name=node_name, metadata=metadata
+            )
+        elif parent_run_id is None and self.graph_name:
+            # This might be graph error (no parent, graph_name set)
+            event_type = "GRAPH_ERROR"
+            attributes = self._build_langgraph_attributes(metadata=metadata)
+        else:
+            event_type = "CHAIN_ERROR"
+            attributes = None
+
         self._log(
-            "CHAIN_ERROR",
+            event_type,
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            attributes=attributes,
+            metadata=metadata,
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
@@ -2167,11 +3284,21 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        self._latency_tracker.start(run_id)
+
+        # Register tool name for later retrieval in on_tool_end
+        tool_name = serialized.get("name", "unknown_tool")
+        self._run_context_registry.register(
+            run_id, tool_name, parent_run_id, kwargs.get("metadata")
+        )
+
         self._log(
             "TOOL_STARTING",
             run_id,
-            content=input_str,
+            content={"tool": tool_name, "input": input_str},
             parent_run_id=parent_run_id,
+            attributes={"tool_name": tool_name},
             metadata=kwargs.get("metadata"),
         )
 
@@ -2183,12 +3310,21 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
+        # Retrieve tool name from registry
+        context = self._run_context_registry.pop(run_id)
+        tool_name = context.name if context else "unknown_tool"
+
         self._log(
             "TOOL_COMPLETED",
             run_id,
-            content=str(output),
+            content={"tool": tool_name, "result": str(output)},
             parent_run_id=parent_run_id,
+            attributes={"tool_name": tool_name},
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
@@ -2200,12 +3336,21 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
+        # Retrieve tool name from registry
+        context = self._run_context_registry.pop(run_id)
+        tool_name = context.name if context else "unknown_tool"
+
         self._log(
             "TOOL_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
+            attributes={"tool_name": tool_name},
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
@@ -2268,6 +3413,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # Start latency tracking
+        self._latency_tracker.start(run_id)
+
         self._log(
             "RETRIEVER_START",
             run_id,
@@ -2284,6 +3432,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
         docs = [doc.model_dump() for doc in documents]
         self._log(
             "RETRIEVER_END",
@@ -2291,6 +3442,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             content=json.dumps(docs, default=str),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
@@ -2302,12 +3454,16 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
         self._log(
             "RETRIEVER_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
@@ -2319,14 +3475,231 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # End latency tracking
+        latency_measurement = self._latency_tracker.end(run_id)
+
         self._log(
             "LLM_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
+            latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
 
+    def graph_context(
+        self,
+        graph_name: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> "GraphExecutionContext":
+        """Create a context manager for graph execution.
+
+        Usage:
+            with handler.graph_context("my_graph") as ctx:
+                result = graph.invoke(inputs)
+
+        Args:
+            graph_name: Name of the graph being executed.
+            metadata: Optional metadata to include in events.
+
+        Returns:
+            GraphExecutionContext that emits GRAPH_START/GRAPH_END events.
+        """
+        return GraphExecutionContext(self, graph_name, metadata)
+
     def close(self) -> None:
         self.shutdown()
+
+
+# ==============================================================================
+# GRAPH EXECUTION CONTEXT MANAGERS
+# ==============================================================================
+
+
+class GraphExecutionContext:
+    """Context manager for wrapping graph execution with GRAPH_START/GRAPH_END events.
+
+    Usage:
+        with handler.graph_context("my_graph") as ctx:
+            # Graph execution happens here
+            result = graph.invoke(inputs)
+
+    This will emit GRAPH_START when entering and GRAPH_END when exiting.
+    If an exception occurs, GRAPH_ERROR will be emitted instead of GRAPH_END.
+    """
+
+    def __init__(
+        self,
+        handler: BigQueryCallbackHandler,
+        graph_name: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Initialize the graph execution context.
+
+        Args:
+            handler: The BigQueryCallbackHandler instance.
+            graph_name: Name of the graph being executed.
+            metadata: Optional metadata to include in events.
+        """
+        self.handler = handler
+        self.graph_name = graph_name
+        self.metadata = metadata or {}
+        self._run_id: Optional[uuid.UUID] = None
+        self._original_graph_name: Optional[str] = None
+
+    def __enter__(self) -> "GraphExecutionContext":
+        """Enter the context and emit GRAPH_START event."""
+        self._run_id = uuid.uuid4()
+        self._original_graph_name = self.handler.graph_name
+        self.handler.graph_name = self.graph_name
+        self.handler._reset_execution_order()
+        self.handler._latency_tracker.start(self._run_id)
+
+        self.handler._log(
+            "GRAPH_START",
+            self._run_id,
+            content=json.dumps({"graph_name": self.graph_name}, default=str),
+            attributes=self.handler._build_langgraph_attributes(metadata=self.metadata),
+            metadata=self.metadata,
+        )
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type],
+        exc_val: Optional[BaseException],
+        exc_tb: Any,
+    ) -> None:
+        """Exit the context and emit GRAPH_END or GRAPH_ERROR event."""
+        if self._run_id is None:
+            return
+
+        latency_measurement = self.handler._latency_tracker.end(self._run_id)
+
+        if exc_val is not None:
+            # An exception occurred - emit GRAPH_ERROR
+            self.handler._log(
+                "GRAPH_ERROR",
+                self._run_id,
+                error=str(exc_val),
+                attributes=self.handler._build_langgraph_attributes(
+                    metadata=self.metadata
+                ),
+                metadata=self.metadata,
+                latency_measurement=latency_measurement,
+            )
+        else:
+            # Normal completion - emit GRAPH_END
+            self.handler._log(
+                "GRAPH_END",
+                self._run_id,
+                content=json.dumps({"graph_name": self.graph_name}, default=str),
+                attributes=self.handler._build_langgraph_attributes(
+                    metadata=self.metadata
+                ),
+                metadata=self.metadata,
+                latency_measurement=latency_measurement,
+            )
+
+        # Restore original graph name
+        self.handler.graph_name = self._original_graph_name
+
+    @property
+    def run_id(self) -> Optional[uuid.UUID]:
+        """Get the run ID for this graph execution."""
+        return self._run_id
+
+
+class AsyncGraphExecutionContext:
+    """Async context manager for wrapping graph execution with events.
+
+    Usage:
+        async with handler.graph_context("my_graph") as ctx:
+            # Graph execution happens here
+            result = await graph.ainvoke(inputs)
+
+    This will emit GRAPH_START when entering and GRAPH_END when exiting.
+    If an exception occurs, GRAPH_ERROR will be emitted instead of GRAPH_END.
+    """
+
+    def __init__(
+        self,
+        handler: AsyncBigQueryCallbackHandler,
+        graph_name: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Initialize the async graph execution context.
+
+        Args:
+            handler: The AsyncBigQueryCallbackHandler instance.
+            graph_name: Name of the graph being executed.
+            metadata: Optional metadata to include in events.
+        """
+        self.handler = handler
+        self.graph_name = graph_name
+        self.metadata = metadata or {}
+        self._run_id: Optional[uuid.UUID] = None
+        self._original_graph_name: Optional[str] = None
+
+    async def __aenter__(self) -> "AsyncGraphExecutionContext":
+        """Enter the context and emit GRAPH_START event."""
+        self._run_id = uuid.uuid4()
+        self._original_graph_name = self.handler.graph_name
+        self.handler.graph_name = self.graph_name
+        self.handler._reset_execution_order()
+        await self.handler._latency_tracker.start(self._run_id)
+
+        await self.handler._log(
+            "GRAPH_START",
+            self._run_id,
+            content=json.dumps({"graph_name": self.graph_name}, default=str),
+            attributes=self.handler._build_langgraph_attributes(metadata=self.metadata),
+            metadata=self.metadata,
+        )
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[type],
+        exc_val: Optional[BaseException],
+        exc_tb: Any,
+    ) -> None:
+        """Exit the context and emit GRAPH_END or GRAPH_ERROR event."""
+        if self._run_id is None:
+            return
+
+        latency_measurement = await self.handler._latency_tracker.end(self._run_id)
+
+        if exc_val is not None:
+            # An exception occurred - emit GRAPH_ERROR
+            await self.handler._log(
+                "GRAPH_ERROR",
+                self._run_id,
+                error=str(exc_val),
+                attributes=self.handler._build_langgraph_attributes(
+                    metadata=self.metadata
+                ),
+                metadata=self.metadata,
+                latency_measurement=latency_measurement,
+            )
+        else:
+            # Normal completion - emit GRAPH_END
+            await self.handler._log(
+                "GRAPH_END",
+                self._run_id,
+                content=json.dumps({"graph_name": self.graph_name}, default=str),
+                attributes=self.handler._build_langgraph_attributes(
+                    metadata=self.metadata
+                ),
+                metadata=self.metadata,
+                latency_measurement=latency_measurement,
+            )
+
+        # Restore original graph name
+        self.handler.graph_name = self._original_graph_name
+
+    @property
+    def run_id(self) -> Optional[uuid.UUID]:
+        """Get the run ID for this graph execution."""
+        return self._run_id
