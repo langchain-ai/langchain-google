@@ -455,7 +455,7 @@ class LatencyTracker:
                 components = self._component_times.pop(run_id)
                 # Filter out any unfinished component start markers
                 component_ms = {
-                    k: v for k, v in components.items() if not k.endswith("_start")
+                    k: int(v) for k, v in components.items() if not k.endswith("_start")
                 }
                 if not component_ms:
                     component_ms = None
@@ -533,7 +533,7 @@ class AsyncLatencyTracker:
                 components = self._component_times.pop(run_id)
                 # Filter out any unfinished component start markers
                 component_ms = {
-                    k: v for k, v in components.items() if not k.endswith("_start")
+                    k: int(v) for k, v in components.items() if not k.endswith("_start")
                 }
                 if not component_ms:
                     component_ms = None
