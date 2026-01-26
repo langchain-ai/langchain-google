@@ -19,16 +19,12 @@ from langchain_google_vertexai.model_garden_maas import (
 model_names = _LLAMA_MODELS + _MISTRAL_MODELS
 # Fix tool support for new Mistral and Llama models
 model_names_with_tools_support = [
-    "mistral-nemo@2407",
+    "mistral-medium-3",
 ]
 model_locations = {
     "meta/llama-4-maverick-17b-128e-instruct-maas": "us-east5",
     "meta/llama-4-scout-17b-16e-instruct-maas": "us-east5",
 }
-
-# TODO: mistral-nemo@2407 missing from Cloud project
-model_names.remove("mistral-nemo@2407")
-model_names_with_tools_support.remove("mistral-nemo@2407")
 
 
 @pytest.mark.extended
