@@ -765,9 +765,7 @@ class OpenTelemetryTraceManager:
             if self._otel_available:
                 current_span = self._otel_trace.get_current_span()
                 if current_span and current_span.get_span_context().is_valid:
-                    trace_id = format(
-                        current_span.get_span_context().trace_id, "032x"
-                    )
+                    trace_id = format(current_span.get_span_context().trace_id, "032x")
                 else:
                     trace_id = self._generate_trace_id()
             else:
