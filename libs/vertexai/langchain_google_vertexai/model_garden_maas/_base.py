@@ -25,12 +25,7 @@ from typing_extensions import Self
 
 from langchain_google_vertexai._base import _VertexAIBase
 
-_MISTRAL_MODELS: list[str] = [
-    "mistral-nemo@2407",
-    "mistral-large-2411@001",
-    "mistral-small-2503@001",
-    "codestral-2501@001",
-]
+_MISTRAL_MODELS: list[str] = ["mistral-medium-3", "mistral-small-2503", "codestral-2"]
 _LLAMA_MODELS: list[str] = [
     "meta/llama-3.2-90b-vision-instruct-maas",
     "meta/llama-3.3-70b-instruct-maas",
