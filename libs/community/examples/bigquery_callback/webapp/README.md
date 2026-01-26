@@ -3,7 +3,7 @@
 A real-time monitoring dashboard for LangGraph agents using BigQuery as the backend.
 This is a **Datadog-like observability platform** for your AI agents.
 
-![Dashboard Preview](https://via.placeholder.com/800x400?text=LangGraph+Agent+Analytics+Dashboard)
+![Dashboard Preview](static/dashboard_preview.png)
 
 ## Features
 
