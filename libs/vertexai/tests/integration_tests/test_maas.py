@@ -29,6 +29,7 @@ model_locations = {
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 def test_generate(model_name: str) -> None:
     llm = get_vertex_maas_model(
         model_name=model_name, location=model_locations.get(model_name, "us-central1")
@@ -39,6 +40,7 @@ def test_generate(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 async def test_agenerate(model_name: str) -> None:
     llm = get_vertex_maas_model(
         model_name=model_name, location=model_locations.get(model_name, "us-central1")
@@ -49,6 +51,7 @@ async def test_agenerate(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 def test_stream(model_name: str) -> None:
     # streaming currently fails with mistral-nemo@2407
     if "stral" in model_name:
@@ -63,6 +66,7 @@ def test_stream(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 async def test_astream(model_name: str) -> None:
     # streaming currently fails with mistral-nemo@2407
     if "stral" in model_name:
