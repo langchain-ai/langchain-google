@@ -2,11 +2,11 @@
 
 As an open-source project in a rapidly developing field, we are extremely open to contributions, whether it be in the form of a new feature, improved infrastructure, or better documentation.
 
-For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview).
+For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview). This document outlines additional details specific to the `langchain-google` repository.
 
-## Repository Structure
+## Repository structure
 
-If you plan on contributing to LangChain-Google code or documentation, it can be useful to understand the high level structure of the repository.
+If you plan on contributing to `langchain-google` code or documentation, it can be useful to understand the high level structure of the repository.
 
 `langchain-google` is organized as a [monorepo](https://en.wikipedia.org/wiki/Monorepo) that contains multiple packages.
 
@@ -15,11 +15,11 @@ Here's the structure visualized as a tree:
 ```text
 .
 ├── libs
-│   ├── community
+│   ├── genai
 │   │   ├── tests/unit_tests # Unit tests (present in each package, not shown for brevity)
 │   │   ├── tests/integration_tests # Integration tests (present in each package, not shown for brevity)
-│   ├── genai
 │   ├── vertexai
+│   ├── community
 ```
 
 The root directory also contains the following files:
@@ -29,149 +29,9 @@ The root directory also contains the following files:
 
 There are other files in the root directory level, but their presence should be self-explanatory.
 
-## Local Development Dependencies
+## Integration tests
 
-Install development requirements (for running langchain, running examples, linting, formatting, tests, and coverage):
-
-```bash
-uv sync --group lint --group typing --group test --group test_integration
-```
-
-Then verify dependency installation:
-
-```bash
-make test
-```
-
-## Formatting and Linting
-
-### Formatting
-
-Formatting for this project is done via [ruff](https://docs.astral.sh/ruff/rules/).
-
-To run formatting for a library, run the same command from the relevant library directory:
-
-```bash
-cd libs/{LIBRARY}
-make format
-```
-
-Additionally, you can run the formatter only on the files that have been modified in your current branch as compared to the master branch using the format_diff command:
-
-```bash
-make format_diff
-```
-
-This is especially useful when you have made changes to a subset of the project and want to ensure your changes are properly formatted without affecting the rest of the codebase.
-
-### Linting
-
-Linting for this project is done via a combination of [ruff](https://docs.astral.sh/ruff/rules/) and [mypy](http://mypy-lang.org/).
-
-To run linting for docs, cookbook and templates:
-
-```bash
-make lint
-```
-
-To run linting for a library, run the same command from the relevant library directory:
-
-```bash
-cd libs/{LIBRARY}
-make lint
-```
-
-In addition, you can run the linter only on the files that have been modified in your current branch as compared to the master branch using the lint_diff command:
-
-```bash
-make lint_diff
-```
-
-This can be very helpful when you've made changes to only certain parts of the project and want to ensure your changes meet the linting standards without having to check the entire codebase.
-
-We recognize linting can be annoying - if you do not want to do it, please contact a project maintainer, and they can help you with it. We do not want this to be a blocker for good code getting contributed.
-
-## Working with Optional Dependencies
-
-`community`, `genai`, and `vertexai` rely on optional dependencies to keep these packages lightweight.
-
-You'll notice that `pyproject.toml` and `uv.lock` are **not** touched when you add optional dependencies below.
-
-If you're adding a new dependency to Langchain-Google, assume that it will be an optional dependency, and that most users won't have it installed.
-
-Users who do not have the dependency installed should be able to **import** your code without any side effects (no warnings, no errors, no exceptions).
-
-To introduce the dependency to a library, please do the following:
-
-1. Open `extended_testing_deps.txt` and add the dependency
-2. Add a unit test that the very least attempts to import the new code. Ideally, the unit test makes use of lightweight fixtures to test the logic of the code.
-3. Please use the `@pytest.mark.requires(package_name)` decorator for any unit tests that require the dependency.
-
-## Testing
-
-All of our packages have unit tests and integration tests, and we favor unit tests over integration tests.
-
-Unit tests run on every pull request, so they should be fast and reliable.
-
-Integration tests run once a day, and they require more setup, so they should be reserved for confirming interface points with external services.
-
-### Unit Tests
-
-Unit tests cover modular logic that does not require calls to outside APIs.
-
-If you add new logic, please add a unit test.
-
-In unit tests we check pre/post processing and mocking all external dependencies.
-
-To install dependencies for unit tests:
-
-```bash
-uv sync --group test
-```
-
-To run unit tests:
-
-```bash
-make test
-```
-
-To run unit tests in Docker:
-
-```bash
-make docker_tests
-```
-
-To run a specific test:
-
-```bash
-TEST_FILE=tests/unit_tests/test_imports.py make test
-```
-
-### Integration Tests
-
-Integration tests cover logic that requires making calls to outside APIs (often integration with other services).
-
-If you add support for a new external API, please add a new integration test.
-
-**Warning:** Almost no tests should be integration tests.
-
-  Tests that require making network connections make it difficult for other developers to test the code.
-
-  Instead favor relying on `responses` library and/or `mock.patch` to mock requests using small fixtures.
-
-To install dependencies for integration tests:
-
-```bash
-uv sync --group test --group test_integration
-```
-
-To run integration tests:
-
-```bash
-make integration_tests
-```
-
-#### Backend Selection for Integration Tests
+### Backend selection
 
 For `libs/genai`, integration tests can run against different backends using the `TEST_VERTEXAI` environment variable:
 
@@ -181,7 +41,7 @@ For `libs/genai`, integration tests can run against different backends using the
 
 Vertex AI tests require the `GOOGLE_CLOUD_PROJECT` environment variable to be set. Tests will automatically skip if not configured.
 
-#### Annotating integration tests
+### Annotating integration tests
 
 We annotate integration tests to separate those tests which heavily rely on GCP infrastructure. Especially for running those tests we have created a separate GCP project with all necessary infrastructure parts provisioned. To run the extended integration tests locally you will need to provision a GCP project and pass its configuration via env variables.
 
@@ -214,18 +74,34 @@ start "" htmlcov/index.html || open htmlcov/index.html
 
 ```
 
-### Coverage
+## Releases
 
-Code coverage (i.e. the amount of code that is covered by unit tests) helps identify areas of the code that are potentially more or less brittle.
+Releases are automated using [release-please](https://github.com/googleapis/release-please). When commits land on `main`, release-please analyzes them and creates/updates release PRs with changelog entries and version bumps.
 
-Coverage requires the dependencies for integration tests:
+### How it works
 
-```bash
-uv sync --group test_integration
-```
+1. **Make commits using [Conventional Commits](https://www.conventionalcommits.org/) format** - this determines version bumps:
+   - `fix(genai): ...` → patch bump (4.2.0 → 4.2.1)
+   - `feat(genai): ...` → minor bump (4.2.0 → 4.3.0)
+   - `feat(genai)!: ...` or `fix(genai)!: ...` → major bump (4.2.0 → 5.0.0)
 
-To get a report of current coverage, run the following:
+2. **Release-please creates a PR** for each package with pending changes, titled `release(genai): X.Y.Z`
 
-```bash
-make coverage
-```
+3. **Merge the release PR** → triggers the release workflow which runs tests, publishes to PyPI, and creates a GitHub Release
+
+### What if a release fails?
+
+If the release workflow fails after a release PR is merged (e.g., tests fail, PyPI publish fails):
+
+1. **The GitHub Release is NOT created** - it only happens after successful PyPI publish
+2. **Fix the issue** in a follow-up commit
+3. **Manually retry the release** by triggering `_release.yml` via `workflow_dispatch`:
+   - Go to Actions → "🚀 Package Release" → Run workflow
+   - Select the package directory (e.g., `libs/genai`)
+   - Enter the version from `pyproject.toml`
+
+**Why manual retry?** The version was already bumped in `pyproject.toml` when the release PR merged. If you push a fix and let release-please create a new PR, it will bump to the *next* version (e.g., 4.3.0 → 4.3.1), and 4.3.0 will be skipped. Manual retry preserves the intended version.
+
+### Manual releases
+
+For hotfixes or bypassing release-please, you can still manually trigger `_release.yml` via `workflow_dispatch`.
