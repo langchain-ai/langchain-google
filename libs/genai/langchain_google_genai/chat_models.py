@@ -1638,7 +1638,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             - Property ordering preservation
             - Support for streaming partial JSON chunks
 
-            Uses Gemini's `response_json_schema` API param. Refer to the Gemini API
+            Uses Gemini's `response_schema` API param. Refer to the Gemini API
             [docs](https://ai.google.dev/gemini-api/docs/structured-output) for more
             details. This method is recommended for better reliability as it
             constrains the model's generation process directly.
@@ -2677,7 +2677,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> dict[str, Any]:
         """Add response-specific parameters to generation config.
 
-        Includes `response_mime_type`, `response_schema`, and `response_json_schema`.
+        Includes `response_mime_type`, and `response_schema`.
         """
         # Handle response mime type
         response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
@@ -2685,19 +2685,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen_config["response_mime_type"] = response_mime_type
 
         response_schema = kwargs.get("response_schema", self.response_schema)
-        response_json_schema = kwargs.get("response_json_schema")  # If passed as kwarg
 
         # Handle both response_schema and response_json_schema
-        # (Regardless, we use `response_json_schema` in the request)
-        schema_to_use = (
-            response_json_schema
-            if response_json_schema is not None
-            else response_schema
-        )
-        if schema_to_use:
+        # (Regardless, we use `response_schema` in the request)
+        if "response_json_schema" in kwargs:
+            response_schema = kwargs.pop("response_json_schema")
+
+        if response_schema:
             self._validate_and_add_response_schema(
                 gen_config=gen_config,
-                response_schema=schema_to_use,
+                response_schema=response_schema,
                 response_mime_type=response_mime_type,
             )
 
@@ -2721,7 +2718,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
             raise ValueError(error_message)
 
-        gen_config["response_json_schema"] = response_schema
+        gen_config["response_schema"] = response_schema
 
     def _prepare_request(
         self,
@@ -2786,8 +2783,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     kwargs["response_mime_type"] = "application/json"
                 json_schema = response_format.get("json_schema", {})
                 schema = json_schema.get("schema")
-                if schema and "response_json_schema" not in kwargs:
-                    kwargs["response_json_schema"] = schema
+                if schema and "response_schema" not in kwargs:
+                    kwargs["response_schema"] = schema
 
         # Get generation parameters
         # (consumes thinking kwargs into params.thinking_config)
@@ -2806,7 +2803,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_level",
             "include_thoughts",
             "response_schema",
-            "response_json_schema",
             "response_mime_type",
         }
         _consumed_kwargs.update(params.model_fields_set)
@@ -3413,7 +3409,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # This ensures Union types and nested schemas work correctly.
             llm = self.bind(
                 response_mime_type="application/json",
-                response_json_schema=schema_json,
+                response_schema=schema_json,
                 ls_structured_output_format={
                     "kwargs": {"method": method},
                     "schema": ls_schema,
