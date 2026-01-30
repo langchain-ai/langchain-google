@@ -2998,7 +2998,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         image_config_obj = None
         if image_config_dict is not None:
             image_config_obj = ImageConfig(**image_config_dict)
-
+        # Reformat kwargs injected from Langchain's provider strategy
+        provider_strategy_setting = kwargs.pop("response_format", None)
+        if isinstance(provider_strategy_setting, dict):
+            kwargs["response_mime_type"] = "application/json"
+            kwargs["response_json_schema"] = provider_strategy_setting.get(
+                "json_schema", {}
+            ).get("schema")
+            kwargs.pop("strict")
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
