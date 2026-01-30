@@ -95,11 +95,11 @@ class _BaseGoogleGenerativeAI(BaseModel):
         ```python
         # Ensure ADC is configured: gcloud auth application-default login
         # Either set GOOGLE_CLOUD_PROJECT env var or pass project directly
-        # Location defaults to us-central1 or can be set via GOOGLE_CLOUD_LOCATION
+        # Location defaults to global or can be set via GOOGLE_CLOUD_LOCATION
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             project="my-project",
-            # location="us-central1",
+            # location="global",
         )
         ```
 
@@ -111,7 +111,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     | `GEMINI_API_KEY` | API key (fallback) | Both (see `GOOGLE_GENAI_USE_VERTEXAI`) |
     | `GOOGLE_GENAI_USE_VERTEXAI` | Force Vertex AI backend (`true`/`false`) | Vertex AI |
     | `GOOGLE_CLOUD_PROJECT` | GCP project ID | Vertex AI |
-    | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `us-central1`) | Vertex AI |
+    | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `global`) | Vertex AI |
     | `HTTPS_PROXY` | HTTP/HTTPS proxy URL | Both |
     | `SSL_CERT_FILE` | Custom SSL certificate file | Both |
 
@@ -247,7 +247,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """Google Cloud region (**Vertex AI only**).
 
     If not provided, falls back to the `GOOGLE_CLOUD_LOCATION` env var, then
-    `'us-central1'`.
+    `'global'`.
     """
 
     base_url: str | dict | None = Field(default=None, alias="client_options")
