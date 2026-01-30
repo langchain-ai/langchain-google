@@ -1327,7 +1327,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         | `GEMINI_API_KEY` | API key (fallback) | Both (see `GOOGLE_GENAI_USE_VERTEXAI`) |
         | `GOOGLE_GENAI_USE_VERTEXAI` | Force Vertex AI backend (`true`/`false`) | Vertex AI |
         | `GOOGLE_CLOUD_PROJECT` | GCP project ID | Vertex AI |
-        | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `us-central1`) | Vertex AI |
+        | `GOOGLE_CLOUD_LOCATION` | GCP region (default: `global`) | Vertex AI |
         | `HTTPS_PROXY` | HTTP/HTTPS proxy URL | Both |
         | `SSL_CERT_FILE` | Custom SSL certificate file | Both |
 
