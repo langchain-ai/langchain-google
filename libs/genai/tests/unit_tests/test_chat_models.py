@@ -2848,6 +2848,38 @@ def test_convert_to_parts_media_with_file_uri() -> None:
     assert result[0].file_data.file_uri == "gs://bucket/file.pdf"
 
 
+def test_convert_to_parts_video_type_alias() -> None:
+    """Test `_convert_to_parts` with video type as alias for media."""
+    content = [
+        {
+            "type": "video",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.mime_type == "video/mp4"
+    assert result[0].file_data.file_uri == "gs://bucket/video.mp4"
+
+
+def test_convert_to_parts_media_with_url_alias() -> None:
+    """Test `_convert_to_parts` with url as alias for file_uri."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "url": "gs://bucket/video.mp4",
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].file_data is not None
+    assert result[0].file_data.mime_type == "video/mp4"
+    assert result[0].file_data.file_uri == "gs://bucket/video.mp4"
+
+
 def test_convert_to_parts_media_with_video_metadata() -> None:
     """Test `_convert_to_parts` with media type containing video metadata."""
     content = [
