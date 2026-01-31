@@ -2,7 +2,8 @@
 Tests configuration to be executed before tests execution.
 """
 
-from typing import List
+import asyncio
+from typing import Generator, List
 
 import pytest
 
@@ -62,3 +63,20 @@ def pytest_collection_modifyitems(
         if keywords and not any((config.getoption(f"--{kw}") for kw in keywords)):
             skip = pytest.mark.skip(reason=f"need --{keywords[0]} option to run")
             item.add_marker(skip)
+
+
+@pytest.fixture
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
+    """Provide a clean event loop and ensure pending tasks are cancelled."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        yield loop
+    finally:
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        loop.close()
+        asyncio.set_event_loop(None)
