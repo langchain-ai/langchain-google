@@ -1332,7 +1332,8 @@ async def _aconvert_to_parts(
                     blob_kwargs = {"data": bytes_}
                     if mime_type:
                         blob_kwargs["mime_type"] = mime_type
-                    part_kwargs = {"inline_data": Blob(**blob_kwargs)}
+                    blob = Blob(**blob_kwargs)
+                    part_kwargs: dict[str, Any] = {"inline_data": blob}
 
                     if "media_resolution" in part:
                         if model and _is_gemini_3_or_later(model):
@@ -1367,7 +1368,7 @@ async def _aconvert_to_parts(
                 elif part["type"] == "media":
                     # ... (Simplified for brevity, standard media handling)
                     mime_type = part["mime_type"]
-                    media_part_kwargs = {}
+                    media_part_kwargs: dict[str, Any] = {}
                     if "data" in part:
                         media_part_kwargs["inline_data"] = Blob(
                             data=part["data"], mime_type=mime_type
@@ -1471,7 +1472,7 @@ async def _aparse_chat_history(
     for i, message in enumerate(messages_without_tool_messages):
         if isinstance(message, SystemMessage):
             # Async call
-            system_parts = await _aconvert_to_parts(message.content, model=model)
+            system_parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
@@ -1487,7 +1488,7 @@ async def _aparse_chat_history(
                 if message.content:
                     # This usually only has text, safe to use sync or minimal conversion
                     # But for completeness:
-                    parts = await _aconvert_to_parts(message.content, model=model)
+                    parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
                     ai_message_parts.extend(parts)
 
                 # Revert to standard loop to fix syntax and satisfy linter
@@ -1519,14 +1520,14 @@ async def _aparse_chat_history(
                 continue
 
             if message.response_metadata.get("output_version") == "v1":
-                parts = message.content
+                parts = cast(list[Part], message.content)
             else:
-                parts = await _aconvert_to_parts(message.content, model=model)
+                parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
             formatted_messages.append(Content(role=role, parts=parts))
 
         elif isinstance(message, HumanMessage):
             role = "user"
-            parts = await _aconvert_to_parts(message.content, model=model)
+            parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = list(system_instruction.parts or []) + parts
                 system_instruction = None
