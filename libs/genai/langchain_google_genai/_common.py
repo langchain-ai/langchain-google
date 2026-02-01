@@ -506,6 +506,16 @@ class _BaseGoogleGenerativeAI(BaseModel):
         infrastructure.
     """
 
+    labels: dict[str, str] | None = Field(default=None)
+    """User-defined key-value metadata for organizing and filtering billing reports.
+
+    Attach labels to categorize API usage by team, environment, or feature.
+
+    Can be overridden per-request via invoke kwargs.
+
+    See: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls
+    """
+
     @model_validator(mode="after")
     def _resolve_project_from_credentials(self) -> Self:
         """Extract project from credentials if not explicitly set.

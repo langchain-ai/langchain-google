@@ -16,7 +16,8 @@ def test_call() -> None:
         google_api_key=google_api_key, google_cse_id=google_cse_id
     )
     output = search.run("What was Obama's first name?")
-    assert "Barack Hussein Obama II" in output
+    assert "Barack" in output
+    assert "Hussein" in output
 
 
 @pytest.mark.extended

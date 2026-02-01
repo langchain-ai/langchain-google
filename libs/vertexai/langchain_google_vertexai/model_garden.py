@@ -291,6 +291,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         llm_output = {
             k: v for k, v in data_dict.items() if k not in ("content", "role", "type")
         }
+
+        if llm_output.get("model_name", None) is None:
+            llm_model = llm_output.get("model", None)
+            if llm_model is not None:
+                llm_output["model_name"] = llm_model
         if len(content) == 1 and content[0]["type"] == "text":
             msg = AIMessage(content=content[0]["text"])
         elif any(block["type"] == "tool_use" for block in content):

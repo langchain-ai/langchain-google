@@ -6,6 +6,7 @@ Ref: https://cloud.google.com/security-command-center/docs/model-armor-overview
 
 import logging
 import os
+from collections.abc import Iterable, Mapping
 from typing import Any, List, Optional, TypeVar, Union
 
 import google.auth
@@ -134,7 +135,7 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
         client_options: Optional[Any] = None,
         client_info: Optional[Any] = None,
         template_id: Optional[str] = None,
-        fail_open: bool = True,
+        fail_open: bool = False,
         **kwargs: Any,
     ) -> None:
         # Initialize the ModelArmorParams base class.
@@ -206,7 +207,25 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
 
         # Handle LangChain message types.
         if isinstance(value, BaseMessage):
-            return getattr(value, "content", str(value))
+            # LangChain v1 exposes content_blocks for multimodal messages.
+            content_blocks = getattr(value, "content_blocks", None)
+            text_from_blocks = self._content_blocks_to_text(content_blocks)
+            if text_from_blocks:
+                return text_from_blocks
+
+            content_attr = getattr(value, "content", None)
+            if isinstance(content_attr, list):
+                list_text = self._content_blocks_to_text(content_attr)
+                if list_text:
+                    return list_text
+
+            if isinstance(content_attr, str):
+                return content_attr
+
+            if content_attr is not None:
+                return str(content_attr)
+
+            return str(value)
 
         # Handle LangChain prompt templates.
         if isinstance(value, BasePromptTemplate):
@@ -246,6 +265,75 @@ class ModelArmorSanitizeBaseRunnable(ModelArmorParams, RunnableSerializable):
                 f"Supported types are: str, BaseMessage, BasePromptTemplate, "
                 f"List[BaseMessage], or objects with to_string() or format() methods."
             ) from e
+
+    def _content_blocks_to_text(self, blocks: Any) -> Optional[str]:
+        """Extract textual content from LangChain v1 standard content blocks."""
+
+        if blocks in (None, ""):
+            return None
+
+        text_parts: list[str] = []
+
+        def _consume(block: Any) -> None:
+            if block in (None, ""):
+                return
+
+            if isinstance(block, str):
+                text_parts.append(block)
+                return
+
+            if isinstance(block, Mapping):
+                block_type = block.get("type") or block.get("kind")
+                if block_type == "text":
+                    _consume(block.get("text"))
+                    return
+                if block_type == "reasoning":
+                    _consume(block.get("reasoning"))
+                    return
+                if block_type in {"output", "output_text"}:
+                    _consume(block.get("output"))
+                    _consume(block.get("text"))
+                    return
+                if block_type == "tool_result":
+                    _consume(block.get("output"))
+                    return
+
+                # Skip non-textual content blocks (images, audio, video, etc.)
+                if block_type in {
+                    "image",
+                    "image_url",
+                    "audio",
+                    "video",
+                    "media",
+                    "file",
+                }:
+                    return
+
+                for key in ("text", "reasoning", "output", "content"):
+                    if key in block:
+                        _consume(block[key])
+                        return
+
+                # Fallback: attempt to read nested iterable values.
+                for value in block.values():
+                    if isinstance(value, (str, Mapping, list, tuple)):
+                        _consume(value)
+                return
+
+            if isinstance(block, Iterable) and not isinstance(
+                block, (bytes, bytearray)
+            ):
+                for item in block:
+                    _consume(item)
+                return
+
+            # Fallback to best-effort string conversion for unknown content types.
+            text_parts.append(str(block))
+
+        _consume(blocks)
+
+        combined = "\n".join(part for part in text_parts if part)
+        return combined or None
 
     def evaluate(
         self,

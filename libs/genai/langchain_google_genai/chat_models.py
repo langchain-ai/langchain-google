@@ -3083,6 +3083,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         labels = kwargs.pop("labels", None)
         if labels is None:
             labels = getattr(self, "labels", None)
+            labels = self.labels
 
         _consumed_kwargs = {
             "thinking_budget",
