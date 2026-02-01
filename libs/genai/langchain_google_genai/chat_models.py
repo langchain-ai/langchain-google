@@ -734,7 +734,7 @@ def _parse_chat_history(
                 parts = [Part(function_call=function_call)]
             elif message.response_metadata.get("output_version") == "v1":
                 # Already converted to v1beta format above
-                parts = message.content  # type: ignore[assignment]
+                parts = cast("list[Part]", message.content)
             else:
                 # Prepare request content parts from message.content field
                 parts = _convert_to_parts(message.content, model=model)
@@ -754,9 +754,7 @@ def _parse_chat_history(
         # Final step; assemble the Content object to pass to the API
         # If version = "v1", the parts are already in v1beta format and will be
         # automatically converted using protobuf's auto-conversion
-        formatted_messages.append(
-            Content(role=role, parts=parts)
-        )
+        formatted_messages.append(Content(role=role, parts=parts))
 
     # Enforce thought signatures for new Gemini models
     #
@@ -1401,7 +1399,7 @@ async def _aconvert_tool_message_to_parts(
 ) -> list[Part]:
     """Async version of _convert_tool_message_to_parts."""
     name = message.name or name or message.additional_kwargs.get("name")
-    parts = []
+    parts: list[Part] = []
     if isinstance(message.content, list):
         media_blocks = []
         other_blocks = []
@@ -1421,7 +1419,7 @@ async def _aconvert_tool_message_to_parts(
         try:
             response = json.loads(message.content)
         except json.JSONDecodeError:
-            response = message.content
+            response = message.content  # type: ignore[assignment]
 
     part = Part(
         function_response=FunctionResponse(
@@ -1442,7 +1440,7 @@ async def _aget_ai_message_tool_messages_parts(
 ) -> list[Part]:
     """Async version of _get_ai_message_tool_messages_parts."""
     tool_calls_ids = {tool_call["id"]: tool_call for tool_call in ai_message.tool_calls}
-    parts = []
+    parts: list[Part] = []
     for message in tool_messages:
         if not tool_calls_ids:
             break
@@ -1528,30 +1526,20 @@ async def _aparse_chat_history(
             if message.response_metadata.get("output_version") == "v1":
                 parts = cast("list[Part]", message.content)
             else:
-                parts: list[Part] = await _aconvert_to_parts(
-                    message.content, model=model
-                )
-            formatted_messages.append(
-                Content(role=role, parts=parts)
-            )
+                parts = await _aconvert_to_parts(message.content, model=model)
+            formatted_messages.append(Content(role=role, parts=parts))
 
         elif isinstance(message, HumanMessage):
             role = "user"
-            parts: list[Part] = await _aconvert_to_parts(
-                message.content, model=model
-            )
+            parts = await _aconvert_to_parts(message.content, model=model)
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = list(system_instruction.parts or []) + parts
                 system_instruction = None
-            formatted_messages.append(
-                Content(role=role, parts=parts)
-            )
+            formatted_messages.append(Content(role=role, parts=parts))
         elif isinstance(message, FunctionMessage):
             role = "user"
             parts = await _aconvert_tool_message_to_parts(message, model=model)
-            formatted_messages.append(
-                Content(role=role, parts=parts)
-            )
+            formatted_messages.append(Content(role=role, parts=parts))
 
     return system_instruction, formatted_messages
 
@@ -3094,7 +3082,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         labels = kwargs.pop("labels", None)
         if labels is None:
-            labels = self.labels
+            labels = getattr(self, "labels", None)
 
         _consumed_kwargs = {
             "thinking_budget",
@@ -3191,7 +3179,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         image_config = kwargs.pop("image_config", None)
         labels = kwargs.pop("labels", None)
         if labels is None:
-            labels = self.labels
+            labels = getattr(self, "labels", None)
 
         _consumed_kwargs = {
             "thinking_budget",
