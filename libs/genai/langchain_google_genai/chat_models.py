@@ -1311,10 +1311,11 @@ async def _aconvert_to_parts(
                     elif "base64" in part:
                         bytes_ = base64.b64decode(part["base64"])
                     else:
-                        raise ValueError(
+                        msg = (
                             "Data content block must contain 'url', 'base64', or "
                             "'data' field."
                         )
+                        raise ValueError(msg)
 
                     mime_type = part.get("mime_type")
                     if not mime_type:
