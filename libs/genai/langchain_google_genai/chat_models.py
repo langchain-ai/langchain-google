@@ -247,14 +247,12 @@ def _convert_to_parts(
                         bytes_ = image_loader._bytes_from_url(part["url"])
                     elif "base64" in part:
                         # v1 multimodal block w/ base64
-                        bytes_ = base64.b64decode(part["base64"])
-                    else:
-                        msg = (
-                            "Data content block must contain 'url', 'base64', or "
-                            "'data' field."
-                        )
-                        raise ValueError(msg)
-
+                                        else:
+                                            msg = (
+                                                "Data content block must contain 'url', 'base64', "
+                                                "or 'data' field."
+                                            )
+                                            raise ValueError(msg)
                     mime_type = part.get("mime_type")
                     if not mime_type:
                         # Guess MIME type based on data field if not provided
@@ -1310,12 +1308,12 @@ async def _aconvert_to_parts(
                         bytes_ = await image_loader._abytes_from_url(part["url"])
                     elif "base64" in part:
                         bytes_ = base64.b64decode(part["base64"])
-                    else:
-                       msg = (
-                                "Data content block must contain 'url', 'base64', or 'data' field."
-                            )
-                    raise ValueError(msg)
-
+                                        else:
+                                            msg = (
+                                                "Data content block must contain 'url', 'base64', "
+                                                "or 'data' field."
+                                            )
+                                            raise ValueError(msg)
                     mime_type = part.get("mime_type")
                     if not mime_type:
                         source = cast(
