@@ -1474,7 +1474,9 @@ async def _aparse_chat_history(
     for i, message in enumerate(messages_without_tool_messages):
         if isinstance(message, SystemMessage):
             # Async call
-            system_parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
+            system_parts: list[Part] = await _aconvert_to_parts(
+                message.content, model=model
+            )
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
@@ -1490,7 +1492,9 @@ async def _aparse_chat_history(
                 if message.content:
                     # This usually only has text, safe to use sync or minimal conversion
                     # But for completeness:
-                    parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
+                    parts: list[Part] = await _aconvert_to_parts(
+                        message.content, model=model
+                    )
                     ai_message_parts.extend(parts)
 
                 # Revert to standard loop to fix syntax and satisfy linter
@@ -1522,16 +1526,20 @@ async def _aparse_chat_history(
                 continue
 
             if message.response_metadata.get("output_version") == "v1":
-                parts = cast(list[Part], message.content)
+                parts = cast("list[Part]", message.content)
             else:
-                parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
+                parts: list[Part] = await _aconvert_to_parts(
+                    message.content, model=model
+                )
             formatted_messages.append(
                 Content(role=role, parts=parts)
             )
 
         elif isinstance(message, HumanMessage):
             role = "user"
-            parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
+            parts: list[Part] = await _aconvert_to_parts(
+                message.content, model=model
+            )
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = list(system_instruction.parts or []) + parts
                 system_instruction = None
