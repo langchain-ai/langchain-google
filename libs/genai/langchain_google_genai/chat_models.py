@@ -250,11 +250,7 @@ def _convert_to_parts(
                         bytes_ = base64.b64decode(part["base64"])
                     else:
                         msg = (
-                            msg = (
-                                "Data content block must contain 'url', "
-                                "'base64', or 'data' field."
-                            )
-                            raise ValueError(msg)
+                            "Data content block must contain 'url', 'base64', or "
                             "'data' field."
                         )
                         raise ValueError(msg)
@@ -1316,11 +1312,8 @@ async def _aconvert_to_parts(
                         bytes_ = base64.b64decode(part["base64"])
                     else:
                         raise ValueError(
-                            msg = (
-                                "Data content block must contain 'url', "
-                                "'base64', or 'data' field."
-                            )
-                            raise ValueError(msg)
+                            "Data content block must contain 'url', 'base64', or "
+                            "'data' field."
                         )
 
                     mime_type = part.get("mime_type")
