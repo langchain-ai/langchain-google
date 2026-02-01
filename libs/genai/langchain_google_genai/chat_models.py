@@ -754,7 +754,9 @@ def _parse_chat_history(
         # Final step; assemble the Content object to pass to the API
         # If version = "v1", the parts are already in v1beta format and will be
         # automatically converted using protobuf's auto-conversion
-        formatted_messages.append(Content(role=role, parts=parts))
+        formatted_messages.append(
+            Content(role=role, parts=parts)
+        )
 
     # Enforce thought signatures for new Gemini models
     #
@@ -1523,7 +1525,9 @@ async def _aparse_chat_history(
                 parts = cast(list[Part], message.content)
             else:
                 parts: list[Part] = await _aconvert_to_parts(message.content, model=model)
-            formatted_messages.append(Content(role=role, parts=parts))
+            formatted_messages.append(
+                Content(role=role, parts=parts)
+            )
 
         elif isinstance(message, HumanMessage):
             role = "user"
@@ -1531,11 +1535,15 @@ async def _aparse_chat_history(
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = list(system_instruction.parts or []) + parts
                 system_instruction = None
-            formatted_messages.append(Content(role=role, parts=parts))
+            formatted_messages.append(
+                Content(role=role, parts=parts)
+            )
         elif isinstance(message, FunctionMessage):
             role = "user"
             parts = await _aconvert_tool_message_to_parts(message, model=model)
-            formatted_messages.append(Content(role=role, parts=parts))
+            formatted_messages.append(
+                Content(role=role, parts=parts)
+            )
 
     return system_instruction, formatted_messages
 
