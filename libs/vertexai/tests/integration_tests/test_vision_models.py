@@ -135,7 +135,7 @@ def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
 
 
 @pytest.mark.release
-@pytest.mark.flaky(retries=3)
+@pytest.mark.xfail(reason="Started raising 500 error on 2026-01-26.")
 def test_vertex_ai_image_generation_and_edition() -> None:
     generator = VertexAIImageGeneratorChat()
 
