@@ -8,6 +8,7 @@ import ast
 import base64
 from functools import cached_property
 import json
+import mimetypes
 import logging
 import re
 from operator import itemgetter
@@ -302,6 +303,15 @@ def _parse_chat_history_gemini(
                 oai_content_block = convert_to_openai_image_block(part)
                 url = oai_content_block["image_url"]["url"]
                 return imageBytesLoader.load_gapic_part(url)
+            if part.get("source_type") == "url" or "url" in part:
+                url = part.get("url")
+                if not url:
+                    msg = "Data content block must contain 'url'."
+                    raise ValueError(msg)
+                mime_type = part.get("mime_type")
+                if not mime_type:
+                    mime_type, _ = mimetypes.guess_type(url)
+                return Part(file_data=FileData(file_uri=url, mime_type=mime_type))
             if "base64" in part or part.get("source_type") == "base64":
                 key_name = "base64" if "base64" in part else "data"
                 bytes_ = base64.b64decode(part[key_name])
@@ -652,6 +662,22 @@ def _append_to_content(
     raise TypeError(msg)
 
 
+def _collapse_text_content(content: list[Any]) -> str | list[Any]:
+    """Collapse list content into a string when it only contains plain text."""
+    if not content:
+        return ""
+    if all(isinstance(item, str) for item in content):
+        return "".join(content)
+    if all(
+        isinstance(item, dict)
+        and item.get("type") == "text"
+        and set(item.keys()).issubset({"type", "text"})
+        for item in content
+    ):
+        return "".join(item.get("text", "") for item in content)
+    return content
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: Candidate | VertexCandidate,
@@ -804,6 +830,8 @@ def _parse_response_candidate(
 
     if content is None:
         content = ""
+    if isinstance(content, list):
+        content = _collapse_text_content(content)
 
     if streaming:
         return AIMessageChunk(
@@ -2328,6 +2356,69 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         """
         _, contents = _parse_chat_history_gemini(
             [HumanMessage(content=text)],
+            self._image_bytes_loader_client,
+            perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
+        )
+        response = self.prediction_client.count_tokens(  # type: ignore[union-attr]
+            {
+                "endpoint": self.full_model_name,
+                "model": self.full_model_name,
+                "contents": contents,
+            }
+        )
+        return response.total_tokens
+
+    def get_num_tokens_from_messages(
+        self,
+        messages: Sequence[BaseMessage],
+        tools: Sequence[Any] | None = None,
+    ) -> int:
+        """Get the number of tokens in the messages.
+
+        Uses the Vertex AI count_tokens API to accurately count tokens,
+        including multi-modal content like images and videos.
+
+        Args:
+            messages: The list of messages to count tokens for.
+            tools: Optional list of tools to include in token count.
+                Currently not supported and will be ignored.
+
+        Returns:
+            The total number of tokens in the messages.
+
+        Example:
+            ```python
+            from langchain_core.messages import HumanMessage
+            from langchain_google_vertexai import ChatVertexAI
+
+            llm = ChatVertexAI(model="gemini-2.0-flash")
+
+            # Text-only message
+            messages = [HumanMessage(content="Hello, world!")]
+            token_count = llm.get_num_tokens_from_messages(messages)
+
+            # Multi-modal message with image
+            messages = [
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "What is in this image?"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64,..."},
+                        },
+                    ]
+                )
+            ]
+            token_count = llm.get_num_tokens_from_messages(messages)
+            ```
+        """
+        if tools:
+            logger.warning(
+                "Tool token counting is not yet supported for ChatVertexAI. "
+                "The tools parameter will be ignored."
+            )
+        _, contents = _parse_chat_history_gemini(
+            list(messages),
             self._image_bytes_loader_client,
             perform_literal_eval_on_string_raw_content=self.perform_literal_eval_on_string_raw_content,
         )
