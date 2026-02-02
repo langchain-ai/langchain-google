@@ -483,10 +483,10 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
     assert call_http_options.base_url == api_endpoint
 
-    # Verify user-agent header is set
-    assert "User-Agent" in call_http_options.headers
-    assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
-    assert "ChatGoogleGenerativeAI" in call_http_options.headers["User-Agent"]
+    # Verify user-agent header is set (lowercase to match google-genai SDK)
+    assert "user-agent" in call_http_options.headers
+    assert "langchain-google-genai" in call_http_options.headers["user-agent"]
+    assert "ChatGoogleGenerativeAI" in call_http_options.headers["user-agent"]
 
     # Verify user-provided headers are included
     if headers:
@@ -516,7 +516,7 @@ def test_base_url_passed_to_client() -> None:
         )
         call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == "http://localhost:8000"
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 def test_async_client_property() -> None:
@@ -576,7 +576,7 @@ def test_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 async def test_async_api_endpoint_via_client_options() -> None:
@@ -620,7 +620,7 @@ async def test_async_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 def test_default_metadata_field_alias() -> None:
