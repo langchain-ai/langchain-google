@@ -22,7 +22,6 @@ dependencies = [
     "bottleneck>=1.4.0,<2.0.0",
     "numexpr>=2.8.6,<3.0.0",
     "pyarrow>=19.0.1,<23.0.0",
-    "langchain-tests>=1.0.1",
     "google-cloud-vectorsearch>=0.2.0",
 ]
 
