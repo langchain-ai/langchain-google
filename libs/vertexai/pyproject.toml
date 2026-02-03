@@ -38,19 +38,11 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.35.0,<1.0.0"]
 mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
-testing = [
-  "pytest",
-  "pytest-mock",
-  "pytest-asyncio",
-  "pytest-retry",
-  "pytest-recording",
-  "langchain-core[testing]",
-]
 vectorsearch_v2 = [
   "google-cloud-vectorsearch",
 ]
 all = [
-  "langchain-google-vertexai[testing,vectorsearch_v2]",
+  "langchain-google-vertexai[vectorsearch_v2]",
 ]
 
 [dependency-groups]
@@ -80,6 +72,8 @@ test = [
     "anthropic>=0.64.0,<1.0.0",
     "validators>=0.35.0,<1.0.0",
     "langchain-tests>=1.1.2,<2.0.0",
+    "pytest-recording>=0.13.4",
+    "langchain-core[testing]>=1.2.7",
 ]
 test_integration = [
     "numexpr>=2.8.8; python_version>='3.9'",
