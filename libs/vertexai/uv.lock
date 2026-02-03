@@ -1063,9 +1063,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-all = [
-    { name = "google-cloud-vectorsearch" },
-]
 anthropic = [
     { name = "anthropic" },
 ]
@@ -1131,7 +1128,6 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "httpx-sse", specifier = ">=0.4.0,<1.0.0" },
     { name = "langchain-core", specifier = ">=1.2.7,<2.0.0" },
-    { name = "langchain-google-vertexai", extras = ["vectorsearch-v2"], marker = "extra == 'all'" },
     { name = "langchain-mistralai", marker = "extra == 'mistral'", specifier = ">=0.2.0,<2.0.0" },
     { name = "langchain-tests", specifier = ">=1.0.1" },
     { name = "numexpr", specifier = ">=2.8.6,<3.0.0" },
@@ -1139,7 +1135,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9.0,<3.0.0" },
     { name = "validators", specifier = ">=0.22.0,<1.0.0" },
 ]
-provides-extras = ["anthropic", "mistral", "vectorsearch-v2", "all"]
+provides-extras = ["anthropic", "mistral", "vectorsearch-v2"]
 
 [package.metadata.requires-dev]
 lint = [{ name = "ruff", specifier = ">=0.13.1,<0.14.0" }]
