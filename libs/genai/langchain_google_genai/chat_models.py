@@ -230,53 +230,71 @@ def _convert_to_parts(
                     )
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
+                    part_kwargs: dict[str, Any] = {}
+                    mime_type = part.get("mime_type")
 
                     if "source_type" in part:
                         # Catch legacy v0 formats
                         # Safe since v1 content blocks don't have `source_type` key
                         if part["source_type"] == "url":
-                            bytes_ = image_loader._bytes_from_url(part["url"])
+                            url = part.get("url")
+                            if not url:
+                                msg = "Data content block must contain 'url'."
+                                raise ValueError(msg)
+                            if not mime_type:
+                                mime_type, _ = mimetypes.guess_type(url)
+                            part_kwargs["file_data"] = FileData(
+                                file_uri=url, mime_type=mime_type
+                            )
                         elif part["source_type"] == "base64":
                             bytes_ = base64.b64decode(part["data"])
+                            if not mime_type:
+                                # Guess MIME type based on data field if not provided
+                                source = cast("str", part.get("data"))
+                                mime_type, _ = mimetypes.guess_type(source)
+                                if not mime_type:
+                                    # Last resort - try to guess based on file bytes
+                                    kind = filetype.guess(bytes_)
+                                    if kind:
+                                        mime_type = kind.mime
+                            blob_kwargs: dict[str, Any] = {"data": bytes_}
+                            if mime_type:
+                                blob_kwargs["mime_type"] = mime_type
+                            part_kwargs["inline_data"] = Blob(**blob_kwargs)
                         else:
                             # Unable to support IDContentBlock
                             msg = "source_type must be url or base64."
                             raise ValueError(msg)
                     elif "url" in part:
                         # v1 multimodal block w/ URL
-                        bytes_ = image_loader._bytes_from_url(part["url"])
+                        url = part["url"]
+                        if not mime_type:
+                            mime_type, _ = mimetypes.guess_type(url)
+                        part_kwargs["file_data"] = FileData(
+                            file_uri=url, mime_type=mime_type
+                        )
                     elif "base64" in part:
                         # v1 multimodal block w/ base64
                         bytes_ = base64.b64decode(part["base64"])
+                        if not mime_type:
+                            # Guess MIME type based on data field if not provided
+                            source = cast("str", part.get("base64"))
+                            mime_type, _ = mimetypes.guess_type(source)
+                            if not mime_type:
+                                # Last resort - try to guess based on file bytes
+                                kind = filetype.guess(bytes_)
+                                if kind:
+                                    mime_type = kind.mime
+                        blob_kwargs = {"data": bytes_}
+                        if mime_type:
+                            blob_kwargs["mime_type"] = mime_type
+                        part_kwargs["inline_data"] = Blob(**blob_kwargs)
                     else:
                         msg = (
                             "Data content block must contain 'url', 'base64', or "
                             "'data' field."
                         )
                         raise ValueError(msg)
-
-                    mime_type = part.get("mime_type")
-                    if not mime_type:
-                        # Guess MIME type based on data field if not provided
-                        source = cast(
-                            "str",
-                            part.get("url") or part.get("base64") or part.get("data"),
-                        )
-                        mime_type, _ = mimetypes.guess_type(source)
-                        if not mime_type:
-                            # Last resort - try to guess based on file bytes
-                            kind = filetype.guess(bytes_)
-                            if kind:
-                                mime_type = kind.mime
-                    blob_kwargs: dict[str, Any] = {
-                        "data": bytes_,
-                    }
-                    if mime_type:
-                        blob_kwargs["mime_type"] = mime_type
-
-                    part_kwargs: dict[str, Any] = {
-                        "inline_data": Blob(**blob_kwargs),
-                    }
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
                             warnings.warn(

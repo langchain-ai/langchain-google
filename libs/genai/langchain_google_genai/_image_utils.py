@@ -23,7 +23,7 @@ class Route(Enum):
     """
 
     URL = 1
-    """HTTP/HTTPS URL. Downloads content via HTTP request."""
+    """HTTP/HTTPS URL. Passed directly to the API as a file reference."""
 
     BASE64 = 2
     """Base64 encoded data URI (e.g., `data:image/png;base64,...`)."""
@@ -109,7 +109,7 @@ class ImageBytesLoader:
 
         Returns:
             Part object with either `inline_data` containing the media bytes, or
-                `file_data` for GCS URIs.
+                `file_data` for URL/GCS references.
         """
         route = self._route(image_string)
 
@@ -122,7 +122,8 @@ class ImageBytesLoader:
             bytes_ = self._bytes_from_b64(image_string)
 
         if route == Route.URL:
-            bytes_ = self._bytes_from_url(image_string)
+            mime_type, _ = mimetypes.guess_type(image_string)
+            return Part(file_data=FileData(file_uri=image_string, mime_type=mime_type))
 
         if route == Route.LOCAL_FILE:
             msg = (
