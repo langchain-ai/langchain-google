@@ -393,19 +393,48 @@ wheels = [
 name = "langchain-core"
 version = "1.2.5"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
+    "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
+]
 dependencies = [
-    { name = "jsonpatch" },
-    { name = "langsmith" },
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "tenacity" },
-    { name = "typing-extensions" },
-    { name = "uuid-utils" },
+    { name = "jsonpatch", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "langsmith", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "packaging", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "pydantic", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "pyyaml", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "tenacity", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "typing-extensions", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "uuid-utils", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c8/86/bd678d69341ae4178bc8dfa04024d63636e5d580ff03d4502c8bc2262917/langchain_core-1.2.5.tar.gz", hash = "sha256:d674f6df42f07e846859b9d3afe547cad333d6bf9763e92c88eb4f8aaedcd3cc", size = 820445, upload-time = "2025-12-22T23:45:32.041Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/bd/9df897cbc98290bf71140104ee5b9777cf5291afb80333aa7da5a497339b/langchain_core-1.2.5-py3-none-any.whl", hash = "sha256:3255944ef4e21b2551facb319bfc426057a40247c0a05de5bd6f2fc021fbfa34", size = 484851, upload-time = "2025-12-22T23:45:30.525Z" },
+]
+
+[[package]]
+name = "langchain-core"
+version = "1.2.8"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
+]
+dependencies = [
+    { name = "jsonpatch", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "langsmith", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "packaging", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "pydantic", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "pyyaml", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "tenacity", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "typing-extensions", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "uuid-utils", marker = "platform_python_implementation == 'PyPy'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/75/cc/55bf57b83cbc164cbf84cbf0c5e4fb640d673546af131db70797b97b125b/langchain_core-1.2.8.tar.gz", hash = "sha256:76d933c3f4cfd8484d8131c39bf25f562e2df4d0d5fe3218e05ff773210713b6", size = 814506, upload-time = "2026-02-02T15:35:33.056Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/d4/37fef9639b701c1fb1eea9e68447b72d86852ca3dc3253cdfd9c0afe228d/langchain_core-1.2.8-py3-none-any.whl", hash = "sha256:c732301272d63cfbcd75d114540257678627878f11b87046241272a25ba12ea7", size = 495753, upload-time = "2026-02-02T15:35:31.284Z" },
 ]
 
 [[package]]
@@ -415,7 +444,8 @@ source = { editable = "." }
 dependencies = [
     { name = "filetype" },
     { name = "google-genai" },
-    { name = "langchain-core" },
+    { name = "langchain-core", version = "1.2.5", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
+    { name = "langchain-core", version = "1.2.8", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
     { name = "pydantic" },
 ]
 
@@ -425,7 +455,8 @@ lint = [
 ]
 test = [
     { name = "freezegun" },
-    { name = "langchain-tests" },
+    { name = "langchain-tests", version = "1.1.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
+    { name = "langchain-tests", version = "1.1.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "protobuf" },
@@ -487,23 +518,56 @@ typing = [
 name = "langchain-tests"
 version = "1.1.2"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
+    "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
+]
 dependencies = [
-    { name = "httpx" },
-    { name = "langchain-core" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-benchmark" },
-    { name = "pytest-codspeed" },
-    { name = "pytest-recording" },
-    { name = "pytest-socket" },
-    { name = "syrupy" },
-    { name = "vcrpy" },
+    { name = "httpx", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "langchain-core", version = "1.2.5", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' and platform_python_implementation != 'PyPy'" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' and platform_python_implementation != 'PyPy'" },
+    { name = "pytest", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "pytest-asyncio", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "pytest-benchmark", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "pytest-codspeed", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "pytest-recording", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "pytest-socket", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "syrupy", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "vcrpy", version = "7.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8d/be/c4380da2e674d828bae323bf1d69d715f20007dda9f1711d932f3b371f5b/langchain_tests-1.1.2.tar.gz", hash = "sha256:064eca975439f74971c828dd853d6fc41b1f100c18111b92d0a2b432a153ecac", size = 178516, upload-time = "2025-12-27T09:03:50.024Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/1a/7543d03550444052b825bbd88bbc4935293a58fe4875b959e4420a266d0c/langchain_tests-1.1.2-py3-none-any.whl", hash = "sha256:5ef2469c44f6ebc72fe2a0c305801a37e43327db271a0f6d0150cf0fdfe450af", size = 52163, upload-time = "2025-12-27T09:03:48.803Z" },
+]
+
+[[package]]
+name = "langchain-tests"
+version = "1.1.3"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
+]
+dependencies = [
+    { name = "httpx", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "langchain-core", version = "1.2.8", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' and platform_python_implementation == 'PyPy'" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' and platform_python_implementation == 'PyPy'" },
+    { name = "pytest", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "pytest-asyncio", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "pytest-benchmark", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "pytest-codspeed", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "pytest-recording", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "pytest-socket", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "syrupy", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "vcrpy", version = "8.1.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/23/6b/0168122d0fc7e8f62af910a076d87769311fff270b47d0b4a8a27fadfeca/langchain_tests-1.1.3.tar.gz", hash = "sha256:4afd15984783a718e114ac99b66a8ef822628d8ac372a69a83fa3b539c8df8cc", size = 150811, upload-time = "2026-01-31T21:41:40.059Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/a6/37c4cbb718f67932f8dca77d86b77d068281756440d9da6ed087a93fcd7b/langchain_tests-1.1.3-py3-none-any.whl", hash = "sha256:155ff912a611c28d313e00f1f0ad0099c0689d036797580bd89a2c6a11815cb5", size = 52511, upload-time = "2026-01-31T21:41:39.109Z" },
 ]
 
 [[package]]
@@ -551,7 +615,7 @@ name = "multidict"
 version = "6.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' and platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/80/1e/5492c365f222f907de1039b91f922b93fa4f764c713ee858d235495d8f50/multidict-6.7.0.tar.gz", hash = "sha256:c6e99d9a65ca282e578dfea819cfa9c0a62b2499d8677392e09feaf305e9e6f5", size = 101834, upload-time = "2025-10-06T14:52:30.657Z" }
 wheels = [
@@ -1396,7 +1460,8 @@ version = "0.13.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytest" },
-    { name = "vcrpy" },
+    { name = "vcrpy", version = "7.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
+    { name = "vcrpy", version = "8.1.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/32/9c/f4027c5f1693847b06d11caf4b4f6bb09f22c1581ada4663877ec166b8c6/pytest_recording-0.13.4.tar.gz", hash = "sha256:568d64b2a85992eec4ae0a419c855d5fd96782c5fb016784d86f18053792768c", size = 26576, upload-time = "2025-05-08T10:41:11.231Z" }
 wheels = [
@@ -1524,8 +1589,7 @@ dependencies = [
     { name = "certifi" },
     { name = "charset-normalizer" },
     { name = "idna" },
-    { name = "urllib3", version = "1.26.20", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
-    { name = "urllib3", version = "2.6.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
@@ -1728,7 +1792,7 @@ resolution-markers = [
     "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
 ]
 dependencies = [
-    { name = "urllib3", version = "2.6.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
+    { name = "urllib3", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/36/27/489922f4505975b11de2b5ad07b4fe1dca0bca9be81a703f26c5f3acfce5/types_requests-2.32.4.20250913.tar.gz", hash = "sha256:abd6d4f9ce3a9383f269775a9835a4c24e5cd6b9f647d64f88aa4613c33def5d", size = 23113, upload-time = "2025-09-13T02:40:02.309Z" }
 wheels = [
@@ -1767,30 +1831,11 @@ wheels = [
 
 [[package]]
 name = "urllib3"
-version = "1.26.20"
+version = "2.6.3"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
-    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
-    "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e4/e8/6ff5e6bc22095cfc59b6ea711b687e2b7ed4bdb373f7eeec370a97d7392f/urllib3-1.26.20.tar.gz", hash = "sha256:40c2dc0c681e47eb8f90e7e27bf6ff7df2e677421fd46756da1161c39ca70d32", size = 307380, upload-time = "2024-08-29T15:43:11.37Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/33/cf/8435d5a7159e2a9c83a95896ed596f68cf798005fe107cc655b5c5c14704/urllib3-1.26.20-py2.py3-none-any.whl", hash = "sha256:0ed14ccfbf1c30a9072c7ca157e4319b70d65f623e91e7b32fadb2853431016e", size = 144225, upload-time = "2024-08-29T15:43:08.921Z" },
-]
-
-[[package]]
-name = "urllib3"
-version = "2.6.1"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
-    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
-    "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5e/1d/0f3a93cca1ac5e8287842ed4eebbd0f7a991315089b1a0b01c7788aa7b63/urllib3-2.6.1.tar.gz", hash = "sha256:5379eb6e1aba4088bae84f8242960017ec8d8e3decf30480b3a1abdaa9671a3f", size = 432678, upload-time = "2025-12-08T15:25:26.773Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/56/190ceb8cb10511b730b564fb1e0293fa468363dbad26145c34928a60cb0c/urllib3-2.6.1-py3-none-any.whl", hash = "sha256:e67d06fe947c36a7ca39f4994b08d73922d40e6cca949907be05efa6fd75110b", size = 131138, upload-time = "2025-12-08T15:25:25.51Z" },
+    { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
 ]
 
 [[package]]
@@ -1826,16 +1871,38 @@ wheels = [
 name = "vcrpy"
 version = "7.0.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
+    "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
+]
 dependencies = [
-    { name = "pyyaml" },
-    { name = "urllib3", version = "1.26.20", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
-    { name = "urllib3", version = "2.6.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
-    { name = "wrapt" },
-    { name = "yarl" },
+    { name = "pyyaml", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "urllib3", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "wrapt", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "yarl", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/25/d3/856e06184d4572aada1dd559ddec3bedc46df1f2edc5ab2c91121a2cccdb/vcrpy-7.0.0.tar.gz", hash = "sha256:176391ad0425edde1680c5b20738ea3dc7fb942520a48d2993448050986b3a50", size = 85502, upload-time = "2024-12-31T00:07:57.894Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/13/5d/1f15b252890c968d42b348d1e9b0aa12d5bf3e776704178ec37cceccdb63/vcrpy-7.0.0-py2.py3-none-any.whl", hash = "sha256:55791e26c18daa363435054d8b35bd41a4ac441b6676167635d1b37a71dbe124", size = 42321, upload-time = "2024-12-31T00:07:55.277Z" },
+]
+
+[[package]]
+name = "vcrpy"
+version = "8.1.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
+    "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
+]
+dependencies = [
+    { name = "pyyaml", marker = "platform_python_implementation == 'PyPy'" },
+    { name = "wrapt", marker = "platform_python_implementation == 'PyPy'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b3/07/bcfd5ebd7cb308026ab78a353e091bd699593358be49197d39d004e5ad83/vcrpy-8.1.1.tar.gz", hash = "sha256:58e3053e33b423f3594031cb758c3f4d1df931307f1e67928e30cf352df7709f", size = 85770, upload-time = "2026-01-04T19:22:03.886Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3a/d7/f79b05a5d728f8786876a7d75dfb0c5cae27e428081b2d60152fb52f155f/vcrpy-8.1.1-py3-none-any.whl", hash = "sha256:2d16f31ad56493efb6165182dd99767207031b0da3f68b18f975545ede8ac4b9", size = 42445, upload-time = "2026-01-04T19:22:02.532Z" },
 ]
 
 [[package]]
@@ -2027,9 +2094,9 @@ name = "yarl"
 version = "1.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "idna" },
-    { name = "multidict" },
-    { name = "propcache" },
+    { name = "idna", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "multidict", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "propcache", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/57/63/0c6ebca57330cd313f6102b16dd57ffaf3ec4c83403dcb45dbd15c6f3ea1/yarl-1.22.0.tar.gz", hash = "sha256:bebf8557577d4401ba8bd9ff33906f1376c877aa78d1fe216ad01b4d6745af71", size = 187169, upload-time = "2025-10-06T14:12:55.963Z" }
 wheels = [
