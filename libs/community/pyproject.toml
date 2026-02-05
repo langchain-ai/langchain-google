@@ -43,7 +43,7 @@ bigquery = [
 ]
 calendar = ["google-auth>=2.36.0,<3.0.0", "google-auth-oauthlib>=1.2.0,<2.0.0"]
 docai = [
-    "google-cloud-documentai>=2.26.0,<3.0.0",
+    "google-cloud-documentai>=2.26.0,<4.0.0",
     "google-cloud-contentwarehouse>=0.7.7,<1.0.0",
     #"google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0",
     "gapic-google-longrunning>=0.11.2,<1.0.0",
@@ -69,7 +69,7 @@ test = [
     "pytest-asyncio>=0.21.1,<1.0.0",
     "pytest-retry>=1.7.0,<2.0.0",
     "pytest-socket>=0.7.0,<1.0.0",
-    "google-cloud-documentai>=2.24.2,<3.0.0",
+    "google-cloud-documentai>=2.24.2,<4.0.0",
     #"google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0",
     "google-cloud-bigquery>=3.21.0,<4.0.0",
     "google-cloud-discoveryengine>=0.11.14,<1.0.0",
