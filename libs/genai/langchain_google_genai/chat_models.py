@@ -2561,6 +2561,31 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Check if the current model supports thinking capabilities."""
         return self.profile.get("reasoning_output", False) if self.profile else False
 
+    def _validate_response_modalities(self, gen_config: dict[str, Any]) -> None:
+        """Validate that the model supports the requested response modalities."""
+        requested_modalities = gen_config.get("response_modalities")
+        if not requested_modalities:
+            return
+
+        if not self.profile:
+            return
+
+        supported_modalities = self.profile.get("output_modalities")
+        if not supported_modalities:
+            return
+
+        # cast is required to help mypy understand this is a list
+        supported_modalities = cast("list[str]", supported_modalities)
+
+        for modality in requested_modalities:
+            # requested_modalities contains string values (e.g., "IMAGE", "AUDIO")
+            if modality not in supported_modalities:
+                msg = (
+                    f"Model '{self.model}' does not support output modality "
+                    f"'{modality}'. Supported modalities are: {supported_modalities}"
+                )
+                raise ValueError(msg)
+
     def _prepare_params(
         self,
         stop: list[str] | None,
@@ -2574,6 +2599,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         # Handle response-specific kwargs (MIME type and structured output)
         gen_config = self._add_response_parameters(gen_config, **kwargs)
+
+        # --- ADDED: Validation call ---
+        self._validate_response_modalities(gen_config)
+        # ------------------------------
 
         return GenerationConfig.model_validate(gen_config)
 
