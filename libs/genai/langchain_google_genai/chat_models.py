@@ -1193,7 +1193,9 @@ def _response_to_result(
             model_name_for_content=response.model_version,  # Always set
         )
         if include_response_headers:
-            message.response_metadata["headers"] = dict(response.headers)
+            headers = getattr(response, "headers", None)
+            if headers:
+                message.response_metadata["headers"] = dict(headers)
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
