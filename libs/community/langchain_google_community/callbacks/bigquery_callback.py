@@ -1524,8 +1524,8 @@ class _SyncLangChainContentParser(_LangChainContentParserMixin):
 
       if offload_req and self.offloader:
         try:
-          # Sync implementation uses internal _upload_sync or we should expose a sync method?
-          # _GCSOffloader has _upload_sync.
+          # Sync implementation uses internal _upload_sync or we should expose a
+          # sync method? _GCSOffloader has _upload_sync.
           uri = self.offloader._upload_sync(
               offload_req.data, offload_req.mime_type, offload_req.path
           )
@@ -1684,8 +1684,8 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     self.graph_name = graph_name
 
     # Execution order context variable (instance-scoped via ContextVar)
-    # Using id(self) in the name ensures that if multiple handlers are used in the same context,
-    # their ContextVars don't collide.
+    # Using id(self) in the name ensures that if multiple handlers are used in
+    # the same context, their ContextVars don't collide.
     self._execution_order_cv: contextvars.ContextVar[int] = (
         contextvars.ContextVar(f"execution_order_{id(self)}", default=0)
     )
