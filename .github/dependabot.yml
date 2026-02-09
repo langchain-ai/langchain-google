@@ -1,0 +1,34 @@
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "pip"
+    directory: "/libs/genai"
+    schedule:
+      interval: "weekly"
+    groups:
+      genai:
+        patterns: ["*"]
+
+  - package-ecosystem: "pip"
+    directory: "/libs/vertexai"
+    schedule:
+      interval: "weekly"
+    groups:
+      vertexai:
+        patterns: ["*"]
+
+  - package-ecosystem: "pip"
+    directory: "/libs/community"
+    schedule:
+      interval: "weekly"
+    groups:
+      community:
+        patterns: ["*"]
