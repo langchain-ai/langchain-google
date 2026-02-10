@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextvars
 import functools
 import json
@@ -1348,8 +1349,6 @@ class _LangChainContentParserMixin:
                         try:
                             header, encoded = url.split(",", 1)
                             mime_type = header.split(":")[1].split(";")[0]
-                            import base64
-
                             data = base64.b64decode(encoded)
                             ext = mimetypes.guess_extension(mime_type) or ".bin"
                             path = self._get_offload_path(idx, ext)
