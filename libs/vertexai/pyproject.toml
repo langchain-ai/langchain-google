@@ -9,10 +9,10 @@ license = {text = "MIT"}
 readme = "README.md"
 authors = []
 
-version = "3.2.0"
+version = "3.2.2"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
-    "langchain-core>=1.2.5,<2.0.0",
+    "langchain-core>=1.2.7,<2.0.0",
     "google-cloud-aiplatform>=1.97.0,<2.0.0",
     "google-cloud-storage>=2.18.0,<4.0.0",
     "httpx>=0.28.0,<1.0.0",
@@ -21,7 +21,9 @@ dependencies = [
     "validators>=0.22.0,<1.0.0",
     "bottleneck>=1.4.0,<2.0.0",
     "numexpr>=2.8.6,<3.0.0",
-    "pyarrow>=19.0.1,<23.0.0",
+    "pyarrow>=19.0.1,<24.0.0",
+    "langchain-tests>=1.0.1",
+    "google-cloud-vectorsearch>=0.2.0",
 ]
 
 [project.urls]
@@ -36,24 +38,38 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.35.0,<1.0.0"]
 mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
+testing = [
+  "pytest",
+  "pytest-mock",
+  "pytest-asyncio",
+  "pytest-retry",
+  "pytest-recording",
+  "langchain-core[testing]",
+]
+vectorsearch_v2 = [
+  "google-cloud-vectorsearch",
+]
+all = [
+  "langchain-google-vertexai[testing,vectorsearch_v2]",
+]
 
 [dependency-groups]
-lint = ["ruff>=0.13.1,<0.14.0"]
+lint = ["ruff>=0.13.1,<0.16.0"]
 typing = [
-    "mypy>=1.18.1,<1.19.0",
+    "mypy>=1.18.1,<1.20.0",
     "types-requests>=2.31.0,<3.0.0",
     "types-google-cloud-ndb>=2.2.0.20240106,<3.0.0.0",
-    "types-protobuf>=4.24.0.4,<5.0.0.0",
+    "types-protobuf>=4.24.0.4,<7.0.0.0",
     "anthropic>=0.64.0,<1.0.0",
 ]
 test = [
-    "pytest>=8.4.0,<9.0.0",
+    "pytest>=8.4.0,<10.0.0",
     "pytest-xdist>=3.8.0,<4.0.0",
     "pytest-order>=1.3.0,<2.0.0",
     "pytest-retry>=1.7.0,<2.0.0",
     "freezegun>=1.5.0,<2.0.0",
     "pytest-mock>=3.14.0,<4.0.0",
-    "syrupy>=4.9.0,<5.0.0",
+    "syrupy>=4.9.0,<6.0.0",
     "pytest-watcher>=0.4.0,<1.0.0",
     "pytest-asyncio>=0.21.0,<2.0.0",
     "pytest-socket>=0.7.0,<1.0.0",

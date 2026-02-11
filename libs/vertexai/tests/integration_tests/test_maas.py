@@ -19,20 +19,17 @@ from langchain_google_vertexai.model_garden_maas import (
 model_names = _LLAMA_MODELS + _MISTRAL_MODELS
 # Fix tool support for new Mistral and Llama models
 model_names_with_tools_support = [
-    "mistral-nemo@2407",
+    "mistral-medium-3",
 ]
 model_locations = {
     "meta/llama-4-maverick-17b-128e-instruct-maas": "us-east5",
     "meta/llama-4-scout-17b-16e-instruct-maas": "us-east5",
 }
 
-# TODO: mistral-nemo@2407 missing from Cloud project
-model_names.remove("mistral-nemo@2407")
-model_names_with_tools_support.remove("mistral-nemo@2407")
-
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 def test_generate(model_name: str) -> None:
     llm = get_vertex_maas_model(
         model_name=model_name, location=model_locations.get(model_name, "us-central1")
@@ -43,6 +40,7 @@ def test_generate(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 async def test_agenerate(model_name: str) -> None:
     llm = get_vertex_maas_model(
         model_name=model_name, location=model_locations.get(model_name, "us-central1")
@@ -53,6 +51,7 @@ async def test_agenerate(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 def test_stream(model_name: str) -> None:
     # streaming currently fails with mistral-nemo@2407
     if "stral" in model_name:
@@ -67,6 +66,7 @@ def test_stream(model_name: str) -> None:
 
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
+@pytest.mark.flaky(retries=3)
 async def test_astream(model_name: str) -> None:
     # streaming currently fails with mistral-nemo@2407
     if "stral" in model_name:
