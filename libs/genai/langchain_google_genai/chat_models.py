@@ -2983,7 +2983,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         retry_options = None
         if max_retries is not None:
-            retry_options = HttpRetryOptions(attempts=max_retries)
+            retry_options = HttpRetryOptions(attempts=1 + max_retries)
 
         http_options = None
         if timeout is not None or retry_options is not None:
