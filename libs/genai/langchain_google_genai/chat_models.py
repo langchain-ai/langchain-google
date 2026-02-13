@@ -3548,3 +3548,168 @@ def _get_tool_name(
         if is_typeddict(tool):
             return convert_to_openai_tool(cast("dict", tool))["function"]["name"]
         raise
+
+
+def _extract_text_from_interaction_payload(payload: dict[str, Any]) -> str:
+    """Best-effort text extraction from an Interactions API payload."""
+    texts: list[str] = []
+
+    def _walk(obj: Any) -> None:
+        if isinstance(obj, dict):
+            text_val = obj.get("text")
+            if isinstance(text_val, str) and text_val.strip():
+                texts.append(text_val)
+            for value in obj.values():
+                _walk(value)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item)
+
+    _walk(payload.get("outputs", payload))
+    # Preserve order while deduplicating
+    unique_texts = list(dict.fromkeys(texts))
+    return "\n".join(unique_texts)
+
+
+class ChatGoogleGenerativeAIInteractions(ChatGoogleGenerativeAI):
+    """Chat model wrapper for Gemini Interactions API.
+
+    Uses `client.interactions.create(...)` instead of `client.models.generate_content`.
+
+    This is intentionally minimal and focused on model/agent interaction workflows.
+    """
+
+    agent: str | None = None
+    """Optional built-in agent name (e.g. `deep-research-pro-preview-12-2025`)."""
+
+    background: bool = False
+    """Whether to run the interaction in background mode."""
+
+    store: bool = False
+    """Whether to request server-side state storage for the interaction."""
+
+    previous_interaction_id: str | None = None
+    """Optional previous interaction id for server-managed history threading."""
+
+    @property
+    def _llm_type(self) -> str:
+        return "chat-google-generative-ai-interactions"
+
+    def _prepare_interaction_request(
+        self,
+        messages: list[BaseMessage],
+        *,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        generation_config: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        if self.client is None:
+            msg = "Client not initialized."
+            raise ValueError(msg)
+
+        system_instruction, formatted_messages = _parse_chat_history(
+            messages,
+            self.convert_system_message_to_human,
+            model=self.model,
+        )
+
+        interaction_input = [
+            content.model_dump(exclude_none=True) for content in formatted_messages
+        ]
+
+        request: dict[str, Any] = {
+            "input": interaction_input,
+            "background": self.background,
+            "store": self.store,
+            "stream": False,
+        }
+
+        if self.agent:
+            request["agent"] = self.agent
+        else:
+            request["model"] = self.model
+
+        if self.previous_interaction_id:
+            request["previous_interaction_id"] = self.previous_interaction_id
+
+        if system_instruction and system_instruction.parts:
+            instruction_text = "\n".join(
+                part.text for part in system_instruction.parts if part.text
+            )
+            if instruction_text:
+                request["system_instruction"] = instruction_text
+
+        if generation_config:
+            request["generation_config"] = generation_config
+
+        if tools or functions:
+            request["tools"] = list(self._format_tools(tools, functions))
+
+        # Allow explicit per-invoke overrides for interactions-only options
+        for key in (
+            "agent",
+            "background",
+            "store",
+            "previous_interaction_id",
+            "response_mime_type",
+            "response_format",
+            "response_modalities",
+        ):
+            if key in kwargs:
+                request[key] = kwargs[key]
+
+        return request
+
+    def _interaction_to_chat_result(self, interaction: Any) -> ChatResult:
+        payload = (
+            interaction.model_dump(exclude_none=True)
+            if hasattr(interaction, "model_dump")
+            else cast("dict[str, Any]", interaction)
+        )
+        text = _extract_text_from_interaction_payload(payload)
+
+        message = AIMessage(
+            content=text,
+            additional_kwargs={"interaction": payload},
+            response_metadata={
+                "model_provider": "google_genai",
+                "interaction_id": payload.get("id"),
+                "status": payload.get("status"),
+                "agent": payload.get("agent"),
+                "model_name": payload.get("model"),
+            },
+        )
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        *,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | ToolConfig | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        if self.client is None:
+            msg = "Client not initialized."
+            raise ValueError(msg)
+
+        request = self._prepare_interaction_request(
+            messages,
+            tools=tools,
+            functions=functions,
+            generation_config=generation_config,
+            **kwargs,
+        )
+        try:
+            interaction = self.client.interactions.create(**request)
+        except ClientError as e:
+            _handle_client_error(e, request)
+        return self._interaction_to_chat_result(interaction)
