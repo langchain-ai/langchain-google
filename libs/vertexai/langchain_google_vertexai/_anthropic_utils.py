@@ -1,6 +1,6 @@
 import base64
 import re
-import urllib
+import urllib.parse
 import warnings
 from collections.abc import Callable, Sequence
 from typing import (
@@ -187,6 +187,7 @@ def _format_message_anthropic(
                         new_block[copy_attr] = block[copy_attr]
 
                 if block["type"] == "image":
+                    # Fixes KeyError by checking keys directly instead of source_type
                     if "url" in block:
                         url = block["url"]
                         if url.startswith("data:"):
@@ -297,7 +298,7 @@ def _format_message_anthropic(
 
                 content.append(block)
     else:
-        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable, unused-ignore]
+        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable]  # noqa: E501
         raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
@@ -336,6 +337,19 @@ def _format_messages_anthropic(
         if not fm:
             continue
         formatted_messages.append(fm)
+
+    # --- FIX: Sanitize trailing whitespace in prefill (last assistant msg) ---
+    if formatted_messages:
+        last_msg = formatted_messages[-1]
+        if last_msg["role"] == "assistant":
+            if isinstance(last_msg.get("content"), list):
+                for block in last_msg["content"]:
+                    if isinstance(block, dict):
+                        b_type = block.get("type")
+                        if b_type == "text" and "text" in block:
+                            block["text"] = block["text"].rstrip()
+                        elif b_type == "thinking" and "thinking" in block:
+                            block["thinking"] = block["thinking"].rstrip()
 
     return system_messages, formatted_messages
 
@@ -380,7 +394,6 @@ def _clean_content_block(block: Any) -> Any:
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
-    # Remove known streaming metadata fields
     keys_to_remove = {"index", "partial_json", "caller"}
 
     # The id field is required for tool_use blocks and some image blocks,
