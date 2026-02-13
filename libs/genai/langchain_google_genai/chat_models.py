@@ -1102,6 +1102,7 @@ def _parse_response_candidate(
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
+    include_response_headers: bool = False,
     prev_usage: UsageMetadata | None = None,
 ) -> ChatResult:
     """Converts a Google AI response into a LangChain `ChatResult`."""
@@ -1191,6 +1192,10 @@ def _response_to_result(
             model_name=model_name_for_metadata,  # None for intermediate chunks
             model_name_for_content=response.model_version,  # Always set
         )
+        if include_response_headers:
+            headers = getattr(response, "headers", None)
+            if headers:
+                message.response_metadata["headers"] = dict(headers)
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
