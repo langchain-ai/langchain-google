@@ -3644,7 +3644,9 @@ class ChatGoogleGenerativeAIInteractions(ChatGoogleGenerativeAI):
             request["generation_config"] = generation_config
 
         if tools or functions:
-            request["tools"] = list(self._format_tools(tools, functions))
+            formatted_tools = self._format_tools(tools, functions)
+            if formatted_tools is not None:
+                request["tools"] = list(formatted_tools)
 
         # Allow explicit per-invoke overrides for interactions-only options
         for key in (
