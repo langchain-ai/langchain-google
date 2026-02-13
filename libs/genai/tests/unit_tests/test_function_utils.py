@@ -862,6 +862,113 @@ def test_tool_with_doubly_nested_list_param() -> None:
     assert "description" in items_level2
 
 
+def test_array_with_empty_items_schema() -> None:
+    """An array property whose items schema is an empty dict (`'items': {}`)
+    must still produce an `items` field in the converted schema.
+
+    Reproduces: the Gemini API rejects `filter_values` with
+    `"properties[filter_values].items: missing field"` because
+    `_get_properties_from_schema` treats `{}` as falsy and silently
+    drops the `items` key.
+
+    The tool definition below mirrors a real-world OpenAI-formatted tool
+    (`pylon_list_issues`) whose `filter_values` parameter is typed as
+    `Optional[list[Any]]`, which Pydantic serialises to
+    `{"anyOf": [{"items": {}, "type": "array"}, {"type": "null"}]}`.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "pylon_list_issues",
+            "description": "Search Pylon issues.",
+            "parameters": {
+                "properties": {
+                    "filter_values": {
+                        "anyOf": [
+                            {"items": {}, "type": "array"},
+                            {"type": "null"},
+                        ],
+                        "default": None,
+                    }
+                },
+                "type": "object",
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    fd = fds[0]
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    filter_values = fd.parameters.properties["filter_values"]
+
+    # The property must be recognised as an array …
+    assert filter_values.type == Type.ARRAY
+    # … and it must carry an ``items`` schema (not None).
+    assert filter_values.items is not None, (
+        "Expected 'filter_values' to have an items schema, but got None. "
+        "An empty items dict ({}) should not be silently dropped."
+    )
+
+
+def test_nested_array_with_empty_inner_items_schema() -> None:
+    """A doubly-nested array whose innermost items schema is an empty dict
+    (`'items': {}`) must still produce an `items` field at every level.
+
+    Reproduces: the Gemini API rejects `values` with
+    `"properties[values].items.items: missing field"` because
+    `_dict_to_genai_schema({})` returns `None` — `bool({})` is
+    `False` in Python, so the guard `if schema:` short-circuits.
+
+    The tool definition below mirrors a real-world OpenAI-formatted tool
+    (`google_sheets_write_range`) whose `values` parameter is typed as
+    `list[list[Any]]`, which Pydantic serialises to
+    `{"type": "array", "items": {"type": "array", "items": {}}}`.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "google_sheets_write_range",
+            "description": "Write data to Google Sheets.",
+            "parameters": {
+                "properties": {
+                    "values": {
+                        "items": {"items": {}, "type": "array"},
+                        "type": "array",
+                    }
+                },
+                "required": ["values"],
+                "type": "object",
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    fd = fds[0]
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    values = fd.parameters.properties["values"]
+
+    # First level: values is an array with items.
+    assert values.type == Type.ARRAY
+    assert values.items is not None, (
+        "Expected 'values' to have a first-level items schema, but got None."
+    )
+
+    # Second level: the inner array must also have items.
+    assert values.items.type == Type.ARRAY
+    assert values.items.items is not None, (
+        "Expected inner array to have an items schema, but got None. "
+        "An empty items dict ({}) should not be silently dropped."
+    )
+
+
 def test_tool_with_union_types() -> None:
     """Test union types with tools.
 
