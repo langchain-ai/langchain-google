@@ -44,13 +44,17 @@ from langchain_google_genai._enums import (
     MediaResolution,
     Modality,
 )
-from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
+from langchain_google_genai.chat_models import (
+    ChatGoogleGenerativeAI,
+    ChatGoogleGenerativeAIInteractions,
+)
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from langchain_google_genai.llms import GoogleGenerativeAI
 from langchain_google_genai.utils import create_context_cache
 
 __all__ = [
     "ChatGoogleGenerativeAI",
+    "ChatGoogleGenerativeAIInteractions",
     "ComputerUse",
     "Environment",
     "GoogleGenerativeAI",
