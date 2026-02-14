@@ -885,9 +885,7 @@ def _parse_response_candidate(
     # Use model_name_for_content if provided, otherwise fall back to model_name.
     # This ensures consistent content format across all streaming chunks while
     # only including model_name in response_metadata for the final chunk.
-    effective_model_name = (
-        model_name_for_content or model_name
-    )
+    effective_model_name = model_name_for_content or model_name
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
     for part in parts:
