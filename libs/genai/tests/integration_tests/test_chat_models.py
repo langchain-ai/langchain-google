@@ -2520,7 +2520,9 @@ def test_context_caching(backend_config: dict) -> None:
     assert isinstance(response, AIMessage)
     content = response.content
     if isinstance(content, list):
-        text = " ".join(b["text"] for b in content if b.get("text"))
+        text = " ".join(
+            b["text"] for b in content if isinstance(b, dict) and b.get("text")
+        )
     else:
         text = content
     assert "747" in text
@@ -2541,7 +2543,9 @@ def test_context_caching(backend_config: dict) -> None:
     assert isinstance(response, AIMessage)
     content = response.content
     if isinstance(content, list):
-        text = " ".join(b["text"] for b in content if b.get("text"))
+        text = " ".join(
+            b["text"] for b in content if isinstance(b, dict) and b.get("text")
+        )
     else:
         text = content
     assert "747" in text
