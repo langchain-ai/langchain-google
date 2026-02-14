@@ -4046,6 +4046,18 @@ def test_kwargs_override_stop() -> None:
     assert config.stop_sequences == ["me"]
 
 
+def test_model_level_stop_propagated() -> None:
+    """Test that model-level `stop` is propagated when not overridden at call time."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY), stop=["model"]
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.stop_sequences == ["model"]
+
+
 def test_kwargs_override_thinking_budget() -> None:
     """Test that thinking_budget can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
