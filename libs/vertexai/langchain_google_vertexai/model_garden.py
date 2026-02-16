@@ -275,6 +275,12 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             params["model"] = kwargs["model"]
         if kwargs.get("betas"):
             params["betas"] = kwargs["betas"]
+        if kwargs.get("additional_headers"):
+            merged_headers = {
+                **(self.additional_headers or {}),
+                **kwargs["additional_headers"],
+            }
+            params["extra_headers"] = merged_headers
         params.pop("model_name", None)
         params.update(
             {
@@ -335,10 +341,13 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
+            extra_headers = params.pop("extra_headers", None)
             has_betas = True if params.get("betas") else False
             if has_betas:
-                return self.client.beta.messages.create(**params)
-            return self.client.messages.create(**params)
+                return self.client.beta.messages.create(
+                    **params, extra_headers=extra_headers
+                )
+            return self.client.messages.create(**params, extra_headers=extra_headers)
 
         data = _completion_with_retry_inner(**params)
         return self._format_output(data, **kwargs)
@@ -365,10 +374,15 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
+            extra_headers = params.pop("extra_headers", None)
             has_betas = True if params.get("betas") else False
             if has_betas:
-                return await self.async_client.beta.messages.create(**params)
-            return await self.async_client.messages.create(**params)
+                return await self.async_client.beta.messages.create(
+                    **params, extra_headers=extra_headers
+                )
+            return await self.async_client.messages.create(
+                **params, extra_headers=extra_headers
+            )
 
         data = await _acompletion_with_retry_inner(**params)
         return self._format_output(data, **kwargs)
@@ -399,10 +413,15 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
+            extra_headers = params.pop("extra_headers", None)
             has_betas = True if params.get("betas") else False
             if has_betas:
-                return self.client.beta.messages.create(**params, stream=True)
-            return self.client.messages.create(**params, stream=True)
+                return self.client.beta.messages.create(
+                    **params, stream=True, extra_headers=extra_headers
+                )
+            return self.client.messages.create(
+                **params, stream=True, extra_headers=extra_headers
+            )
 
         stream = _stream_with_retry(**params)
         coerce_content_to_string = (
@@ -443,12 +462,15 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
+            extra_headers = params.pop("extra_headers", None)
             has_betas = True if params.get("betas") else False
             if has_betas:
                 return await self.async_client.beta.messages.create(
-                    stream=True, **params
+                    stream=True, **params, extra_headers=extra_headers
                 )
-            return await self.async_client.messages.create(**params, stream=True)
+            return await self.async_client.messages.create(
+                **params, stream=True, extra_headers=extra_headers
+            )
 
         stream = await _astream_with_retry(**params)
         coerce_content_to_string = (
@@ -470,13 +492,48 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool],
+        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool| str],
         *,
         tool_choice: dict[str, str] | Literal["any", "auto"] | str | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         """Bind tool-like objects to this chat model."""
-        formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
+        # Check if web_search is in tools
+        has_web_search = False
+        processed_tools: list[dict[str, Any] | type[BaseModel] | Callable |
+         BaseTool] = []
+
+        for tool in tools:
+            # Check for string "web_search"
+            if isinstance(tool, str) and tool == "web_search":
+                has_web_search = True
+                processed_tools.append(
+                    {"type": "web_search_20250305", "name": "web_search"}
+                )
+            # Check for dict with web_search type
+            elif isinstance(tool, dict) and tool.get("type") == "web_search_20250305":
+                has_web_search = True
+                processed_tools.append(tool)
+            else:
+                processed_tools.append(tool)  # type: ignore[arg-type]
+
+        # Auto-inject the beta header if web_search detected
+        if has_web_search:
+            if "additional_headers" not in kwargs:
+                kwargs["additional_headers"] = {}
+            if "anthropic-beta" not in kwargs.get("additional_headers", {}):
+                kwargs["additional_headers"]["anthropic-beta"] = "web-search-2025-03-05"
+
+            # Use processed_tools instead of tools for formatting
+        tools_to_format = processed_tools if has_web_search else list(tools)
+
+        formatted_tools = list[Any] = []
+        for tool in tools_to_format:
+            if isinstance(tool, dict) and tool.get("type") == "web_search_20250305":
+                formatted_tools.append(tool)
+            else:
+                formatted_tools.append(convert_to_anthropic_tool(tool))
+
         if not tool_choice:
             pass
         elif isinstance(tool_choice, dict):
