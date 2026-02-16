@@ -380,6 +380,10 @@ def _clean_content_block(block: Any) -> Any:
     if not isinstance(block, dict):
         return block
 
+    # Convert LangChain image blocks to Anthropic wire format
+    if block.get("type") == "image":
+        return _format_image_content_block(block)
+
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
@@ -412,25 +416,6 @@ def _clean_content(content: Any) -> Any:
     return content
 
 
-def _clean_tool_result_content(content: Any) -> Any:
-    """Clean content for use inside tool_result blocks.
-
-    Applies standard cleaning (streaming metadata removal) and also converts
-    LangChain image blocks to Anthropic wire format. This conversion is necessary
-    because tool_result content bypasses ``_format_message_anthropic``, which
-    handles image conversion for top-level message content.
-    """
-    cleaned = _clean_content(content)
-    if not isinstance(cleaned, list):
-        return cleaned
-    return [
-        _format_image_content_block(block)
-        if isinstance(block, dict) and block.get("type") == "image"
-        else block
-        for block in cleaned
-    ]
-
-
 def _merge_messages(
     messages: Sequence[BaseMessage],
 ) -> list[SystemMessage | AIMessage | HumanMessage]:
@@ -451,7 +436,7 @@ def _merge_messages(
                 # Convert to tool_result format
                 tool_result_block = {
                     "type": "tool_result",
-                    "content": _clean_tool_result_content(curr.content),
+                    "content": _clean_content(curr.content),
                     "tool_use_id": curr.tool_call_id,
                 }
                 # Add error flag if present
