@@ -154,10 +154,65 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
         return self._parse_response(response)
 
 
+_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
+    # Claude 3 family
+    "claude-3-haiku-20240307": 4096,
+    "claude-3-sonnet-20240229": 4096,
+    "claude-3-opus-20240229": 4096,
+    # Claude 3.5 family
+    "claude-3-5-haiku-20241022": 8192,
+    "claude-3-5-haiku-latest": 8192,
+    "claude-3-5-sonnet-20240620": 8192,
+    "claude-3-5-sonnet-20241022": 8192,
+    "claude-3-5-sonnet-latest": 8192,
+    # Claude 3.7 family
+    "claude-3-7-sonnet-20250219": 64000,
+    "claude-3-7-sonnet-latest": 64000,
+    # Claude 4 Sonnet family
+    "claude-sonnet-4-0": 64000,
+    "claude-sonnet-4-20250514": 64000,
+    "claude-sonnet-4-5": 64000,
+    "claude-sonnet-4-5-20250929": 64000,
+    # Claude 4 Opus family
+    "claude-opus-4-0": 32000,
+    "claude-opus-4-20250514": 32000,
+    "claude-opus-4-1": 32000,
+    "claude-opus-4-1-20250805": 32000,
+    "claude-opus-4-5": 64000,
+    "claude-opus-4-5-20251101": 64000,
+    "claude-opus-4-6": 128000,
+    # Claude 4 Haiku family
+    "claude-haiku-4-5": 64000,
+    "claude-haiku-4-5-20251001": 64000,
+}
+"""Max output token limits for known Anthropic models on Vertex AI."""
+
+_ANTHROPIC_FALLBACK_MAX_OUTPUT_TOKENS: int = 4096
+"""Fallback max output tokens when the model is not in the lookup table."""
+
+
+def _get_anthropic_max_output_tokens(model_name: str) -> int:
+    """Look up the max output tokens for an Anthropic model.
+
+    Returns the model-specific limit if known, otherwise the fallback default.
+    """
+    return _ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS.get(
+        model_name, _ANTHROPIC_FALLBACK_MAX_OUTPUT_TOKENS
+    )
+
+
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     async_client: Any = Field(default=None, exclude=True)
 
-    max_output_tokens: int = Field(default=1024, alias="max_tokens")
+    max_output_tokens: int = Field(
+        default=_ANTHROPIC_FALLBACK_MAX_OUTPUT_TOKENS, alias="max_tokens"
+    )
+    """Denotes the number of tokens to predict per generation.
+
+    If not explicitly set, this is determined dynamically based on the model
+    name using known Anthropic model limits. Falls back to 4096 for unknown
+    models.
+    """
 
     access_token: str | None = None
 
@@ -195,6 +250,19 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_default_max_tokens(cls, values: dict[str, Any]) -> Any:
+        """Set default max_output_tokens from model profile if not set."""
+        max_tokens_keys = ("max_output_tokens", "max_tokens")
+        if not any(values.get(k) is not None for k in max_tokens_keys):
+            model = values.get("model_name") or values.get("model")
+            if model:
+                values["max_output_tokens"] = _get_anthropic_max_output_tokens(
+                    model
+                )
+        return values
 
     @model_validator(mode="before")
     @classmethod
