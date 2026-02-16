@@ -398,6 +398,21 @@ def _format_image_content_block(block: dict) -> dict:
             "type": "image",
             "source": {"type": "file", "file_id": block["file_id"]},
         }
+    # Backward compatibility for langchain < 1.X
+    if "data" in block and block.get("source_type") == "base64":
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": block["mime_type"],
+                "data": block["data"],
+            },
+        }
+    if "id" in block and block.get("source_type") == "id":
+        return {
+            "type": "image",
+            "source": {"type": "file", "file_id": block["id"]},
+        }
     return block
 
 
