@@ -259,9 +259,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if not any(values.get(k) is not None for k in max_tokens_keys):
             model = values.get("model_name") or values.get("model")
             if model:
-                values["max_output_tokens"] = _get_anthropic_max_output_tokens(
-                    model
-                )
+                values["max_output_tokens"] = _get_anthropic_max_output_tokens(model)
         return values
 
     @model_validator(mode="before")
