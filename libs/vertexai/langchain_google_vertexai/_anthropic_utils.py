@@ -362,6 +362,45 @@ def convert_to_anthropic_tool(
     )
 
 
+def _format_image_content_block(block: dict) -> dict:
+    """Convert a LangChain image content block to Anthropic wire format.
+
+    LangChain image blocks use ``{"type": "image", "base64": ..., "mime_type": ...}``
+    but Anthropic expects ``{"type": "image", "source": {"type": "base64", ...}}``.
+    This conversion is already done for top-level message content in
+    ``_format_message_anthropic``, but blocks nested inside ``tool_result`` content
+    bypass that function entirely.
+    """
+    if "source" in block:
+        return block
+    if "base64" in block:
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": block["mime_type"],
+                "data": block["base64"],
+            },
+        }
+    if "url" in block:
+        url = block["url"]
+        if url.startswith("data:"):
+            return {
+                "type": "image",
+                "source": _format_image(url, project=None),
+            }
+        return {
+            "type": "image",
+            "source": {"type": "url", "url": url},
+        }
+    if "file_id" in block:
+        return {
+            "type": "image",
+            "source": {"type": "file", "file_id": block["file_id"]},
+        }
+    return block
+
+
 def _clean_content_block(block: Any) -> Any:
     """Remove streaming metadata fields from content blocks.
 
@@ -409,6 +448,27 @@ def _clean_content(content: Any) -> Any:
     return content
 
 
+def _clean_tool_result_content(content: Any) -> Any:
+    """Clean content for use inside tool_result blocks.
+
+    Applies standard cleaning (streaming metadata removal) and also converts
+    LangChain image blocks to Anthropic wire format. This conversion is necessary
+    because tool_result content bypasses ``_format_message_anthropic``, which
+    handles image conversion for top-level message content.
+    """
+    cleaned = _clean_content(content)
+    if not isinstance(cleaned, list):
+        return cleaned
+    return [
+        _format_image_content_block(block)
+        if isinstance(block, dict)
+        and block.get("type") == "image"
+        and "source" not in block
+        else block
+        for block in cleaned
+    ]
+
+
 def _merge_messages(
     messages: Sequence[BaseMessage],
 ) -> list[SystemMessage | AIMessage | HumanMessage]:
@@ -429,7 +489,7 @@ def _merge_messages(
                 # Convert to tool_result format
                 tool_result_block = {
                     "type": "tool_result",
-                    "content": _clean_content(curr.content),
+                    "content": _clean_tool_result_content(curr.content),
                     "tool_use_id": curr.tool_call_id,
                 }
                 # Add error flag if present
