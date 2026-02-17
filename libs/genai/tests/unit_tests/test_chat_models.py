@@ -3333,6 +3333,60 @@ def test_with_structured_output_json_schema_alias() -> None:
     assert structured_llm_dict is not None
 
 
+def test_with_structured_output_tools_forwarded_json_schema() -> None:
+    """Test that `tools` parameter is forwarded to `.bind()` on json_schema path."""
+    from pydantic import BaseModel
+
+    class TestModel(BaseModel):
+        name: str
+        age: int
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
+    tools: list[dict[str, Any]] = [{"google_search": {}}]
+    structured_llm = llm.with_structured_output(
+        TestModel, method="json_schema", tools=tools
+    )
+
+    # Walk the chain to find the bound model and inspect its kwargs
+    bound = structured_llm.first if hasattr(structured_llm, "first") else structured_llm
+    bound_kwargs = cast("Any", bound).kwargs
+    assert bound_kwargs["tools"] == tools
+    assert bound_kwargs["response_mime_type"] == "application/json"
+
+
+def test_with_structured_output_tools_none_not_forwarded() -> None:
+    """Test that `tools=None` does not add a tools key to bind kwargs."""
+    from pydantic import BaseModel
+
+    class TestModel(BaseModel):
+        name: str
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
+    structured_llm = llm.with_structured_output(TestModel, tools=None)
+
+    bound = structured_llm.first if hasattr(structured_llm, "first") else structured_llm
+    bound_kwargs = cast("Any", bound).kwargs
+    assert "tools" not in bound_kwargs
+
+
+def test_with_structured_output_tools_function_calling_raises() -> None:
+    """Test that `tools` with method='function_calling' raises ValueError."""
+    from pydantic import BaseModel
+
+    class TestModel(BaseModel):
+        name: str
+
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="fake-key")
+    with pytest.raises(
+        ValueError, match="Cannot use 'tools' with method='function_calling'"
+    ):
+        llm.with_structured_output(
+            TestModel,
+            method="function_calling",
+            tools=[{"google_search": {}}],
+        )
+
+
 def test_response_json_schema_parameter() -> None:
     """Test that `response_json_schema` is properly set via `bind`."""
 

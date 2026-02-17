@@ -1783,6 +1783,38 @@ def test_structured_output_with_google_search(
         _check_usage_metadata(response)
 
 
+@pytest.mark.release
+@pytest.mark.flaky(retries=3, delay=1)
+def test_structured_output_tools_param_with_google_search(
+    backend_config: dict,
+) -> None:
+    """Test with_structured_output `tools` parameter with Google Search.
+
+    Uses the first-class `tools` kwarg on `with_structured_output` instead of
+    the manual `.bind()` workaround.
+    """
+
+    class MatchResult(BaseModel):
+        winner: str
+        final_match_score: str
+        scorers: list[str]
+
+    llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", **backend_config)
+    structured = llm.with_structured_output(
+        MatchResult,
+        tools=[{"google_search": {}}],
+    )
+
+    result = structured.invoke(
+        "Search for all details for the latest Euro championship final match."
+    )
+    assert isinstance(result, MatchResult)
+    assert isinstance(result.winner, str)
+    assert len(result.winner) > 0
+    assert isinstance(result.final_match_score, str)
+    assert isinstance(result.scorers, list)
+
+
 def test_search_with_googletool(backend_config: dict) -> None:
     """Test using `GoogleTool` with Google Search."""
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", **backend_config)

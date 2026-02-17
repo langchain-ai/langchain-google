@@ -3268,6 +3268,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         | None = "json_schema",
         *,
         include_raw: bool = False,
+        tools: Sequence[
+            dict[str, Any] | type | Callable[..., Any] | BaseTool | GoogleTool
+        ]
+        | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         """Return a `Runnable` that constrains model output to a given schema.
@@ -3291,6 +3295,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     `'json_schema'` and not recommended for new code.
             include_raw: If `True`, returns a dict with both the raw model output
                 and the parsed structured output.
+            tools: Optional list of tools (e.g., Google Search, URL context) to
+                bind alongside the structured output schema.
+
+                Only supported with `method='json_schema'` (default).
+
+                Gemini's native JSON schema mode constrains generation
+                independently of tool use, so the two features are orthogonal.
+
+                Raises `ValueError` if used with `method='function_calling'`.
 
         Returns:
             A `Runnable` that takes the same input as the chat model but returns the
@@ -3371,10 +3384,40 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             print(result["parsed"])  # Person(name="Bob", age=25)
             print(result["raw"])  # AIMessage with full model response
             ```
+
+            ```python title="Structured output with Google Search grounding"
+            from pydantic import BaseModel
+            from langchain_google_genai import ChatGoogleGenerativeAI
+
+
+            class MatchResult(BaseModel):
+                winner: str
+                final_match_score: str
+                scorers: list[str]
+
+
+            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            structured_model = model.with_structured_output(
+                MatchResult,
+                tools=[{"google_search": {}}],
+            )
+
+            result = structured_model.invoke(
+                "Search for details on the latest Euro championship final."
+            )
+            print(result)  # MatchResult(winner="...", ...)
+            ```
         """
         _ = kwargs.pop("strict", None)
         if kwargs:
             msg = f"Received unsupported arguments {kwargs}"
+            raise ValueError(msg)
+
+        if tools is not None and method == "function_calling":
+            msg = (
+                "Cannot use 'tools' with method='function_calling'. "
+                "Use method='json_schema' (default) instead."
+            )
             raise ValueError(msg)
 
         parser: OutputParserLike
@@ -3411,14 +3454,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # Note: The Google GenAI SDK automatically handles schema transformation
             # (inlining $defs, resolving $ref) via its process_schema() function.
             # This ensures Union types and nested schemas work correctly.
-            llm = self.bind(
-                response_mime_type="application/json",
-                response_json_schema=schema_json,
-                ls_structured_output_format={
+            bind_kwargs: dict[str, Any] = {
+                "response_mime_type": "application/json",
+                "response_json_schema": schema_json,
+                "ls_structured_output_format": {
                     "kwargs": {"method": method},
                     "schema": ls_schema,
                 },
-            )
+            }
+            if tools is not None:
+                bind_kwargs["tools"] = tools
+            llm = self.bind(**bind_kwargs)
         else:
             # LangChain tool calling structured output method (discouraged)
             tool_name = _get_tool_name(schema)  # type: ignore[arg-type]
