@@ -355,6 +355,65 @@ def test_init_client_with_custom_model_kwargs() -> None:
     assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
 
 
+@pytest.mark.parametrize(
+    ("model_name", "expected_max_tokens"),
+    [
+        ("claude-sonnet-4-5", 64000),
+        ("claude-sonnet-4-5-20250929", 64000),
+        ("claude-opus-4-0", 32000),
+        ("claude-opus-4-5", 64000),
+        ("claude-opus-4-6", 128000),
+        ("claude-3-5-sonnet-20241022", 8192),
+        ("claude-3-7-sonnet-20250219", 64000),
+        ("claude-haiku-4-5", 64000),
+        ("claude-3-opus-20240229", 4096),
+    ],
+)
+def test_anthropic_vertex_model_aware_max_tokens(
+    model_name: str, expected_max_tokens: int
+) -> None:
+    """Test that max_output_tokens defaults are model-aware."""
+    llm = ChatAnthropicVertex(
+        model_name=model_name,
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == expected_max_tokens
+    assert llm._default_params["max_tokens"] == expected_max_tokens
+
+
+def test_anthropic_vertex_unknown_model_fallback() -> None:
+    """Test that unknown model names fall back to 4096."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-unknown-future-model",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_explicit_max_tokens_override() -> None:
+    """Test that explicitly set max_output_tokens is not overridden."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+        max_output_tokens=2048,
+    )
+    assert llm.max_output_tokens == 2048
+
+
+def test_anthropic_vertex_explicit_max_tokens_alias_override() -> None:
+    """Test that max_tokens alias also prevents override."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+        max_tokens=512,
+    )
+    assert llm.max_output_tokens == 512
+
+
 def test_profile() -> None:
     model = ChatVertexAI(
         model="gemini-2.0-flash", project="test-project", location="moon-dark1"
