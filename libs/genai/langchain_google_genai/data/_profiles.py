@@ -535,5 +535,5 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-    }
+    },
 }
