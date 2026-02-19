@@ -2331,7 +2331,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self.default_metadata = tuple(additional_headers.items())
 
         _, user_agent = get_user_agent("ChatGoogleGenerativeAI")
-        headers = {"User-Agent": user_agent, **additional_headers}
+        headers = {"user-agent": user_agent, **additional_headers}
 
         google_api_key = None
         if not self.credentials:

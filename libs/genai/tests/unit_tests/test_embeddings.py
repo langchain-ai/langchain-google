@@ -30,13 +30,13 @@ def test_integration_initialization() -> None:
             google_api_key=SecretStr("..."),
         )
         mock_client.assert_called_once()
-        # Check that http_options contains user agent
+        # Check that http_options contains user agent (lowercase for google-genai)
         call_kwargs = mock_client.call_args.kwargs
         assert "http_options" in call_kwargs
         http_options = call_kwargs["http_options"]
-        assert "User-Agent" in http_options.headers
-        assert "langchain-google-genai" in http_options.headers["User-Agent"]
-        assert "GoogleGenerativeAIEmbeddings" in http_options.headers["User-Agent"]
+        assert "user-agent" in http_options.headers
+        assert "langchain-google-genai" in http_options.headers["user-agent"]
+        assert "GoogleGenerativeAIEmbeddings" in http_options.headers["user-agent"]
 
     with patch("langchain_google_genai.embeddings.Client") as mock_client:
         _ = GoogleGenerativeAIEmbeddings(
