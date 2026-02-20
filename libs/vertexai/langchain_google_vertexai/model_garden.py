@@ -191,6 +191,10 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     )
 
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
+    labels: dict[str, str] | None = Field(
+        default=None, description="Labels for Vertex AI cost tracking."
+    )
+    "Optional tag llm calls with metadata to help in traceability and billing."
 
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
@@ -275,6 +279,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             params["model"] = kwargs["model"]
         if kwargs.get("betas"):
             params["betas"] = kwargs["betas"]
+        labels = kwargs.get("labels") or self.labels
+        if labels:
+            params["labels"] = labels
         params.pop("model_name", None)
         params.update(
             {
