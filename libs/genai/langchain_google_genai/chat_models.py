@@ -563,7 +563,7 @@ def _get_ai_message_tool_messages_parts(
 #     pass
 #
 # model = ChatGoogleGenerativeAI(
-#     model="gemini-3-pro-preview"
+#     model="gemini-3.1-pro-preview"
 # ).bind_tools([generate_placeholder_thoughts])
 #
 # response = model.invoke("Generate a placeholder tool invocation.")
@@ -1281,7 +1281,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", api_key="...")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", api_key="...")
         ```
 
         **For Vertex AI Platform with API key**:
@@ -1293,10 +1293,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         # Or explicitly:
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             api_key="...",
             project="your-project-id",
             vertexai=True,
@@ -1358,7 +1358,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         model.invoke("Write me a ballad about LangChain")
         ```
 
@@ -1385,7 +1385,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             response_metadata={
                 "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
                 "finish_reason": "STOP",
-                "model_name": "gemini-3-pro-preview",
+                "model_name": "gemini-3.1-pro-preview",
                 "safety_ratings": [],
                 "model_provider": "google_genai",
             },
@@ -1764,7 +1764,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         message = HumanMessage(
             content=[
@@ -1842,7 +1842,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             thinking_level="low",  # For faster, lower-latency responses
         )
         ```
@@ -1859,7 +1859,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             include_thoughts=True,
         )
         ai_msg = model.invoke("How many 'r's are in the word 'strawberry'?")
@@ -1886,7 +1886,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         response = model.invoke(
             "When is the next total solar eclipse in US?",
             tools=[{"google_search": {}}],
@@ -1897,7 +1897,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Alternatively, you can bind the tool to the model for easier reuse across calls:
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         model_with_search = model.bind_tools([{"google_search": {}}])
         response = model_with_search.invoke(
@@ -1920,7 +1920,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         model_with_code_interpreter = model.bind_tools([{"code_execution": {}}])
         response = model_with_code_interpreter.invoke("Use Python to calculate 3^3.")
@@ -1984,7 +1984,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             safety_settings={
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             },
@@ -2028,7 +2028,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 file = client.files.get(name=file.name)
 
             # Create cache
-            model = "gemini-3-pro-preview"
+            model = "gemini-3.1-pro-preview"
             cache = client.caches.create(
                 model=model,
                 config=types.CreateCachedContentConfig(
@@ -2085,7 +2085,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     ],
                 )
             ]
-            model = "gemini-3-pro-preview"
+            model = "gemini-3.1-pro-preview"
             cache = client.caches.create(
                 model=model,
                 config=CreateCachedContentConfig(
@@ -2119,7 +2119,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         {
-            "model_name": "gemini-3-pro-preview",
+            "model_name": "gemini-3.1-pro-preview",
             "model_provider": "google_genai",
             "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
             "finish_reason": "STOP",
@@ -3246,7 +3246,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Example:
             ```python
-            llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             num_tokens = llm.get_num_tokens("Hello, world!")
             print(num_tokens)
             # -> 4
@@ -3308,7 +3308,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 age: int
 
 
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             structured_model = model.with_structured_output(
                 Person,
                 method="json_schema",
@@ -3331,7 +3331,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 steps: list[str]
 
 
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             structured_model = model.with_structured_output(
                 Recipe, method="json_schema"
             )
@@ -3344,7 +3344,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ```
 
             ```python title="Using with dict schema"
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
             schema = {
                 "type": "object",
