@@ -3,7 +3,7 @@
 import asyncio
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Generator
+from typing import Any, AsyncGenerator, Dict, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -109,7 +109,7 @@ def mock_bigquery_clients() -> Generator[Dict[str, Any], None, None]:
 
 
 @pytest.fixture
-async def handler() -> AsyncBigQueryCallbackHandler:
+async def handler() -> AsyncGenerator[AsyncBigQueryCallbackHandler, None]:
     """Returns an initialized `AsyncBigQueryCallbackHandler` with mocked clients."""
     handler = AsyncBigQueryCallbackHandler(
         project_id="test-project",
@@ -117,11 +117,16 @@ async def handler() -> AsyncBigQueryCallbackHandler:
         table_id="test_table",
     )
     await handler._ensure_started()
-    return handler
+
+    # Hand the handler to the test
+    yield handler
+
+    # Clean up the background tasks after the test completes!
+    await handler.shutdown()
 
 
 @pytest.fixture
-def sync_handler() -> BigQueryCallbackHandler:
+def sync_handler() -> Generator[BigQueryCallbackHandler, None, None]:
     """Returns an initialized `BigQueryCallbackHandler` with mocked clients."""
     handler = BigQueryCallbackHandler(
         project_id="test-project",
@@ -129,7 +134,12 @@ def sync_handler() -> BigQueryCallbackHandler:
         table_id="test_table",
     )
     handler._ensure_started()
-    return handler
+
+    # Hand the handler to the test
+    yield handler
+
+    # Clean up the background threads after the test completes!
+    handler.shutdown()
 
 
 @pytest.mark.asyncio
