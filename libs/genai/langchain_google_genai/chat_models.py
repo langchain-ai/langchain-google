@@ -21,6 +21,7 @@ from typing import (
 )
 
 import filetype  # type: ignore[import-untyped]
+from google.genai import types as genai_types
 from google.genai.client import Client
 from google.genai.errors import ClientError
 from google.genai.types import (
@@ -74,6 +75,9 @@ from langchain_core.messages import (
 )
 from langchain_core.messages import content as types
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
+from langchain_core.messages.block_translators.google_genai import (
+    translate_grounding_metadata_to_citations,
+)
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
@@ -230,53 +234,71 @@ def _convert_to_parts(
                     )
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
+                    part_kwargs: dict[str, Any] = {}
+                    mime_type = part.get("mime_type")
 
                     if "source_type" in part:
                         # Catch legacy v0 formats
                         # Safe since v1 content blocks don't have `source_type` key
                         if part["source_type"] == "url":
-                            bytes_ = image_loader._bytes_from_url(part["url"])
+                            url = part.get("url")
+                            if not url:
+                                msg = "Data content block must contain 'url'."
+                                raise ValueError(msg)
+                            if not mime_type:
+                                mime_type, _ = mimetypes.guess_type(url)
+                            part_kwargs["file_data"] = FileData(
+                                file_uri=url, mime_type=mime_type
+                            )
                         elif part["source_type"] == "base64":
                             bytes_ = base64.b64decode(part["data"])
+                            if not mime_type:
+                                # Guess MIME type based on data field if not provided
+                                source = cast("str", part.get("data"))
+                                mime_type, _ = mimetypes.guess_type(source)
+                                if not mime_type:
+                                    # Last resort - try to guess based on file bytes
+                                    kind = filetype.guess(bytes_)
+                                    if kind:
+                                        mime_type = kind.mime
+                            blob_kwargs: dict[str, Any] = {"data": bytes_}
+                            if mime_type:
+                                blob_kwargs["mime_type"] = mime_type
+                            part_kwargs["inline_data"] = Blob(**blob_kwargs)
                         else:
                             # Unable to support IDContentBlock
                             msg = "source_type must be url or base64."
                             raise ValueError(msg)
                     elif "url" in part:
                         # v1 multimodal block w/ URL
-                        bytes_ = image_loader._bytes_from_url(part["url"])
+                        url = part["url"]
+                        if not mime_type:
+                            mime_type, _ = mimetypes.guess_type(url)
+                        part_kwargs["file_data"] = FileData(
+                            file_uri=url, mime_type=mime_type
+                        )
                     elif "base64" in part:
                         # v1 multimodal block w/ base64
                         bytes_ = base64.b64decode(part["base64"])
+                        if not mime_type:
+                            # Guess MIME type based on data field if not provided
+                            source = cast("str", part.get("base64"))
+                            mime_type, _ = mimetypes.guess_type(source)
+                            if not mime_type:
+                                # Last resort - try to guess based on file bytes
+                                kind = filetype.guess(bytes_)
+                                if kind:
+                                    mime_type = kind.mime
+                        blob_kwargs = {"data": bytes_}
+                        if mime_type:
+                            blob_kwargs["mime_type"] = mime_type
+                        part_kwargs["inline_data"] = Blob(**blob_kwargs)
                     else:
                         msg = (
                             "Data content block must contain 'url', 'base64', or "
                             "'data' field."
                         )
                         raise ValueError(msg)
-
-                    mime_type = part.get("mime_type")
-                    if not mime_type:
-                        # Guess MIME type based on data field if not provided
-                        source = cast(
-                            "str",
-                            part.get("url") or part.get("base64") or part.get("data"),
-                        )
-                        mime_type, _ = mimetypes.guess_type(source)
-                        if not mime_type:
-                            # Last resort - try to guess based on file bytes
-                            kind = filetype.guess(bytes_)
-                            if kind:
-                                mime_type = kind.mime
-                    blob_kwargs: dict[str, Any] = {
-                        "data": bytes_,
-                    }
-                    if mime_type:
-                        blob_kwargs["mime_type"] = mime_type
-
-                    part_kwargs: dict[str, Any] = {
-                        "inline_data": Blob(**blob_kwargs),
-                    }
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
                             warnings.warn(
@@ -802,6 +824,54 @@ def _parse_chat_history(
     return system_instruction, formatted_messages
 
 
+def _clone_cached_content_with_overrides(
+    client: Client,
+    *,
+    model: str,
+    cache_name: str,
+    tools: list | None,
+    system_instruction: Content | None,
+    tool_config: ToolConfig | None,
+) -> str:
+    """Clone cached content and apply tool/system overrides.
+
+    Raises if the cached content config cannot be read.
+    """
+    cached = client.caches.get(name=cache_name)
+    cached_config = getattr(cached, "config", None)
+    if cached_config is None:
+        msg = (
+            "Unable to read cached content configuration to attach tools or "
+            "system_instruction. Recreate the cache with create_context_cache()."
+        )
+        raise ValueError(msg)
+
+    if hasattr(cached_config, "model_dump"):
+        cache_config_dict = cached_config.model_dump(exclude_unset=True)
+    else:
+        cache_config_dict = {
+            key: value
+            for key, value in cached_config.__dict__.items()
+            if value is not None
+        }
+
+    if system_instruction is not None:
+        cache_config_dict["system_instruction"] = system_instruction
+    if tools is not None:
+        cache_config_dict["tools"] = tools
+    if tool_config is not None:
+        cache_config_dict["tool_config"] = tool_config
+
+    new_cache = client.caches.create(
+        model=model,
+        config=genai_types.CreateCachedContentConfig(**cache_config_dict),
+    )
+    if new_cache.name is None:
+        msg = "Cache name was not set after creation."
+        raise ValueError(msg)
+    return new_cache.name
+
+
 # Helper function to append content consistently
 def _append_to_content(
     current_content: str | list[Any] | None, new_item: Any
@@ -820,6 +890,55 @@ def _append_to_content(
     # but it catches any unexpected types that might slip through.
     msg = f"Unexpected content type: {type(current_content)}"
     raise TypeError(msg)
+
+
+def _collapse_text_content(content: list[Any]) -> str | list[Any]:
+    """Collapse list content into a string when it only contains plain text."""
+    if not content:
+        return ""
+    if all(isinstance(item, str) for item in content):
+        return "".join(content)
+    if all(
+        isinstance(item, dict)
+        and item.get("type") == "text"
+        and set(item.keys()).issubset({"type", "text"})
+        for item in content
+    ):
+        return "".join(item.get("text", "") for item in content)
+    return content
+
+
+def _add_grounding_citations_to_content(
+    message: AIMessage | AIMessageChunk, grounding_metadata: dict[str, Any]
+) -> None:
+    """Attach grounding citations to text content blocks when missing."""
+    if not grounding_metadata or not isinstance(message.content, list):
+        return
+
+    if any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and block.get("annotations")
+        for block in message.content
+    ):
+        return
+
+    citations = translate_grounding_metadata_to_citations(grounding_metadata)
+    if not citations:
+        return
+
+    for idx, block in enumerate(message.content):
+        if isinstance(block, dict) and block.get("type") == "text":
+            if not block.get("annotations"):
+                block["annotations"] = citations
+            return
+        if isinstance(block, str):
+            message.content[idx] = {
+                "type": "text",
+                "text": block,
+                "annotations": citations,
+            }
+            return
 
 
 def _convert_integer_like_floats(obj: Any) -> Any:
@@ -849,6 +968,7 @@ def _parse_response_candidate(
     model_name: str | None = None,
     *,
     model_name_for_content: str | None = None,
+    output_version: str | None = None,
 ) -> AIMessage:
     """Parse a response candidate from Google into an `AIMessage`.
 
@@ -878,6 +998,8 @@ def _parse_response_candidate(
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
     if model_name:
         response_metadata["model_name"] = model_name
+    if output_version:
+        response_metadata["output_version"] = output_version
     tool_calls = []
     invalid_tool_calls = []
     tool_call_chunks = []
@@ -890,6 +1012,9 @@ def _parse_response_candidate(
     )
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
+    preserve_list_content = output_version == "v1" or _is_gemini_3_or_later(
+        effective_model_name or ""
+    )
     for part in parts:
         text: str | None = None
         try:
@@ -914,22 +1039,29 @@ def _parse_response_candidate(
                 thought_sig = None
 
         if hasattr(part, "thought") and part.thought:
-            thinking_message = {
-                "type": "thinking",
-                "thinking": part.text,
-            }
-            # Include signature if present
-            if thought_sig:
-                thinking_message["signature"] = thought_sig
-            content = _append_to_content(content, thinking_message)
-        elif (
-            (text is not None and text)  # text part with non-empty string
-            or (part.text is not None and thought_sig)  # text part w/ thought sig
-        ):
+            thought_text = part.text or ""
+            if output_version == "v1":
+                reasoning_message: dict[str, Any] = {
+                    "type": "reasoning",
+                    "reasoning": thought_text,
+                }
+                if thought_sig:
+                    reasoning_message["extras"] = {"signature": thought_sig}
+                content = _append_to_content(content, reasoning_message)
+            else:
+                thinking_message: dict[str, Any] = {
+                    "type": "thinking",
+                    "thinking": thought_text,
+                }
+                # Include signature if present
+                if thought_sig:
+                    thinking_message["signature"] = thought_sig
+                content = _append_to_content(content, thinking_message)
+        elif text is not None and text:
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
-            if thought_sig or _is_gemini_3_or_later(effective_model_name or ""):
+            if thought_sig or preserve_list_content:
                 # append blocks if there's a signature or new Gemini model
                 content = _append_to_content(content, text_block)
             elif isinstance(content, list) and any(
@@ -944,13 +1076,23 @@ def _parse_response_candidate(
 
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
-                code_id = str(uuid.uuid4())  # Generate ID if not present, needed later
-                code_message = {
-                    "type": "executable_code",
-                    "executable_code": part.executable_code.code,
-                    "language": part.executable_code.language,
-                    "id": code_id,
-                }
+                if output_version == "v1":
+                    code_message = {
+                        "type": "server_tool_call",
+                        "name": "code_interpreter",
+                        "args": {
+                            "code": part.executable_code.code,
+                            "language": part.executable_code.language,
+                        },
+                    }
+                else:
+                    code_id = str(uuid.uuid4())  # Generate ID if not present
+                    code_message = {
+                        "type": "executable_code",
+                        "executable_code": part.executable_code.code,
+                        "language": part.executable_code.language,
+                        "id": code_id,
+                    }
                 content = _append_to_content(content, code_message)
 
         if (
@@ -968,12 +1110,22 @@ def _parse_response_candidate(
                 outcome = 1
             else:
                 outcome = 2
-            execution_result = {
-                "type": "code_execution_result",
-                "code_execution_result": part.code_execution_result.output,
-                "outcome": outcome,
-                "tool_call_id": "",  # Linked via block translator
-            }
+            execution_result: dict[str, Any]
+            if output_version == "v1":
+                execution_result = {
+                    "type": "server_tool_result",
+                    "name": "code_interpreter",
+                    "output": str(part.code_execution_result.output),
+                    "status": "success" if outcome == 1 else "error",
+                    "extras": {"outcome": outcome},
+                }
+            else:
+                execution_result = {
+                    "type": "code_execution_result",
+                    "code_execution_result": part.code_execution_result.output,
+                    "outcome": outcome,
+                    "tool_call_id": "",  # Linked via block translator
+                }
             content = _append_to_content(content, execution_result)
 
         if part.inline_data and part.inline_data.data and part.inline_data.mime_type:
@@ -1066,10 +1218,12 @@ def _parse_response_candidate(
                 )
 
     if content is None:
-        if _is_gemini_3_or_later(effective_model_name or ""):
+        if preserve_list_content:
             content = []
         else:
             content = ""
+    if isinstance(content, list) and not preserve_list_content:
+        content = _collapse_text_content(content)
     if isinstance(content, list) and any(
         isinstance(item, dict) and "executable_code" in item for item in content
     ):
@@ -1103,6 +1257,9 @@ def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: UsageMetadata | None = None,
+    *,
+    output_version: str | None = None,
+    default_model_name: str | None = None,
 ) -> ChatResult:
     """Converts a Google AI response into a LangChain `ChatResult`."""
     llm_output = (
@@ -1185,11 +1342,13 @@ def _response_to_result(
         # consistent list-based content across all chunks), but only include
         # model_name in response_metadata for the final chunk to avoid duplication
         # when chunks are concatenated.
+        model_name_for_content = response.model_version or default_model_name
         message = _parse_response_candidate(
             candidate,
             streaming=stream,
             model_name=model_name_for_metadata,  # None for intermediate chunks
-            model_name_for_content=response.model_version,  # Always set
+            model_name_for_content=model_name_for_content,
+            output_version=output_version,
         )
 
         if not hasattr(message, "response_metadata"):
@@ -1217,6 +1376,7 @@ def _response_to_result(
                     grounding_metadata["web_search_queries"] = []
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
+                _add_grounding_citations_to_content(message, grounding_metadata)
         except AttributeError:
             pass
 
@@ -2217,6 +2377,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
+    output_version: Literal["v0", "v1"] | None = None
+    """Output format version for structured content blocks.
+
+    Supported values:
+        * `'v0'`: Legacy content blocks.
+        * `'v1'`: New content blocks with reasoning/annotations.
+    """
+
     thinking_level: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
     )
@@ -2751,10 +2919,52 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             model=self.model,
         )
 
+        # Cached content cannot be combined with tools or system_instruction
+        if (cached_content or self.cached_content) and (
+            formatted_tools or tool_config or system_instruction is not None
+        ):
+            msg = (
+                "Cached content cannot be used with tools, tool_config, or "
+                "system_instruction in a GenerateContent request. "
+                "Move those settings into the cached content configuration."
+            )
+            raise ValueError(msg)
+
         # Process tool configuration
         formatted_tool_config = self._process_tool_config(
             tool_choice, tool_config, formatted_tools
         )
+
+        # If cached content is set, Gemini forbids tools/system_instruction/tool_config
+        # in the GenerateContent request. Clone the cache to include them instead.
+        cached_content_from_kwargs = cached_content
+        cache_name = cached_content or self.cached_content
+        if cache_name and (
+            formatted_tools or formatted_tool_config or system_instruction is not None
+        ):
+            if self.client is None:
+                msg = "Client not initialized."
+                raise ValueError(msg)
+            if not self.model:
+                msg = "Model name must be specified to create cached content."
+                raise ValueError(msg)
+
+            cache_name = _clone_cached_content_with_overrides(
+                self.client,
+                model=self.model,
+                cache_name=cache_name,
+                tools=formatted_tools,
+                system_instruction=system_instruction,
+                tool_config=formatted_tool_config,
+            )
+            cached_content = cache_name
+            if cached_content_from_kwargs is None:
+                object.__setattr__(self, "cached_content", cache_name)
+
+            # Ensure request does not include forbidden fields
+            formatted_tools = None
+            formatted_tool_config = None
+            system_instruction = None
 
         # Process safety settings
         formatted_safety_settings = self._format_safety_settings(
@@ -2789,6 +2999,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 if schema and "response_json_schema" not in kwargs:
                     kwargs["response_json_schema"] = schema
 
+        output_version = kwargs.get("output_version", self.output_version)
+        if output_version is not None:
+            kwargs["output_version"] = output_version
+
         # Get generation parameters
         # (consumes thinking kwargs into params.thinking_config)
         params: GenerationConfig = self._prepare_params(
@@ -2808,6 +3022,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "response_schema",
             "response_json_schema",
             "response_mime_type",
+            "output_version",
         }
         _consumed_kwargs.update(params.model_fields_set)
         # Filter out kwargs already consumed by _prepare_params.
@@ -3031,6 +3246,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
+        output_version = kwargs.get("output_version", self.output_version)
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -3050,7 +3267,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         except ClientError as e:
             _handle_client_error(e, request)
 
-        return _response_to_result(response)
+        return _response_to_result(
+            response,
+            output_version=output_version,
+            default_model_name=self.model,
+        )
 
     async def _agenerate(
         self,
@@ -3070,6 +3291,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
+        output_version = kwargs.get("output_version", self.output_version)
 
         request = self._prepare_request(
             messages,
@@ -3092,7 +3315,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         except ClientError as e:
             _handle_client_error(e, request)
 
-        return _response_to_result(response)
+        return _response_to_result(
+            response,
+            output_version=output_version,
+            default_model_name=self.model,
+        )
 
     def _stream(
         self,
@@ -3112,6 +3339,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
+        output_version = kwargs.get("output_version", self.output_version)
 
         request = self._prepare_request(
             messages,
@@ -3140,7 +3369,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for chunk in response:
             if chunk:
                 _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
+                    chunk,
+                    stream=True,
+                    prev_usage=prev_usage_metadata,
+                    output_version=output_version,
+                    default_model_name=self.model,
                 )
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
@@ -3184,6 +3417,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
+        output_version = kwargs.get("output_version", self.output_version)
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -3208,7 +3443,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         async for chunk in stream:
             _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
+                chunk,
+                stream=True,
+                prev_usage=prev_usage_metadata,
+                output_version=output_version,
+                default_model_name=self.model,
             )
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)
