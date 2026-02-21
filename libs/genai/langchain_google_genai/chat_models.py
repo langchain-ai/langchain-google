@@ -567,15 +567,8 @@ def _get_ai_message_tool_messages_parts(
 # ).bind_tools([generate_placeholder_thoughts])
 #
 # response = model.invoke("Generate a placeholder tool invocation.")
-
-DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
-    "ErQCCrECAdHtim8MtxgeMCRCiNiyoyImxtYAEDzz4NXOr/HSL3rA7rPPvHWZCm+T9VSDYh/mt9lESoH4wQh"
-    "/ca1zDtWTN6XOL1+S3krYLQeqp47RV/b1eSq5jdZF28S4Lb7w4A3/EFdybc4SFb2/YhMm+CulYLmLA4Tr4V"
-    "Su0eMWgxM3HVt6u0jECf5BbXzj0qjJ32tEQYJvKvV8H1tCHvB6J+RZhsDr+TcyOCaqxDoR4WKxXYxNRZb3h"
-    "YTuCnBEDPhn1lROumVaghi9nEIgc17z002zLoyqIptlLfIVw70FXkCLsPUSL1SjPQYtGL8PVncVajeqGogR"
-    "D/eZSVZ1Zr5tshxh3DQ+JAYNcrHaRHWC4Hg0H6oftYx+JdJD9B/81NYV9jyGxP7zHKFHOELl0IUP5GEXP9I"
-    "="
-)
+# INSERT THIS
+DUMMY_THOUGHT_SIGNATURE = b"skip_thought_signature_validator"
 
 
 def _parse_chat_history(
