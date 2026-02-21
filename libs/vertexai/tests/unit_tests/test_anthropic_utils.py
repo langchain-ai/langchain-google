@@ -1353,6 +1353,121 @@ def test_tool_message_preserves_cache_control() -> None:
     }
 
 
+def test_format_messages_tool_message_with_image_blocks() -> None:
+    """Test image blocks in ToolMessage content are converted to Anthropic format.
+
+    LangChain image blocks use {"type": "image", "base64": ..., "mime_type": ...}
+    but Anthropic expects {"type": "image", "source": {"type": "base64", ...}}.
+    This conversion must happen even when images are nested inside tool_result content.
+    """
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "screenshot.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "base64": "iVBORw0KGgo=",
+                    "mime_type": "image/png",
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    tool_result = formatted[1]["content"][0]
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["tool_use_id"] == "call_1"
+
+    image_block = tool_result["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgo=",
+        },
+    }
+
+
+def test_format_messages_tool_message_with_url_image_block() -> None:
+    """Test URL image blocks in ToolMessage are converted."""
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "img.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "url": "https://example.com/image.png",
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    image_block = formatted[1]["content"][0]["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {"type": "url", "url": "https://example.com/image.png"},
+    }
+
+
+def test_format_messages_tool_message_with_already_formatted_image() -> None:
+    """Test that image blocks already in Anthropic format are passed through."""
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "img.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "iVBORw0KGgo=",
+                    },
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    image_block = formatted[1]["content"][0]["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgo=",
+        },
+    }
+
+
 @pytest.mark.parametrize(
     ("image_url", "expected_media_type"),
     [

@@ -47,7 +47,7 @@ from langchain_google_genai import (
 )
 
 _MODEL = "gemini-3-flash-preview"
-_PRO_MODEL = "gemini-3-pro-preview"
+_PRO_MODEL = "gemini-3.1-pro-preview"
 _VISION_MODEL = "gemini-2.5-flash"
 _IMAGE_OUTPUT_MODEL = "gemini-2.5-flash-image"
 _IMAGE_EDITING_MODEL = "gemini-3-pro-image-preview"
@@ -1706,7 +1706,7 @@ def test_structured_output_with_google_search(
         final_match_score: str
         scorers: list[str]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", **backend_config)
+    llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", **backend_config)
 
     # Bind tools and configure for structured output
     llm_with_search = llm.bind(
@@ -2229,12 +2229,12 @@ async def test_basic_streaming(
 def test_gemini_3_pro_streaming_with_thinking(
     output_version: Literal["v0", "v1"], backend_config: dict
 ) -> None:
-    """Test `gemini-3-pro-preview` streaming with thinking capabilities.
+    """Test `gemini-3.1-pro-preview` streaming with thinking capabilities.
 
-    `gemini-3-pro-preview` uses `thinking_level` instead of `thinking_budget`.
+    `gemini-3.1-pro-preview` uses `thinking_level` instead of `thinking_budget`.
     """
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-pro-preview",
+        model="gemini-3.1-pro-preview",
         thinking_level="high",
         include_thoughts=True,
         output_version=output_version,
@@ -2299,7 +2299,7 @@ def test_gemini_3_pro_streaming_with_thinking(
 def test_gemini_3_pro_agent_loop_streaming(
     output_version: Literal["v0", "v1"], backend_config: dict
 ) -> None:
-    """Test `gemini-3-pro-preview` agent loop with streaming and thinking."""
+    """Test `gemini-3.1-pro-preview` agent loop with streaming and thinking."""
 
     @tool
     def calculate_sum(a: int, b: int) -> int:
@@ -2315,7 +2315,7 @@ def test_gemini_3_pro_agent_loop_streaming(
         return a + b
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-pro-preview",
+        model="gemini-3.1-pro-preview",
         thinking_level="high",
         include_thoughts=True,
         output_version=output_version,
@@ -2381,7 +2381,7 @@ def test_gemini_3_pro_agent_loop_streaming(
     assert len(text_blocks) > 0
 
 
-@pytest.mark.parametrize("model_name", [_MODEL, "gemini-3-pro-preview"])
+@pytest.mark.parametrize("model_name", [_MODEL, "gemini-3.1-pro-preview"])
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_streaming_with_multiple_tool_calls(
     model_name: str, output_version: Literal["v0", "v1"], backend_config: dict
@@ -2782,7 +2782,7 @@ def test_streaming_function_call_arguments() -> None:
     # Use Gemini 3 Pro as these features are only available there
     # Note: This test explicitly requires Vertex AI, so we hardcode those parameters
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-pro-preview",
+        model="gemini-3.1-pro-preview",
         vertexai=True,
         project=project,
         api_key=None,  # Force use of application default credentials
@@ -2879,7 +2879,7 @@ def test_multimodal_function_response() -> None:
 
     # Use Gemini 3 Pro as these features are only available there
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-pro-preview",
+        model="gemini-3.1-pro-preview",
         vertexai=True,
         project=project,
         api_key=None,  # Force use of application default credentials
