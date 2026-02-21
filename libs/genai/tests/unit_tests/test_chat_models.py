@@ -54,6 +54,7 @@ from langchain_google_genai._compat import (
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
+    ChatGoogleGenerativeAIInteractions,
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
@@ -159,6 +160,74 @@ def test_seed_initialization() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_no_seed.seed is None
+
+
+def test_interactions_wrapper_calls_interactions_create_with_model() -> None:
+    """Interactions wrapper should call interactions.create with model payload."""
+
+    class FakeInteraction:
+        def model_dump(self, exclude_none: bool = True) -> dict[str, Any]:
+            return {
+                "id": "interaction-1",
+                "status": "completed",
+                "model": "gemini-3-pro-preview",
+                "outputs": [{"content": [{"type": "text", "text": "hello"}]}],
+            }
+
+    mock_client = Mock()
+    mock_interactions = Mock()
+    mock_interactions.create.return_value = FakeInteraction()
+    mock_client.return_value.interactions = mock_interactions
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAIInteractions(
+            model="gemini-3-pro-preview",
+            google_api_key=SecretStr(FAKE_API_KEY),
+        )
+
+    response = llm.invoke("Say hello")
+    assert isinstance(response, AIMessage)
+    assert "hello" in cast("str", response.content)
+
+    mock_interactions.create.assert_called_once()
+    call_kwargs = mock_interactions.create.call_args.kwargs
+    assert call_kwargs["model"] == "gemini-3-pro-preview"
+    assert "agent" not in call_kwargs
+    assert isinstance(call_kwargs["input"], list)
+
+
+def test_interactions_wrapper_calls_interactions_create_with_agent() -> None:
+    """Interactions wrapper should pass agent when configured."""
+
+    class FakeInteraction:
+        def model_dump(self, exclude_none: bool = True) -> dict[str, Any]:
+            return {
+                "id": "interaction-2",
+                "status": "running",
+                "agent": "deep-research-pro-preview-12-2025",
+                "outputs": [],
+            }
+
+    mock_client = Mock()
+    mock_interactions = Mock()
+    mock_interactions.create.return_value = FakeInteraction()
+    mock_client.return_value.interactions = mock_interactions
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAIInteractions(
+            model="gemini-3-pro-preview",
+            agent="deep-research-pro-preview-12-2025",
+            background=True,
+            google_api_key=SecretStr(FAKE_API_KEY),
+        )
+
+    _ = llm.invoke("Research TPUs")
+
+    mock_interactions.create.assert_called_once()
+    call_kwargs = mock_interactions.create.call_args.kwargs
+    assert call_kwargs["agent"] == "deep-research-pro-preview-12-2025"
+    assert "model" not in call_kwargs
+    assert call_kwargs["background"] is True
 
 
 def test_safety_settings_initialization() -> None:
