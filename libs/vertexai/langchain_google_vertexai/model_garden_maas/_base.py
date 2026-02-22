@@ -27,7 +27,6 @@ from langchain_google_vertexai._base import _VertexAIBase
 
 _MISTRAL_MODELS: list[str] = ["mistral-medium-3", "mistral-small-2503", "codestral-2"]
 _LLAMA_MODELS: list[str] = [
-    "meta/llama-3.2-90b-vision-instruct-maas",
     "meta/llama-3.3-70b-instruct-maas",
     "meta/llama-4-maverick-17b-128e-instruct-maas",
     "meta/llama-4-scout-17b-16e-instruct-maas",
