@@ -1497,3 +1497,58 @@ def test_format_image(image_url: str, expected_media_type: str) -> None:
         }
 
         mock_loader_instance.load_bytes.assert_called_once_with(image_url)
+
+
+def test_format_messages_anthropic_system_not_first() -> None:
+    """Test that system messages are accepted when not at position 0.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1022
+    """
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content="Hi there!"),
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="What is 2+2?"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
+
+    assert system_messages == [{"type": "text", "text": "You are a helpful assistant."}]
+    # System message should be extracted; remaining messages should be formatted
+    assert len(formatted_messages) == 3
+    assert formatted_messages[0]["role"] == "user"
+    assert formatted_messages[1]["role"] == "assistant"
+    assert formatted_messages[2]["role"] == "user"
+
+
+def test_format_messages_anthropic_consecutive_system_merged() -> None:
+    """Test that consecutive system messages are merged into one."""
+    messages = [
+        SystemMessage(content="Rule 1."),
+        SystemMessage(content="Rule 2."),
+        HumanMessage(content="Hello"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
+
+    # Consecutive system messages should be merged
+    assert system_messages == [
+        {"type": "text", "text": "Rule 1."},
+        {"type": "text", "text": "Rule 2."},
+    ]
+    assert len(formatted_messages) == 1
+    assert formatted_messages[0]["role"] == "user"
+
+
+def test_format_messages_anthropic_multiple_non_consecutive_system_raises() -> None:
+    """Test that multiple non-consecutive system messages raise an error."""
+    messages = [
+        SystemMessage(content="First system."),
+        HumanMessage(content="Hello"),
+        SystemMessage(content="Second system."),
+        HumanMessage(content="World"),
+    ]
+    with pytest.raises(ValueError, match="multiple non-consecutive system messages"):
+        _format_messages_anthropic(messages, project="test-project")
