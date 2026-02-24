@@ -267,10 +267,10 @@ def _format_messages_anthropic(
     formatted_messages: list[dict] = []
 
     merged_messages = _merge_messages(messages)
-    for i, message in enumerate(merged_messages):
+    for message in merged_messages:
         if message.type == "system":
-            if i != 0:
-                msg = "System message must be at beginning of message list."
+            if system_messages is not None:
+                msg = "Received multiple non-consecutive system messages."
                 raise ValueError(msg)
             fm = _format_message_anthropic(message, project)
             if fm:
@@ -458,16 +458,21 @@ def _merge_messages(
                     curr = curr.model_copy(deep=True)
                     curr.content = cleaned_content
         last = merged[-1] if merged else None
-        if isinstance(last, HumanMessage) and isinstance(curr, HumanMessage):
-            if isinstance(last.content, str):
-                new_content: list = [{"type": "text", "text": last.content}]
+        if any(
+            all(isinstance(m, c) for m in (curr, last))
+            for c in (SystemMessage, HumanMessage)
+        ):
+            if isinstance(cast("BaseMessage", last).content, str):
+                new_content: list = [
+                    {"type": "text", "text": cast("BaseMessage", last).content}
+                ]
             else:
-                new_content = last.content
+                new_content = cast("list", cast("BaseMessage", last).content)
             if isinstance(curr.content, str):
                 new_content.append({"type": "text", "text": curr.content})
             else:
                 new_content.extend(curr.content)
-            last.content = new_content
+            merged[-1] = curr.model_copy(update={"content": new_content})
         else:
             merged.append(curr)
     return merged
