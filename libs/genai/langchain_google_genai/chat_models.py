@@ -2677,27 +2677,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> dict[str, Any]:
         """Add response-specific parameters to generation config.
 
-        Includes `response_mime_type`, `response_schema`, and `response_json_schema`.
+        Handles `response_mime_type` and `response_json_schema`.
+
+        Note: `response_schema` is handled separately in `_prepare_request`
+        because it must bypass GenerationConfig (whose strict Schema type
+        rejects $defs/$ref) and go directly to GenerateContentConfig.
         """
         # Handle response mime type
         response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
         if response_mime_type is not None:
             gen_config["response_mime_type"] = response_mime_type
 
-        response_schema = kwargs.get("response_schema", self.response_schema)
-        response_json_schema = kwargs.get("response_json_schema")  # If passed as kwarg
-
-        # Handle both response_schema and response_json_schema
-        # (Regardless, we use `response_json_schema` in the request)
-        schema_to_use = (
-            response_json_schema
-            if response_json_schema is not None
-            else response_schema
-        )
-        if schema_to_use:
+        response_json_schema = kwargs.get("response_json_schema")
+        if response_json_schema is not None:
             self._validate_and_add_response_schema(
                 gen_config=gen_config,
-                response_schema=schema_to_use,
+                response_schema=response_json_schema,
                 response_mime_type=response_mime_type,
             )
 
@@ -2789,6 +2784,29 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 if schema and "response_json_schema" not in kwargs:
                     kwargs["response_json_schema"] = schema
 
+        # Extract response_schema before _prepare_params. It must bypass
+        # GenerationConfig (whose strict Schema type rejects $defs/$ref)
+        # and go directly to GenerateContentConfig where the SDK's
+        # process_schema() pipeline inlines $defs/$ref.
+        response_schema = kwargs.pop("response_schema", self.response_schema)
+        if kwargs.get("response_json_schema") is not None:
+            response_schema = None  # response_json_schema takes precedence
+        if response_schema is not None:
+            response_mime_type = kwargs.get(
+                "response_mime_type", self.response_mime_type
+            )
+            if response_mime_type != "application/json":
+                error_message = (
+                    "JSON schema structured output is only supported when "
+                    "response_mime_type is set to 'application/json'"
+                )
+                if response_mime_type == "text/x.enum":
+                    error_message += (
+                        ". Instead of 'text/x.enum', define enums using "
+                        "your JSON schema."
+                    )
+                raise ValueError(error_message)
+
         # Get generation parameters
         # (consumes thinking kwargs into params.thinking_config)
         params: GenerationConfig = self._prepare_params(
@@ -2829,6 +2847,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             max_retries=max_retries,
             image_config=image_config,
             labels=labels,
+            response_schema=response_schema,
             **remaining_kwargs,
         )
 
@@ -2977,6 +2996,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         max_retries: int | None = None,
         image_config: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
+        response_schema: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
@@ -2999,6 +3019,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if image_config_dict is not None:
             image_config_obj = ImageConfig(**image_config_dict)
 
+        # response_schema is passed directly to GenerateContentConfig
+        # (bypassing GenerationConfig) so the SDK's process_schema()
+        # pipeline can inline $defs/$ref for Vertex AI compatibility.
+        config_kwargs: dict[str, Any] = {}
+        if response_schema is not None:
+            config_kwargs["response_schema"] = response_schema
+
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
@@ -3009,6 +3036,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             image_config=image_config_obj,
             labels=labels,
             **params.model_dump(exclude_unset=True),
+            **config_kwargs,
             **kwargs,
         )
 
@@ -3408,12 +3436,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 msg = f"Unsupported schema type {type(schema)}"
                 raise ValueError(msg)
 
-            # Note: The Google GenAI SDK automatically handles schema transformation
-            # (inlining $defs, resolving $ref) via its process_schema() function.
-            # This ensures Union types and nested schemas work correctly.
+            # Use response_schema (not response_json_schema) so the SDK's
+            # process_schema() pipeline inlines $defs/$ref. This is required for
+            # Vertex AI, which silently returns empty arrays for schemas with $ref.
             llm = self.bind(
                 response_mime_type="application/json",
-                response_json_schema=schema_json,
+                response_schema=schema_json,
                 ls_structured_output_format={
                     "kwargs": {"method": method},
                     "schema": ls_schema,
