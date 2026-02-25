@@ -4921,3 +4921,51 @@ def test_openai_style_bind_with_response_format() -> None:
         strict=True,
     )
     assert bound4 is not None
+
+
+def test_labels_passed_to_generate_content_config() -> None:
+    """Test that `labels` is properly passed to `GenerateContentConfig`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        labels={"env": "production", "team": "ml"},
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.labels is not None
+    assert config.labels == {"env": "production", "team": "ml"}
+
+
+def test_labels_none_by_default() -> None:
+    """Test that `labels` is `None` by default."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.labels is None
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.labels is None
+
+
+def test_labels_override_in_invoke() -> None:
+    """Test that labels can be overridden at invocation time via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        labels={"env": "production", "team": "ml"},
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    # Override labels via kwargs
+    request = llm._prepare_request(
+        messages, labels={"env": "staging", "request_id": "123"}
+    )
+    config = request["config"]
+
+    assert config.labels == {"env": "staging", "request_id": "123"}

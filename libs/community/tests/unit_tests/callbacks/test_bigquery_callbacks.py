@@ -1,6 +1,8 @@
 """Unit tests for `BigQueryCallbackHandler`."""
 
+import asyncio
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -13,7 +15,9 @@ from langchain_core.outputs import Generation, LLMResult
 
 from langchain_google_community.callbacks.bigquery_callback import (
     AsyncBigQueryCallbackHandler,
+    AsyncTraceIdRegistry,
     BigQueryCallbackHandler,
+    TraceIdRegistry,
 )
 
 
@@ -86,7 +90,11 @@ def mock_bigquery_clients() -> Generator[Dict[str, Any], None, None]:
         ),
         patch(
             "sys.modules",
-            {"pyarrow": mock_pyarrow, "google.api_core": mock_api_core, **sys.modules},
+            {
+                "pyarrow": mock_pyarrow,
+                "google.api_core": mock_api_core,
+                **sys.modules,
+            },
         ),
     ):
         # The `pyarrow` module is imported directly in some places, so we
@@ -114,9 +122,7 @@ async def handler() -> AsyncBigQueryCallbackHandler:
 
 @pytest.fixture
 def sync_handler() -> BigQueryCallbackHandler:
-    """
-    Returns an initialized `BigQueryCallbackHandler` with mocked clients.
-    """
+    """Returns an initialized `BigQueryCallbackHandler` with mocked clients."""
     handler = BigQueryCallbackHandler(
         project_id="test-project",
         dataset_id="test_dataset",
@@ -205,7 +211,9 @@ async def test_async_on_chain_start(
         raise ValueError("Batch processor not initialized")
     handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
     await handler.on_chain_start(
-        serialized={"name": "test_chain"}, inputs={"input": "test"}, run_id=uuid4()
+        serialized={"name": "test_chain"},
+        inputs={"input": "test"},
+        run_id=uuid4(),
     )
     handler.async_batch_processor.append.assert_called_once()
 
@@ -218,7 +226,9 @@ def test_sync_on_chain_start(
         raise ValueError("Batch processor not initialized")
     sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
     sync_handler.on_chain_start(
-        serialized={"name": "test_chain"}, inputs={"input": "test"}, run_id=uuid4()
+        serialized={"name": "test_chain"},
+        inputs={"input": "test"},
+        run_id=uuid4(),
     )
     sync_handler.batch_processor.append.assert_called_once()
 
@@ -429,7 +439,9 @@ async def test_ensure_init_creates_dataset_and_table(
 ) -> None:
     """Test that `_ensure_init` creates dataset and table if they don't exist."""
     handler = AsyncBigQueryCallbackHandler(
-        project_id="test-project", dataset_id="test_dataset", table_id="test_table"
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
     )
     mock_bq_client = mock_bigquery_clients["mock_bq_client"]
     mock_cloud_exceptions = mock_bigquery_clients["mock_cloud_exceptions"]
@@ -671,3 +683,758 @@ def test_sync_log_parsing_error(
         assert (
             f"Failed to parse content: {error_message}" in logged_row["error_message"]
         )
+
+
+def test_sync_init_raises_if_dataset_missing(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that sync init raises ValueError if the dataset does not exist."""
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_cloud_exceptions = mock_bigquery_clients["mock_cloud_exceptions"]
+
+    # Simulate dataset not found
+    mock_bq_client.get_dataset.side_effect = mock_cloud_exceptions.NotFound(
+        "Dataset not found"
+    )
+
+    with pytest.raises(ValueError, match="Dataset 'test_dataset' does not exist"):
+        BigQueryCallbackHandler(
+            project_id="test-project",
+            dataset_id="test_dataset",
+            table_id="test_table",
+        )
+
+    mock_bq_client.get_dataset.assert_called_with("test_dataset")
+
+
+def test_async_init_raises_if_dataset_missing(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that async init raises ValueError if the dataset does not exist."""
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_cloud_exceptions = mock_bigquery_clients["mock_cloud_exceptions"]
+
+    # Simulate dataset not found
+    mock_bq_client.get_dataset.side_effect = mock_cloud_exceptions.NotFound(
+        "Dataset not found"
+    )
+
+    with pytest.raises(ValueError, match="Dataset 'test_dataset' does not exist"):
+        AsyncBigQueryCallbackHandler(
+            project_id="test-project",
+            dataset_id="test_dataset",
+            table_id="test_table",
+        )
+
+    mock_bq_client.get_dataset.assert_called_with("test_dataset")
+
+
+def test_trace_id_registry_root_run() -> None:
+    """Verify that a root run gets its own ID as the trace ID."""
+    registry = TraceIdRegistry()
+    run_id = uuid4()
+
+    # Register a root run (no parent)
+    trace_id = registry.register_run(run_id)
+
+    # Trace ID should match the run ID for root runs
+    assert trace_id == str(run_id)
+
+    # Cleanup
+    registry.end_run(run_id)
+    assert run_id not in registry._run_map
+
+
+def test_trace_id_registry_child_run_propagation() -> None:
+    """Verify that a root run gets its own ID as the trace ID."""
+    registry = TraceIdRegistry()
+    root_run_id = uuid4()
+    child_run_id = uuid4()
+    grandchild_run_id = uuid4()
+
+    # 1. Start Root
+    root_trace_id = registry.register_run(root_run_id)
+    assert root_trace_id == str(root_run_id)
+
+    # 2. Start Child (linked to Root)
+    child_trace_id = registry.register_run(child_run_id, parent_run_id=root_run_id)
+    assert child_trace_id == str(root_run_id)
+
+    # 3. Start Grandchild (linked to Child)
+    grandchild_trace_id = registry.register_run(
+        grandchild_run_id, parent_run_id=child_run_id
+    )
+    assert grandchild_trace_id == str(root_run_id)
+
+    # 4. End Root Run (should clean up all descendants in the map)
+    registry.end_run(root_run_id)
+
+    assert root_run_id not in registry._run_map
+    assert child_run_id not in registry._run_map
+    assert grandchild_run_id not in registry._run_map
+
+
+def test_trace_id_registry_missing_parent_behavior() -> None:
+    """If parent is unknown, it should be treated as a new root."""
+    registry = TraceIdRegistry()
+    run_id = uuid4()
+    unknown_parent_id = uuid4()
+
+    trace_id = registry.register_run(run_id, parent_run_id=unknown_parent_id)
+
+    # Should adopt the parent ID as trace ID even if parent wasn't explicitly registered
+    assert trace_id == str(unknown_parent_id)
+
+
+def test_trace_id_registry_concurrency() -> None:
+    """Verify thread safety."""
+    registry = TraceIdRegistry()
+    root_run_id = uuid4()
+    registry.register_run(root_run_id)
+
+    def register_child(_: int) -> str:
+        child_id = uuid4()
+        return registry.register_run(child_id, parent_run_id=root_run_id)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(register_child, range(100)))
+
+    for tid in results:
+        assert tid == str(root_run_id)
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_root_run() -> None:
+    """Verify that a root run gets its own ID as the trace ID."""
+    registry = AsyncTraceIdRegistry()
+    root_run_id = uuid4()
+
+    # Register a root run (no parent)
+    trace_id = await registry.register_run(root_run_id)
+
+    # Trace ID should match the run ID for root runs
+    assert trace_id == str(root_run_id)
+
+    # Cleanup
+    await registry.end_run(root_run_id)
+    assert root_run_id not in registry._run_map
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_child_run_propagation() -> None:
+    """Verify that child runs inherit the trace ID from the root."""
+    registry = AsyncTraceIdRegistry()
+    root_run_id = uuid4()
+    child_run_id = uuid4()
+    grandchild_run_id = uuid4()
+
+    # 1. Start Root
+    root_trace_id = await registry.register_run(root_run_id)
+    assert root_trace_id == str(root_run_id)
+
+    # 2. Start Child (linked to Root)
+    child_trace_id = await registry.register_run(
+        child_run_id, parent_run_id=root_run_id
+    )
+    assert child_trace_id == str(root_run_id)
+
+    # 3. Start Grandchild (linked to Child)
+    grandchild_trace_id = await registry.register_run(
+        grandchild_run_id, parent_run_id=child_run_id
+    )
+    assert grandchild_trace_id == str(root_run_id)
+
+    # 4. End Root Run (should clean up all descendants in the map)
+    await registry.end_run(root_run_id)
+
+    assert root_run_id not in registry._run_map
+    assert child_run_id not in registry._run_map
+    assert grandchild_run_id not in registry._run_map
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_missing_parent_behavior() -> None:
+    """If parent is unknown, it should be treated as a new root."""
+    registry = AsyncTraceIdRegistry()
+    run_id = uuid4()
+    unknown_parent_id = uuid4()
+
+    trace_id = await registry.register_run(run_id, parent_run_id=unknown_parent_id)
+
+    # Should adopt the parent ID as trace ID even if parent wasn't explicitly registered
+    assert trace_id == str(unknown_parent_id)
+
+
+@pytest.mark.asyncio
+async def test_async_trace_id_registry_concurrency() -> None:
+    """Verify async concurrency safety."""
+    registry = AsyncTraceIdRegistry()
+    root_run_id = uuid4()
+    await registry.register_run(root_run_id)
+
+    async def register_child(_: int) -> str:
+        child_id = uuid4()
+        return await registry.register_run(child_id, parent_run_id=root_run_id)
+
+    tasks = [register_child(i) for i in range(100)]
+    results = await asyncio.gather(*tasks)
+
+    for tid in results:
+        assert tid == str(root_run_id)
+
+
+# ==============================================================================
+# LATENCY TRACKER TESTS
+# ==============================================================================
+
+
+def test_latency_tracker_basic_timing() -> None:
+    """Test basic start/end timing functionality."""
+    from langchain_google_community.callbacks.bigquery_callback import LatencyTracker
+
+    tracker = LatencyTracker()
+    run_id = uuid4()
+
+    tracker.start(run_id)
+    import time
+
+    time.sleep(0.1)  # Sleep for 100ms
+    result = tracker.end(run_id)
+
+    assert result is not None
+    assert result.total_ms >= 100  # Should be at least 100ms
+
+
+def test_latency_tracker_component_timing() -> None:
+    """Test component timing functionality."""
+    from langchain_google_community.callbacks.bigquery_callback import LatencyTracker
+
+    tracker = LatencyTracker()
+    run_id = uuid4()
+
+    tracker.start(run_id)
+    tracker.start_component(run_id, "parsing")
+    import time
+
+    time.sleep(0.05)
+    tracker.end_component(run_id, "parsing")
+    result = tracker.end(run_id)
+
+    assert result is not None
+    assert result.component_ms is not None
+    assert "parsing" in result.component_ms
+    assert result.component_ms["parsing"] >= 50
+
+
+def test_latency_tracker_missing_start() -> None:
+    """Test that ending a run without starting returns None."""
+    from langchain_google_community.callbacks.bigquery_callback import LatencyTracker
+
+    tracker = LatencyTracker()
+    run_id = uuid4()
+
+    result = tracker.end(run_id)
+    assert result is None
+
+
+def test_latency_tracker_stale_cleanup() -> None:
+    """Test that stale entries are cleaned up."""
+    from langchain_google_community.callbacks.bigquery_callback import LatencyTracker
+
+    # Use a very short stale threshold for testing
+    tracker = LatencyTracker(stale_threshold_ms=1)
+    run_id1 = uuid4()
+    run_id2 = uuid4()
+
+    tracker.start(run_id1)
+    import time
+
+    time.sleep(0.01)  # Wait for run_id1 to become stale
+
+    # Starting a new run should clean up stale entries
+    tracker.start(run_id2)
+
+    # run_id1 should have been cleaned up
+    assert tracker.end(run_id1) is None
+    assert tracker.end(run_id2) is not None
+
+
+@pytest.mark.asyncio
+async def test_async_latency_tracker_basic_timing() -> None:
+    """Test basic async start/end timing functionality."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        AsyncLatencyTracker,
+    )
+
+    tracker = AsyncLatencyTracker()
+    run_id = uuid4()
+
+    await tracker.start(run_id)
+    await asyncio.sleep(0.1)  # Sleep for 100ms
+    result = await tracker.end(run_id)
+
+    assert result is not None
+    assert result.total_ms >= 100
+
+
+@pytest.mark.asyncio
+async def test_async_latency_tracker_component_timing() -> None:
+    """Test async component timing functionality."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        AsyncLatencyTracker,
+    )
+
+    tracker = AsyncLatencyTracker()
+    run_id = uuid4()
+
+    await tracker.start(run_id)
+    await tracker.start_component(run_id, "llm_call")
+    await asyncio.sleep(0.05)
+    await tracker.end_component(run_id, "llm_call")
+    result = await tracker.end(run_id)
+
+    assert result is not None
+    assert result.component_ms is not None
+    assert "llm_call" in result.component_ms
+
+
+@pytest.mark.asyncio
+async def test_async_latency_tracker_missing_start() -> None:
+    """Test that ending a run without starting returns None."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        AsyncLatencyTracker,
+    )
+
+    tracker = AsyncLatencyTracker()
+    run_id = uuid4()
+
+    result = await tracker.end(run_id)
+    assert result is None
+
+
+# ==============================================================================
+# RUN CONTEXT REGISTRY TESTS
+# ==============================================================================
+
+
+def test_run_context_registry_register_get_pop() -> None:
+    """Test register, get, and pop operations."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        RunContextRegistry,
+    )
+
+    registry = RunContextRegistry()
+    run_id = uuid4()
+
+    # Register
+    context = registry.register(run_id, "my_tool", metadata={"key": "value"})
+    assert context.name == "my_tool"
+    assert context.run_id == str(run_id)
+
+    # Get (should not remove)
+    got = registry.get(run_id)
+    assert got is not None
+    assert got.name == "my_tool"
+
+    # Get again (should still exist)
+    got2 = registry.get(run_id)
+    assert got2 is not None
+
+    # Pop (should remove)
+    popped = registry.pop(run_id)
+    assert popped is not None
+    assert popped.name == "my_tool"
+
+    # Get after pop (should be None)
+    assert registry.get(run_id) is None
+
+
+def test_run_context_registry_update_metadata() -> None:
+    """Test updating metadata for a run context."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        RunContextRegistry,
+    )
+
+    registry = RunContextRegistry()
+    run_id = uuid4()
+
+    registry.register(run_id, "tool", metadata={"a": 1})
+    updated = registry.update_metadata(run_id, {"b": 2})
+
+    assert updated is not None
+    assert updated.metadata["a"] == 1
+    assert updated.metadata["b"] == 2
+
+
+@pytest.mark.asyncio
+async def test_async_run_context_registry_register_pop() -> None:
+    """Test async register and pop operations."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        AsyncRunContextRegistry,
+    )
+
+    registry = AsyncRunContextRegistry()
+    run_id = uuid4()
+
+    # Register
+    context = await registry.register(run_id, "search_tool")
+    assert context.name == "search_tool"
+
+    # Pop
+    popped = await registry.pop(run_id)
+    assert popped is not None
+    assert popped.name == "search_tool"
+
+    # Pop again (should be None)
+    assert await registry.pop(run_id) is None
+
+
+# ==============================================================================
+
+
+# ==============================================================================
+# EVENT FILTERING TESTS
+# ==============================================================================
+
+
+def test_event_filtering_denylist(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that events in the denylist are not logged."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        BigQueryCallbackHandler,
+        BigQueryLoggerConfig,
+    )
+
+    config = BigQueryLoggerConfig(event_denylist=["CHAIN_START", "CHAIN_END"])
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=config,
+    )
+
+    assert handler._should_log_event("LLM_REQUEST") is True
+    assert handler._should_log_event("CHAIN_START") is False
+    assert handler._should_log_event("CHAIN_END") is False
+
+
+def test_event_filtering_allowlist(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that only events in the allowlist are logged."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        BigQueryCallbackHandler,
+        BigQueryLoggerConfig,
+    )
+
+    config = BigQueryLoggerConfig(event_allowlist=["LLM_REQUEST", "LLM_RESPONSE"])
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=config,
+    )
+
+    assert handler._should_log_event("LLM_REQUEST") is True
+    assert handler._should_log_event("LLM_RESPONSE") is True
+    assert handler._should_log_event("CHAIN_START") is False
+    assert handler._should_log_event("TOOL_STARTING") is False
+
+
+def test_event_filtering_no_filters(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that all events are logged when no filters are set."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        BigQueryCallbackHandler,
+    )
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+    )
+
+    assert handler._should_log_event("LLM_REQUEST") is True
+    assert handler._should_log_event("CHAIN_START") is True
+    assert handler._should_log_event("ANY_EVENT") is True
+
+
+# ==============================================================================
+# LANGGRAPH DETECTION TESTS
+# ==============================================================================
+
+
+def test_langgraph_node_detection(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test detection of LangGraph nodes via metadata."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        BigQueryCallbackHandler,
+    )
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        graph_name="test_graph",
+    )
+
+    # Regular chain (not a LangGraph node)
+    serialized = {"name": "RunnableSequence"}
+    metadata: Dict[str, Any] = {}
+    assert handler._is_langgraph_root_invocation(serialized, uuid4(), metadata) is False
+
+    # LangGraph root invocation
+    serialized = {"name": "CompiledGraph"}
+    metadata = {"langgraph_step": 0}
+    assert handler._is_langgraph_root_invocation(serialized, None, metadata) is True
+
+
+def test_langgraph_attributes_building(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test building LangGraph attributes."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        BigQueryCallbackHandler,
+    )
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        graph_name="my_graph",
+    )
+
+    metadata = {
+        "langgraph_node": "process_node",
+        "langgraph_step": 2,
+        "langgraph_triggers": ["start"],
+    }
+
+    attrs = handler._build_langgraph_attributes(
+        node_name="process_node", metadata=metadata
+    )
+
+    assert "langgraph" in attrs
+    assert attrs["langgraph"]["graph_name"] == "my_graph"
+    assert attrs["langgraph"]["node_name"] == "process_node"
+    assert attrs["langgraph"]["step"] == 2
+    assert attrs["langgraph"]["triggers"] == ["start"]
+
+
+def test_execution_order_tracking(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test execution order tracking."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        BigQueryCallbackHandler,
+    )
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+    )
+
+    assert handler._get_execution_order() == 0
+    handler._increment_execution_order()
+    assert handler._get_execution_order() == 1
+    handler._increment_execution_order()
+    assert handler._get_execution_order() == 2
+    handler._reset_execution_order()
+    assert handler._get_execution_order() == 0
+
+
+def test_execution_order_isolation(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that execution order is isolated between instances."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        BigQueryCallbackHandler,
+    )
+
+    handler1 = BigQueryCallbackHandler(
+        project_id="test-project", dataset_id="test_dataset", table_id="t1"
+    )
+    handler2 = BigQueryCallbackHandler(
+        project_id="test-project", dataset_id="test_dataset", table_id="t2"
+    )
+
+    # Increment handler1
+    handler1._increment_execution_order()
+    assert handler1._get_execution_order() == 1
+    assert handler2._get_execution_order() == 0
+
+    # Increment handler2
+    handler2._increment_execution_order()
+    handler2._increment_execution_order()
+    assert handler1._get_execution_order() == 1
+    assert handler2._get_execution_order() == 2
+
+
+# ==============================================================================
+# GRAPH EXECUTION CONTEXT TESTS
+# ==============================================================================
+
+
+def test_context_manager_emits_events(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that the context manager emits GRAPH_START and GRAPH_END events."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    with sync_handler.graph_context("test_graph"):
+        pass  # Graph execution would happen here
+
+    # Should have two calls: GRAPH_START and GRAPH_END
+    assert sync_handler.batch_processor.append.call_count == 2
+
+    calls = sync_handler.batch_processor.append.call_args_list
+    assert calls[0][0][0]["event_type"] == "GRAPH_START"
+    assert calls[1][0][0]["event_type"] == "GRAPH_END"
+
+
+def test_context_manager_handles_errors(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that the context manager emits GRAPH_ERROR on exception."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    try:
+        with sync_handler.graph_context("test_graph"):
+            raise ValueError("Test error")
+    except ValueError:
+        pass
+
+    # Should have two calls: GRAPH_START and GRAPH_ERROR
+    assert sync_handler.batch_processor.append.call_count == 2
+
+    calls = sync_handler.batch_processor.append.call_args_list
+    assert calls[0][0][0]["event_type"] == "GRAPH_START"
+    assert calls[1][0][0]["event_type"] == "GRAPH_ERROR"
+    assert "Test error" in calls[1][0][0]["error_message"]
+
+
+@pytest.mark.asyncio
+async def test_async_context_manager_emits_events(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that the async context manager emits GRAPH_START and GRAPH_END events."""
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+
+    async with handler.graph_context("test_graph"):
+        pass  # Graph execution would happen here
+
+    # Should have two calls: GRAPH_START and GRAPH_END
+    assert handler.async_batch_processor.append.call_count == 2
+
+    calls = handler.async_batch_processor.append.call_args_list
+    assert calls[0][0][0]["event_type"] == "GRAPH_START"
+    assert calls[1][0][0]["event_type"] == "GRAPH_END"
+
+
+@pytest.mark.asyncio
+async def test_async_context_manager_handles_errors(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that the async context manager emits GRAPH_ERROR on exception."""
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+
+    try:
+        async with handler.graph_context("test_graph"):
+            raise RuntimeError("Async test error")
+    except RuntimeError:
+        pass
+
+    # Should have two calls: GRAPH_START and GRAPH_ERROR
+    assert handler.async_batch_processor.append.call_count == 2
+
+    calls = handler.async_batch_processor.append.call_args_list
+    assert calls[0][0][0]["event_type"] == "GRAPH_START"
+    assert calls[1][0][0]["event_type"] == "GRAPH_ERROR"
+
+
+# ==============================================================================
+# TOOL NAME TRACKING TESTS
+# ==============================================================================
+
+
+def test_tool_name_tracking_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that tool names are properly tracked through start/end."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+
+    # Simulate tool_start
+    sync_handler.on_tool_start(
+        serialized={"name": "search_tool"},
+        input_str="search query",
+        run_id=run_id,
+    )
+
+    # Simulate tool_end
+    sync_handler.on_tool_end(
+        output="search results",
+        run_id=run_id,
+    )
+
+    calls = sync_handler.batch_processor.append.call_args_list
+    assert len(calls) == 2
+
+    # Check tool name is in the end event
+    end_call = calls[1][0][0]
+    assert end_call["event_type"] == "TOOL_COMPLETED"
+    assert end_call["attributes"]["tool_name"] == "search_tool"
+
+
+@pytest.mark.asyncio
+async def test_tool_name_tracking_async(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Test that tool names are properly tracked through start/end asynchronously."""
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+
+    # Simulate tool_start
+    await handler.on_tool_start(
+        serialized={"name": "calculator"},
+        input_str="2 + 2",
+        run_id=run_id,
+    )
+
+    # Simulate tool_end
+    await handler.on_tool_end(
+        output="4",
+        run_id=run_id,
+    )
+
+    calls = handler.async_batch_processor.append.call_args_list
+    assert len(calls) == 2
+
+    # Check tool name is in the end event
+    end_call = calls[1][0][0]
+    assert end_call["event_type"] == "TOOL_COMPLETED"
+    assert end_call["attributes"]["tool_name"] == "calculator"
