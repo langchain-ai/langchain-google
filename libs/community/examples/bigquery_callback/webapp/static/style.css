@@ -1,0 +1,182 @@
+/* Custom styles for LangGraph Agent Analytics Dashboard */
+
+/* Animation utilities */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+/* Live indicator */
+.live-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #22c55e;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+/* Event stream scrollbar */
+#event-stream::-webkit-scrollbar {
+    width: 8px;
+}
+
+#event-stream::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+#event-stream::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+#event-stream::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Chart container */
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+/* Responsive table */
+.responsive-table {
+    overflow-x: auto;
+}
+
+/* Status badges */
+.status-ok {
+    color: #059669;
+    background-color: #d1fae5;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-error {
+    color: #dc2626;
+    background-color: #fee2e2;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Event badges */
+.event-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.llm-event {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.tool-event {
+    background-color: #ede9fe;
+    color: #5b21b6;
+}
+
+.graph-event {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.chain-event {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.node-event {
+    background-color: #e0e7ff;
+    color: #3730a3;
+}
+
+/* Card hover effects */
+.stat-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Table row hover */
+tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+tbody tr:hover {
+    background-color: #f9fafb;
+}
+
+/* Content preview box */
+.content-box {
+    background-color: #f9fafb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+    font-size: 0.875rem;
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Timeline styles */
+.timeline-item {
+    position: relative;
+    padding-left: 32px;
+    padding-bottom: 24px;
+}
+
+.timeline-item:before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 32px;
+    bottom: 0;
+    width: 2px;
+    background-color: #e5e7eb;
+}
+
+.timeline-item:last-child:before {
+    display: none;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: 0;
+    top: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
