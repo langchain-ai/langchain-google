@@ -21,6 +21,7 @@ from typing import (
 )
 
 import filetype  # type: ignore[import-untyped]
+from google.auth.credentials import AnonymousCredentials
 from google.genai.client import Client
 from google.genai.errors import ClientError
 from google.genai.types import (
@@ -2398,12 +2399,47 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 os.environ["GOOGLE_API_KEY"] = google_api_key
                 api_key_env_set = True
 
+            # Prepare credentials - skip ADC lookup if API key provided and no
+            # credentials exist
+            client_credentials = self.credentials
+            # FIX: Only force Anonymous (skipping ADC search) if user has NO
+            # standard credentials. This prevents the 10-12s timeout/hang on
+            # local machines when relying solely on API keys.
+            if google_api_key and client_credentials is None:
+                # Check 1: Env Var
+                has_env_var = "GOOGLE_APPLICATION_CREDENTIALS" in os.environ
+                # Check 2: Default File Path
+                if os.name == "nt":  # Windows
+                    default_path = os.path.join(
+                        os.environ.get("APPDATA", ""),
+                        "gcloud",
+                        "application_default_credentials.json",
+                    )
+                else:  # Mac/Linux
+                    default_path = os.path.join(
+                        os.path.expanduser("~"),
+                        ".config",
+                        "gcloud",
+                        "application_default_credentials.json",
+                    )
+                has_default_file = os.path.exists(default_path)
+                # Only force Anonymous if absolutely NO standard credentials exist
+                if not has_env_var and not has_default_file:
+                    client_credentials = AnonymousCredentials()  # type: ignore
+            # Prepare Project ID
+            # Vertex AI requires a project ID to build the URL. If the user
+            # didn't provide one, the SDK attempts a slow lookup. We provide a
+            # dummy ID to skip that lookup.
+            client_project = self.project
+            if google_api_key and not client_project:
+                client_project = "missing-project-id"
+
             try:
                 self.client = Client(
                     vertexai=True,
-                    project=self.project,
+                    project=client_project,
                     location=self.location,
-                    credentials=self.credentials,
+                    credentials=client_credentials,
                     http_options=http_options,
                 )
             finally:

@@ -4499,6 +4499,235 @@ def test_model_name_normalization_for_vertexai() -> None:
         os.environ.update(original_env)
 
 
+def test_vertexai_anonymous_credentials_with_api_key_no_credentials() -> None:
+    """Test AnonymousCredentials is used when API key provided but no credentials exist."""  # noqa: E501
+    from google.auth.credentials import AnonymousCredentials
+
+    original_env = os.environ.copy()
+    try:
+        # Clear any existing credentials
+        os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+        os.environ.pop("GOOGLE_API_KEY", None)
+        os.environ.pop("GEMINI_API_KEY", None)
+
+        mock_client = Mock()
+        mock_models = Mock()
+        mock_generate_content = Mock()
+        mock_generate_content.return_value = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+        mock_models.generate_content = mock_generate_content
+        mock_client.return_value.models = mock_models
+
+        # Mock os.path.exists to return False for default credentials file
+        with patch("langchain_google_genai.chat_models.Client", mock_client):
+            with patch("os.path.exists", return_value=False):
+                ChatGoogleGenerativeAI(
+                    model=MODEL_NAME,
+                    api_key=FAKE_API_KEY,
+                    vertexai=True,
+                )
+
+                # Verify Client was called with AnonymousCredentials
+                mock_client.assert_called_once()
+                call_kwargs = mock_client.call_args.kwargs
+                assert call_kwargs["vertexai"] is True
+                assert isinstance(call_kwargs["credentials"], AnonymousCredentials)
+                assert call_kwargs["project"] == "missing-project-id"
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_vertexai_no_anonymous_credentials_when_credentials_provided() -> None:
+    """Test AnonymousCredentials is NOT used when credentials are explicitly provided."""  # noqa: E501
+    from unittest.mock import Mock as MockCreds
+
+    original_env = os.environ.copy()
+    try:
+        os.environ.pop("GOOGLE_API_KEY", None)
+        os.environ.pop("GEMINI_API_KEY", None)
+
+        fake_credentials = MockCreds()
+        mock_client = Mock()
+        mock_models = Mock()
+        mock_generate_content = Mock()
+        mock_generate_content.return_value = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+        mock_models.generate_content = mock_generate_content
+        mock_client.return_value.models = mock_models
+
+        with patch("langchain_google_genai.chat_models.Client", mock_client):
+            ChatGoogleGenerativeAI(
+                model=MODEL_NAME,
+                api_key=FAKE_API_KEY,
+                credentials=fake_credentials,
+                project="test-project",
+                vertexai=True,
+            )
+
+            # Verify Client was called with provided credentials, not AnonymousCredentials  # noqa: E501
+            mock_client.assert_called_once()
+            call_kwargs = mock_client.call_args.kwargs
+            assert call_kwargs["vertexai"] is True
+            assert call_kwargs["credentials"] is fake_credentials
+            assert call_kwargs["project"] == "test-project"
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_vertexai_no_anonymous_credentials_with_env_var() -> None:
+    """Test AnonymousCredentials is NOT used when GOOGLE_APPLICATION_CREDENTIALS exists."""  # noqa: E501
+    original_env = os.environ.copy()
+    try:
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/path/to/credentials.json"
+        os.environ.pop("GOOGLE_API_KEY", None)
+        os.environ.pop("GEMINI_API_KEY", None)
+
+        mock_client = Mock()
+        mock_models = Mock()
+        mock_generate_content = Mock()
+        mock_generate_content.return_value = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+        mock_models.generate_content = mock_generate_content
+        mock_client.return_value.models = mock_models
+
+        with patch("langchain_google_genai.chat_models.Client", mock_client):
+            with patch("os.path.exists", return_value=False):
+                ChatGoogleGenerativeAI(
+                    model=MODEL_NAME,
+                    api_key=FAKE_API_KEY,
+                    vertexai=True,
+                )
+
+                # Verify Client was called without AnonymousCredentials
+                # (should use None and let SDK handle ADC)
+                mock_client.assert_called_once()
+                call_kwargs = mock_client.call_args.kwargs
+                assert call_kwargs["vertexai"] is True
+                assert call_kwargs["credentials"] is None
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_vertexai_no_anonymous_credentials_with_default_file() -> None:
+    """Test AnonymousCredentials is NOT used when default gcloud credentials file exists."""  # noqa: E501
+    original_env = os.environ.copy()
+    try:
+        os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+        os.environ.pop("GOOGLE_API_KEY", None)
+        os.environ.pop("GEMINI_API_KEY", None)
+
+        mock_client = Mock()
+        mock_models = Mock()
+        mock_generate_content = Mock()
+        mock_generate_content.return_value = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+        mock_models.generate_content = mock_generate_content
+        mock_client.return_value.models = mock_models
+
+        # Mock os.path.exists to return True for default credentials file
+        def mock_exists(path: str) -> bool:
+            if "application_default_credentials.json" in path:
+                return True
+            return False
+
+        with patch("langchain_google_genai.chat_models.Client", mock_client):
+            with patch("os.path.exists", side_effect=mock_exists):
+                ChatGoogleGenerativeAI(
+                    model=MODEL_NAME,
+                    api_key=FAKE_API_KEY,
+                    vertexai=True,
+                )
+
+                # Verify Client was called without AnonymousCredentials
+                mock_client.assert_called_once()
+                call_kwargs = mock_client.call_args.kwargs
+                assert call_kwargs["vertexai"] is True
+                assert call_kwargs["credentials"] is None
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_vertexai_placeholder_project_id_with_api_key() -> None:
+    """Test placeholder project ID is used when API key provided but no project ID."""
+
+    original_env = os.environ.copy()
+    try:
+        os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+        os.environ.pop("GOOGLE_API_KEY", None)
+        os.environ.pop("GEMINI_API_KEY", None)
+
+        mock_client = Mock()
+        mock_models = Mock()
+        mock_generate_content = Mock()
+        mock_generate_content.return_value = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+        mock_models.generate_content = mock_generate_content
+        mock_client.return_value.models = mock_models
+
+        with patch("langchain_google_genai.chat_models.Client", mock_client):
+            with patch("os.path.exists", return_value=False):
+                ChatGoogleGenerativeAI(
+                    model=MODEL_NAME,
+                    api_key=FAKE_API_KEY,
+                    vertexai=True,
+                )
+
+                # Verify placeholder project ID is used
+                mock_client.assert_called_once()
+                call_kwargs = mock_client.call_args.kwargs
+                assert call_kwargs["project"] == "missing-project-id"
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_vertexai_normal_project_id_with_api_key() -> None:
+    """Test normal project ID is used when explicitly provided with API key."""
+    from google.auth.credentials import AnonymousCredentials
+
+    original_env = os.environ.copy()
+    try:
+        os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+        os.environ.pop("GOOGLE_API_KEY", None)
+        os.environ.pop("GEMINI_API_KEY", None)
+
+        mock_client = Mock()
+        mock_models = Mock()
+        mock_generate_content = Mock()
+        mock_generate_content.return_value = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+        mock_models.generate_content = mock_generate_content
+        mock_client.return_value.models = mock_models
+
+        with patch("langchain_google_genai.chat_models.Client", mock_client):
+            with patch("os.path.exists", return_value=False):
+                ChatGoogleGenerativeAI(
+                    model=MODEL_NAME,
+                    api_key=FAKE_API_KEY,
+                    project="my-project-id",
+                    vertexai=True,
+                )
+
+                # Verify provided project ID is used, not placeholder
+                mock_client.assert_called_once()
+                call_kwargs = mock_client.call_args.kwargs
+                assert call_kwargs["project"] == "my-project-id"
+                assert isinstance(call_kwargs["credentials"], AnonymousCredentials)
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
 def test_max_retries_configuration_for_500_errors() -> None:
     """Test that `max_retries` is properly configured for handling 500 errors.
 
