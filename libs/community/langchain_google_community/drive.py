@@ -310,6 +310,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         """Load credentials."""
         # Adapted from https://developers.google.com/drive/api/v3/quickstart/python
         try:
+            import google.auth.credentials  # type: ignore[import]
             from google.auth import default  # type: ignore[import]
             from google.auth.transport.requests import Request  # type: ignore[import]
             from google.oauth2 import service_account  # type: ignore[import]
@@ -345,7 +346,9 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
                 creds.refresh(Request())
             elif "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
                 creds, project = default()
-                creds = creds.with_scopes(self.scopes)
+                creds = google.auth.credentials.with_scopes_if_required(
+                    creds, self.scopes
+                )
                 # no need to write to file
                 if creds:
                     return creds
