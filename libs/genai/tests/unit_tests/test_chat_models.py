@@ -4,7 +4,7 @@ import base64
 import json
 import os
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
@@ -5074,7 +5074,7 @@ def test_cached_content_strips_tools_tool_config_system_instruction() -> None:
     ]
     request = llm._prepare_request(
         messages,
-        tools=[_dummy_tool_for_cached_content_test],
+        tools=cast("Sequence[Any]", [_dummy_tool_for_cached_content_test]),
         cached_content="cachedContents/test-cache-123",
     )
     config = request["config"]
@@ -5097,7 +5097,7 @@ def test_cached_content_not_set_preserves_tools_and_system_instruction() -> None
     ]
     request = llm._prepare_request(
         messages,
-        tools=[_dummy_tool_for_cached_content_test],
+        tools=cast("Sequence[Any]", [_dummy_tool_for_cached_content_test]),
         cached_content=None,
     )
     config = request["config"]
