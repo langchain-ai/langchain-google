@@ -1215,6 +1215,11 @@ def _response_to_result(
                     and grounding_metadata["web_search_queries"] is None
                 ):
                     grounding_metadata["web_search_queries"] = []
+                if (
+                    "image_search_queries" in grounding_metadata
+                    and grounding_metadata["image_search_queries"] is None
+                ):
+                    grounding_metadata["image_search_queries"] = []
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
         except AttributeError:

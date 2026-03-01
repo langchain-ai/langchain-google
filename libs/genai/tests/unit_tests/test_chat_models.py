@@ -1410,6 +1410,7 @@ def test_max_retries_parameter_handling(
                 "google_maps_widget_context_token": None,
                 "grounding_chunks": [
                     {
+                        "image": None,
                         "maps": None,
                         "retrieved_context": None,
                         "web": {
@@ -1431,6 +1432,7 @@ def test_max_retries_parameter_handling(
                         "confidence_scores": [0.95],
                     }
                 ],
+                "image_search_queries": [],
                 "retrieval_metadata": None,
                 "retrieval_queries": None,
                 "search_entry_point": None,
@@ -1457,6 +1459,82 @@ def test_max_retries_parameter_handling(
                 },
             },
             {},
+        ),
+        (
+            # Case 3: Response with image_search_queries in grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "grounding_metadata": {
+                            "grounding_chunks": [
+                                {
+                                    "web": {
+                                        "uri": "https://example.com",
+                                        "title": "Example Site",
+                                    }
+                                }
+                            ],
+                            "grounding_supports": [
+                                {
+                                    "segment": {
+                                        "start_index": 0,
+                                        "end_index": 13,
+                                        "text": "Test response",
+                                        "part_index": 0,
+                                    },
+                                    "grounding_chunk_indices": [0],
+                                    "confidence_scores": [0.95],
+                                }
+                            ],
+                            "web_search_queries": ["test query"],
+                            "image_search_queries": ["cat images"],
+                        },
+                    }
+                ],
+                "prompt_feedback": {
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {
+                "google_maps_widget_context_token": None,
+                "grounding_chunks": [
+                    {
+                        "image": None,
+                        "maps": None,
+                        "retrieved_context": None,
+                        "web": {
+                            "domain": None,
+                            "uri": "https://example.com",
+                            "title": "Example Site",
+                        },
+                    }
+                ],
+                "grounding_supports": [
+                    {
+                        "segment": {
+                            "start_index": 0,
+                            "end_index": 13,
+                            "text": "Test response",
+                            "part_index": 0,
+                        },
+                        "grounding_chunk_indices": [0],
+                        "confidence_scores": [0.95],
+                    }
+                ],
+                "image_search_queries": ["cat images"],
+                "retrieval_metadata": None,
+                "retrieval_queries": None,
+                "search_entry_point": None,
+                "source_flagging_uris": None,
+                "web_search_queries": ["test query"],
+            },
         ),
     ],
 )
