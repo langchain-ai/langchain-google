@@ -44,6 +44,7 @@ from langchain_core.messages.block_translators.google_genai import (
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.tools import tool
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
@@ -5047,3 +5048,61 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+# --- Issue #1618: cached_content must strip tools, tool_config, system_instruction ---
+
+
+@tool
+def _dummy_tool_for_cached_content_test(x: str) -> str:
+    """A dummy tool for testing cached_content stripping."""
+    return x
+
+
+def test_cached_content_strips_tools_tool_config_system_instruction() -> None:
+    """When cached_content is set, request config must omit tools, tool_config, system_instruction.
+
+    See: https://github.com/langchain-ai/langchain-google/issues/1618
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="Hello"),
+    ]
+    request = llm._prepare_request(
+        messages,
+        tools=[_dummy_tool_for_cached_content_test],
+        cached_content="cachedContents/test-cache-123",
+    )
+    config = request["config"]
+
+    assert config.cached_content == "cachedContents/test-cache-123"
+    assert config.tools is None
+    assert config.tool_config is None
+    assert config.system_instruction is None
+
+
+def test_cached_content_not_set_preserves_tools_and_system_instruction() -> None:
+    """When cached_content is not set, tools and system_instruction remain in config."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="Hello"),
+    ]
+    request = llm._prepare_request(
+        messages,
+        tools=[_dummy_tool_for_cached_content_test],
+        cached_content=None,
+    )
+    config = request["config"]
+
+    assert config.cached_content is None
+    assert config.tools is not None
+    assert len(config.tools) >= 1
+    assert config.system_instruction is not None
