@@ -5060,7 +5060,7 @@ def _dummy_tool_for_cached_content_test(x: str) -> str:
 
 
 def test_cached_content_strips_tools_tool_config_system_instruction() -> None:
-    """When cached_content is set, request config must omit tools, tool_config, system_instruction.
+    """With cached_content set, config must omit tools, tool_config, system_instruction.
 
     See: https://github.com/langchain-ai/langchain-google/issues/1618
     """
