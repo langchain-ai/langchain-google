@@ -22,7 +22,7 @@ dependencies = [
     "bottleneck>=1.4.0,<2.0.0",
     "numexpr>=2.8.6,<3.0.0",
     "pyarrow>=19.0.1,<24.0.0",
-    "langchain-tests>=1.0.1",
+    "langchain-tests>=1.1.4",
     "google-cloud-vectorsearch>=0.2.0",
 ]
 
@@ -90,6 +90,9 @@ test_integration = [
     "langchain-mistralai>=0.2.12,<2.0.0",
     "langchain-tests>=1.0.0,<2.0.0",
 ]
+
+[tool.uv]
+constraint-dependencies = ["urllib3>=2.6.3"]
 
 [tool.ruff]
 fix = true
