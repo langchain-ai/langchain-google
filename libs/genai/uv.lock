@@ -391,50 +391,21 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.2.5"
+version = "1.2.11"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_python_implementation != 'PyPy'",
-    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation != 'PyPy'",
-    "python_full_version < '3.11' and platform_python_implementation != 'PyPy'",
-]
 dependencies = [
-    { name = "jsonpatch", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "langsmith", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "packaging", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "pydantic", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "pyyaml", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "tenacity", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "typing-extensions", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "uuid-utils", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "jsonpatch" },
+    { name = "langsmith" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "tenacity" },
+    { name = "typing-extensions" },
+    { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/86/bd678d69341ae4178bc8dfa04024d63636e5d580ff03d4502c8bc2262917/langchain_core-1.2.5.tar.gz", hash = "sha256:d674f6df42f07e846859b9d3afe547cad333d6bf9763e92c88eb4f8aaedcd3cc", size = 820445, upload-time = "2025-12-22T23:45:32.041Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/17/1943cedfc118e04b8128e4c3e1dbf0fa0ea58eefddbb6198cfd699d19f01/langchain_core-1.2.11.tar.gz", hash = "sha256:f164bb36602dd74a3a50c1334fca75309ad5ed95767acdfdbb9fa95ce28a1e01", size = 831211, upload-time = "2026-02-10T20:35:28.35Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/bd/9df897cbc98290bf71140104ee5b9777cf5291afb80333aa7da5a497339b/langchain_core-1.2.5-py3-none-any.whl", hash = "sha256:3255944ef4e21b2551facb319bfc426057a40247c0a05de5bd6f2fc021fbfa34", size = 484851, upload-time = "2025-12-22T23:45:30.525Z" },
-]
-
-[[package]]
-name = "langchain-core"
-version = "1.2.8"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
-    "python_full_version >= '3.11' and python_full_version < '3.13' and platform_python_implementation == 'PyPy'",
-    "python_full_version < '3.11' and platform_python_implementation == 'PyPy'",
-]
-dependencies = [
-    { name = "jsonpatch", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "langsmith", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "packaging", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "pydantic", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "pyyaml", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "tenacity", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "typing-extensions", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "uuid-utils", marker = "platform_python_implementation == 'PyPy'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/75/cc/55bf57b83cbc164cbf84cbf0c5e4fb640d673546af131db70797b97b125b/langchain_core-1.2.8.tar.gz", hash = "sha256:76d933c3f4cfd8484d8131c39bf25f562e2df4d0d5fe3218e05ff773210713b6", size = 814506, upload-time = "2026-02-02T15:35:33.056Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cc/d4/37fef9639b701c1fb1eea9e68447b72d86852ca3dc3253cdfd9c0afe228d/langchain_core-1.2.8-py3-none-any.whl", hash = "sha256:c732301272d63cfbcd75d114540257678627878f11b87046241272a25ba12ea7", size = 495753, upload-time = "2026-02-02T15:35:31.284Z" },
+    { url = "https://files.pythonhosted.org/packages/10/30/1f80e3fc674353cad975ed5294353d42512535d2094ef032c06454c2c873/langchain_core-1.2.11-py3-none-any.whl", hash = "sha256:ae11ceb8dda60d0b9d09e763116e592f1683327c17be5b715f350fd29aee65d3", size = 500062, upload-time = "2026-02-10T20:35:26.698Z" },
 ]
 
 [[package]]
@@ -444,8 +415,7 @@ source = { editable = "." }
 dependencies = [
     { name = "filetype" },
     { name = "google-genai" },
-    { name = "langchain-core", version = "1.2.5", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
-    { name = "langchain-core", version = "1.2.8", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
+    { name = "langchain-core" },
     { name = "pydantic" },
 ]
 
@@ -525,7 +495,7 @@ resolution-markers = [
 ]
 dependencies = [
     { name = "httpx", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "langchain-core", version = "1.2.5", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation != 'PyPy'" },
+    { name = "langchain-core", marker = "platform_python_implementation != 'PyPy'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' and platform_python_implementation != 'PyPy'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' and platform_python_implementation != 'PyPy'" },
     { name = "pytest", marker = "platform_python_implementation != 'PyPy'" },
@@ -553,7 +523,7 @@ resolution-markers = [
 ]
 dependencies = [
     { name = "httpx", marker = "platform_python_implementation == 'PyPy'" },
-    { name = "langchain-core", version = "1.2.8", source = { registry = "https://pypi.org/simple" }, marker = "platform_python_implementation == 'PyPy'" },
+    { name = "langchain-core", marker = "platform_python_implementation == 'PyPy'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' and platform_python_implementation == 'PyPy'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' and platform_python_implementation == 'PyPy'" },
     { name = "pytest", marker = "platform_python_implementation == 'PyPy'" },
