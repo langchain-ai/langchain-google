@@ -2984,12 +2984,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
 
-        # =============================================================
-        # Cache the tools, tool_config, and system_instruction all together under one key.
-        # This is to prevent the issue where the tools, tool_config, and system_instruction
-        # are not passed to the API call.
-        # https://github.com/langchain-ai/langchain-google/issues/1618
-        # =============================================================
+        # When cached_content is set, omit tools/tool_config/system_instruction from
+        # the request; they are already stored in the cache (issue GH-1618).
         if cached_content:
             formatted_tools = None
             formatted_tool_config = None
