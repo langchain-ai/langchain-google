@@ -561,7 +561,7 @@ for n, generated_video in enumerate(operation.response.generated_videos):
 
 ### Search grounding
 
-Google Search can be used as a tool for grounding queries that with up to date information from the web.
+Google Search can be used as a tool for grounding queries with up to date information from the web.
 
 ```python
 from google import genai
