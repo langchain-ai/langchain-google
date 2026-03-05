@@ -27,6 +27,7 @@ from google.genai.types import (
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
+from google.genai.client import Client
 from google.protobuf.struct_pb2 import Struct
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
@@ -546,7 +547,7 @@ def test_async_client_raises_when_client_not_initialized() -> None:
         _ = chat.async_client
 
 
-def test_provided_client_is_used():
+def test_provided_client_is_used() -> None:
     """Test that a provided client is used and not replaced."""
     # Create a real Client instance
     provided_client = Client(api_key="fake-api-key")
@@ -572,10 +573,15 @@ def test_provided_client_is_used():
 
 
 @patch("google.genai.client.Client")
-def test_provided_client_with_vertex_ai(mock_client_class):
+def test_provided_client_with_vertex_ai(mock_client_class: Any) -> None:
     """Test that a provided client is used even with Vertex AI configuration."""
     # Create a real Client instance
-    provided_client = Client(api_key="fake-api-key", vertexai=True, project="test-project", location="us-central1")
+    provided_client = Client(
+        api_key="fake-api-key",
+        vertexai=True,
+        project="test-project",
+        location="us-central1",
+    )
 
     # Patch the models as needed
     with patch.object(provided_client, "models", create=True) as mock_models:
@@ -597,7 +603,6 @@ def test_provided_client_with_vertex_ai(mock_client_class):
         assert llm.client is provided_client
         # The Client constructor should NOT be called again
         mock_client_class.assert_not_called()
-
 
 def test_api_endpoint_via_client_options() -> None:
     """Test that `api_endpoint` via `client_options` is used in API calls."""
