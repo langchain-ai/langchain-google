@@ -27,7 +27,6 @@ from google.genai.types import (
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
-from google.genai.client import Client
 from google.protobuf.struct_pb2 import Struct
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
@@ -547,7 +546,6 @@ def test_async_client_raises_when_client_not_initialized() -> None:
         _ = chat.async_client
 
 
-
 def test_api_endpoint_via_client_options() -> None:
     """Test that `api_endpoint` via `client_options` is used in API calls."""
     mock_generate_content = Mock()
@@ -579,8 +577,7 @@ def test_api_endpoint_via_client_options() -> None:
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
         assert "langchain-google-genai" in call_http_options.headers["user-agent"]
-
-
+    
 async def test_async_api_endpoint_via_client_options() -> None:
     """Test that `api_endpoint` via `client_options` is used in async API calls."""
     api_endpoint = "https://async-custom-endpoint.com"
