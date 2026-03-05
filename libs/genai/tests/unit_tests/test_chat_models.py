@@ -546,6 +546,35 @@ def test_async_client_raises_when_client_not_initialized() -> None:
         _ = chat.async_client
 
 
+def test_provided_client_is_used() -> None:
+    """Test that a provided client is used and not replaced."""
+    # Create a mock client
+    provided_client = Mock()
+    provided_client.models = Mock()
+    provided_client.models.generate_content = Mock(
+        return_value=GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))]
+        )
+    )
+
+    # Initialize ChatGoogleGenerativeAI with the provided client
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        client=provided_client,
+    )
+
+    # Assert that the chat model uses the provided client
+    assert chat.client is provided_client
+
+    # Invoke the model to verify the provided client is actually used
+    messages = [HumanMessage(content="test")]
+    response = chat.invoke(messages)
+    assert response is not None
+    # Verify that the provided client's generate_content was called
+    provided_client.models.generate_content.assert_called_once()
+
+
 def test_api_endpoint_via_client_options() -> None:
     """Test that `api_endpoint` via `client_options` is used in API calls."""
     mock_generate_content = Mock()
@@ -5047,3 +5076,47 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+def test_provided_client_is_used() -> None:
+    """Test that a provided client is actually used and not overwritten."""
+    # Create a mock client to pass in
+    mock_provided_client = Mock()
+    mock_provided_client.models = Mock()
+    mock_provided_client.models.generate_content = Mock()
+
+    # Create ChatGoogleGenerativeAI with the provided client
+    # Should NOT call Client() constructor because we provide one
+    with patch("langchain_google_genai.chat_models.Client") as mock_client_constructor:
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            client=mock_provided_client,
+        )
+
+        # Verify that the provided client is used
+        assert llm.client is mock_provided_client
+        # Verify that Client constructor was NOT called
+        mock_client_constructor.assert_not_called()
+
+
+def test_provided_client_with_vertex_ai() -> None:
+    """Test that a provided client is used even with Vertex AI configuration."""
+    # Create a mock client to pass in
+    mock_provided_client = Mock()
+    mock_provided_client.models = Mock()
+
+    # Create ChatGoogleGenerativeAI with the provided client and Vertex AI config
+    # Should NOT create a new client because we provide one
+    with patch("langchain_google_genai.chat_models.Client") as mock_client_constructor:
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            client=mock_provided_client,
+            project="test-project",
+            location="us-central1",
+            vertexai=True,
+        )
+
+        # Verify that the provided client is used
+        assert llm.client is mock_provided_client
+        # Verify that Client constructor was NOT called
+        mock_client_constructor.assert_not_called()
