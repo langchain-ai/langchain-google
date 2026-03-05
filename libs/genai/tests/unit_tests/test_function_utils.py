@@ -24,10 +24,12 @@ from pydantic import BaseModel, Field
 from langchain_google_genai import Environment
 from langchain_google_genai._function_utils import (
     _convert_pydantic_to_genai_function,
+    _dict_to_genai_schema,
     _format_base_tool_to_function_declaration,
     _format_dict_to_function_declaration,
     _format_to_genai_function_declaration,
     _FunctionDeclarationLike,
+    _get_properties_from_schema,
     _tool_choice_to_tool_config,
     convert_to_genai_function_declarations,
     tool_to_dict,
@@ -1462,3 +1464,182 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+# ── Tests for nested freeform dict fields ─────────────────────────────────
+
+
+class TestGetPropertiesFromSchemaDictFields:
+    """Low-level tests for _get_properties_from_schema with dict fields."""
+
+    def test_first_pass_preserves_object_type_with_additional_properties(self) -> None:
+        """First pass: OBJECT with additionalProperties should stay OBJECT."""
+        properties_dict = {
+            "metadata": {
+                "type": "object",
+                "additionalProperties": True,
+                "title": "Metadata",
+            }
+        }
+        result = _get_properties_from_schema(properties_dict)
+        assert result["metadata"]["type"] == Type.OBJECT
+
+    def test_second_pass_preserves_object_type(self) -> None:
+        """Second pass (re-processing output): should still stay OBJECT."""
+        properties_dict = {
+            "metadata": {
+                "type": "object",
+                "additionalProperties": True,
+                "title": "Metadata",
+            }
+        }
+        first = _get_properties_from_schema(properties_dict)
+        # Simulate re-processing the output (as happens in recursive conversion)
+        second = _get_properties_from_schema(first)
+        assert second["metadata"]["type"] == Type.OBJECT
+
+    def test_object_with_explicit_properties_unchanged(self) -> None:
+        """OBJECT with explicit properties should not be affected."""
+        properties_dict = {
+            "config": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string"},
+                },
+            }
+        }
+        result = _get_properties_from_schema(properties_dict)
+        assert result["config"]["type"] == Type.OBJECT
+        assert "key" in result["config"]["properties"]
+
+    def test_empty_object_without_additional_properties_becomes_string(self) -> None:
+        """OBJECT without properties AND without additionalProperties -> STRING."""
+        properties_dict = {
+            "data": {
+                "type": "object",
+            }
+        }
+        result = _get_properties_from_schema(properties_dict)
+        assert result["data"]["type"] == Type.STRING
+
+
+class TestDictToGenaiSchemaNestedDicts:
+    """Mid-level tests for _dict_to_genai_schema with nested dicts."""
+
+    def test_top_level_dict_field(self) -> None:
+        """dict field at top level should remain OBJECT."""
+        schema = {
+            "properties": {
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "title": "Metadata",
+                }
+            },
+            "required": ["metadata"],
+            "type": "object",
+        }
+        result = _dict_to_genai_schema(schema)
+        assert result is not None
+        assert result.properties is not None
+        assert result.properties["metadata"].type == Type.OBJECT
+
+    def test_dict_inside_array_items(self) -> None:
+        """dict field inside array items should remain OBJECT."""
+        schema = {
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "tags": {
+                                "type": "object",
+                                "additionalProperties": True,
+                            }
+                        },
+                    },
+                }
+            },
+            "type": "object",
+        }
+        result = _dict_to_genai_schema(schema)
+        assert result is not None
+        assert result.properties is not None
+        items_prop = result.properties["items"]
+        assert items_prop is not None
+        items_schema = items_prop.items
+        assert items_schema is not None
+        assert items_schema.properties is not None
+        assert items_schema.properties["tags"].type == Type.OBJECT
+
+    def test_dict_inside_nested_object(self) -> None:
+        """dict field inside a nested object should remain OBJECT."""
+        schema = {
+            "properties": {
+                "outer": {
+                    "type": "object",
+                    "properties": {
+                        "inner_dict": {
+                            "type": "object",
+                            "additionalProperties": True,
+                        }
+                    },
+                }
+            },
+            "type": "object",
+        }
+        result = _dict_to_genai_schema(schema)
+        assert result is not None
+        assert result.properties is not None
+        outer = result.properties["outer"]
+        assert outer is not None
+        assert outer.properties is not None
+        inner = outer.properties["inner_dict"]
+        assert inner is not None
+        assert inner.type == Type.OBJECT
+
+
+class TestToolWithNestedDictFields:
+    """End-to-end tests: @tool with Pydantic models containing dict fields."""
+
+    def test_tool_with_dict_field_preserves_object_type(self) -> None:
+        class MyInput(BaseModel):
+            name: str
+            metadata: dict[str, Any] = Field(description="Freeform metadata")
+
+        @tool(args_schema=MyInput)
+        def my_tool(name: str, metadata: dict[str, Any]) -> str:
+            """A tool with a dict field."""
+            return "ok"
+
+        result = convert_to_genai_function_declarations([my_tool])
+        declarations = result[0].function_declarations
+        assert declarations is not None
+        params = declarations[0].parameters
+        assert params is not None
+        assert params.properties is not None
+        assert params.properties["metadata"].type == Type.OBJECT
+
+    def test_tool_with_nested_model_dict_field(self) -> None:
+        class Inner(BaseModel):
+            tags: dict[str, Any] = Field(description="Tag mapping")
+
+        class Outer(BaseModel):
+            label: str
+            inner: Inner
+
+        @tool(args_schema=Outer)
+        def my_tool(label: str, inner: Inner) -> str:
+            """A tool with nested dict field."""
+            return "ok"
+
+        result = convert_to_genai_function_declarations([my_tool])
+        declarations = result[0].function_declarations
+        assert declarations is not None
+        params = declarations[0].parameters
+        assert params is not None
+        assert params.properties is not None
+        inner_props = params.properties["inner"].properties
+        assert inner_props is not None
+        assert inner_props["tags"].type == Type.OBJECT
