@@ -47,6 +47,7 @@ from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _bytes_to_base64,
+    _collapse_text_content,
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
@@ -2194,3 +2195,36 @@ def test_get_num_tokens_from_messages_multimodal(
         request_dict = call_args[0][0]
         assert "contents" in request_dict
         assert len(request_dict["contents"]) > 0
+
+
+def test_collapse_text_content_with_thought_signature() -> None:
+    """Test that _collapse_text_content collapses text blocks with thought_signature.
+
+    thought_signature is added by Gemini when thinking_budget is set.
+    """
+    # Should collapse to a plain string even when thought_signature is present
+    content = [
+        {
+            "type": "text",
+            "text": "Hello! I'm doing well.",
+            "thought_signature": "abc123",
+        }
+    ]
+    result = _collapse_text_content(content)
+    assert isinstance(result, str)
+    assert result == "Hello! I'm doing well."
+
+    # Multiple text blocks with thought_signature should also collapse
+    content_multi = [
+        {"type": "text", "text": "Hello! ", "thought_signature": "abc123"},
+        {"type": "text", "text": "How can I help?", "thought_signature": "def456"},
+    ]
+    result_multi = _collapse_text_content(content_multi)
+    assert isinstance(result_multi, str)
+    assert result_multi == "Hello! How can I help?"
+
+    # Without thought_signature should still work as before
+    content_plain = [{"type": "text", "text": "Hello!"}]
+    result_plain = _collapse_text_content(content_plain)
+    assert isinstance(result_plain, str)
+    assert result_plain == "Hello!"

@@ -671,7 +671,7 @@ def _collapse_text_content(content: list[Any]) -> str | list[Any]:
     if all(
         isinstance(item, dict)
         and item.get("type") == "text"
-        and set(item.keys()).issubset({"type", "text"})
+        and set(item.keys()).issubset({"type", "text", "thought_signature"})
         for item in content
     ):
         return "".join(item.get("text", "") for item in content)
