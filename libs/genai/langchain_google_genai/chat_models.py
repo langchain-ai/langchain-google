@@ -885,9 +885,7 @@ def _parse_response_candidate(
     # Use model_name_for_content if provided, otherwise fall back to model_name.
     # This ensures consistent content format across all streaming chunks while
     # only including model_name in response_metadata for the final chunk.
-    effective_model_name = (
-        model_name_for_content if model_name_for_content else model_name
-    )
+    effective_model_name = model_name_for_content or model_name
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
     for part in parts:
@@ -1220,6 +1218,11 @@ def _response_to_result(
                     and grounding_metadata["web_search_queries"] is None
                 ):
                     grounding_metadata["web_search_queries"] = []
+                if (
+                    "image_search_queries" in grounding_metadata
+                    and grounding_metadata["image_search_queries"] is None
+                ):
+                    grounding_metadata["image_search_queries"] = []
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
         except AttributeError:
@@ -2336,7 +2339,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self.default_metadata = tuple(additional_headers.items())
 
         _, user_agent = get_user_agent("ChatGoogleGenerativeAI")
-        headers = {"User-Agent": user_agent, **additional_headers}
+        headers = {"user-agent": user_agent, **additional_headers}
 
         google_api_key = None
         if not self.credentials:
