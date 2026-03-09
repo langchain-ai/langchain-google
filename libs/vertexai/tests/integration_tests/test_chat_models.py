@@ -1152,7 +1152,7 @@ def test_json_mode_typeddict() -> None:
         age: int
 
     llm = ChatVertexAI(
-        model_name="gemini-2.0-flash-exp",
+        model_name="gemini-3-flash-preview",
         rate_limiter=RATE_LIMITER,
     )
     model = llm.with_structured_output(MyModel, method="json_mode")
