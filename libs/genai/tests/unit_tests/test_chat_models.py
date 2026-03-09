@@ -5047,3 +5047,123 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+def test_parse_chat_history_reasoning_with_reasoning_key() -> None:
+    """Test _parse_chat_history handles reasoning blocks with 'reasoning' key."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "id": "rs_abc123",
+                "reasoning": "Let me think about this...",
+                "extras": {"signature": None},
+            },
+            {"type": "text", "text": "The answer is 4."},
+        ],
+        tool_calls=[{"name": "my_tool", "args": {"x": 1}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    model_content = formatted_messages[0]
+    assert model_content.role == "model"
+    assert model_content.parts is not None
+    # First part: reasoning thought, second part: function call
+    reasoning_part = model_content.parts[0]
+    assert reasoning_part.thought is True
+    assert reasoning_part.text == "Let me think about this..."
+
+
+def test_parse_chat_history_reasoning_with_summary_key() -> None:
+    """Test _parse_chat_history handles OpenAI reasoning blocks with 'summary' key.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1603
+    """
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "id": "rs_abc123",
+                "summary": [
+                    {"type": "summary_text", "text": "Step 1: analyze the problem."},
+                    {"type": "summary_text", "text": "Step 2: compute the result."},
+                ],
+            },
+            {"type": "text", "text": "The answer is 4."},
+        ],
+        tool_calls=[{"name": "my_tool", "args": {"x": 1}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    model_content = formatted_messages[0]
+    assert model_content.role == "model"
+    assert model_content.parts is not None
+    reasoning_part = model_content.parts[0]
+    assert reasoning_part.thought is True
+    assert (
+        reasoning_part.text
+        == "Step 1: analyze the problem.\nStep 2: compute the result."
+    )
+
+
+def test_convert_to_parts_reasoning_with_summary_key() -> None:
+    """Test _convert_to_parts handles OpenAI reasoning blocks with 'summary' key.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1603
+    """
+    content: list[dict[str, Any]] = [
+        {
+            "type": "reasoning",
+            "id": "rs_abc123",
+            "summary": [
+                {"type": "summary_text", "text": "Let me think step by step..."},
+            ],
+        },
+    ]
+    parts = _convert_to_parts(content)
+
+    assert len(parts) == 1
+    assert parts[0].thought is True
+    assert parts[0].text == "Let me think step by step..."
+
+
+def test_convert_to_parts_reasoning_with_reasoning_key() -> None:
+    """Test _convert_to_parts handles reasoning blocks with 'reasoning' key."""
+    content: list[dict[str, Any]] = [
+        {
+            "type": "reasoning",
+            "reasoning": "Direct reasoning text.",
+            "extras": {"signature": None},
+        },
+    ]
+    parts = _convert_to_parts(content)
+
+    assert len(parts) == 1
+    assert parts[0].thought is True
+    assert parts[0].text == "Direct reasoning text."
+
+
+def test_parse_chat_history_reasoning_with_empty_summary() -> None:
+    """Test _parse_chat_history skips reasoning blocks with empty summary list."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "id": "rs_abc123",
+                "summary": [],
+            },
+            {"type": "text", "text": "The answer is 4."},
+        ],
+        tool_calls=[{"name": "my_tool", "args": {"x": 1}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    model_content = formatted_messages[0]
+    assert model_content.parts is not None
+    # With empty summary, no reasoning part should be added;
+    # only the function call part should exist.
+    assert len(model_content.parts) == 1
+    assert model_content.parts[0].function_call is not None
