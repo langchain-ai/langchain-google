@@ -483,10 +483,10 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
     assert call_http_options.base_url == api_endpoint
 
-    # Verify user-agent header is set
-    assert "User-Agent" in call_http_options.headers
-    assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
-    assert "ChatGoogleGenerativeAI" in call_http_options.headers["User-Agent"]
+    # Verify user-agent header is set (lowercase to match google-genai SDK)
+    assert "user-agent" in call_http_options.headers
+    assert "langchain-google-genai" in call_http_options.headers["user-agent"]
+    assert "ChatGoogleGenerativeAI" in call_http_options.headers["user-agent"]
 
     # Verify user-provided headers are included
     if headers:
@@ -516,7 +516,7 @@ def test_base_url_passed_to_client() -> None:
         )
         call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == "http://localhost:8000"
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 def test_async_client_property() -> None:
@@ -576,7 +576,7 @@ def test_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 async def test_async_api_endpoint_via_client_options() -> None:
@@ -620,7 +620,7 @@ async def test_async_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 def test_default_metadata_field_alias() -> None:
@@ -1410,6 +1410,7 @@ def test_max_retries_parameter_handling(
                 "google_maps_widget_context_token": None,
                 "grounding_chunks": [
                     {
+                        "image": None,
                         "maps": None,
                         "retrieved_context": None,
                         "web": {
@@ -1431,6 +1432,7 @@ def test_max_retries_parameter_handling(
                         "confidence_scores": [0.95],
                     }
                 ],
+                "image_search_queries": [],
                 "retrieval_metadata": None,
                 "retrieval_queries": None,
                 "search_entry_point": None,
@@ -1457,6 +1459,82 @@ def test_max_retries_parameter_handling(
                 },
             },
             {},
+        ),
+        (
+            # Case 3: Response with image_search_queries in grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "grounding_metadata": {
+                            "grounding_chunks": [
+                                {
+                                    "web": {
+                                        "uri": "https://example.com",
+                                        "title": "Example Site",
+                                    }
+                                }
+                            ],
+                            "grounding_supports": [
+                                {
+                                    "segment": {
+                                        "start_index": 0,
+                                        "end_index": 13,
+                                        "text": "Test response",
+                                        "part_index": 0,
+                                    },
+                                    "grounding_chunk_indices": [0],
+                                    "confidence_scores": [0.95],
+                                }
+                            ],
+                            "web_search_queries": ["test query"],
+                            "image_search_queries": ["cat images"],
+                        },
+                    }
+                ],
+                "prompt_feedback": {
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {
+                "google_maps_widget_context_token": None,
+                "grounding_chunks": [
+                    {
+                        "image": None,
+                        "maps": None,
+                        "retrieved_context": None,
+                        "web": {
+                            "domain": None,
+                            "uri": "https://example.com",
+                            "title": "Example Site",
+                        },
+                    }
+                ],
+                "grounding_supports": [
+                    {
+                        "segment": {
+                            "start_index": 0,
+                            "end_index": 13,
+                            "text": "Test response",
+                            "part_index": 0,
+                        },
+                        "grounding_chunk_indices": [0],
+                        "confidence_scores": [0.95],
+                    }
+                ],
+                "image_search_queries": ["cat images"],
+                "retrieval_metadata": None,
+                "retrieval_queries": None,
+                "search_entry_point": None,
+                "source_flagging_uris": None,
+                "web_search_queries": ["test query"],
+            },
         ),
     ],
 )
