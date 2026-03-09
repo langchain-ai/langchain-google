@@ -1086,6 +1086,211 @@ def test_serialize() -> None:
     assert llm == llm_loaded
 
 
+def test_serialize_with_credentials_info() -> None:
+    """Test that models can be serialized with `credentials_info`."""
+    from google.oauth2 import service_account
+
+    # Sample service account info
+    credentials_info = json.dumps(
+        {
+            "type": "service_account",
+            "project_id": "test-project-123",
+            "private_key_id": "key-id-abc",
+            "private_key": "fake-private-key",
+            "client_email": "test@test-project-123.iam.gserviceaccount.com",
+            "client_id": "123456789",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    )
+
+    # Mock the credential reconstruction
+    mock_credentials = Mock(spec=service_account.Credentials)
+    mock_credentials.project_id = "test-project-123"
+    mock_credentials.service_account_email = (
+        "test@test-project-123.iam.gserviceaccount.com"
+    )
+
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info",
+        return_value=mock_credentials,
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            credentials_info=credentials_info,
+            project="test-project-123",
+        )
+
+        # Verify credentials_info is set
+        assert llm.credentials_info is not None
+
+        # Serialize
+        serialized = dumps(llm)
+
+        # Deserialize with secrets_map
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_CREDENTIALS_JSON": credentials_info},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+
+        # Both should have credentials_info
+        assert llm_loaded.credentials_info is not None
+
+        # Credentials should be reconstructed on the loaded model
+        assert llm_loaded.credentials is not None
+
+        # Client should be excluded from comparison
+        llm.client = None
+        llm_loaded.client = None
+
+        # Clear credentials for comparison (credentials objects have different IDs)
+        llm.credentials = None
+        llm_loaded.credentials = None
+
+        assert llm.model == llm_loaded.model
+        assert llm.project == llm_loaded.project
+
+
+def test_credentials_reconstruction_from_info() -> None:
+    """Test that credentials are reconstructed from `credentials_info`."""
+    from google.oauth2 import service_account
+
+    credentials_info = json.dumps(
+        {
+            "type": "service_account",
+            "project_id": "test-project-123",
+            "private_key_id": "key-id-abc",
+            "private_key": "fake-private-key",
+            "client_email": "test@test-project-123.iam.gserviceaccount.com",
+            "client_id": "123456789",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    )
+
+    # Mock the credential reconstruction
+    mock_credentials = Mock(spec=service_account.Credentials)
+    mock_credentials.project_id = "test-project-123"
+    mock_credentials.service_account_email = (
+        "test@test-project-123.iam.gserviceaccount.com"
+    )
+
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info",
+        return_value=mock_credentials,
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            credentials_info=credentials_info,
+            project="test-project-123",
+        )
+
+        # Credentials should be automatically reconstructed
+        assert llm.credentials is not None
+        assert llm.credentials is mock_credentials
+
+
+def test_credentials_scopes_preserved() -> None:
+    """Test that custom scopes are preserved during reconstruction."""
+    from google.oauth2 import service_account
+
+    custom_scopes = [
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/generative-language",
+    ]
+
+    credentials_info = json.dumps(
+        {
+            "type": "service_account",
+            "project_id": "test-project-123",
+            "private_key_id": "key-id-abc",
+            "private_key": "fake-private-key",
+            "client_email": "test@test-project-123.iam.gserviceaccount.com",
+            "client_id": "123456789",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    )
+
+    # Mock the credential reconstruction
+    mock_credentials = Mock(spec=service_account.Credentials)
+    mock_credentials.project_id = "test-project-123"
+    mock_credentials.scopes = custom_scopes
+
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info",
+        return_value=mock_credentials,
+    ) as mock_from_info:
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            credentials_info=credentials_info,
+            credentials_scopes=custom_scopes,
+            project="test-project-123",
+        )
+
+        # Scopes should be preserved
+        assert llm.credentials_scopes == custom_scopes
+        assert llm.credentials is not None
+
+        # Verify from_service_account_info was called with the right scopes
+        mock_from_info.assert_called_once()
+        call_kwargs = mock_from_info.call_args
+        assert call_kwargs[1]["scopes"] == custom_scopes
+
+
+def test_backward_compatibility_with_credentials_object() -> None:
+    """Test that existing code using credentials object still works."""
+    from google.oauth2 import service_account
+
+    # Create a mock credentials object
+    mock_credentials = Mock(spec=service_account.Credentials)
+    mock_credentials.project_id = "test-project-123"
+    mock_credentials.service_account_email = (
+        "test@test-project-123.iam.gserviceaccount.com"
+    )
+    mock_credentials.scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+
+    # This should work without errors (backward compatibility)
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        credentials=mock_credentials,
+        project="test-project-123",
+    )
+
+    assert llm.credentials is mock_credentials
+    # Note: Serialization won't include credentials (excluded), but that's expected
+
+
+def test_serialization_excludes_credentials_object() -> None:
+    """Test that serialization excludes credentials but works."""
+    from google.oauth2 import service_account
+
+    mock_credentials = Mock(spec=service_account.Credentials)
+    mock_credentials.project_id = "test-project-123"
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        credentials=mock_credentials,
+        project="test-project-123",
+    )
+
+    # Serialization should work (credentials is excluded)
+    serialized = dumps(llm)
+
+    # Deserialization works but won't recreate credentials
+    llm_loaded = loads(
+        serialized,
+        valid_namespaces=["langchain_google_genai"],
+        allowed_objects="all",
+    )
+
+    # Original has credentials, loaded doesn't (expected without credentials_info)
+    assert llm.credentials is not None
+    assert llm_loaded.credentials is None
+
+
 @pytest.mark.parametrize(
     "tool_message",
     [

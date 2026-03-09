@@ -2966,3 +2966,42 @@ def test_chat_google_genai_image_editing_multi_turn(backend_config: dict) -> Non
     assert isinstance(second_response, AIMessage)
     # The response should contain either text or an image (or both)
     assert second_response.content is not None
+
+
+@pytest.mark.skipif(
+    "GOOGLE_VERTEX_AI_WEB_CREDENTIALS" not in os.environ,
+    reason="GOOGLE_VERTEX_AI_WEB_CREDENTIALS not set",
+)
+def test_serialize_with_credentials_info() -> None:
+    """Test serialization/deserialization with service account `credentials_info`."""
+    from langchain_core.load import dumps, loads
+
+    # Get credentials from environment
+    credentials_json = os.environ["GOOGLE_VERTEX_AI_WEB_CREDENTIALS"]
+    credentials_dict = json.loads(credentials_json)
+
+    # Initialize with credentials_info
+    llm = ChatGoogleGenerativeAI(
+        model=_MODEL,
+        credentials_info=credentials_json,
+        project=credentials_dict.get("project_id"),
+    )
+
+    # Test that it works
+    response = llm.invoke("Say 'serialization test successful'")
+    assert response.content
+
+    # Test serialization
+    serialized = dumps(llm)
+
+    # Test deserialization
+    llm_loaded = loads(
+        serialized,
+        secrets_map={"GOOGLE_CREDENTIALS_JSON": credentials_json},
+        valid_namespaces=["langchain_google_genai"],
+        allowed_objects="all",
+    )
+
+    # Test that deserialized model works
+    response2 = llm_loaded.invoke("Say 'deserialization successful'")
+    assert response2.content
