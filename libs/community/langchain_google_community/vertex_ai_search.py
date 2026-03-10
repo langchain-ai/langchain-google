@@ -73,7 +73,7 @@ class _BaseVertexAISearchRetriever(Serializable):
     """Vertex AI Search data store ID. Required for engine_data_type 0, 1, and 2."""
 
     search_engine_id: Optional[str] = None
-    """Vertex AI Search app (engine) ID. Required for engine_data_type=3 (blended search).
+    """Vertex AI Search app (engine) ID. Required for engine_data_type=3.
 
     For blended search, this is the ID of the search app that spans multiple data
     stores. Unlike `data_store_id`, this is not deprecated — it is the correct and
@@ -155,22 +155,21 @@ class _BaseVertexAISearchRetriever(Serializable):
             )
         else:
             # For types 0-2: data_store_id is the primary parameter.
-            # search_engine_id is accepted for backwards compatibility only.
-            try:
-                legacy_id = get_from_dict_or_env(
-                    values, "search_engine_id", "SEARCH_ENGINE_ID"
+            # search_engine_id is accepted as a kwarg for backwards compatibility only.
+            # We read directly from values (not via get_from_dict_or_env) to avoid
+            # accidentally picking up the SEARCH_ENGINE_ID env var during
+            # deserialization, where search_engine_id=None is always present as a
+            # declared field and would cause get_from_dict_or_env to fall through
+            # to the env var and overwrite an explicit data_store_id.
+            legacy_id = values.get("search_engine_id")
+            if legacy_id:
+                warnings.warn(
+                    "The `search_engine_id` parameter is deprecated. "
+                    "Use `data_store_id` instead.",
+                    DeprecationWarning,
                 )
-                if legacy_id:
-                    warnings.warn(
-                        "The `search_engine_id` parameter is deprecated. "
-                        "Use `data_store_id` instead.",
-                        DeprecationWarning,
-                    )
-                    values["data_store_id"] = legacy_id
-                    # Clear the field so it doesn't persist on the model.
-                    values["search_engine_id"] = None
-            except:  # noqa: E722
-                pass
+                values["data_store_id"] = legacy_id
+                values["search_engine_id"] = None
 
             values["data_store_id"] = get_from_dict_or_env(
                 values, "data_store_id", "DATA_STORE_ID"
@@ -474,6 +473,8 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                 f"/servingConfigs/{self.serving_config_id}"
             )
         else:
+            # data_store_id is guaranteed non-None for types 0-2 by validate_environment
+            assert self.data_store_id is not None  # noqa: S101
             self._serving_config = self._client.serving_config_path(
                 project=self.project_id,
                 location=self.location_id,
@@ -735,6 +736,8 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
             client_info=get_client_info(module="vertex-ai-search"),
         )
 
+        # data_store_id is guaranteed non-None for types 0 and 2 by validate_environment
+        assert self.data_store_id is not None  # noqa: S101
         self._serving_config = self._client.serving_config_path(
             project=self.project_id,
             location=self.location_id,
