@@ -542,3 +542,121 @@ def test_convert_unstructured_search_response_extractive_answers(
         assert "relevance_score" not in documents[1].metadata
         assert "previous_segments" not in documents[1].metadata
         assert "next_segments" not in documents[1].metadata
+
+
+# ---------------------------------------------------------------------------
+# Blended search (engine_data_type=3) tests
+# ---------------------------------------------------------------------------
+
+
+def test_blended_search_initialization(mock_stable_client: MagicMock) -> None:
+    """engine_data_type=3 is accepted and does NOT call serving_config_path."""
+    retriever = VertexAISearchRetriever(
+        project_id="my-project",
+        data_store_id="my-engine",
+        location_id="global",
+        engine_data_type=3,
+        credentials=ga_credentials.AnonymousCredentials(),
+    )
+
+    assert retriever.engine_data_type == 3
+    # Blended search constructs the path manually, so the SDK helper is not called.
+    mock_stable_client.serving_config_path.assert_not_called()
+
+
+def test_blended_search_serving_config_path(mock_stable_client: MagicMock) -> None:
+    """Blended search uses the engine-based serving config path."""
+    retriever = VertexAISearchRetriever(
+        project_id="my-project",
+        data_store_id="my-engine",
+        location_id="global",
+        serving_config_id="default_config",
+        engine_data_type=3,
+        credentials=ga_credentials.AnonymousCredentials(),
+    )
+
+    expected = (
+        "projects/my-project/locations/global"
+        "/collections/default_collection/engines/my-engine"
+        "/servingConfigs/default_config"
+    )
+    assert retriever._serving_config == expected
+
+
+@pytest.mark.parametrize(
+    "get_extractive_answers, expected_key",
+    [
+        (True, "max_extractive_answer_count"),
+        (False, "max_extractive_segment_count"),
+    ],
+)
+def test_blended_search_content_spec_kwargs(
+    mock_stable_client: MagicMock,
+    get_extractive_answers: bool,
+    expected_key: str,
+) -> None:
+    """Blended search content spec mirrors unstructured (type 0) behavior."""
+    retriever = VertexAISearchRetriever(
+        project_id="my-project",
+        data_store_id="my-engine",
+        engine_data_type=3,
+        get_extractive_answers=get_extractive_answers,
+        credentials=ga_credentials.AnonymousCredentials(),
+    )
+
+    with patch(
+        "google.cloud.discoveryengine_v1.SearchRequest"
+    ) as mock_request:
+        mock_content_spec = MagicMock()
+        mock_content_spec.ExtractiveContentSpec = MagicMock()
+        mock_request.ContentSearchSpec = mock_content_spec
+
+        retriever._get_content_spec_kwargs()
+
+        call_kwargs = mock_content_spec.ExtractiveContentSpec.call_args[1]
+        assert expected_key in call_kwargs
+
+
+@pytest.mark.parametrize(
+    "mock_search_response, expected_module, beta_flag",
+    [
+        (
+            ("google.cloud.discoveryengine_v1", False),
+            "google.cloud.discoveryengine_v1",
+            False,
+        ),
+        (
+            ("google.cloud.discoveryengine_v1beta", True),
+            "google.cloud.discoveryengine_v1beta",
+            True,
+        ),
+    ],
+    indirect=["mock_search_response"],
+)
+def test_blended_search_get_relevant_documents(
+    mock_search_response: Union[SearchResponse, BetaSearchResponse],
+    expected_module: str,
+    beta_flag: bool,
+) -> None:
+    """Blended search retrieves documents using unstructured conversion."""
+    with patch(f"{expected_module}.SearchServiceClient", autospec=True) as mock_client:
+        mock_client.return_value = MagicMock()
+        retriever = VertexAISearchRetriever(
+            project_id="my-project",
+            data_store_id="my-engine",
+            engine_data_type=3,
+            get_extractive_answers=False,
+            return_extractive_segment_score=True,
+            beta=beta_flag,
+            credentials=ga_credentials.AnonymousCredentials(),
+        )
+        mock_client.return_value.search.return_value = mock_search_response
+
+        documents = retriever._convert_unstructured_search_response(
+            mock_search_response.results, "extractive_segments"
+        )
+
+        assert len(documents) == 2
+        assert documents[0].page_content == "Mock content 1"
+        assert documents[0].metadata["id"] == "mock-id-1"
+        assert documents[0].metadata["source"] == "mock-link-1"

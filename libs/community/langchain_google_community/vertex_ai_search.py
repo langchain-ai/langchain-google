@@ -85,12 +85,13 @@ class _BaseVertexAISearchRetriever(Serializable):
     If not provided, credentials will be ascertained from the environment.
     """
 
-    engine_data_type: int = Field(default=0, ge=0, le=2)
+    engine_data_type: int = Field(default=0, ge=0, le=3)
     """ Defines the Vertex AI Search data type
 
     `0` - Unstructured data
     `1` - Structured data
     `2` - Website data
+    `3` - Blended data (queries across multiple data stores in a search app)
     """
 
     _beta: bool = PrivateAttr(default=False)
@@ -444,12 +445,22 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             client_info=get_client_info(module="vertex-ai-search"),
         )
 
-        self._serving_config = self._client.serving_config_path(
-            project=self.project_id,
-            location=self.location_id,
-            data_store=self.data_store_id,
-            serving_config=self.serving_config_id,
-        )
+        if self.engine_data_type == 3:
+            # Blended search uses an engine (app) path rather than a data store path.
+            # The SDK does not provide a helper for this format, so we construct it
+            # directly. `data_store_id` holds the search app (engine) ID in this case.
+            self._serving_config = (
+                f"projects/{self.project_id}/locations/{self.location_id}"
+                f"/collections/default_collection/engines/{self.data_store_id}"
+                f"/servingConfigs/{self.serving_config_id}"
+            )
+        else:
+            self._serving_config = self._client.serving_config_path(
+                project=self.project_id,
+                location=self.location_id,
+                data_store=self.data_store_id,
+                serving_config=self.serving_config_id,
+            )
 
     def _get_beta_specific_params(self, query: str) -> Dict[str, Any]:
         """Get parameters that are only available in beta version."""
@@ -545,10 +556,32 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                     return_snippet=True
                 ),
             )
+        elif self.engine_data_type == 3:
+            # Blended search: use extractive content, matching the unstructured
+            # data store behavior. Data stores in the search app should have
+            # extractive content enabled.
+            if self.get_extractive_answers:
+                extractive_content_spec = (
+                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                        max_extractive_answer_count=self.max_extractive_answer_count,
+                    )
+                )
+            else:
+                extractive_content_spec = (
+                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                        max_extractive_segment_count=self.max_extractive_segment_count,
+                        num_previous_segments=self.num_previous_segments,
+                        num_next_segments=self.num_next_segments,
+                        return_extractive_segment_score=(
+                            self.return_extractive_segment_score
+                        ),
+                    )
+                )
+            content_search_spec = dict(extractive_content_spec=extractive_content_spec)
         else:
             raise NotImplementedError(
                 "Only data store type 0 (Unstructured), 1 (Structured),"
-                "or 2 (Website) are supported currently."
+                "2 (Website), or 3 (Blended) are supported currently."
                 + f" Got {self.engine_data_type}"
             )
         return content_search_spec
@@ -628,10 +661,19 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             documents = self._convert_website_search_response(
                 response.results, chunk_type
             )
+        elif self.engine_data_type == 3:
+            chunk_type = (
+                "extractive_answers"
+                if self.get_extractive_answers
+                else "extractive_segments"
+            )
+            documents = self._convert_unstructured_search_response(
+                response.results, chunk_type
+            )
         else:
             raise NotImplementedError(
                 "Only data store type 0 (Unstructured), 1 (Structured),"
-                "or 2 (Website) are supported currently."
+                "2 (Website), or 3 (Blended) are supported currently."
                 + f" Got {self.engine_data_type}"
             )
 
@@ -684,6 +726,12 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
         if self.engine_data_type == 1:
             raise NotImplementedError(
                 "Data store type 1 (Structured)"
+                "is not currently supported for multi-turn search."
+                + f" Got {self.engine_data_type}"
+            )
+        if self.engine_data_type == 3:
+            raise NotImplementedError(
+                "Data store type 3 (Blended) "
                 "is not currently supported for multi-turn search."
                 + f" Got {self.engine_data_type}"
             )
