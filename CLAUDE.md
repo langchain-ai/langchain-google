@@ -194,6 +194,8 @@ The `google-genai` library requires creating a client object for all API calls.
   - **Prohibited:** `gemini-1.5-flash`
   - **Prohibited:** `gemini-1.5-pro`
   - **Prohibited:** `gemini-pro`
+  - **Prohibited:** `gemini-3-pro-preview` (discontinued March 26, 2026; use `gemini-3.1-pro-preview` instead)
+  - **Prohibited:** `gemini-embedding-001` (use `gemini-embedding-2-preview` instead)
 
 ## Basic inference
 
