@@ -7,7 +7,7 @@ from pydantic import SecretStr
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
-MODEL_NAME = "gemini-embedding-001"
+MODEL_NAME = "gemini-embedding-2-preview"
 
 
 def _mock_embedding_response(values_list: list[list[float]]) -> MagicMock:
