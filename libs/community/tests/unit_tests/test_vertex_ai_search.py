@@ -604,9 +604,7 @@ def test_blended_search_content_spec_kwargs(
         credentials=ga_credentials.AnonymousCredentials(),
     )
 
-    with patch(
-        "google.cloud.discoveryengine_v1.SearchRequest"
-    ) as mock_request:
+    with patch("google.cloud.discoveryengine_v1.SearchRequest") as mock_request:
         mock_content_spec = MagicMock()
         mock_content_spec.ExtractiveContentSpec = MagicMock()
         mock_request.ContentSearchSpec = mock_content_spec
