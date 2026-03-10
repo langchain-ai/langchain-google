@@ -551,16 +551,18 @@ def test_convert_unstructured_search_response_extractive_answers(
 
 
 def test_blended_search_initialization(mock_stable_client: MagicMock) -> None:
-    """engine_data_type=3 is accepted and does NOT call serving_config_path."""
+    """engine_data_type=3 accepts search_engine_id and does NOT call serving_config_path."""
     retriever = VertexAISearchRetriever(
         project_id="my-project",
-        data_store_id="my-engine",
+        search_engine_id="my-engine",
         location_id="global",
         engine_data_type=3,
         credentials=ga_credentials.AnonymousCredentials(),
     )
 
     assert retriever.engine_data_type == 3
+    assert retriever.search_engine_id == "my-engine"
+    assert retriever.data_store_id is None
     # Blended search constructs the path manually, so the SDK helper is not called.
     mock_stable_client.serving_config_path.assert_not_called()
 
@@ -578,7 +580,8 @@ def test_blended_search_search_engine_id_no_deprecation_warning(
             engine_data_type=3,
             credentials=ga_credentials.AnonymousCredentials(),
         )
-    assert retriever.data_store_id == "my-engine"
+    assert retriever.search_engine_id == "my-engine"
+    assert retriever.data_store_id is None
 
 
 def test_search_engine_id_deprecation_warning_for_non_blended(
@@ -586,19 +589,21 @@ def test_search_engine_id_deprecation_warning_for_non_blended(
 ) -> None:
     """search_engine_id still triggers a deprecation warning for types 0–2."""
     with pytest.warns(DeprecationWarning, match="search_engine_id"):
-        VertexAISearchRetriever(
+        retriever = VertexAISearchRetriever(
             project_id="my-project",
             search_engine_id="my-datastore",
             engine_data_type=0,
             credentials=ga_credentials.AnonymousCredentials(),
         )
+    assert retriever.data_store_id == "my-datastore"
+    assert retriever.search_engine_id is None
 
 
 def test_blended_search_serving_config_path(mock_stable_client: MagicMock) -> None:
-    """Blended search uses the engine-based serving config path."""
+    """Blended search uses the engine-based serving config path from search_engine_id."""
     retriever = VertexAISearchRetriever(
         project_id="my-project",
-        data_store_id="my-engine",
+        search_engine_id="my-engine",
         location_id="global",
         serving_config_id="default_config",
         engine_data_type=3,
@@ -628,7 +633,7 @@ def test_blended_search_content_spec_kwargs(
     """Blended search content spec mirrors unstructured (type 0) behavior."""
     retriever = VertexAISearchRetriever(
         project_id="my-project",
-        data_store_id="my-engine",
+        search_engine_id="my-engine",
         engine_data_type=3,
         get_extractive_answers=get_extractive_answers,
         credentials=ga_credentials.AnonymousCredentials(),
@@ -671,7 +676,7 @@ def test_blended_search_get_relevant_documents(
         mock_client.return_value = MagicMock()
         retriever = VertexAISearchRetriever(
             project_id="my-project",
-            data_store_id="my-engine",
+            search_engine_id="my-engine",
             engine_data_type=3,
             get_extractive_answers=False,
             return_extractive_segment_score=True,

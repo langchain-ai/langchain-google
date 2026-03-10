@@ -69,8 +69,16 @@ class _BaseVertexAISearchRetriever(Serializable):
     project_id: str
     """Google Cloud Project ID."""
 
-    data_store_id: str
-    """Vertex AI Search data store ID."""
+    data_store_id: Optional[str] = None
+    """Vertex AI Search data store ID. Required for engine_data_type 0, 1, and 2."""
+
+    search_engine_id: Optional[str] = None
+    """Vertex AI Search app (engine) ID. Required for engine_data_type=3 (blended search).
+
+    For blended search, this is the ID of the search app that spans multiple data
+    stores. Unlike `data_store_id`, this is not deprecated — it is the correct and
+    documented parameter for blended search.
+    """
 
     location_id: str = "global"
     """Vertex AI Search data store location."""
@@ -138,31 +146,35 @@ class _BaseVertexAISearchRetriever(Serializable):
 
         values["project_id"] = get_from_dict_or_env(values, "project_id", "PROJECT_ID")
 
-        try:
-            search_engine_id = get_from_dict_or_env(
+        engine_data_type = values.get("engine_data_type", 0)
+
+        if engine_data_type == 3:
+            # Blended search: search_engine_id is the required, first-class parameter.
+            values["search_engine_id"] = get_from_dict_or_env(
                 values, "search_engine_id", "SEARCH_ENGINE_ID"
             )
-
-            if search_engine_id:
-                # For blended search (engine_data_type=3), `search_engine_id` is the
-                # correct and documented parameter — it holds the search app (engine)
-                # ID, which is semantically distinct from a data store ID. Only warn
-                # for the other data types where `data_store_id` is the right name.
-                if values.get("engine_data_type", 0) != 3:
+        else:
+            # For types 0-2: data_store_id is the primary parameter.
+            # search_engine_id is accepted for backwards compatibility only.
+            try:
+                legacy_id = get_from_dict_or_env(
+                    values, "search_engine_id", "SEARCH_ENGINE_ID"
+                )
+                if legacy_id:
                     warnings.warn(
                         "The `search_engine_id` parameter is deprecated. "
                         "Use `data_store_id` instead.",
                         DeprecationWarning,
                     )
-                values["data_store_id"] = search_engine_id
-                # Remove the key so Pydantic's extra="forbid" does not reject it.
-                values.pop("search_engine_id", None)
-        except:  # noqa: E722
-            pass
+                    values["data_store_id"] = legacy_id
+                    # Clear the field so it doesn't persist on the model.
+                    values["search_engine_id"] = None
+            except:  # noqa: E722
+                pass
 
-        values["data_store_id"] = get_from_dict_or_env(
-            values, "data_store_id", "DATA_STORE_ID"
-        )
+            values["data_store_id"] = get_from_dict_or_env(
+                values, "data_store_id", "DATA_STORE_ID"
+            )
 
         return values
 
@@ -455,10 +467,10 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         if self.engine_data_type == 3:
             # Blended search uses an engine (app) path rather than a data store path.
             # The SDK does not provide a helper for this format, so we construct it
-            # directly. `data_store_id` holds the search app (engine) ID in this case.
+            # directly using search_engine_id (the search app ID).
             self._serving_config = (
                 f"projects/{self.project_id}/locations/{self.location_id}"
-                f"/collections/default_collection/engines/{self.data_store_id}"
+                f"/collections/default_collection/engines/{self.search_engine_id}"
                 f"/servingConfigs/{self.serving_config_id}"
             )
         else:
