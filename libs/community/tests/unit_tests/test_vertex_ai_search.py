@@ -1,3 +1,4 @@
+import warnings
 from typing import Generator, Union
 from unittest import mock
 from unittest.mock import MagicMock, patch
@@ -562,6 +563,35 @@ def test_blended_search_initialization(mock_stable_client: MagicMock) -> None:
     assert retriever.engine_data_type == 3
     # Blended search constructs the path manually, so the SDK helper is not called.
     mock_stable_client.serving_config_path.assert_not_called()
+
+
+def test_blended_search_search_engine_id_no_deprecation_warning(
+    mock_stable_client: MagicMock,
+) -> None:
+    """search_engine_id does NOT trigger a deprecation warning for blended search."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        # Should not raise — search_engine_id is the documented param for type 3.
+        retriever = VertexAISearchRetriever(
+            project_id="my-project",
+            search_engine_id="my-engine",
+            engine_data_type=3,
+            credentials=ga_credentials.AnonymousCredentials(),
+        )
+    assert retriever.data_store_id == "my-engine"
+
+
+def test_search_engine_id_deprecation_warning_for_non_blended(
+    mock_stable_client: MagicMock,
+) -> None:
+    """search_engine_id still triggers a deprecation warning for types 0–2."""
+    with pytest.warns(DeprecationWarning, match="search_engine_id"):
+        VertexAISearchRetriever(
+            project_id="my-project",
+            search_engine_id="my-datastore",
+            engine_data_type=0,
+            credentials=ga_credentials.AnonymousCredentials(),
+        )
 
 
 def test_blended_search_serving_config_path(mock_stable_client: MagicMock) -> None:

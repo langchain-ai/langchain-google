@@ -139,17 +139,24 @@ class _BaseVertexAISearchRetriever(Serializable):
         values["project_id"] = get_from_dict_or_env(values, "project_id", "PROJECT_ID")
 
         try:
-            # For backwards compatibility
             search_engine_id = get_from_dict_or_env(
                 values, "search_engine_id", "SEARCH_ENGINE_ID"
             )
 
             if search_engine_id:
-                warnings.warn(
-                    "The `search_engine_id` parameter is deprecated. Use `data_store_id` instead.",  # noqa: E501
-                    DeprecationWarning,
-                )
+                # For blended search (engine_data_type=3), `search_engine_id` is the
+                # correct and documented parameter — it holds the search app (engine)
+                # ID, which is semantically distinct from a data store ID. Only warn
+                # for the other data types where `data_store_id` is the right name.
+                if values.get("engine_data_type", 0) != 3:
+                    warnings.warn(
+                        "The `search_engine_id` parameter is deprecated. "
+                        "Use `data_store_id` instead.",
+                        DeprecationWarning,
+                    )
                 values["data_store_id"] = search_engine_id
+                # Remove the key so Pydantic's extra="forbid" does not reject it.
+                values.pop("search_engine_id", None)
         except:  # noqa: E722
             pass
 
