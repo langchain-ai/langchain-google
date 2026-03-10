@@ -774,6 +774,7 @@ class VertexAIMultiTurnSearchRetriever(BaseRetriever, _BaseVertexAISearchRetriev
                 TextInput,
             )
 
+        assert self.data_store_id is not None  # noqa: S101
         request = ConverseConversationRequest(
             name=self._client.conversation_path(
                 self.project_id,
