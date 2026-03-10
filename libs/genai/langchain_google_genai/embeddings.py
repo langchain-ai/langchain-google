@@ -45,12 +45,14 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
             # Gemini Developer API
-            embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="gemini-embedding-2-preview"
+            )
             embeddings.embed_query("What's our Q1 revenue?")
 
             # Vertex AI
             embeddings = GoogleGenerativeAIEmbeddings(
-                model="gemini-embedding-001",
+                model="gemini-embedding-2-preview",
                 project="my-project",
                 vertexai=True,
             )
@@ -90,7 +92,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
         ```python
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001",
+            model="gemini-embedding-2-preview",
             client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
@@ -100,10 +102,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     """The Google GenAI client instance."""
 
     model: str = Field(...)
-    """The name of the embedding model to use.
-
-    Example: `'gemini-embedding-001'`
-    """
+    """The name of the embedding model to use."""
 
     task_type: str | None = Field(
         default=None,
