@@ -23,6 +23,14 @@ _DEFAULT_BATCH_SIZE = 100
 class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     """Google Generative AI Embeddings.
 
+    !!! warning "Text-only"
+
+        While `gemini-embedding-2-preview` natively supports multimodal inputs
+        (text, images, video, audio, and PDFs) via the Google GenAI SDK, the
+        LangChain `Embeddings` interface (`embed_query` / `embed_documents`)
+        currently only accepts text. For multimodal embedding use cases in the
+        meantime, use the `Google GenAI SDK directly.
+
     Setup:
         !!! version-added "Vertex AI Platform Support"
 
