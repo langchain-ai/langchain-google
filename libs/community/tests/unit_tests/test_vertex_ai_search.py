@@ -618,24 +618,32 @@ def test_blended_search_serving_config_path(mock_stable_client: MagicMock) -> No
     assert retriever._serving_config == expected
 
 
-@pytest.mark.parametrize(
-    "get_extractive_answers, expected_key",
-    [
-        (True, "max_extractive_answer_count"),
-        (False, "max_extractive_segment_count"),
-    ],
-)
-def test_blended_search_content_spec_kwargs(
+def test_blended_search_content_spec_none_by_default(
     mock_stable_client: MagicMock,
-    get_extractive_answers: bool,
-    expected_key: str,
 ) -> None:
-    """Blended search content spec mirrors unstructured (type 0) behavior."""
+    """Blended search returns no content spec by default (get_extractive_answers=False).
+
+    Without a content spec the API returns results as structured data, which
+    works across mixed data store types (structured, unstructured, etc.).
+    """
     retriever = VertexAISearchRetriever(
         project_id="my-project",
         search_engine_id="my-engine",
         engine_data_type=3,
-        get_extractive_answers=get_extractive_answers,
+        credentials=ga_credentials.AnonymousCredentials(),
+    )
+    assert retriever._get_content_spec_kwargs() is None
+
+
+def test_blended_search_content_spec_extractive_answers(
+    mock_stable_client: MagicMock,
+) -> None:
+    """Blended search requests extractive answers when get_extractive_answers=True."""
+    retriever = VertexAISearchRetriever(
+        project_id="my-project",
+        search_engine_id="my-engine",
+        engine_data_type=3,
+        get_extractive_answers=True,
         credentials=ga_credentials.AnonymousCredentials(),
     )
 
@@ -647,7 +655,7 @@ def test_blended_search_content_spec_kwargs(
         retriever._get_content_spec_kwargs()
 
         call_kwargs = mock_content_spec.ExtractiveContentSpec.call_args[1]
-        assert expected_key in call_kwargs
+        assert "max_extractive_answer_count" in call_kwargs
 
 
 @pytest.mark.parametrize(

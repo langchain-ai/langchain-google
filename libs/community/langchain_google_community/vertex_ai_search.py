@@ -684,9 +684,7 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
             else:
                 # Default: no content spec was requested, so results come back
                 # as structured data regardless of the underlying data store types.
-                documents = self._convert_structured_search_response(
-                    response.results
-                )
+                documents = self._convert_structured_search_response(response.results)
         else:
             raise NotImplementedError(
                 "Only data store type 0 (Unstructured), 1 (Structured),"
