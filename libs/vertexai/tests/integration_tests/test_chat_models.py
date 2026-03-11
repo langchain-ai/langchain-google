@@ -565,9 +565,7 @@ def test_vertexai_single_call_previous_blocked_response() -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("model_name", model_names_to_test)
 def test_get_num_tokens_from_messages(model_name: str) -> None:
-    model = ChatVertexAI(
-        model=model_name, temperature=0.0, rate_limiter=RATE_LIMITER
-    )
+    model = ChatVertexAI(model=model_name, temperature=0.0, rate_limiter=RATE_LIMITER)
     message = HumanMessage(content="Hello")
     token = model.get_num_tokens_from_messages(messages=[message])
     assert isinstance(token, int)
@@ -612,9 +610,9 @@ def test_chat_vertexai_gemini_function_calling(endpoint_version: str) -> None:
     def my_tool(name: str, age: int) -> None:
         """Invoke this with names and ages."""
 
-    model = ChatVertexAI(
-        model=_DEFAULT_MODEL_NAME, safety_settings=safety
-    ).bind_tools([my_tool])
+    model = ChatVertexAI(model=_DEFAULT_MODEL_NAME, safety_settings=safety).bind_tools(
+        [my_tool]
+    )
     response = model.invoke([message])
     _check_tool_calls(response, "my_tool")
 
