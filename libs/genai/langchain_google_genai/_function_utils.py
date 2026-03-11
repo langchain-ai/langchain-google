@@ -505,15 +505,27 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
         original_enum = v.get("enum")
         original_items = v.get("items")
 
-        if v.get("anyOf") and all(
-            anyOf_type.get("type") != "null" for anyOf_type in v.get("anyOf", [])
-        ):
-            properties_item["anyOf"] = [
-                _format_json_schema_to_gapic(anyOf_type)
+        if v.get("anyOf"):
+            non_null_types = [
+                anyOf_type
                 for anyOf_type in v.get("anyOf", [])
+                if anyOf_type.get("type") != "null"
             ]
+            if len(non_null_types) > 1:
+                properties_item["anyOf"] = [
+                    _format_json_schema_to_gapic(anyOf_type)
+                    for anyOf_type in non_null_types
+                ]
             # Don't set type_ when anyOf is present as they're mutually exclusive
-        elif v.get("type") or v.get("anyOf") or v.get("type_"):
+            elif len(non_null_types) == 1:
+                # Update v to the non-null type for processing below
+                v = {**v, **non_null_types[0]}
+                if any(t.get("type") == "null" for t in v.get("anyOf", [])):
+                    properties_item["nullable"] = True
+                if "anyOf" in v:
+                    del v["anyOf"]
+
+        if v.get("type") or v.get("anyOf") or v.get("type_"):
             item_type_ = _get_type_from_schema(v)
             properties_item["type"] = item_type_
             if _is_nullable_schema(v):
