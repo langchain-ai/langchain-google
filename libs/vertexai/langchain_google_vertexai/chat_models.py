@@ -945,7 +945,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Key init args — completion params:
         model: str
-            Name of ChatVertexAI model to use. e.g. `'gemini-2.0-flash-001'`,
+            Name of ChatVertexAI model to use. e.g. `'gemini-2.5-flash'`,
             `'gemini-2.5-pro'`, etc.
         temperature: Optional[float]
             Sampling temperature.
@@ -1269,7 +1269,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
 
             llm = ChatVertexAI(
-                model_name="gemini-2.5-flash",
+                model="gemini-2.5-flash",
                 cached_content=cache.name,
             )
             message = HumanMessage(
@@ -2391,7 +2391,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             from langchain_core.messages import HumanMessage
             from langchain_google_vertexai import ChatVertexAI
 
-            llm = ChatVertexAI(model="gemini-2.0-flash")
+            llm = ChatVertexAI(model="gemini-2.5-flash")
 
             # Text-only message
             messages = [HumanMessage(content="Hello, world!")]
@@ -2638,7 +2638,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(AnswerWithJustification)
 
             structured_llm.invoke(
@@ -2662,7 +2662,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(
                 AnswerWithJustification, include_raw=True
             )
@@ -2694,7 +2694,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
 
             dict_schema = convert_to_openai_function(AnswerWithJustification)
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(dict_schema)
 
             structured_llm.invoke(
@@ -2721,7 +2721,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 examples: str = Field(description="Two examples related to the topic.")
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(Explanation, method="json_mode")
 
             for chunk in structured_llm.stream("Tell me about transformer models"):

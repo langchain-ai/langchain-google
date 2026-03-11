@@ -27,7 +27,7 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 
 @pytest.fixture(scope="module")
 def embeddings() -> VertexAIEmbeddings:
-    return VertexAIEmbeddings(model_name="text-embedding-005")  # type: ignore
+    return VertexAIEmbeddings(model="text-embedding-005")  # type: ignore
 
 
 @pytest.fixture(scope="module")
