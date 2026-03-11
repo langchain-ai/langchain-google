@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Trace - {{ session_id }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .timeline-item { @apply relative pl-8 pb-6; }
+        .timeline-item:before {
+            content: '';
+            @apply absolute left-3 top-8 bottom-0 w-0.5 bg-gray-200;
+        }
+        .timeline-item:last-child:before { display: none; }
+        .timeline-dot {
+            @apply absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center;
+        }
+        .llm-dot { @apply bg-blue-100 text-blue-600; }
+        .tool-dot { @apply bg-purple-100 text-purple-600; }
+        .graph-dot { @apply bg-green-100 text-green-600; }
+        .node-dot { @apply bg-indigo-100 text-indigo-600; }
+        .error-dot { @apply bg-red-100 text-red-600; }
+        .event-badge { @apply px-2 py-1 rounded text-xs font-medium; }
+        .llm-event { @apply bg-blue-100 text-blue-800; }
+        .tool-event { @apply bg-purple-100 text-purple-800; }
+        .graph-event { @apply bg-green-100 text-green-800; }
+        .node-event { @apply bg-indigo-100 text-indigo-800; }
+        .chain-event { @apply bg-yellow-100 text-yellow-800; }
+        .content-box { @apply bg-gray-50 rounded-lg p-4 mt-3 text-sm overflow-x-auto; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
+        <div class="max-w-5xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-white/75 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </a>
+                    <div>
+                        <div class="text-xl font-bold">Session Trace</div>
+                        <div class="text-sm text-white/75 mono">{{ session_id }}</div>
+                    </div>
+                </div>
+                <button onclick="location.reload()" class="bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition-colors">
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-6">
+        <!-- Session Summary -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Session Summary</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="session-summary">
+                <div class="text-center p-4 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-gray-900" id="summary-agent">--</div>
+                    <div class="text-sm text-gray-500">Agent</div>
+                </div>
+                <div class="text-center p-4 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-blue-600" id="summary-llm">--</div>
+                    <div class="text-sm text-gray-500">LLM Calls</div>
+                </div>
+                <div class="text-center p-4 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-purple-600" id="summary-tools">--</div>
+                    <div class="text-sm text-gray-500">Tool Calls</div>
+                </div>
+                <div class="text-center p-4 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-orange-600" id="summary-latency">--</div>
+                    <div class="text-sm text-gray-500">Total Latency (ms)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trace Timeline -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-6">Event Timeline</h2>
+            <div id="timeline" class="space-y-2">
+                <div class="text-center py-8 text-gray-400">Loading timeline...</div>
+            </div>
+        </div>
+
+        <!-- Conversation View -->
+        <div class="bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-lg font-semibold mb-6">Conversation</h2>
+            <div id="conversation" class="space-y-4">
+                <div class="text-center py-8 text-gray-400">Loading conversation...</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const sessionId = '{{ session_id }}';
+
+        // Get dot class for event type
+        function getDotClass(eventType) {
+            if (eventType.includes('ERROR')) return 'error-dot';
+            if (eventType.startsWith('LLM')) return 'llm-dot';
+            if (eventType.startsWith('TOOL')) return 'tool-dot';
+            if (eventType.startsWith('GRAPH')) return 'graph-dot';
+            if (eventType.startsWith('NODE')) return 'node-dot';
+            return 'bg-gray-100 text-gray-600';
+        }
+
+        // Get badge class for event type
+        function getBadgeClass(eventType) {
+            if (eventType.startsWith('LLM')) return 'llm-event';
+            if (eventType.startsWith('TOOL')) return 'tool-event';
+            if (eventType.startsWith('GRAPH')) return 'graph-event';
+            if (eventType.startsWith('NODE')) return 'node-event';
+            if (eventType.startsWith('CHAIN')) return 'chain-event';
+            return 'bg-gray-100 text-gray-800';
+        }
+
+        // Get icon for event type
+        function getIcon(eventType) {
+            if (eventType.startsWith('LLM')) return '🤖';
+            if (eventType.startsWith('TOOL')) return '🔧';
+            if (eventType.startsWith('GRAPH')) return '📊';
+            if (eventType.startsWith('NODE')) return '📍';
+            if (eventType.includes('ERROR')) return '❌';
+            return '📝';
+        }
+
+        // Format content preview
+        function formatContent(content) {
+            if (!content) return '';
+            try {
+                const obj = JSON.parse(content);
+                return JSON.stringify(obj, null, 2);
+            } catch {
+                return content;
+            }
+        }
+
+        // Load timeline
+        async function loadTimeline() {
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}/timeline`);
+                const events = await response.json();
+
+                if (events.length === 0) {
+                    document.getElementById('timeline').innerHTML =
+                        '<div class="text-center py-8 text-gray-400">No events found</div>';
+                    return;
+                }
+
+                // Calculate summary
+                const agent = events[0].agent || '--';
+                const llmCalls = events.filter(e => e.event_type === 'LLM_REQUEST').length;
+                const toolCalls = events.filter(e => e.event_type === 'TOOL_STARTING').length;
+                const totalLatency = events.reduce((sum, e) => sum + (e.latency_ms || 0), 0);
+
+                document.getElementById('summary-agent').textContent = agent;
+                document.getElementById('summary-llm').textContent = llmCalls;
+                document.getElementById('summary-tools').textContent = toolCalls;
+                document.getElementById('summary-latency').textContent = totalLatency.toLocaleString();
+
+                // Render timeline
+                const timeline = document.getElementById('timeline');
+                timeline.innerHTML = events.map((event, idx) => `
+                    <div class="timeline-item">
+                        <div class="timeline-dot ${getDotClass(event.event_type)}">
+                            ${getIcon(event.event_type)}
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center space-x-3">
+                                    <span class="event-badge ${getBadgeClass(event.event_type)}">${event.event_type}</span>
+                                    ${event.tool_name ? `<span class="text-sm text-purple-600 font-medium">${event.tool_name}</span>` : ''}
+                                </div>
+                                <div class="flex items-center space-x-4 text-sm">
+                                    ${event.latency_ms ? `<span class="text-orange-600 font-medium">${event.latency_ms}ms</span>` : ''}
+                                    <span class="${event.status === 'OK' || !event.status ? 'text-green-600' : 'text-red-600'}">${event.status || 'OK'}</span>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500 mb-2 mono">${event.timestamp}</div>
+                            ${event.trace_id ? `<div class="text-xs text-gray-400 mono">Trace: ${event.trace_id} | Span: ${event.span_id || '--'}</div>` : ''}
+                            ${event.content_preview ? `
+                                <details class="mt-3">
+                                    <summary class="text-sm text-gray-600 cursor-pointer hover:text-gray-900">View Content</summary>
+                                    <pre class="content-box mono text-xs">${formatContent(event.content_preview)}</pre>
+                                </details>
+                            ` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading timeline:', error);
+                document.getElementById('timeline').innerHTML =
+                    '<div class="text-center py-8 text-red-500">Error loading timeline</div>';
+            }
+        }
+
+        // Load conversation
+        async function loadConversation() {
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}/conversation`);
+                const messages = await response.json();
+
+                if (messages.length === 0) {
+                    document.getElementById('conversation').innerHTML =
+                        '<div class="text-center py-8 text-gray-400">No conversation data</div>';
+                    return;
+                }
+
+                const conversation = document.getElementById('conversation');
+                conversation.innerHTML = messages.map(msg => {
+                    const isUser = msg.event_type === 'LLM_REQUEST';
+                    const isTool = msg.event_type.startsWith('TOOL');
+                    const isAgent = msg.event_type === 'LLM_RESPONSE';
+
+                    let icon, bgColor, label;
+                    if (isUser) {
+                        icon = '👤';
+                        bgColor = 'bg-blue-50 border-blue-200';
+                        label = 'User';
+                    } else if (isTool) {
+                        icon = '🔧';
+                        bgColor = 'bg-purple-50 border-purple-200';
+                        label = msg.tool_name ? `Tool: ${msg.tool_name}` : 'Tool';
+                    } else {
+                        icon = '🤖';
+                        bgColor = 'bg-green-50 border-green-200';
+                        label = 'Agent';
+                    }
+
+                    const content = msg.message || (msg.full_content ? formatContent(msg.full_content).slice(0, 500) : '(no content)');
+
+                    return `
+                        <div class="flex ${isUser ? 'justify-start' : 'justify-end'}">
+                            <div class="max-w-2xl ${bgColor} border rounded-lg p-4">
+                                <div class="flex items-center space-x-2 mb-2">
+                                    <span>${icon}</span>
+                                    <span class="font-medium text-gray-700">${label}</span>
+                                    <span class="text-xs text-gray-400">${msg.timestamp}</span>
+                                </div>
+                                <div class="text-gray-800 text-sm whitespace-pre-wrap">${content}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading conversation:', error);
+                document.getElementById('conversation').innerHTML =
+                    '<div class="text-center py-8 text-red-500">Error loading conversation</div>';
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await Promise.all([loadTimeline(), loadConversation()]);
+        });
+    </script>
+</body>
+</html>

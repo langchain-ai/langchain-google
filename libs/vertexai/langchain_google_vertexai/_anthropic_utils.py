@@ -323,10 +323,10 @@ def _format_messages_anthropic(
     formatted_messages: list[dict] = []
 
     merged_messages = _merge_messages(messages)
-    for i, message in enumerate(merged_messages):
+    for message in merged_messages:
         if message.type == "system":
-            if i != 0:
-                msg = "System message must be at beginning of message list."
+            if system_messages is not None:
+                msg = "Received multiple non-consecutive system messages."
                 raise ValueError(msg)
             fm = _format_message_anthropic(message, project)
             if fm:
@@ -376,6 +376,64 @@ def convert_to_anthropic_tool(
     )
 
 
+def _format_image_content_block(block: dict, project: str | None = None) -> dict:
+    """Convert a LangChain image content block to Anthropic wire format.
+
+    LangChain image blocks use ``{"type": "image", "base64": ..., "mime_type": ...}``
+    but Anthropic expects ``{"type": "image", "source": {"type": "base64", ...}}``.
+
+    Raises:
+        ValueError: If block has no recognized image data field.
+    """
+    if "source" in block:
+        return block
+    if "base64" in block:
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": block["mime_type"],
+                "data": block["base64"],
+            },
+        }
+    if "url" in block:
+        url = block["url"]
+        if url.startswith("data:"):
+            return {
+                "type": "image",
+                "source": _format_image(url, project),
+            }
+        return {
+            "type": "image",
+            "source": {"type": "url", "url": url},
+        }
+    if "file_id" in block:
+        return {
+            "type": "image",
+            "source": {"type": "file", "file_id": block["file_id"]},
+        }
+    # Backward compatibility for langchain < 1.X
+    if "data" in block and block.get("source_type") == "base64":
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": block["mime_type"],
+                "data": block["data"],
+            },
+        }
+    if "id" in block and block.get("source_type") == "id":
+        return {
+            "type": "image",
+            "source": {"type": "file", "file_id": block["id"]},
+        }
+    msg = (
+        "Image content blocks must have either 'url', 'base64', "
+        "'file_id', 'id' or 'data' field."
+    )
+    raise ValueError(msg)
+
+
 def _clean_content_block(block: Any) -> Any:
     """Remove streaming metadata fields from content blocks.
 
@@ -390,6 +448,10 @@ def _clean_content_block(block: Any) -> Any:
     """
     if not isinstance(block, dict):
         return block
+
+    # Convert LangChain image blocks to Anthropic wire format
+    if block.get("type") == "image":
+        return _format_image_content_block(block)
 
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
@@ -464,16 +526,21 @@ def _merge_messages(
                     curr = curr.model_copy(deep=True)
                     curr.content = cleaned_content
         last = merged[-1] if merged else None
-        if isinstance(last, HumanMessage) and isinstance(curr, HumanMessage):
-            if isinstance(last.content, str):
-                new_content: list = [{"type": "text", "text": last.content}]
+        if any(
+            all(isinstance(m, c) for m in (curr, last))
+            for c in (SystemMessage, HumanMessage)
+        ):
+            if isinstance(cast("BaseMessage", last).content, str):
+                new_content: list = [
+                    {"type": "text", "text": cast("BaseMessage", last).content}
+                ]
             else:
-                new_content = last.content
+                new_content = cast("list", cast("BaseMessage", last).content)
             if isinstance(curr.content, str):
                 new_content.append({"type": "text", "text": curr.content})
             else:
                 new_content.extend(curr.content)
-            last.content = new_content
+            merged[-1] = curr.model_copy(update={"content": new_content})
         else:
             merged.append(curr)
     return merged

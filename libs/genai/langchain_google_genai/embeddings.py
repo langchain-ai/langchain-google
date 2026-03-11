@@ -23,6 +23,14 @@ _DEFAULT_BATCH_SIZE = 100
 class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     """Google Generative AI Embeddings.
 
+    !!! warning "Text-only"
+
+        While `gemini-embedding-2-preview` natively supports multimodal inputs
+        (text, images, video, audio, and PDFs) via the Google GenAI SDK, the
+        LangChain `Embeddings` interface (`embed_query` / `embed_documents`)
+        currently only accepts text. For multimodal embedding use cases in the
+        meantime, use the `Google GenAI SDK directly.
+
     Setup:
         !!! version-added "Vertex AI Platform Support"
 
@@ -45,12 +53,14 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
             # Gemini Developer API
-            embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="gemini-embedding-2-preview"
+            )
             embeddings.embed_query("What's our Q1 revenue?")
 
             # Vertex AI
             embeddings = GoogleGenerativeAIEmbeddings(
-                model="gemini-embedding-001",
+                model="gemini-embedding-2-preview",
                 project="my-project",
                 vertexai=True,
             )
@@ -90,7 +100,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
         ```python
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001",
+            model="gemini-embedding-2-preview",
             client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
@@ -100,10 +110,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     """The Google GenAI client instance."""
 
     model: str = Field(...)
-    """The name of the embedding model to use.
-
-    Example: `'gemini-embedding-001'`
-    """
+    """The name of the embedding model to use."""
 
     task_type: str | None = Field(
         default=None,
@@ -239,7 +246,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
         # Build headers with user agent
         _, user_agent = get_user_agent("GoogleGenerativeAIEmbeddings")
-        headers = {"User-Agent": user_agent}
+        headers = {"user-agent": user_agent}
         if self.additional_headers:
             headers.update(self.additional_headers)
 

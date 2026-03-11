@@ -174,7 +174,7 @@ def test_tracing_params() -> None:
     ) as mc:
         response = GenerateContentResponse(candidates=[])
         mc.return_value.generate_content.return_value = response
-        llm = VertexAI(model_name="gemini-2.5-pro", project="test-proj")
+        llm = VertexAI(model="gemini-2.5-pro", project="test-proj")
         ls_params = llm._get_ls_params()
         assert ls_params == {
             "ls_provider": "google_vertexai",
@@ -183,7 +183,7 @@ def test_tracing_params() -> None:
         }
 
         llm = VertexAI(
-            model_name=_DEFAULT_MODEL_NAME,
+            model=_DEFAULT_MODEL_NAME,
             temperature=0.1,
             max_output_tokens=10,
             project="test-proj",
@@ -200,6 +200,6 @@ def test_tracing_params() -> None:
 
 def test_timeout_parameter() -> None:
     # Test that timeout parameter is passed to ChatVertexAI client.
-    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, project="test-project", timeout=30.0)
+    llm = VertexAI(model=_DEFAULT_MODEL_NAME, project="test-project", timeout=30.0)
     assert llm.timeout == 30.0
     assert llm.client.timeout == 30.0
