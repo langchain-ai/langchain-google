@@ -411,7 +411,7 @@ def test_tuned_model_name() -> None:
     Tuned models must be specified using the full resource name.
     """
     llm = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
         max_tokens=500,
@@ -436,7 +436,7 @@ def test_default_params_gemini() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-2-5-flash", project="test-project")
+        model = ChatVertexAI(model="gemini-2-5-flash", project="test-project")
         message = HumanMessage(content=user_prompt)
         _ = model.invoke([message])
         mock_generate_content.assert_called_once()
@@ -462,7 +462,7 @@ def test_default_params_gemini() -> None:
 def test_generation_config_gemini() -> None:
     """Test that generation config is set correctly in the request when overridden."""
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         project="test-project",
         temperature=0.2,
         top_k=3,
@@ -498,7 +498,7 @@ def test_safety_settings_gemini_init() -> None:
         )
     ]
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         temperature=0.2,
         top_k=3,
         project="test-project",
@@ -511,7 +511,7 @@ def test_safety_settings_gemini_init() -> None:
 def test_safety_settings_gemini() -> None:
     """Test that safety settings are set correctly in the request."""
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash", temperature=0.2, top_k=3, project="test-project"
+        model="gemini-2-5-flash", temperature=0.2, top_k=3, project="test-project"
     )
     expected_safety_setting = SafetySetting(
         category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
@@ -1435,7 +1435,7 @@ def test_parser_multiple_tools() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-2.5-pro", project="test-project")
+        model = ChatVertexAI(model="gemini-2.5-pro", project="test-project")
         message = HumanMessage(content="Hello")
         parser = PydanticToolsParser(tools=[Add, Multiply])
         llm = model | parser
@@ -1856,7 +1856,7 @@ def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
         name: str = Field(description="Person's name")
         age: int = Field(gt=0, le=150, description="Person's age")
 
-    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
 
     # This should not raise any errors when creating structured output
     structured_llm = llm.with_structured_output(TestModel, method="json_mode")
@@ -1890,7 +1890,7 @@ def test_json_mode_pydantic_v1_backward_compatibility() -> None:
         name: str
         age: int
 
-    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
 
     # V1 models should work without issues
     structured_llm = llm.with_structured_output(V1Model, method="json_mode")
