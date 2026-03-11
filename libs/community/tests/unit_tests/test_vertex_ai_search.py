@@ -551,7 +551,7 @@ def test_convert_unstructured_search_response_extractive_answers(
 
 
 def test_blended_search_initialization(mock_stable_client: MagicMock) -> None:
-    """engine_data_type=3 accepts search_engine_id and does NOT call serving_config_path."""
+    """Blended search (type 3) uses search_engine_id, not serving_config_path."""
     retriever = VertexAISearchRetriever(
         project_id="my-project",
         search_engine_id="my-engine",
@@ -600,7 +600,7 @@ def test_search_engine_id_deprecation_warning_for_non_blended(
 
 
 def test_blended_search_serving_config_path(mock_stable_client: MagicMock) -> None:
-    """Blended search uses the engine-based serving config path from search_engine_id."""
+    """Blended search uses the engine-based serving config path."""
     retriever = VertexAISearchRetriever(
         project_id="my-project",
         search_engine_id="my-engine",
