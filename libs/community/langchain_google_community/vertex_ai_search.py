@@ -577,27 +577,17 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                 ),
             )
         elif self.engine_data_type == 3:
-            # Blended search: use extractive content, matching the unstructured
-            # data store behavior. Data stores in the search app should have
-            # extractive content enabled.
+            # Blended search: only request extractive content when explicitly
+            # asked. The data stores in the app may be of mixed types (structured,
+            # unstructured), and not all support extractive content.
             if self.get_extractive_answers:
-                extractive_content_spec = (
-                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                content_search_spec = dict(
+                    extractive_content_spec=SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
                         max_extractive_answer_count=self.max_extractive_answer_count,
                     )
                 )
             else:
-                extractive_content_spec = (
-                    SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                        max_extractive_segment_count=self.max_extractive_segment_count,
-                        num_previous_segments=self.num_previous_segments,
-                        num_next_segments=self.num_next_segments,
-                        return_extractive_segment_score=(
-                            self.return_extractive_segment_score
-                        ),
-                    )
-                )
-            content_search_spec = dict(extractive_content_spec=extractive_content_spec)
+                return None
         else:
             raise NotImplementedError(
                 "Only data store type 0 (Unstructured), 1 (Structured),"
@@ -613,13 +603,18 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
         else:
             from google.cloud.discoveryengine_v1 import SearchRequest
 
-        query_expansion_spec = SearchRequest.QueryExpansionSpec(
-            condition=self.query_expansion_condition,
-        )
-
-        spell_correction_spec = SearchRequest.SpellCorrectionSpec(
-            mode=self.spell_correction_mode
-        )
+        # Blended search (multi-datastore) does not support query expansion or
+        # spell correction specs — the API rejects requests that set these fields.
+        if self.engine_data_type == 3:
+            query_expansion_spec = None
+            spell_correction_spec = None
+        else:
+            query_expansion_spec = SearchRequest.QueryExpansionSpec(
+                condition=self.query_expansion_condition,
+            )
+            spell_correction_spec = SearchRequest.SpellCorrectionSpec(
+                mode=self.spell_correction_mode
+            )
 
         content_search_spec_kwargs = self._get_content_spec_kwargs()
         content_search_spec = (
@@ -682,14 +677,16 @@ class VertexAISearchRetriever(BaseRetriever, _BaseVertexAISearchRetriever):
                 response.results, chunk_type
             )
         elif self.engine_data_type == 3:
-            chunk_type = (
-                "extractive_answers"
-                if self.get_extractive_answers
-                else "extractive_segments"
-            )
-            documents = self._convert_unstructured_search_response(
-                response.results, chunk_type
-            )
+            if self.get_extractive_answers:
+                documents = self._convert_unstructured_search_response(
+                    response.results, "extractive_answers"
+                )
+            else:
+                # Default: no content spec was requested, so results come back
+                # as structured data regardless of the underlying data store types.
+                documents = self._convert_structured_search_response(
+                    response.results
+                )
         else:
             raise NotImplementedError(
                 "Only data store type 0 (Unstructured), 1 (Structured),"
