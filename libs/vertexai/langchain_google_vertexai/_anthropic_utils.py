@@ -1,6 +1,6 @@
 import base64
 import re
-import urllib
+import urllib.parse
 import warnings
 from collections.abc import Callable, Sequence
 from typing import (
@@ -187,7 +187,63 @@ def _format_message_anthropic(
                         new_block[copy_attr] = block[copy_attr]
 
                 if block["type"] == "image":
-                    content.append(_format_image_content_block(block, project))
+                    # Fixes KeyError by checking keys directly instead of source_type
+                    if "url" in block:
+                        url = block["url"]
+                        if url.startswith("data:"):
+                            # Data URI
+                            formatted_block = {
+                                "type": "image",
+                                "source": _format_image(url, project),
+                            }
+                        else:
+                            formatted_block = {
+                                "type": "image",
+                                "source": {"type": "url", "url": url},
+                            }
+                    elif "base64" in block:
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": block["mime_type"],
+                                "data": block["base64"],
+                            },
+                        }
+                    elif "file_id" in block:
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "file",
+                                "file_id": block["file_id"],
+                            },
+                        }
+                    # Backward compatibility for langchain < 1.X
+                    # where source_type was used
+                    elif "data" in block and block.get("source_type", None) == "base64":
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": block["mime_type"],
+                                "data": block["data"],
+                            },
+                        }
+                    elif "id" in block and block.get("source_type", None) == "id":
+                        formatted_block = {
+                            "type": "image",
+                            "source": {
+                                "type": "file",
+                                "file_id": block["id"],
+                            },
+                        }
+                    else:
+                        msg = (
+                            "Image content blocks must have either 'url', 'base64', "
+                            "'file_id', 'id' or 'data' field."
+                        )
+                        raise ValueError(msg)
+                    content.append(formatted_block)
                     continue
 
                 if block["type"] == "text":
@@ -242,7 +298,7 @@ def _format_message_anthropic(
 
                 content.append(block)
     else:
-        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable, unused-ignore]
+        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable]  # noqa: E501
         raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
@@ -281,6 +337,19 @@ def _format_messages_anthropic(
         if not fm:
             continue
         formatted_messages.append(fm)
+
+    # --- FIX: Sanitize trailing whitespace in prefill (last assistant msg) ---
+    if formatted_messages:
+        last_msg = formatted_messages[-1]
+        if last_msg["role"] == "assistant":
+            if isinstance(last_msg.get("content"), list):
+                for block in last_msg["content"]:
+                    if isinstance(block, dict):
+                        b_type = block.get("type")
+                        if b_type == "text" and "text" in block:
+                            block["text"] = block["text"].rstrip()
+                        elif b_type == "thinking" and "thinking" in block:
+                            block["thinking"] = block["thinking"].rstrip()
 
     return system_messages, formatted_messages
 
@@ -387,7 +456,6 @@ def _clean_content_block(block: Any) -> Any:
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
-    # Remove known streaming metadata fields
     keys_to_remove = {"index", "partial_json", "caller"}
 
     # The id field is required for tool_use blocks and some image blocks,
