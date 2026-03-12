@@ -2194,3 +2194,109 @@ def test_get_num_tokens_from_messages_multimodal(
         request_dict = call_args[0][0]
         assert "contents" in request_dict
         assert len(request_dict["contents"]) > 0
+
+
+class TestAnthropicVertexCacheControl:
+    """Regression tests for https://github.com/langchain-ai/langchain-google/issues/1612."""
+
+    def _make_model(self) -> ChatAnthropicVertex:
+        return ChatAnthropicVertex(project="test-project", location="test-location")
+
+    def test_cache_control_applied_to_last_dict_block(self) -> None:
+        """cache_control kwarg is injected into the last content block."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_applied_to_string_content(self) -> None:
+        """String content is converted to a list block with cache_control."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hi")],
+            cache_control={"type": "ephemeral"},
+        )
+        last_msg = params["messages"][-1]
+        assert isinstance(last_msg["content"], list)
+        assert last_msg["content"][-1]["type"] == "text"
+        assert last_msg["content"][-1]["cache_control"] == {"type": "ephemeral"}
+
+    def test_no_cache_control_leaves_messages_unchanged(self) -> None:
+        """Without cache_control, messages are not modified."""
+        model = self._make_model()
+        params = model._format_params(messages=[HumanMessage("Hello")])
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert "cache_control" not in last_block
+
+    def test_cache_control_targets_last_message(self) -> None:
+        """With multiple messages, cache_control goes on the last one."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                HumanMessage("First"),
+                AIMessage("Response"),
+                HumanMessage("Second"),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        first_block = params["messages"][0]["content"][-1]
+        assert "cache_control" not in first_block
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_none_is_ignored(self) -> None:
+        """Explicitly passing cache_control=None has no effect."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control=None,
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert "cache_control" not in last_block
+
+    def test_cache_control_not_in_top_level_params(self) -> None:
+        """cache_control must never appear as a top-level API parameter."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+
+    def test_cache_control_with_system_message(self) -> None:
+        """cache_control works when conversation includes a system message."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                SystemMessage("You are helpful."),
+                HumanMessage("Hello"),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_with_multipart_content(self) -> None:
+        """cache_control is applied to the last block of multipart content."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "Describe this:"},
+                        {"type": "text", "text": "A sunny day."},
+                    ]
+                ),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        blocks = params["messages"][-1]["content"]
+        assert "cache_control" not in blocks[0]
+        assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
