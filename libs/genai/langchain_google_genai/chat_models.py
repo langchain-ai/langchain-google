@@ -3202,39 +3202,63 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        try:
-            stream = await self.client.aio.models.generate_content_stream(
-                **request,
-            )
-        except ClientError as e:
-            _handle_client_error(e, request)
 
-        async for chunk in stream:
-            _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
-            )
-            gen = cast("ChatGenerationChunk", _chat_result.generations[0])
-            message = cast("AIMessageChunk", gen.message)
+        _retriable_codes = {429, 500, 502, 503, 504}
+        _max_retries = self.max_retries if self.max_retries is not None else 0
+        _attempt = 0
 
-            # populate index if missing
-            if isinstance(message.content, list):
-                for block in message.content:
-                    if isinstance(block, dict) and "type" in block:
-                        if block["type"] != index_type:
-                            index_type = block["type"]
-                            index = index + 1
-                        if "index" not in block:
-                            block["index"] = index
+        while _attempt <= _max_retries:
+            _chunks_yielded = False
+            try:
+                stream = await self.client.aio.models.generate_content_stream(
+                    **request,
+                )
+            except ClientError as e:
+                _handle_client_error(e, request)
 
-            prev_usage_metadata = (
-                message.usage_metadata
-                if prev_usage_metadata is None
-                else add_usage(prev_usage_metadata, message.usage_metadata)
-            )
+            try:
+                async for chunk in stream:
+                    _chat_result = _response_to_result(
+                        chunk, stream=True, prev_usage=prev_usage_metadata
+                    )
+                    gen = cast("ChatGenerationChunk", _chat_result.generations[0])
+                    message = cast("AIMessageChunk", gen.message)
 
-            if run_manager:
-                await run_manager.on_llm_new_token(gen.text, chunk=gen)
-            yield gen
+                    # populate index if missing
+                    if isinstance(message.content, list):
+                        for block in message.content:
+                            if isinstance(block, dict) and "type" in block:
+                                if block["type"] != index_type:
+                                    index_type = block["type"]
+                                    index = index + 1
+                                if "index" not in block:
+                                    block["index"] = index
+
+                    prev_usage_metadata = (
+                        message.usage_metadata
+                        if prev_usage_metadata is None
+                        else add_usage(prev_usage_metadata, message.usage_metadata)
+                    )
+
+                    if run_manager:
+                        await run_manager.on_llm_new_token(gen.text, chunk=gen)
+                    _chunks_yielded = True
+                    yield gen
+                break  # Completed successfully
+            except ClientError as e:
+                if (
+                    _chunks_yielded
+                    or _attempt >= _max_retries
+                    or getattr(e, "code", None) not in _retriable_codes
+                ):
+                    raise
+                _attempt += 1
+                _wait = min(2**_attempt, 32)
+                logger.warning(
+                    f"Retrying stream after ClientError (code={getattr(e, 'code', '?')}), "
+                    f"attempt {_attempt}/{_max_retries}, wait={_wait}s"
+                )
+                await asyncio.sleep(_wait)
 
     def get_num_tokens(self, text: str) -> int:
         """Get the number of tokens present in the text. Uses the model's tokenizer.
