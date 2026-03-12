@@ -2606,12 +2606,16 @@ def test_multi_part_text_sig_then_no_sig_all_dict_blocks() -> None:
             f"content[{i}] should be dict, got {type(item).__name__}: {item!r}"
         )
         assert item.get("type") == "text"
-    assert result.content[0]["text"] == "First part of answer"
-    assert result.content[0]["extras"]["signature"] == base64.b64encode(
-        binary_signature
-    ).decode("ascii")
-    assert result.content[1]["text"] == " and second part"
-    assert "extras" not in result.content[1]
+    block0 = result.content[0]
+    block1 = result.content[1]
+    assert isinstance(block0, dict)
+    assert isinstance(block1, dict)
+    assert block0["text"] == "First part of answer"
+    assert block0["extras"]["signature"] == base64.b64encode(binary_signature).decode(
+        "ascii"
+    )
+    assert block1["text"] == " and second part"
+    assert "extras" not in block1
 
 
 def test_multi_part_text_full_text_concatenation() -> None:
@@ -2667,9 +2671,15 @@ def test_multi_part_text_three_parts_mixed_signatures_all_dict_blocks() -> None:
     for i, item in enumerate(result.content):
         assert isinstance(item, dict), f"content[{i}] should be dict"
         assert item.get("type") == "text"
-    assert "signature" in result.content[0]["extras"]
-    assert "signature" in result.content[1]["extras"]
-    assert "extras" not in result.content[2]
+    block0 = result.content[0]
+    block1 = result.content[1]
+    block2 = result.content[2]
+    assert isinstance(block0, dict)
+    assert isinstance(block1, dict)
+    assert isinstance(block2, dict)
+    assert "signature" in block0["extras"]
+    assert "signature" in block1["extras"]
+    assert "extras" not in block2
 
 
 def test_single_text_part_no_signature_remains_string() -> None:
