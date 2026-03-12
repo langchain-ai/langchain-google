@@ -3255,7 +3255,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 _attempt += 1
                 _wait = min(2**_attempt, 32)
                 logger.warning(
-                    f"Retrying stream after ClientError (code={getattr(e, 'code', '?')}), "
+                    "Retrying stream after ClientError "
+                    f"(code={getattr(e, 'code', '?')}), "
                     f"attempt {_attempt}/{_max_retries}, wait={_wait}s"
                 )
                 await asyncio.sleep(_wait)
