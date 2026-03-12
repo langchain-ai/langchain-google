@@ -2333,6 +2333,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
 
+        # If a client is already provided, use it and skip client creation
+        if self.client is not None:
+            return self
+
         _, user_agent = get_user_agent("ChatGoogleGenerativeAI")
         headers = {"user-agent": user_agent, **additional_headers}
 
