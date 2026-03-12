@@ -276,9 +276,12 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         if kwargs.get("betas"):
             params["betas"] = kwargs["betas"]
         params.pop("model_name", None)
-        # Pop cache_control before building the final payload — the Anthropic API
-        # requires it to be nested inside a message content block, not at the top
-        # level.  This mirrors the handling in langchain-anthropic's ChatAnthropic.
+        # Pop cache_control and inject it into the last message content block
+        # for explicit cache breakpoint placement.  The Anthropic API also
+        # supports top-level cache_control for automatic caching, but the
+        # explicit approach gives fine-grained control over which blocks are
+        # cached.  This mirrors the handling in langchain-anthropic's
+        # ChatAnthropic.
         cache_control = params.pop("cache_control", None)
         if cache_control and formatted_messages:
             for formatted_message in reversed(formatted_messages):
