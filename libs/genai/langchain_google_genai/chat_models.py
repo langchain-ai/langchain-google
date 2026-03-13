@@ -2587,7 +2587,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         config: dict[str, Any] = {
             "candidate_count": self.n,
             "temperature": kwargs.get("temperature", self.temperature),
-            "stop_sequences": stop,
+            "stop_sequences": stop if stop is not None else self.stop,
             "max_output_tokens": kwargs.get(
                 "max_output_tokens", self.max_output_tokens
             ),
