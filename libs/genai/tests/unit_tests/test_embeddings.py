@@ -302,3 +302,102 @@ async def test_aembed_documents() -> None:
 
         # Verify the result
         assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+
+# ---------------------------------------------------------------------------
+# String-like wrapper coercion (issue #1640)
+# StrOutputParser returns a TextAccessor — a duck-typed str that is NOT a
+# subclass of str. All four public methods must coerce inputs to plain str
+# before passing them to the SDK, which does isinstance(x, str) checks.
+# ---------------------------------------------------------------------------
+
+
+class _StringLikeWrapper:
+    """Minimal stand-in for LangChain's TextAccessor."""
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def __str__(self) -> str:
+        return self._text
+
+    def __len__(self) -> int:
+        return len(self._text)
+
+
+def test_embed_query_coerces_string_like_wrapper() -> None:
+    """embed_query must coerce string-like wrappers to str before the SDK call."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_embed = MagicMock(return_value=_mock_embedding_response([[1.0, 2.0]]))
+        mock_client.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME, google_api_key=SecretStr("test-key")
+        )
+        llm.embed_query(_StringLikeWrapper("hello"))  # type: ignore[arg-type]
+
+        contents = mock_embed.call_args.kwargs["contents"]
+        assert type(contents) is str
+        assert contents == "hello"
+
+
+def test_embed_documents_coerces_string_like_wrappers() -> None:
+    """embed_documents must coerce each element to str before the SDK call."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_embed = MagicMock(return_value=_mock_embedding_response([[1.0], [2.0]]))
+        mock_client.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME, google_api_key=SecretStr("test-key")
+        )
+        llm.embed_documents(
+            [_StringLikeWrapper("foo"), _StringLikeWrapper("bar")]  # type: ignore[list-item]
+        )
+
+        contents = mock_embed.call_args.kwargs["contents"]
+        assert all(type(t) is str for t in contents)
+        assert contents == ["foo", "bar"]
+
+
+@pytest.mark.asyncio
+async def test_aembed_query_coerces_string_like_wrapper() -> None:
+    """aembed_query must coerce string-like wrappers to str before the SDK call."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_embed = AsyncMock(return_value=_mock_embedding_response([[1.0, 2.0]]))
+        mock_client.aio.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME, google_api_key=SecretStr("test-key")
+        )
+        await llm.aembed_query(_StringLikeWrapper("hello"))  # type: ignore[arg-type]
+
+        contents = mock_embed.call_args.kwargs["contents"]
+        assert type(contents) is str
+        assert contents == "hello"
+
+
+@pytest.mark.asyncio
+async def test_aembed_documents_coerces_string_like_wrappers() -> None:
+    """aembed_documents must coerce each element to str before the SDK call."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_embed = AsyncMock(return_value=_mock_embedding_response([[1.0], [2.0]]))
+        mock_client.aio.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME, google_api_key=SecretStr("test-key")
+        )
+        await llm.aembed_documents(
+            [_StringLikeWrapper("foo"), _StringLikeWrapper("bar")]  # type: ignore[list-item]
+        )
+
+        contents = mock_embed.call_args.kwargs["contents"]
+        assert all(type(t) is str for t in contents)
+        assert contents == ["foo", "bar"]
