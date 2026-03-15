@@ -578,9 +578,7 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
                 # Preserve additionalProperties flag so that subsequent schema
                 # processing passes don't lose it and incorrectly downgrade
                 # dict-typed fields to STRING.
-                properties_item["additionalProperties"] = v[
-                    "additionalProperties"
-                ]
+                properties_item["additionalProperties"] = v["additionalProperties"]
             else:
                 # Only provide dummy type for object without properties AND
                 # without additionalProperties
