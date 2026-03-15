@@ -1327,7 +1327,7 @@ def test_nested_dict_field_preserves_object_type() -> None:
     class Plan(BaseModel):
         steps: list[Step] = Field(description="List of steps")
 
-    @tool  # type: ignore[misc]
+    @tool
     def create_plan(plan: Plan) -> str:
         """Create a plan."""
         return "ok"
@@ -1335,9 +1335,11 @@ def test_nested_dict_field_preserves_object_type() -> None:
     fd = _format_base_tool_to_function_declaration(create_plan)
 
     assert fd.parameters is not None
+    assert fd.parameters.properties is not None
     plan_prop = fd.parameters.properties["plan"]
     assert plan_prop.type == Type.OBJECT
 
+    assert plan_prop.properties is not None
     steps_prop = plan_prop.properties["steps"]
     assert steps_prop.type == Type.ARRAY
     assert steps_prop.items is not None
