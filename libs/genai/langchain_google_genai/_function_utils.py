@@ -574,9 +574,14 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
                     properties_item["required"] = [
                         k for k, v in v_properties.items() if "default" not in v
                     ]
-            elif not v.get("additionalProperties"):
-                # Only provide dummy type for object without properties AND without
-                # additionalProperties
+            elif v.get("additionalProperties"):
+                # Preserve additionalProperties flag so that subsequent schema
+                # processing passes don't lose it and incorrectly downgrade
+                # dict-typed fields to STRING.
+                properties_item["additionalProperties"] = v["additionalProperties"]
+            else:
+                # Only provide dummy type for object without properties AND
+                # without additionalProperties
                 properties_item["type"] = types.Type.STRING
 
         if k == "title" and "description" not in properties_item:

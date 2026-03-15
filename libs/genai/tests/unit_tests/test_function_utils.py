@@ -1316,6 +1316,46 @@ def test_optional_dict_schema_validation() -> None:
     )
 
 
+def test_nested_dict_field_preserves_object_type() -> None:
+    """Test that nested dict fields retain OBJECT type instead of being
+    downgraded to STRING. Regression test for issue #1622."""
+
+    class Step(BaseModel):
+        name: str = Field(description="Step name")
+        config: dict = Field(default={}, description="Arbitrary config dict")
+
+    class Plan(BaseModel):
+        steps: list[Step] = Field(description="List of steps")
+
+    @tool
+    def create_plan(plan: Plan) -> str:
+        """Create a plan."""
+        return "ok"
+
+    fd = _format_base_tool_to_function_declaration(create_plan)
+
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    plan_prop = fd.parameters.properties["plan"]
+    assert plan_prop.type == Type.OBJECT
+
+    assert plan_prop.properties is not None
+    steps_prop = plan_prop.properties["steps"]
+    assert steps_prop.type == Type.ARRAY
+    assert steps_prop.items is not None
+
+    step_items = steps_prop.items
+    assert step_items.type == Type.OBJECT
+    assert step_items.properties is not None
+
+    config_prop = step_items.properties["config"]
+    assert config_prop.type == Type.OBJECT, (
+        f"Nested dict field should have OBJECT type, got {config_prop.type}. "
+        "See https://github.com/langchain-ai/langchain-google/issues/1622"
+    )
+    assert config_prop.description == "Arbitrary config dict"
+
+
 def test_tool_field_enum_array() -> None:
     class ToolInfo(BaseModel):
         kind: list[Literal["foo", "bar"]]
