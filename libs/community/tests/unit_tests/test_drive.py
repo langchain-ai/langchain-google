@@ -52,7 +52,7 @@ def _make_mock_service(mime_type: str, file_id: str) -> MagicMock:
 
 
 def test_load_documents_from_ids_dispatches_sheets() -> None:
-    """Spreadsheet IDs must be routed to _load_sheet_from_id, not _load_document_from_id."""
+    """Spreadsheet IDs must be routed to _load_sheet_from_id."""
     sheet_doc = Document(page_content="row1", metadata={})
     loader = GoogleDriveLoader(document_ids=["sheet_id_123"])
     with (
@@ -76,7 +76,7 @@ def test_load_documents_from_ids_dispatches_sheets() -> None:
 
 
 def test_load_documents_from_ids_dispatches_docs() -> None:
-    """Google Doc IDs must be routed to _load_document_from_id, not _load_sheet_from_id."""
+    """Google Doc IDs must be routed to _load_document_from_id."""
     doc = Document(page_content="hello", metadata={})
     loader = GoogleDriveLoader(document_ids=["doc_id_456"])
     with (
@@ -88,9 +88,7 @@ def test_load_documents_from_ids_dispatches_docs() -> None:
             ),
         ),
         patch.object(loader, "_load_sheet_from_id") as mock_sheet,
-        patch.object(
-            loader, "_load_document_from_id", return_value=doc
-        ) as mock_doc,
+        patch.object(loader, "_load_document_from_id", return_value=doc) as mock_doc,
     ):
         result = loader._load_documents_from_ids()
 
@@ -111,9 +109,7 @@ def test_load_documents_from_ids_dispatches_pdfs() -> None:
         ),
         patch.object(loader, "_load_sheet_from_id") as mock_sheet,
         patch.object(loader, "_load_document_from_id") as mock_doc,
-        patch.object(
-            loader, "_load_file_from_id", return_value=[pdf_doc]
-        ) as mock_file,
+        patch.object(loader, "_load_file_from_id", return_value=[pdf_doc]) as mock_file,
     ):
         result = loader._load_documents_from_ids()
 
