@@ -54,6 +54,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
@@ -130,16 +131,36 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+class GoogleContextOverflowError(ClientError, ContextOverflowError):
+    """ClientError raised when input exceeds Google's context limit."""
+
+
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
-    """Convert `ClientError` to `ChatGoogleGenerativeAIError` with descriptive message.
+    """Convert `ClientError` to a more specific exception when possible.
+
+    Raises `GoogleContextOverflowError` (a `ContextOverflowError` subclass)
+    when the error indicates that the input exceeded the model's token limit,
+    so that upstream middleware (e.g. `SummarizationMiddleware`) can catch it
+    and fall back to context compaction.
 
     Args:
         e: The `ClientError` exception to handle.
         request: The request dict containing model info.
 
     Raises:
-        ChatGoogleGenerativeAIError: Always raised with formatted error message.
+        GoogleContextOverflowError: When the error indicates a context overflow.
+        ChatGoogleGenerativeAIError: For all other client errors.
     """
+    error_str = str(e)
+    if (
+        "exceeds the maximum number of tokens allowed" in error_str
+        or "token limit" in error_str.lower()
+    ):
+        raise GoogleContextOverflowError(
+            code=e.code,
+            response_json=e.details,
+            response=e.response,
+        ) from e
     model_name = request.get("model", "unknown")
     msg = f"Error calling model '{model_name}' ({e.status}): {e}"
     raise ChatGoogleGenerativeAIError(msg) from e
