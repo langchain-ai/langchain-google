@@ -2445,25 +2445,30 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # Attempt to close the async client
             # Note: The SDK's close() doesn't close the async client automatically
             if hasattr(self.client, "aio") and self.client.aio is not None:
+                # Check if there's a usable event loop on this thread
+                # Note: get_event_loop() instead of get_running_loop()
+                # so we also find loops that exist but aren't running
                 try:
-                    # Check if there's an event loop on this thread
-                    # Note: get_event_loop() instead of get_running_loop()
-                    # so we also find loops that exist but aren't running
                     loop = asyncio.get_event_loop()
-                    if not loop.is_closed():
-                        if loop.is_running():
-                            # Schedule the close as a background task
-                            task = loop.create_task(self.client.aio.aclose())
-                            task.add_done_callback(
-                                lambda t: t.exception()
-                                if not t.cancelled()
-                                else None
-                            )
-                        else:
-                            # Loop is idle - run cleanup synchronously
-                            loop.run_until_complete(self.client.aio.aclose())
                 except RuntimeError:
-                    # No event loop at all - create a throwaway one
+                    loop = None
+
+                if loop is not None and not loop.is_closed() and loop.is_running():
+                    # Schedule the close as a background task
+                    task = loop.create_task(self.client.aio.aclose())
+                    task.add_done_callback(
+                        lambda t: t.exception()
+                        if not t.cancelled()
+                        else None
+                    )
+                elif loop is not None and not loop.is_closed():
+                    # Loop is idle - run cleanup synchronously
+                    try:
+                        loop.run_until_complete(self.client.aio.aclose())
+                    except Exception:
+                        pass
+                else:
+                    # No usable loop - create a throwaway one
                     try:
                         loop = asyncio.new_event_loop()
                         try:
