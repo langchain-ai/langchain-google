@@ -2457,9 +2457,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     # Schedule the close as a background task
                     task = loop.create_task(self.client.aio.aclose())
                     task.add_done_callback(
-                        lambda t: t.exception()
-                        if not t.cancelled()
-                        else None
+                        lambda t: t.exception() if not t.cancelled() else None
                     )
                 elif loop is not None and not loop.is_closed():
                     # Loop is idle - run cleanup synchronously
