@@ -26,7 +26,7 @@
 #   • release    — prepare a new release
 #
 # Allowed Scope(s) (optional):
-#   genai, vertexai, community, infra
+#   genai, vertexai, community, infra, model-profiles
 #
 # Multiple scopes can be used by separating them with a comma.
 #
@@ -85,6 +85,7 @@ jobs:
             vertexai
             community
             infra
+            model-profiles
           requireScope: false
           disallowScopes: |
             release
