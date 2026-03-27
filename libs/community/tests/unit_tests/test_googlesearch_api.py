@@ -23,7 +23,10 @@ def test_no_result_call() -> None:
 def test_results_includes_image_and_thumbnail() -> None:
     """Test that results extracts image and thumbnail from pagemap."""
     with patch("googleapiclient.discovery.build") as search_engine:
-        search_engine.return_value.cse.return_value.list.return_value.execute.return_value = {
+        mock_execute = search_engine.return_value.cse
+        mock_execute = mock_execute.return_value.list
+        mock_execute = mock_execute.return_value.execute
+        mock_execute.return_value = {
             "items": [
                 {
                     "title": "Test Title",
