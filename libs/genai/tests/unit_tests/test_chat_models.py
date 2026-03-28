@@ -4730,6 +4730,61 @@ def test_finish_reason_as_integer() -> None:
     assert result.generations[0].generation_info["finish_reason"] == "UNKNOWN_15"  # type: ignore[index]
 
 
+def test_response_to_result_tool_use_prompt_tokens() -> None:
+    """Test that tool_use_prompt_token_count is included in input_tokens."""
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[Part(text="Here is the answer.")],
+                ),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=25,
+            tool_use_prompt_token_count=10,
+        ),
+    )
+
+    result = _response_to_result(response, stream=False)
+    usage = result.generations[0].message.usage_metadata
+    assert usage is not None
+    assert usage["input_tokens"] == 20  # 10 prompt + 10 tool use
+    assert usage["output_tokens"] == 5
+    assert usage["total_tokens"] == 25
+    assert usage["input_token_details"]["tool_use"] == 10
+
+
+def test_response_to_result_no_tool_use_prompt_tokens() -> None:
+    """Test that input_tokens is correct when tool_use_prompt_token_count is absent."""
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[Part(text="Hello.")],
+                ),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
+    )
+
+    result = _response_to_result(response, stream=False)
+    usage = result.generations[0].message.usage_metadata
+    assert usage is not None
+    assert usage["input_tokens"] == 10
+    assert usage["output_tokens"] == 5
+    assert usage["total_tokens"] == 15
+    assert "tool_use" not in usage["input_token_details"]
+
+
 def test_image_config_in_init() -> None:
     """Test that `image_config` is properly initialized."""
     llm = ChatGoogleGenerativeAI(
