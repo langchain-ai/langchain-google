@@ -4750,12 +4750,13 @@ def test_response_to_result_tool_use_prompt_tokens() -> None:
     )
 
     result = _response_to_result(response, stream=False)
-    usage = result.generations[0].message.usage_metadata
-    assert usage is not None
-    assert usage["input_tokens"] == 20  # 10 prompt + 10 tool use
-    assert usage["output_tokens"] == 5
-    assert usage["total_tokens"] == 25
-    assert usage["input_token_details"]["tool_use"] == 10
+    msg = result.generations[0].message
+    assert isinstance(msg, AIMessage)
+    assert msg.usage_metadata is not None
+    assert msg.usage_metadata["input_tokens"] == 20  # 10 prompt + 10 tool use
+    assert msg.usage_metadata["output_tokens"] == 5
+    assert msg.usage_metadata["total_tokens"] == 25
+    assert msg.usage_metadata["input_token_details"]["tool_use"] == 10  # type: ignore[typeddict-item]
 
 
 def test_response_to_result_no_tool_use_prompt_tokens() -> None:
@@ -4777,12 +4778,13 @@ def test_response_to_result_no_tool_use_prompt_tokens() -> None:
     )
 
     result = _response_to_result(response, stream=False)
-    usage = result.generations[0].message.usage_metadata
-    assert usage is not None
-    assert usage["input_tokens"] == 10
-    assert usage["output_tokens"] == 5
-    assert usage["total_tokens"] == 15
-    assert "tool_use" not in usage["input_token_details"]
+    msg = result.generations[0].message
+    assert isinstance(msg, AIMessage)
+    assert msg.usage_metadata is not None
+    assert msg.usage_metadata["input_tokens"] == 10
+    assert msg.usage_metadata["output_tokens"] == 5
+    assert msg.usage_metadata["total_tokens"] == 15
+    assert "tool_use" not in msg.usage_metadata["input_token_details"]
 
 
 def test_image_config_in_init() -> None:
