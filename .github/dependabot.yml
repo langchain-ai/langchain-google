@@ -4,31 +4,67 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
-      actions:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/genai"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
-      genai:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/vertexai"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
-      vertexai:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/community"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
-      community:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
