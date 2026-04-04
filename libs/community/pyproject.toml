@@ -34,7 +34,7 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
 bigquery = [
-    "google-cloud-bigquery-storage>=2.25.0,<3.0.0",
+    "google-cloud-bigquery-storage<3.0.0,>=2.6.0",
     "google-cloud-bigquery>=3.21.0,<4.0.0",
     "google-cloud-core>=2.4.3,<3.0.0",
     "google-auth>=2.36.0,<3.0.0",
