@@ -130,7 +130,7 @@ def _dict_to_genai_schema(
     is_property: bool = False,
     is_any_of_item: bool = False,
 ) -> types.Schema | None:
-    if schema:
+    if schema is not None:
         dereferenced_schema = dereference_refs(schema)
         formatted_schema = _format_json_schema_to_gapic(dereferenced_schema)
         # Convert the formatted schema to google.genai.types.Schema
@@ -188,6 +188,14 @@ def _dict_to_genai_schema(
                 if any_of_schema:
                     any_of_schemas.append(any_of_schema)
             schema_dict["any_of"] = any_of_schemas  # type: ignore[assignment]
+        # Default to STRING when no type information is available for a
+        # nested schema (e.g., "items": {} meaning "any type" in JSON Schema).
+        # Top-level schemas without type info remain None (no parameters).
+        if "type" not in schema_dict and "any_of" not in schema_dict:
+            if is_property:
+                schema_dict["type"] = types.Type.STRING
+            else:
+                return None
         return types.Schema.model_validate(schema_dict)
     return None
 
@@ -555,7 +563,10 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
         if description and isinstance(description, str):
             properties_item["description"] = description
 
-        if properties_item.get("type") == types.Type.ARRAY and v.get("items"):
+        if (
+            properties_item.get("type") == types.Type.ARRAY
+            and v.get("items") is not None
+        ):
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
 
         if properties_item.get("type") == types.Type.OBJECT:
