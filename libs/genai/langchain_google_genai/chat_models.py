@@ -385,13 +385,24 @@ def _convert_to_parts(
                     if sig and isinstance(sig, str):
                         # Decode base64-encoded signature back to bytes
                         thought_sig = base64.b64decode(sig)
-                    parts.append(
-                        Part(
-                            text=part["reasoning"],
-                            thought=True,
-                            thought_signature=thought_sig,
+                    # Handle both Gemini format ("reasoning" key) and
+                    # OpenAI format ("summary" key with list of summary items)
+                    reasoning_text = part.get("reasoning")
+                    if reasoning_text is None and "summary" in part:
+                        summary_parts = part.get("summary", [])
+                        reasoning_text = "\n".join(
+                            item.get("text", "")
+                            for item in summary_parts
+                            if isinstance(item, dict)
                         )
-                    )
+                    if reasoning_text:
+                        parts.append(
+                            Part(
+                                text=reasoning_text,
+                                thought=True,
+                                thought_signature=thought_sig,
+                            )
+                        )
                 elif part["type"] == "server_tool_call":
                     if part.get("name") == "code_interpreter":
                         args = part.get("args", {})
@@ -684,13 +695,28 @@ def _parse_chat_history(
                                 thought_sig = None
                                 if sig and isinstance(sig, str):
                                     thought_sig = base64.b64decode(sig)
-                                ai_message_parts.append(
-                                    Part(
-                                        text=content_block["reasoning"],
-                                        thought=True,
-                                        thought_signature=thought_sig,
+                                # Handle both Gemini format ("reasoning" key)
+                                # and OpenAI format ("summary" key with list
+                                # of summary items)
+                                reasoning_text = content_block.get("reasoning")
+                                if (
+                                    reasoning_text is None
+                                    and "summary" in content_block
+                                ):
+                                    summary_parts = content_block.get("summary", [])
+                                    reasoning_text = "\n".join(
+                                        item.get("text", "")
+                                        for item in summary_parts
+                                        if isinstance(item, dict)
                                     )
-                                )
+                                if reasoning_text:
+                                    ai_message_parts.append(
+                                        Part(
+                                            text=reasoning_text,
+                                            thought=True,
+                                            thought_signature=thought_sig,
+                                        )
+                                    )
 
                 # Then, add function call parts
                 function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
