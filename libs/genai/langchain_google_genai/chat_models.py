@@ -2984,6 +2984,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
 
+        # When cached_content is set, omit tools/tool_config/system_instruction from
+        # the request; they are already stored in the cache (issue GH-1618).
+        if cached_content:
+            formatted_tools = None
+            formatted_tool_config = None
+            system_instruction = None
+
         retry_options = None
         if max_retries is not None:
             retry_options = HttpRetryOptions(attempts=max_retries)
