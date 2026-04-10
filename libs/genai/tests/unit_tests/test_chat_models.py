@@ -1320,6 +1320,64 @@ def test_timeout_streaming_parameter_handling(
 
 
 @pytest.mark.parametrize(
+    "instance_timeout,call_timeout,expected_timeout",
+    [
+        (5.0, None, 5.0),
+        (5.0, 1.5, 1.5),
+        (None, None, None),
+    ],
+)
+def test_prepare_request_passes_timeout_to_media_loader(
+    instance_timeout: float | None,
+    call_timeout: float | None,
+    expected_timeout: float | None,
+) -> None:
+    """Test that request timeout is propagated to remote media fetches."""
+    llm_kwargs: dict[str, Any] = {
+        "model": MODEL_NAME,
+        "google_api_key": SecretStr(FAKE_API_KEY),
+    }
+    if instance_timeout is not None:
+        llm_kwargs["timeout"] = instance_timeout
+
+    llm = ChatGoogleGenerativeAI(**llm_kwargs)
+    messages: list[BaseMessage] = [
+        HumanMessage(
+            content=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.png"},
+                }
+            ]
+        )
+    ]
+    mock_loader_instance = Mock()
+    mock_loader_instance.load_part.return_value = Part(
+        inline_data=Blob(data=b"fake-image-data", mime_type="image/png")
+    )
+
+    call_kwargs: dict[str, Any] = {}
+    if call_timeout is not None:
+        call_kwargs["timeout"] = call_timeout
+
+    with patch("langchain_google_genai.chat_models.ImageBytesLoader") as mock_loader:
+        mock_loader.return_value = mock_loader_instance
+        request = llm._prepare_request(messages, **call_kwargs)
+
+    mock_loader.assert_called_once_with(timeout=expected_timeout)
+    mock_loader_instance.load_part.assert_called_once_with(
+        "https://example.com/image.png"
+    )
+
+    config = request["config"]
+    if expected_timeout is not None:
+        assert config.http_options is not None
+        assert config.http_options.timeout == int(expected_timeout * 1000)
+    else:
+        assert config.http_options is None or config.http_options.timeout is None
+
+
+@pytest.mark.parametrize(
     "instance_max_retries,call_max_retries,expected_max_retries,should_have_max_retries",
     [
         (1, None, 1, True),  # Instance-level max_retries
@@ -3197,6 +3255,38 @@ def test_convert_tool_message_to_parts_list_content_with_media() -> None:
     # Second part should be the function response
     assert result[1].function_response is not None
     assert result[1].function_response.name == "test_tool"
+    assert result[1].function_response.response == {"output": ["Text response"]}
+
+
+def test_convert_tool_message_to_parts_list_content_with_media_timeout() -> None:
+    """Test `_convert_tool_message_to_parts` passes timeouts to media loading."""
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            "Text response",
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://example.com/image.png"},
+            },
+        ],
+        tool_call_id="123",
+    )
+    mock_loader_instance = Mock()
+    mock_loader_instance.load_part.return_value = Part(
+        inline_data=Blob(data=b"fake_image_data", mime_type="image/png")
+    )
+
+    with patch("langchain_google_genai.chat_models.ImageBytesLoader") as mock_loader:
+        mock_loader.return_value = mock_loader_instance
+        result = _convert_tool_message_to_parts(message, media_fetch_timeout=3.0)
+
+    mock_loader.assert_called_once_with(timeout=3.0)
+    mock_loader_instance.load_part.assert_called_once_with(
+        "https://example.com/image.png"
+    )
+    assert len(result) == 2
+    assert result[0].inline_data is not None
+    assert result[1].function_response is not None
     assert result[1].function_response.response == {"output": ["Text response"]}
 
 

@@ -1,5 +1,7 @@
 """Tests for the _image_utils module."""
 
+from unittest.mock import Mock, patch
+
 import pytest
 
 from langchain_google_genai._image_utils import ImageBytesLoader, Route
@@ -82,3 +84,30 @@ class TestImageBytesLoader:
         assert part.inline_data is not None
         assert part.inline_data.mime_type == "image/png"
         assert part.file_data is None
+
+    def test_bytes_from_url_uses_configured_timeout(self) -> None:
+        """Test that HTTP media fetches honor the loader timeout."""
+        loader = ImageBytesLoader(timeout=5.0)
+        response = Mock(ok=True, content=b"image-bytes")
+
+        with patch(
+            "langchain_google_genai._image_utils.requests.get",
+            return_value=response,
+        ) as mock_get:
+            result = loader._bytes_from_url("https://example.com/image.png")
+
+        assert result == b"image-bytes"
+        mock_get.assert_called_once_with("https://example.com/image.png", timeout=5.0)
+
+    def test_bytes_from_url_without_timeout_uses_requests_default(self) -> None:
+        """Test that HTTP media fetches preserve the requests default timeout."""
+        response = Mock(ok=True, content=b"image-bytes")
+
+        with patch(
+            "langchain_google_genai._image_utils.requests.get",
+            return_value=response,
+        ) as mock_get:
+            result = self.loader._bytes_from_url("https://example.com/image.png")
+
+        assert result == b"image-bytes"
+        mock_get.assert_called_once_with("https://example.com/image.png")
