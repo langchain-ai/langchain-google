@@ -184,12 +184,12 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
-            elif url := block_dict.get("url") and model_provider == "google_genai":
+            elif (url := block_dict.get("url")) and model_provider == "google_genai":
                 # Google file service
                 new_block = {
                     "file_data": {
                         "mime_type": block_dict.get("mime_type", "image/jpeg"),
-                        "file_uri": block_dict[str(url)],
+                        "file_uri": url,
                     }
                 }
                 new_content.append(new_block)
@@ -221,14 +221,14 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
-            elif url := block_dict.get("url") and model_provider == "google_genai":
+            elif (url := block_dict.get("url")) and model_provider == "google_genai":
                 # Google file service
                 new_block = {
                     "file_data": {
                         "mime_type": block_dict.get(
                             "mime_type", "application/octet-stream"
                         ),
-                        "file_uri": block_dict[str(url)],
+                        "file_uri": url,
                     }
                 }
                 new_content.append(new_block)
