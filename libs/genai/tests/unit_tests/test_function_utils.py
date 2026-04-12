@@ -1462,3 +1462,164 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+def test_tool_with_literal_single_value_param() -> None:
+    """Test that a Pydantic `Literal` with a single value (which generates `const`
+    in JSON Schema) is correctly converted to an `enum` with one element.
+
+    This is the most common real-world case: Pydantic's `Literal['value']` produces
+    `{"const": "value"}` in the JSON schema, which the Gemini API doesn't support
+    directly but can handle as `{"enum": ["value"]}`.
+    """
+
+    @tool(parse_docstring=True)
+    def greet(
+        action: Literal["greet"],
+        name: str,
+    ) -> str:
+        """A greeting tool.
+
+        Args:
+            action: The action type.
+            name: Name of the person.
+        """
+        return f"Hello {name}"
+
+    oai_tool: dict[str, Any] = convert_to_openai_tool(greet)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list)
+    fn_decl = function_declarations[0]
+    properties = fn_decl["parameters"]["properties"]
+
+    action_prop = properties["action"]
+    assert action_prop.get("enum") == ["greet"], (
+        "Literal['greet'] (const) should be converted to enum with single value."
+    )
+    assert_property_type(action_prop, Type.STRING, "action")
+
+
+def test_tool_with_pydantic_literal_const() -> None:
+    """Test that a Pydantic model with `Literal` fields correctly converts `const`
+    to `enum` when used as a tool's args_schema."""
+
+    class GreetArgs(BaseModel):
+        action: Literal["greet"]
+        name: str
+
+    fd = _convert_pydantic_to_genai_function(
+        GreetArgs, tool_name="greet", tool_description="A greeting tool"
+    )
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    action_prop = fd.parameters.properties["action"]
+    assert action_prop.enum == ["greet"]
+    assert action_prop.type == Type.STRING
+
+
+def test_const_in_anyof_discriminated_union() -> None:
+    """Test that `const` is converted to `enum` inside `anyOf` branches.
+
+    This mirrors the pattern used in discriminated unions where each branch
+    has a `const` discriminator field.
+    """
+    from langchain_google_genai._function_utils import _dict_to_genai_schema
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "response": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {"const": "text", "type": "string"},
+                            "content": {"type": "string"},
+                        },
+                        "required": ["type", "content"],
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {"const": "number", "type": "string"},
+                            "value": {"type": "number"},
+                        },
+                        "required": ["type", "value"],
+                    },
+                ]
+            }
+        },
+        "required": ["response"],
+    }
+
+    result = _dict_to_genai_schema(schema)
+    assert result is not None
+    assert result.properties is not None
+    response_prop = result.properties["response"]
+    assert response_prop.any_of is not None
+    assert len(response_prop.any_of) == 2
+
+    first_branch = response_prop.any_of[0]
+    assert first_branch.properties is not None
+    assert first_branch.properties["type"].enum == ["text"]
+
+    second_branch = response_prop.any_of[1]
+    assert second_branch.properties is not None
+    assert second_branch.properties["type"].enum == ["number"]
+
+
+def test_const_with_non_string_values() -> None:
+    """Test that `const` works with non-string values (int, bool)."""
+    from langchain_google_genai._function_utils import _format_json_schema_to_gapic
+
+    schema_int = {"const": 42, "type": "integer"}
+    result = _format_json_schema_to_gapic(schema_int)
+    assert result["enum"] == [42]
+
+    schema_bool = {"const": True, "type": "boolean"}
+    result = _format_json_schema_to_gapic(schema_bool)
+    assert result["enum"] == [True]
+
+
+def test_const_does_not_override_existing_enum() -> None:
+    """Test that if both `const` and `enum` are present, the existing `enum` is
+    preserved (enum takes precedence since it's already the target format)."""
+    from langchain_google_genai._function_utils import _format_json_schema_to_gapic
+
+    schema = {"const": "a", "enum": ["a", "b"], "type": "string"}
+    result = _format_json_schema_to_gapic(schema)
+    assert result["enum"] == ["a", "b"]
+
+
+def test_const_in_raw_dict_schema() -> None:
+    """Test `const` conversion when passing a raw dict schema (not from Pydantic)
+    through the full conversion pipeline."""
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "action": {"const": "greet", "type": "string"},
+            "message": {"type": "string"},
+        },
+        "required": ["action", "message"],
+    }
+
+    result = convert_to_genai_function_declarations(
+        [
+            {
+                "name": "test_tool",
+                "description": "A test tool",
+                "parameters": schema,
+            }
+        ]
+    )
+    assert len(result) == 1
+    assert result[0].function_declarations is not None
+    fd = result[0].function_declarations[0]
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    action_prop = fd.parameters.properties["action"]
+    assert action_prop.enum == ["greet"]
