@@ -220,6 +220,20 @@ def _format_message_anthropic(
                     )
                     continue
 
+                if block["type"] == "reasoning":
+                    # LC_OUTPUT_VERSION=v1 standardizes thinking blocks as
+                    # "reasoning" type. Convert back to Anthropic-native
+                    # "thinking" format before sending to the API.
+                    thinking_block: dict[str, Any] = {"type": "thinking"}
+                    if "reasoning" in block:
+                        thinking_block["thinking"] = block["reasoning"]
+                    if signature := block.get("extras", {}).get("signature"):
+                        thinking_block["signature"] = signature
+                    if "cache_control" in block:
+                        thinking_block["cache_control"] = block["cache_control"]
+                    content.append(thinking_block)
+                    continue
+
                 if block["type"] == "image_url":
                     # convert format
                     source = _format_image(block["image_url"]["url"], project)
