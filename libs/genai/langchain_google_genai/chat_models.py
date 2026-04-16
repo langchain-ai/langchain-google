@@ -2466,29 +2466,34 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # Attempt to close the async client
             # Note: The SDK's close() doesn't close the async client automatically
             if hasattr(self.client, "aio") and self.client.aio is not None:
+                # Check if there's a usable event loop on this thread
+                # Note: get_event_loop() instead of get_running_loop()
+                # so we also find loops that exist but aren't running
                 try:
-                    # Check if there's a running event loop
-                    loop = asyncio.get_running_loop()
-                    if not loop.is_closed():
-                        # Schedule the close
-                        # Wrap in ensure_future to avoid "coroutine never awaited"
-                        task = asyncio.ensure_future(
-                            self.client.aio.aclose(), loop=loop
-                        )
-                        # Add a done callback to suppress any exceptions
-                        task.add_done_callback(
-                            lambda t: t.exception() if not t.cancelled() else None
-                        )
+                    loop = asyncio.get_event_loop()
                 except RuntimeError:
-                    # No running loop - create a new one for cleanup
+                    loop = None
+
+                if loop is not None and not loop.is_closed() and loop.is_running():
+                    # Schedule the close as a background task
+                    task = loop.create_task(self.client.aio.aclose())
+                    task.add_done_callback(
+                        lambda t: t.exception() if not t.cancelled() else None
+                    )
+                elif loop is not None and not loop.is_closed():
+                    # Loop is idle - run cleanup synchronously
+                    try:
+                        loop.run_until_complete(self.client.aio.aclose())
+                    except Exception:
+                        pass
+                else:
+                    # No usable loop - create a throwaway one
                     try:
                         loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
                         try:
                             loop.run_until_complete(self.client.aio.aclose())
                         finally:
                             loop.close()
-                            asyncio.set_event_loop(None)
                     except Exception:
                         # Suppress errors during shutdown
                         pass
