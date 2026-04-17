@@ -676,12 +676,18 @@ def _parse_chat_history(
             if message.tool_calls:
                 ai_message_parts = []
 
+                # Preserve non-empty textual content even when tool calls are present.
+                if isinstance(message.content, str) and message.content:
+                    ai_message_parts.append(Part(text=message.content))
+
                 # First, include thinking blocks from content if present.
                 # When include_thoughts=True, thinking blocks need to be preserved
                 # when passing messages back to the API.
                 if isinstance(message.content, list):
                     for content_block in message.content:
-                        if isinstance(content_block, dict):
+                        if isinstance(content_block, str) and content_block:
+                            ai_message_parts.append(Part(text=content_block))
+                        elif isinstance(content_block, dict):
                             block_type = content_block.get("type")
                             if block_type == "thinking":
                                 # v0 output_format thinking block
@@ -711,6 +717,12 @@ def _parse_chat_history(
                                         thought=True,
                                         thought_signature=thought_sig,
                                     )
+                                )
+                            elif block_type == "text" and isinstance(
+                                content_block.get("text"), str
+                            ):
+                                ai_message_parts.append(
+                                    Part(text=content_block["text"])
                                 )
 
                 # Then, add function call parts
