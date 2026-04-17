@@ -206,6 +206,7 @@ def _is_gemini_25_model(model_name: str) -> bool:
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
     model: str | None = None,
+    media_fetch_timeout: float | None = None,
 ) -> list[Part]:
     """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
@@ -215,7 +216,7 @@ def _convert_to_parts(
     objects.
     """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
-    image_loader = ImageBytesLoader()
+    image_loader = ImageBytesLoader(timeout=media_fetch_timeout)
 
     parts = []
     # Iterate over each item in the content list, constructing a list of Parts
@@ -510,6 +511,7 @@ def _convert_tool_message_to_parts(
     message: ToolMessage | FunctionMessage,
     name: str | None = None,
     model: str | None = None,
+    media_fetch_timeout: float | None = None,
 ) -> list[Part]:
     """Converts a tool or function message to a Google `Part`."""
     # Legacy agent stores tool name in message.additional_kwargs instead of message.name
@@ -526,7 +528,13 @@ def _convert_tool_message_to_parts(
                 media_blocks.append(block)
             else:
                 other_blocks.append(block)
-        parts.extend(_convert_to_parts(media_blocks, model=model))
+        parts.extend(
+            _convert_to_parts(
+                media_blocks,
+                model=model,
+                media_fetch_timeout=media_fetch_timeout,
+            )
+        )
         response = other_blocks
 
     elif not isinstance(message.content, str):
@@ -552,6 +560,7 @@ def _get_ai_message_tool_messages_parts(
     tool_messages: Sequence[ToolMessage],
     ai_message: AIMessage,
     model: str | None = None,
+    media_fetch_timeout: float | None = None,
 ) -> list[Part]:
     """Conversion.
 
@@ -567,7 +576,10 @@ def _get_ai_message_tool_messages_parts(
         if message.tool_call_id in tool_calls_ids:
             tool_call = tool_calls_ids[message.tool_call_id]
             message_parts = _convert_tool_message_to_parts(
-                message, name=tool_call.get("name"), model=model
+                message,
+                name=tool_call.get("name"),
+                model=model,
+                media_fetch_timeout=media_fetch_timeout,
             )
             parts.extend(message_parts)
             # remove the id from the dict, so that we do not iterate over it again
@@ -603,6 +615,7 @@ def _parse_chat_history(
     input_messages: Sequence[BaseMessage],
     convert_system_message_to_human: bool = False,
     model: str | None = None,
+    media_fetch_timeout: float | None = None,
 ) -> tuple[Content | None, list[Content]]:
     """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
@@ -660,7 +673,11 @@ def _parse_chat_history(
     ]
     for i, message in enumerate(messages_without_tool_messages):
         if isinstance(message, SystemMessage):
-            system_parts = _convert_to_parts(message.content, model=model)
+            system_parts = _convert_to_parts(
+                message.content,
+                model=model,
+                media_fetch_timeout=media_fetch_timeout,
+            )
             if i == 0:
                 system_instruction = Content(parts=system_parts)
             elif system_instruction is not None:
@@ -734,7 +751,10 @@ def _parse_chat_history(
                     else:
                         ai_message_parts.append(Part(function_call=function_call))
                 tool_messages_parts = _get_ai_message_tool_messages_parts(
-                    tool_messages=tool_messages, ai_message=message, model=model
+                    tool_messages=tool_messages,
+                    ai_message=message,
+                    model=model,
+                    media_fetch_timeout=media_fetch_timeout,
                 )
                 formatted_messages.append(Content(role=role, parts=ai_message_parts))
                 # Only append tool response message if there are actual tool responses.
@@ -758,16 +778,28 @@ def _parse_chat_history(
                 parts = message.content  # type: ignore[assignment]
             else:
                 # Prepare request content parts from message.content field
-                parts = _convert_to_parts(message.content, model=model)
+                parts = _convert_to_parts(
+                    message.content,
+                    model=model,
+                    media_fetch_timeout=media_fetch_timeout,
+                )
         elif isinstance(message, HumanMessage):
             role = "user"
-            parts = _convert_to_parts(message.content, model=model)
+            parts = _convert_to_parts(
+                message.content,
+                model=model,
+                media_fetch_timeout=media_fetch_timeout,
+            )
             if i == 1 and convert_system_message_to_human and system_instruction:
                 parts = list(system_instruction.parts or []) + parts
                 system_instruction = None
         elif isinstance(message, FunctionMessage):
             role = "user"
-            parts = _convert_tool_message_to_parts(message, model=model)
+            parts = _convert_tool_message_to_parts(
+                message,
+                model=model,
+                media_fetch_timeout=media_fetch_timeout,
+            )
         else:
             msg = f"Unexpected message with type {type(message)} at the position {i}."
             raise ValueError(msg)
@@ -2762,6 +2794,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Prepare the request configuration for the API call."""
+        timeout_seconds = kwargs.pop("timeout", None)
+        if timeout_seconds is None:
+            timeout_seconds = self.timeout
+
         # Process tools and functions
         formatted_tools = self._format_tools(tools, functions)
 
@@ -2773,6 +2809,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             filtered_messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
             model=self.model,
+            media_fetch_timeout=timeout_seconds,
         )
 
         # Process tool configuration
@@ -2785,11 +2822,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             safety_settings if safety_settings is not None else self.safety_settings
         )
 
-        timeout = kwargs.pop("timeout", None)
-        if timeout is not None:
-            timeout = int(timeout * 1000)
-        elif self.timeout is not None:
-            timeout = int(self.timeout * 1000)
+        timeout = None
+        if timeout_seconds is not None:
+            timeout = int(timeout_seconds * 1000)
 
         max_retries = kwargs.pop("max_retries", None)
         if max_retries is None:

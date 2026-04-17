@@ -50,6 +50,14 @@ class ImageBytesLoader:
         references
     """
 
+    def __init__(self, timeout: float | None = None) -> None:
+        """Initialize the loader.
+
+        Args:
+            timeout: Timeout in seconds for HTTP/HTTPS media fetches.
+        """
+        self.timeout = timeout
+
     def load_bytes(self, image_string: str) -> bytes:
         """Routes to the correct loader based on the `'image_string'`.
 
@@ -213,7 +221,10 @@ class ImageBytesLoader:
         Returns:
             Media bytes (images, PDFs, audio, video, etc.).
         """
-        response = requests.get(url)
+        if self.timeout is None:
+            response = requests.get(url)
+        else:
+            response = requests.get(url, timeout=self.timeout)
 
         if not response.ok:
             response.raise_for_status()
