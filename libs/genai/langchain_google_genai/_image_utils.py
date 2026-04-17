@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import mimetypes
 import os
@@ -49,6 +50,45 @@ class ImageBytesLoader:
     - Google Cloud Storage URIs (gs://) passed directly to the API as file
         references
     """
+
+    async def aload_part(self, image_string: str) -> Part:
+        """Async version of load_part."""
+        route = self._route(image_string)
+
+        if route == Route.GCS_URI:
+            mime_type, _ = mimetypes.guess_type(image_string)
+            return Part(file_data=FileData(file_uri=image_string, mime_type=mime_type))
+
+        if route == Route.BASE64:
+            bytes_ = self._bytes_from_b64(image_string)
+
+        if route == Route.URL:
+            # THIS IS THE KEY FIX: Use the async loader
+            bytes_ = await self._abytes_from_url(image_string)
+
+        if route == Route.LOCAL_FILE:
+            msg = (
+                "Loading from local files is no longer supported for security reasons. "
+                "Please specify media as Google Cloud Storage URI, "
+                "base64 encoded data URI (e.g., data:image/..., "
+                "data:application/pdf;base64,...), or valid HTTP/HTTPS URL."
+            )
+            raise ValueError(msg)
+
+        # Mime type guessing logic (same as sync)
+        mime_type, _ = mimetypes.guess_type(image_string)
+        if not mime_type:
+            kind = filetype.guess(bytes_)
+            if kind:
+                mime_type = kind.mime
+
+        blob = Blob(data=bytes_, mime_type=mime_type)
+        return Part(inline_data=blob)
+
+    async def _abytes_from_url(self, url: str) -> bytes:
+        """Async version of _bytes_from_url using a thread pool."""
+        # This wraps the blocking requests.get call in a thread
+        return await asyncio.to_thread(self._bytes_from_url, url)
 
     def load_bytes(self, image_string: str) -> bytes:
         """Routes to the correct loader based on the `'image_string'`.

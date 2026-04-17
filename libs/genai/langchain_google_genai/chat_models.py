@@ -755,7 +755,7 @@ def _parse_chat_history(
                 parts = [Part(function_call=function_call)]
             elif message.response_metadata.get("output_version") == "v1":
                 # Already converted to v1beta format above
-                parts = message.content  # type: ignore[assignment]
+                parts = cast("list[Part]", message.content)
             else:
                 # Prepare request content parts from message.content field
                 parts = _convert_to_parts(message.content, model=model)
@@ -2823,7 +2823,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         labels = kwargs.pop("labels", None)
         if labels is None:
-            labels = self.labels
+            labels = getattr(self, "labels", None)
 
         _consumed_kwargs = {
             "thinking_budget",
@@ -3095,7 +3095,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
-        request = self._prepare_request(
+        # --- CHANGED: Use await _aprepare_request ---
+        request = await asyncio.to_thread(
+            self._prepare_request,
             messages,
             stop=stop,
             tools=tools,
@@ -3107,6 +3109,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+
         try:
             response: GenerateContentResponse = (
                 await self.client.aio.models.generate_content(
@@ -3208,7 +3211,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
-        request = self._prepare_request(
+        # --- CHANGED: Use await _aprepare_request ---
+        request = await asyncio.to_thread(
+            self._prepare_request,
             messages,
             stop=stop,
             tools=tools,
@@ -3220,6 +3225,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
