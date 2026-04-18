@@ -1217,7 +1217,7 @@ def _response_to_result(
         # inject Gemini provider response id in `response_metadata`
         gemini_response_id = getattr(response, "response_id", None)
         if gemini_response_id:
-            message.response_metadata["response_id"] = gemini_response_id
+            message.response_metadata["id"] = gemini_response_id
 
         try:
             if candidate.grounding_metadata:
@@ -1417,7 +1417,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "model_name": "gemini-3.1-pro-preview",
                 "safety_ratings": [],
                 "model_provider": "google_genai",
-                "response_id": "SgTkaaD7J6fH-sAPkrqhcA",
+                "id": "SgTkaaD7J6fH-sAPkrqhcA",
             },
             id="lc_run--63a04ced-6b63-4cf6-86a1-c32fa565938e-0",
             usage_metadata={
@@ -1453,7 +1453,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             response_metadata={
                 "finish_reason": "STOP",
                 "safety_ratings": [],
-                "response_id": "SgTkaaD7J6fH-sAPkrqhcB",
+                "id": "SgTkaaD7J6fH-sAPkrqhcB",
             },
             id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
             usage_metadata={
@@ -1488,7 +1488,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                         "blocked": False,
                     },
                 ],
-                "response_id": "SgTkaaD7J6fH-sAPkrqhcC",
+                "id": "SgTkaaD7J6fH-sAPkrqhcC",
             },
             id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
             usage_metadata={
@@ -1537,7 +1537,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                         "blocked": False,
                     },
                 ],
-                "response_id": "SgTkaaD7J6fH-sAPkrqhcD",
+                "id": "SgTkaaD7J6fH-sAPkrqhcD",
             },
             id="run-3ce13a42-cd30-4ad7-a684-f1f0b37cdeec",
             usage_metadata={
@@ -2181,7 +2181,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     "blocked": False,
                 },
             ],
-            "response_id": "SgTkaaD7J6fH-sAPkrqhcE",
+            "id": "SgTkaaD7J6fH-sAPkrqhcE",
         }
         ```
     """  # noqa: E501
