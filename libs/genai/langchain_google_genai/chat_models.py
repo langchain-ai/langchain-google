@@ -1450,7 +1450,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         AIMessageChunk(
             content="J",
-            response_metadata={"finish_reason": "STOP", "safety_ratings": [], "response_id": "SgTkaaD7J6fH-sAPkrqhcB"},
+            response_metadata={
+                "finish_reason": "STOP",
+                "safety_ratings": [],
+                "response_id": "SgTkaaD7J6fH-sAPkrqhcB"
+            },
             id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
             usage_metadata={
                 "input_tokens": 18,
