@@ -948,6 +948,10 @@ def _parse_response_candidate(
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
+            if isinstance(content, list):
+                content = _append_to_content(content, text_block)
+            else:
+                content = _append_to_content(content, text or "")
             if thought_sig or _is_gemini_3_or_later(effective_model_name or ""):
                 # append blocks if there's a signature or new Gemini model
                 content = _append_to_content(content, text_block)
@@ -1036,9 +1040,23 @@ def _parse_response_candidate(
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
+
+            fc_id = getattr(part.function_call, "id", None)
+            fc_index = getattr(part.function_call, "index", None)
+
+            if fc_id is not None:
+                function_call["id"] = fc_id
+            if fc_index is not None:
+                function_call["index"] = fc_index
+
             additional_kwargs["function_call"] = function_call
 
             tool_call_id = function_call.get("id", str(uuid.uuid4()))
+            if tool_call_id is None:
+                if function_call.get("index") is not None:
+                    tool_call_id = f"{function_call['name']}_{function_call['index']}"
+                else:
+                    tool_call_id = f"{function_call['name']}_0"
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
