@@ -951,7 +951,7 @@ def _parse_response_candidate(
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
-            if isinstance(content, list) or saw_thinking_block:
+            if isinstance(content, list) or saw_thinking_block or thought_sig:
                 content = _append_to_content(content, text_block)
             else:
                 # otherwise, keep plain text responses as strings
@@ -1042,13 +1042,13 @@ def _parse_response_candidate(
 
             additional_kwargs["function_call"] = function_call
 
-            tool_call_id = function_call.get("id")
-            if tool_call_id is None:
-                if function_call.get("index") is not None:
-                    tool_call_id = f"{function_call['name']}_{function_call['index']}"
-                else:
-                    tool_call_id = f"{function_call['name']}_0"
             if streaming:
+                tool_call_id = function_call.get("id")
+                if tool_call_id is None:
+                    if function_call.get("index") is not None:
+                        tool_call_id = f"{function_call['name']}_{function_call['index']}"
+                    else:
+                        tool_call_id = f"{function_call['name']}_0"
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
@@ -1058,6 +1058,7 @@ def _parse_response_candidate(
                     )
                 )
             else:
+                tool_call_id = function_call.get("id", str(uuid.uuid4()))
                 try:
                     tool_call_dict = parse_tool_calls(
                         [{"function": function_call}],
@@ -1092,7 +1093,6 @@ def _parse_response_candidate(
                     if isinstance(thought_sig, bytes)
                     else thought_sig
                 )
-
     if content is None:
         if _is_gemini_3_or_later(effective_model_name or ""):
             content = []
