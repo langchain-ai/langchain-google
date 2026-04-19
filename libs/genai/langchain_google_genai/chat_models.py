@@ -1046,7 +1046,8 @@ def _parse_response_candidate(
                 tool_call_id = function_call.get("id")
                 if tool_call_id is None:
                     if function_call.get("index") is not None:
-                        tool_call_id = f"{function_call['name']}_{function_call['index']}"
+                        tool_call_id =
+                        f"{function_call['name']}_{function_call['index']}"
                     else:
                         tool_call_id = f"{function_call['name']}_0"
                 tool_call_chunks.append(
