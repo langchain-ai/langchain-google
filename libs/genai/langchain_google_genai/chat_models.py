@@ -908,6 +908,8 @@ def _parse_response_candidate(
     # only including model_name in response_metadata for the final chunk.
     effective_model_name = model_name_for_content or model_name
 
+    saw_thinking_block = False
+
     parts = response_candidate.content.parts or [] if response_candidate.content else []
     for part in parts:
         text: str | None = None
@@ -941,6 +943,7 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
+            saw_thinking_block = True
         elif (
             (text is not None and text)  # text part with non-empty string
             or (part.text is not None and thought_sig)  # text part w/ thought sig
@@ -948,23 +951,11 @@ def _parse_response_candidate(
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
-            if isinstance(content, list):
+            if isinstance(content, list) or saw_thinking_block:
                 content = _append_to_content(content, text_block)
             else:
+                # otherwise, keep plain text responses as strings
                 content = _append_to_content(content, text or "")
-            if thought_sig or _is_gemini_3_or_later(effective_model_name or ""):
-                # append blocks if there's a signature or new Gemini model
-                content = _append_to_content(content, text_block)
-            elif isinstance(content, list) and any(
-                isinstance(item, dict) and item.get("type") == "thinking"
-                for item in content
-            ):
-                # if there's thinking blocks, keep content as dicts
-                content = _append_to_content(content, text_block)
-            else:
-                # otherwise, append text
-                content = _append_to_content(content, text or "")
-
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_id = str(uuid.uuid4())  # Generate ID if not present, needed later
@@ -1051,7 +1042,7 @@ def _parse_response_candidate(
 
             additional_kwargs["function_call"] = function_call
 
-            tool_call_id = function_call.get("id", str(uuid.uuid4()))
+            tool_call_id = function_call.get("id")
             if tool_call_id is None:
                 if function_call.get("index") is not None:
                     tool_call_id = f"{function_call['name']}_{function_call['index']}"
