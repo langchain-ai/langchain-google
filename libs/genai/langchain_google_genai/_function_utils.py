@@ -97,6 +97,13 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
     for key, value in schema.items():
         if key == "definitions":
             continue
+        if key == "const":
+            # Convert const to enum with a single value, since the Gemini API
+            # doesn't support the const keyword but does support enum.
+            # Don't override if enum is already set (enum takes precedence).
+            if "enum" not in schema:
+                converted_schema["enum"] = [value]
+            continue
         if key == "items":
             if value is not None:
                 converted_schema["items"] = _format_json_schema_to_gapic(value)
@@ -499,6 +506,10 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
         properties_item: dict[str, str | int | dict | list] = {}
+
+        # Convert const to enum with a single value before further processing
+        if "const" in v and "enum" not in v:
+            v = {**v, "enum": [v["const"]]}
 
         # Preserve description and other schema properties before manipulation
         original_description = v.get("description")
