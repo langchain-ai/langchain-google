@@ -875,7 +875,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
     },
-    "gemma-4-26b-it": {
+    "gemma-4-26b-a4b-it": {
         "name": "Gemma 4 26B",
         "release_date": "2026-04-02",
         "last_updated": "2026-04-02",
