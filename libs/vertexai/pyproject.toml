@@ -44,7 +44,6 @@ testing = [
   "pytest-asyncio",
   "pytest-retry",
   "pytest-recording",
-  "langchain-core[testing]",
 ]
 vectorsearch_v2 = [
   "google-cloud-vectorsearch",
