@@ -50,6 +50,7 @@ from langchain_google_vertexai.chat_models import (
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
+    _validate_video_metadata,
 )
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 from tests.integration_tests.conftest import (
@@ -996,6 +997,72 @@ def test_python_literal_inputs() -> None:
 
     for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
         _ = llm._prepare_request_gemini([HumanMessage(input_string)])
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}},
+        {"start_offset": {"seconds": 0}, "end_offset": {"seconds": 0}},
+        {"start_offset": 0, "end_offset": 10},
+        {"start_offset": "1s", "end_offset": "5s"},
+        {},
+        {"end_offset": {"seconds": 5}},
+        {"start_offset": {"seconds": 1}},
+    ],
+)
+def test_validate_video_metadata_accepts_valid_offsets(
+    video_metadata: dict,
+) -> None:
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    ("video_metadata", "expected_substring"),
+    [
+        (
+            {"start_offset": {"seconds": -1}, "end_offset": {"seconds": 5}},
+            "start_offset must be non-negative",
+        ),
+        (
+            {"start_offset": {"seconds": 0}, "end_offset": {"seconds": -1}},
+            "end_offset must be non-negative",
+        ),
+        (
+            {"start_offset": {"seconds": 10}, "end_offset": {"seconds": 5}},
+            "must not exceed",
+        ),
+        (
+            {"start_offset": "5s", "end_offset": "1s"},
+            "must not exceed",
+        ),
+    ],
+)
+def test_validate_video_metadata_rejects_invalid_offsets(
+    video_metadata: dict, expected_substring: str
+) -> None:
+    with pytest.raises(ValueError, match=expected_substring):
+        _validate_video_metadata(video_metadata)
+
+
+def test_parse_chat_history_gemini_video_offset_validation() -> None:
+    """Invalid video offsets should raise ValueError before reaching the API."""
+    bad_part = {
+        "type": "media",
+        "mime_type": "video/mp4",
+        "file_uri": "gs://example-bucket/clip.mp4",
+        "video_metadata": {
+            "start_offset": {"seconds": 30},
+            "end_offset": {"seconds": 5},
+        },
+    }
+    history: list[BaseMessage] = [HumanMessage(content=[bad_part])]
+    image_bytes_loader = ImageBytesLoader()
+    with pytest.raises(ValueError, match="must not exceed"):
+        _parse_chat_history_gemini(
+            history=history,
+            imageBytesLoader=image_bytes_loader,
+        )
 
 
 @pytest.mark.parametrize(

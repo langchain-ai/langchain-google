@@ -214,6 +214,61 @@ class _GeminiGenerateContentKwargs(TypedDict):
     tool_config: ToolConfig | None
 
 
+def _validate_video_metadata(video_metadata: dict) -> None:
+    """Validate user-supplied video metadata before sending to Vertex AI.
+
+    The Vertex API surfaces an opaque ``400 invalid argument`` when video
+    offsets are negative or ``start_offset`` exceeds ``end_offset``. This
+    helper checks the obvious cases up front and raises a clearer error so
+    callers do not have to debug the underlying API response.
+
+    Args:
+        video_metadata: Raw ``video_metadata`` dict from a media part. May
+            contain ``start_offset`` and ``end_offset`` as a number of
+            seconds, a ``{"seconds": int, "nanos": int}`` mapping, a
+            ``google.protobuf.duration_pb2.Duration`` instance, or a string
+            like ``"10s"``.
+
+    Raises:
+        ValueError: If an offset is negative or ``start_offset`` is greater
+            than ``end_offset``.
+    """
+
+    def _to_seconds(value: object) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, dict):
+            return float(value.get("seconds", 0)) + float(value.get("nanos", 0)) / 1e9
+        if hasattr(value, "seconds"):
+            return float(value.seconds) + float(getattr(value, "nanos", 0)) / 1e9
+        if isinstance(value, str) and value.endswith("s"):
+            try:
+                return float(value[:-1])
+            except ValueError:
+                return None
+        return None
+
+    start = _to_seconds(video_metadata.get("start_offset"))
+    end = _to_seconds(video_metadata.get("end_offset"))
+
+    if start is not None and start < 0:
+        msg = f"video_metadata.start_offset must be non-negative, got {start}s"
+        raise ValueError(msg)
+    if end is not None and end < 0:
+        msg = f"video_metadata.end_offset must be non-negative, got {end}s"
+        raise ValueError(msg)
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"video_metadata.start_offset ({start}s) must not exceed "
+            f"video_metadata.end_offset ({end}s)"
+        )
+        raise ValueError(msg)
+
+
 def _parse_chat_history_gemini(
     history: list[BaseMessage],
     imageBytesLoader: ImageBytesLoader,
@@ -348,6 +403,7 @@ def _parse_chat_history_gemini(
                 raise ValueError(msg)
 
             if "video_metadata" in part:
+                _validate_video_metadata(part["video_metadata"])
                 metadata = VideoMetadata(part["video_metadata"])
                 proto_part.video_metadata = metadata
             return proto_part
