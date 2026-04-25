@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.genai.types import Content
 from pydantic import SecretStr
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
@@ -118,7 +119,17 @@ def test_embed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        # Contents should be wrapped in Content objects (not bare strings)
+        # to ensure the SDK returns one embedding per text. See #1704.
+        contents = call_kwargs["contents"]
+        assert len(contents) == 2
+        assert isinstance(contents[0], Content)
+        first_parts = contents[0].parts
+        second_parts = contents[1].parts
+        assert first_parts is not None
+        assert second_parts is not None
+        assert first_parts[0].text == "test text"
+        assert second_parts[0].text == "test text2"
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
@@ -151,6 +162,65 @@ def test_embed_documents_with_numerous_texts() -> None:
 
         # Should be called once per batch
         assert mock_embed.call_count == test_corpus_size / test_batch_size
+
+
+def test_embed_documents_vertex_single_content_fallback() -> None:
+    """Test that embed_documents falls back to per-text requests on Vertex."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = MagicMock()
+        mock_embed.side_effect = [
+            ValueError(
+                "The embedContent API for this model only supports one content at "
+                "a time."
+            ),
+            _mock_embedding_response([[1.0, 2.0]]),
+            _mock_embedding_response([[3.0, 4.0]]),
+        ]
+        mock_client.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+            project="test-project",
+            vertexai=True,
+        )
+
+        result = llm.embed_documents(["text a", "text b"])
+
+        assert mock_embed.call_count == 3
+        assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+        first_call_contents = mock_embed.call_args_list[0].kwargs["contents"]
+        assert len(first_call_contents) == 2
+
+        second_call_contents = mock_embed.call_args_list[1].kwargs["contents"]
+        third_call_contents = mock_embed.call_args_list[2].kwargs["contents"]
+        assert len(second_call_contents) == 1
+        assert len(third_call_contents) == 1
+        assert second_call_contents[0].parts[0].text == "text a"
+        assert third_call_contents[0].parts[0].text == "text b"
+
+
+def test_embed_documents_unrelated_value_error_propagates() -> None:
+    """Ensure unrelated ValueErrors are not swallowed by the Vertex fallback."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = MagicMock()
+        mock_embed.side_effect = ValueError("contents are required.")
+        mock_client.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        with pytest.raises(ValueError, match=r"contents are required\."):
+            llm.embed_documents(["text a"])
 
 
 def test_base_url_support() -> None:
@@ -297,8 +367,78 @@ async def test_aembed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        # Contents should be wrapped in Content objects. See #1704.
+        contents = call_kwargs["contents"]
+        assert len(contents) == 2
+        assert isinstance(contents[0], Content)
+        first_parts = contents[0].parts
+        second_parts = contents[1].parts
+        assert first_parts is not None
+        assert second_parts is not None
+        assert first_parts[0].text == "test text"
+        assert second_parts[0].text == "test text2"
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
         assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+
+@pytest.mark.asyncio
+async def test_aembed_documents_vertex_single_content_fallback() -> None:
+    """Test that aembed_documents falls back to per-text requests on Vertex."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = AsyncMock()
+        mock_embed.side_effect = [
+            ValueError(
+                "The embedContent API for this model only supports one content at "
+                "a time."
+            ),
+            _mock_embedding_response([[1.0, 2.0]]),
+            _mock_embedding_response([[3.0, 4.0]]),
+        ]
+        mock_client.aio.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+            project="test-project",
+            vertexai=True,
+        )
+
+        result = await llm.aembed_documents(["text a", "text b"])
+
+        assert mock_embed.call_count == 3
+        assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+        first_call_contents = mock_embed.call_args_list[0].kwargs["contents"]
+        assert len(first_call_contents) == 2
+
+        second_call_contents = mock_embed.call_args_list[1].kwargs["contents"]
+        third_call_contents = mock_embed.call_args_list[2].kwargs["contents"]
+        assert len(second_call_contents) == 1
+        assert len(third_call_contents) == 1
+        assert second_call_contents[0].parts[0].text == "text a"
+        assert third_call_contents[0].parts[0].text == "text b"
+
+
+@pytest.mark.asyncio
+async def test_aembed_documents_unrelated_value_error_propagates() -> None:
+    """Ensure unrelated ValueErrors propagate in the async path."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = AsyncMock()
+        mock_embed.side_effect = ValueError("contents are required.")
+        mock_client.aio.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        with pytest.raises(ValueError, match=r"contents are required\."):
+            await llm.aembed_documents(["text a"])
