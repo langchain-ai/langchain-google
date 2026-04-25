@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.genai.types import Content
 from pydantic import SecretStr
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
@@ -118,7 +119,15 @@ def test_embed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        # Contents should be wrapped in Content objects (not bare strings)
+        # to ensure the SDK returns one embedding per text. See #1704.
+        contents = call_kwargs["contents"]
+        assert len(contents) == 2
+        assert isinstance(contents[0], Content)
+        assert contents[0].parts is not None
+        assert contents[0].parts[0].text == "test text"
+        assert contents[1].parts is not None
+        assert contents[1].parts[0].text == "test text2"
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
@@ -225,6 +234,56 @@ def test_vertexai_auto_detection_with_project() -> None:
     assert call_kwargs["vertexai"] is True
 
 
+def test_embed_documents_vertex_single_content_fallback() -> None:
+    """Test that embed_documents falls back to per-text requests when the SDK
+    raises ValueError (Vertex AI embedContent single-content limit)."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = MagicMock()
+        # First call raises ValueError (simulating Vertex AI guard), then
+        # subsequent per-text calls succeed.
+        mock_embed.side_effect = [
+            ValueError("only supports one content at a time"),
+            _mock_embedding_response([[1.0, 2.0]]),
+            _mock_embedding_response([[3.0, 4.0]]),
+        ]
+        mock_client.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        result = llm.embed_documents(["text a", "text b"])
+
+        # First call was the batch attempt (raised ValueError), then two
+        # individual calls — total 3 calls.
+        assert mock_embed.call_count == 3
+        assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_embed_documents_unrelated_value_error_propagates() -> None:
+    """Ensure ValueErrors unrelated to the Vertex single-content guard are not
+    swallowed by the fallback logic."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = MagicMock()
+        mock_embed.side_effect = ValueError("contents are required.")
+        mock_client.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        with pytest.raises(ValueError, match="contents are required"):
+            llm.embed_documents(["text a"])
+
+
 def test_embed_documents_default_task_type() -> None:
     """Test that embed_documents uses default `RETRIEVAL_DOCUMENT` when `task_type` is
     `None`."""
@@ -276,6 +335,52 @@ async def test_aembed_query() -> None:
 
 
 @pytest.mark.asyncio
+async def test_aembed_documents_vertex_single_content_fallback() -> None:
+    """Test async fallback to per-text requests on ValueError."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = AsyncMock()
+        mock_embed.side_effect = [
+            ValueError("only supports one content at a time"),
+            _mock_embedding_response([[1.0, 2.0]]),
+            _mock_embedding_response([[3.0, 4.0]]),
+        ]
+        mock_client.aio.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        result = await llm.aembed_documents(["text a", "text b"])
+
+        assert mock_embed.call_count == 3
+        assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+
+@pytest.mark.asyncio
+async def test_aembed_documents_unrelated_value_error_propagates() -> None:
+    """Ensure unrelated ValueErrors propagate in the async path."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = AsyncMock()
+        mock_embed.side_effect = ValueError("contents are required.")
+        mock_client.aio.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        with pytest.raises(ValueError, match="contents are required"):
+            await llm.aembed_documents(["text a"])
+
+
+@pytest.mark.asyncio
 async def test_aembed_documents() -> None:
     """Test async embed_documents."""
     with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
@@ -297,7 +402,14 @@ async def test_aembed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        # Contents should be wrapped in Content objects. See #1704.
+        contents = call_kwargs["contents"]
+        assert len(contents) == 2
+        assert isinstance(contents[0], Content)
+        assert contents[0].parts is not None
+        assert contents[0].parts[0].text == "test text"
+        assert contents[1].parts is not None
+        assert contents[1].parts[0].text == "test text2"
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
