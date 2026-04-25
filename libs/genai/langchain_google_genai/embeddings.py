@@ -1,6 +1,7 @@
 import os
 import re
 import string
+import warnings
 from typing import Any
 
 from google.genai.client import Client
@@ -428,6 +429,13 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             title = None
             if titles_batch and len(titles_batch) == 1:
                 title = titles_batch[0]
+            elif titles_batch and len(titles_batch) > 1:
+                warnings.warn(
+                    "Titles are not supported for multi-text batches. "
+                    "The titles for this batch will be dropped. "
+                    "To preserve titles, use batch_size=1.",
+                    stacklevel=3,
+                )
 
             config = self._build_config(
                 task_type=effective_task_type,
@@ -546,6 +554,13 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             title = None
             if titles_batch and len(titles_batch) == 1:
                 title = titles_batch[0]
+            elif titles_batch and len(titles_batch) > 1:
+                warnings.warn(
+                    "Titles are not supported for multi-text batches. "
+                    "The titles for this batch will be dropped. "
+                    "To preserve titles, use batch_size=1.",
+                    stacklevel=3,
+                )
 
             config = self._build_config(
                 task_type=effective_task_type,
