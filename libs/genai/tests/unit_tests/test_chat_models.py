@@ -431,6 +431,61 @@ def test_parse_history() -> None:
         assert system_instruction == Content(parts=[Part(text=system_input)])
 
 
+def test_parse_history_preserves_str_content_with_tool_calls() -> None:
+    function_call = {
+        "name": "calculator",
+        "args": {"arg1": "2", "arg2": "2", "op": "+"},
+        "id": "0",
+    }
+    message = AIMessage(content="I'll call a tool now", tool_calls=[function_call])
+
+    _, history = _parse_chat_history([message])
+
+    assert history == [
+        Content(
+            role="model",
+            parts=[
+                Part(text="I'll call a tool now"),
+                Part(
+                    function_call=FunctionCall(
+                        name="calculator",
+                        args=function_call["args"],
+                    )
+                ),
+            ],
+        )
+    ]
+
+
+def test_parse_history_preserves_list_text_content_with_tool_calls() -> None:
+    function_call = {
+        "name": "calculator",
+        "args": {"arg1": "3", "arg2": "4", "op": "*"},
+        "id": "1",
+    }
+    message = AIMessage(
+        content=[{"type": "text", "text": "Need to compute this."}],
+        tool_calls=[function_call],
+    )
+
+    _, history = _parse_chat_history([message])
+
+    assert history == [
+        Content(
+            role="model",
+            parts=[
+                Part(text="Need to compute this."),
+                Part(
+                    function_call=FunctionCall(
+                        name="calculator",
+                        args=function_call["args"],
+                    )
+                ),
+            ],
+        )
+    ]
+
+
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
 def test_parse_function_history(content: str | list[str | dict]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
