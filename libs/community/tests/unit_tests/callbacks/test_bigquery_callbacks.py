@@ -1824,3 +1824,139 @@ def test_extract_token_usage_prefers_legacy_when_present() -> None:
     assert BigQueryCallbackHandler._extract_token_usage(response) == {
         "total_tokens": 99,
     }
+
+
+def test_extract_token_usage_preserves_empty_legacy_dict() -> None:
+    """``llm_output={'token_usage': {}}`` must round-trip as ``{}``.
+
+    Some providers explicitly emit an empty dict to signal "I checked and
+    there is no usage info" — meaningfully different from "the field isn't
+    here at all". The integration test
+    ``tests/integration_tests/callbacks/test_bigquery_callback.py`` asserts
+    ``attributes['usage'] == {}`` on this path, so the extractor must use a
+    presence check (not a truthiness check) on the legacy slot.
+    """
+    response = LLMResult(
+        generations=[[Generation(text="x")]],
+        llm_output={"token_usage": {}},
+    )
+    assert BigQueryCallbackHandler._extract_token_usage(response) == {}
+
+
+def test_skipped_internal_chain_preserves_trace_continuity_for_children(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Trace continuity must survive ``skip_internal_chain_events=True``.
+
+    When an internal chain (ChannelWrite, RunnableLambda, …) is skipped, any
+    LLM/tool child whose ``parent_run_id`` points at that skipped chain must
+    still resolve to the real graph root in the BigQuery ``trace_id`` column.
+    Otherwise the child becomes its own root and we lose the ability to join
+    rows for the same end-to-end invocation.
+    """
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(skip_internal_chain_events=True),
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    root_run_id = uuid4()
+    skipped_run_id = uuid4()
+    child_llm_run_id = uuid4()
+
+    handler.on_chain_start(
+        serialized={"name": "MyGraph"},
+        inputs={},
+        run_id=root_run_id,
+        parent_run_id=None,
+        metadata={"langgraph_step": 1},
+    )
+    handler.on_chain_start(
+        serialized={"name": "ChannelWrite<messages>"},
+        inputs={},
+        run_id=skipped_run_id,
+        parent_run_id=root_run_id,
+        metadata={},
+    )
+    handler.on_llm_start(
+        serialized={"name": "test_llm"},
+        prompts=["hi"],
+        run_id=child_llm_run_id,
+        parent_run_id=skipped_run_id,
+    )
+
+    emitted_event_types = [
+        call.args[0]["event_type"]
+        for call in handler.batch_processor.append.call_args_list
+    ]
+    assert "LLM_REQUEST" in emitted_event_types
+    assert "CHAIN_START" not in emitted_event_types  # internal chain dropped
+
+    llm_row = next(
+        call.args[0]
+        for call in handler.batch_processor.append.call_args_list
+        if call.args[0]["event_type"] == "LLM_REQUEST"
+    )
+    # The bug being guarded against: without registering the skipped run in
+    # trace_registry, the child's trace_id collapses to skipped_run_id.
+    assert llm_row["trace_id"] != str(skipped_run_id), (
+        "trace_id collapsed onto the skipped internal chain — children no "
+        "longer share a trace with the real graph root"
+    )
+    assert llm_row["trace_id"] == str(root_run_id)
+    assert llm_row["parent_span_id"] == str(skipped_run_id)
+
+
+@pytest.mark.asyncio
+async def test_skipped_internal_chain_preserves_trace_continuity_async(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Async equivalent of the trace-continuity guard above."""
+    handler = AsyncBigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(skip_internal_chain_events=True),
+    )
+    await handler._ensure_started()
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+
+    root_run_id = uuid4()
+    skipped_run_id = uuid4()
+    child_llm_run_id = uuid4()
+
+    await handler.on_chain_start(
+        serialized={"name": "MyGraph"},
+        inputs={},
+        run_id=root_run_id,
+        parent_run_id=None,
+        metadata={"langgraph_step": 1},
+    )
+    await handler.on_chain_start(
+        serialized={"name": "ChannelWrite<messages>"},
+        inputs={},
+        run_id=skipped_run_id,
+        parent_run_id=root_run_id,
+        metadata={},
+    )
+    await handler.on_llm_start(
+        serialized={"name": "test_llm"},
+        prompts=["hi"],
+        run_id=child_llm_run_id,
+        parent_run_id=skipped_run_id,
+    )
+
+    llm_row = next(
+        call.args[0]
+        for call in handler.async_batch_processor.append.call_args_list
+        if call.args[0]["event_type"] == "LLM_REQUEST"
+    )
+    assert llm_row["trace_id"] == str(root_run_id)
+    assert llm_row["trace_id"] != str(skipped_run_id)

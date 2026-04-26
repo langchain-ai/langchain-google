@@ -1917,14 +1917,14 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         - Some providers populate ``response_metadata["usage_metadata"]`` or
           ``response_metadata["usage"]`` instead.
 
-        Returns the first non-empty source found, normalized to include
-        ``prompt_tokens``, ``completion_tokens``, and ``total_tokens`` keys when
-        derived from ``usage_metadata``.
+        The legacy ``llm_output["token_usage"]`` slot is returned as-is when
+        present (including empty dicts), preserving the historical contract for
+        callers that distinguish "provider gave us nothing" from "provider
+        omitted the field entirely". Other sources only fall through when
+        truly absent or empty.
         """
-        if response.llm_output:
-            usage = response.llm_output.get("token_usage")
-            if usage:
-                return usage  # type: ignore[no-any-return]
+        if response.llm_output is not None and "token_usage" in response.llm_output:
+            return response.llm_output["token_usage"]  # type: ignore[no-any-return]
 
         if not response.generations or not response.generations[0]:
             return None
@@ -2361,6 +2361,11 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             and not langgraph_node
             and self._is_internal_chain_name(chain_name)
         ):
+            # Still register the run in trace_registry so any LLM/tool child
+            # whose parent_run_id points at this skipped chain can resolve to
+            # the true graph root (otherwise the child becomes its own root
+            # and trace continuity breaks across the skipped boundary).
+            await self.trace_registry.register_run(run_id, parent_run_id)
             self._mark_run_skipped(run_id)
             return
 
@@ -2972,10 +2977,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
 
         See ``AsyncBigQueryCallbackHandler._extract_token_usage`` for details.
         """
-        if response.llm_output:
-            usage = response.llm_output.get("token_usage")
-            if usage:
-                return usage  # type: ignore[no-any-return]
+        if response.llm_output is not None and "token_usage" in response.llm_output:
+            return response.llm_output["token_usage"]  # type: ignore[no-any-return]
 
         if not response.generations or not response.generations[0]:
             return None
@@ -3376,6 +3379,11 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             and not langgraph_node
             and self._is_internal_chain_name(chain_name)
         ):
+            # Register in trace_registry anyway so child events whose
+            # parent_run_id points at this skipped chain still resolve to the
+            # true graph root (otherwise trace continuity breaks across the
+            # skipped boundary).
+            self.trace_registry.register_run(run_id, parent_run_id)
             self._mark_run_skipped(run_id)
             return
 
