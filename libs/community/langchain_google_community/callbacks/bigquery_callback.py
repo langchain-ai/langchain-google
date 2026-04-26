@@ -378,6 +378,24 @@ class RunContext:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
+_INTERNAL_CHAIN_NAME_PATTERNS: tuple[str, ...] = (
+    "ChannelWrite",
+    "ChannelRead",
+    "Branch",
+    "RunnableLambda",
+    "RunnableSequence",
+    "RunnableParallel",
+    "RunnableAssign",
+    "RunnablePassthrough",
+    "RunnableBinding",
+    "_write",
+    "_route",
+    "__start__",
+    "__end__",
+    "Pregel",
+)
+
+
 @dataclass
 class BigQueryLoggerConfig:
     enabled: bool = True
@@ -396,6 +414,11 @@ class BigQueryLoggerConfig:
     queue_max_size: int = 10000
     gcs_bucket_name: str | None = None
     connection_id: str | None = None
+    skip_internal_chain_events: bool = False
+    """When True, skip CHAIN_START/CHAIN_END/CHAIN_ERROR events for chains that
+    are not LangGraph nodes, root invocations, or recognizable user-defined
+    chains. Reduces noise in multi-agent LangGraph deployments where many
+    framework-internal chains (ChannelWrite, RunnableLambda, Branch, ...) fire."""
 
 
 # ==============================================================================
@@ -1689,6 +1712,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # New tracking components
         self._latency_tracker = AsyncLatencyTracker()
         self._run_context_registry = AsyncRunContextRegistry()
+        self._skipped_runs: set[uuid.UUID] = set()
 
         _ensure_dataset_exists(
             self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
@@ -1863,6 +1887,110 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         """Reset the execution order to 0."""
         self._execution_order_cv.set(0)
 
+    @staticmethod
+    def _is_internal_chain_name(name: Optional[str]) -> bool:
+        """Heuristically detect framework-internal LangGraph/LangChain chains."""
+        if not name:
+            return False
+        return any(pattern in name for pattern in _INTERNAL_CHAIN_NAME_PATTERNS)
+
+    def _mark_run_skipped(self, run_id: uuid.UUID) -> None:
+        """Record that ``on_*_start`` did not emit an event for this run."""
+        self._skipped_runs.add(run_id)
+
+    def _take_run_skipped(self, run_id: uuid.UUID) -> bool:
+        """Return True (and forget) if ``on_*_start`` skipped this run."""
+        if run_id in self._skipped_runs:
+            self._skipped_runs.discard(run_id)
+            return True
+        return False
+
+    @staticmethod
+    def _extract_token_usage(response: LLMResult) -> Optional[Dict[str, Any]]:
+        """Extract token usage from an LLMResult across provider conventions.
+
+        LangChain providers report token usage in different shapes:
+
+        - Legacy LLMs populate ``llm_output["token_usage"]`` (OpenAI-style dict).
+        - Modern Chat models attach ``usage_metadata`` to the ``AIMessage``
+          (input_tokens / output_tokens / total_tokens).
+        - Some providers populate ``response_metadata["usage_metadata"]`` or
+          ``response_metadata["usage"]`` instead.
+
+        Returns the first non-empty source found, normalized to include
+        ``prompt_tokens``, ``completion_tokens``, and ``total_tokens`` keys when
+        derived from ``usage_metadata``.
+        """
+        if response.llm_output:
+            usage = response.llm_output.get("token_usage")
+            if usage:
+                return usage  # type: ignore[no-any-return]
+
+        if not response.generations or not response.generations[0]:
+            return None
+        gen = response.generations[0][0]
+        message = getattr(gen, "message", None)
+        if message is None:
+            return None
+
+        usage_metadata = getattr(message, "usage_metadata", None)
+        if usage_metadata:
+            normalized: Dict[str, Any] = {
+                "prompt_tokens": usage_metadata.get("input_tokens"),
+                "completion_tokens": usage_metadata.get("output_tokens"),
+                "total_tokens": usage_metadata.get("total_tokens"),
+            }
+            for extra_key in ("input_token_details", "output_token_details"):
+                if extra_key in usage_metadata:
+                    normalized[extra_key] = usage_metadata[extra_key]
+            return normalized
+
+        response_metadata = getattr(message, "response_metadata", None) or {}
+        for key in ("usage_metadata", "usage", "token_usage"):
+            value = response_metadata.get(key)
+            if value:
+                return value  # type: ignore[no-any-return]
+        return None
+
+    async def _resolve_event_metadata(
+        self,
+        run_id: uuid.UUID,
+        kwargs_metadata: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Merge kwargs metadata with metadata captured at start time.
+
+        ``langchain-core`` only forwards ``metadata`` to ``*_start`` callbacks;
+        ``*_end`` and ``*_error`` callbacks receive bare ``run_id`` / ``tags``
+        (see ``langchain_core/callbacks/manager.py``). Without this helper,
+        end/error events would drop user-supplied keys like ``session_id``,
+        ``user_id``, and ``agent`` -- matching the bug report in issue #1690.
+        """
+        context = await self._run_context_registry.get(run_id)
+        merged: Dict[str, Any] = (
+            dict(context.metadata) if context and context.metadata else {}
+        )
+        if kwargs_metadata:
+            for key, value in kwargs_metadata.items():
+                if value is not None:
+                    merged[key] = value
+        return merged
+
+    async def _register_run_metadata(
+        self,
+        run_id: uuid.UUID,
+        parent_run_id: Optional[uuid.UUID],
+        name: str,
+        metadata: Optional[Dict[str, Any]],
+    ) -> None:
+        """Register a run so its metadata survives until ``*_end``/``*_error``."""
+        existing = await self._run_context_registry.get(run_id)
+        if existing is None:
+            await self._run_context_registry.register(
+                run_id, name, parent_run_id, metadata
+            )
+        elif metadata:
+            await self._run_context_registry.update_metadata(run_id, metadata)
+
     async def _ensure_started(self) -> None:
         if self._started:
             return
@@ -1965,7 +2093,15 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         metadata = metadata or {}
         session_id = metadata.get("session_id")
         user_id = metadata.get("user_id")
-        agent = metadata.get("agent")
+        # Sub-agent attribution: prefer explicit `agent`, else fall back to the
+        # active LangGraph node (each node is effectively a sub-agent), else
+        # the configured graph_name. This mirrors ADK's per-sub-agent tagging.
+        agent = (
+            metadata.get("agent")
+            or metadata.get("langgraph_node")
+            or metadata.get("checkpoint_ns")
+            or self.graph_name
+        )
 
         registry_trace_id = await self.trace_registry.register_run(
             run_id, parent_run_id
@@ -2102,14 +2238,18 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # Start latency tracking
         await self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
+        await self._register_run_metadata(
+            run_id, parent_run_id, model_name or "llm", metadata
+        )
         await self._log(
             "LLM_REQUEST",
             run_id,
             content={"prompts": prompts},
             parent_run_id=parent_run_id,
             attributes={"tags": tags, "model": model_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     async def on_chat_model_start(
@@ -2125,7 +2265,11 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # Start latency tracking
         await self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
+        await self._register_run_metadata(
+            run_id, parent_run_id, model_name or "chat_model", metadata
+        )
         # Serialize messages safely for parsing
         flat_msgs = [m.model_dump() for sub in messages for m in sub]
         await self._log(
@@ -2134,7 +2278,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             content={"messages": flat_msgs},
             parent_run_id=parent_run_id,
             attributes={"tags": tags, "model": model_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     async def on_llm_end(
@@ -2147,19 +2291,24 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        # Drop the now-stale registration from start time.
+        await self._run_context_registry.pop(run_id)
 
         if response.generations and response.generations[0]:
             resp_text = response.generations[0][0].text
         else:
             resp_text = ""
-        usage = response.llm_output.get("token_usage") if response.llm_output else None
+        # Token usage tracking — modern Chat models emit usage on the AIMessage
+        # rather than the legacy llm_output dict (issue #1720).
+        usage = self._extract_token_usage(response)
         await self._log(
             "LLM_RESPONSE",
             run_id,
             content=resp_text,
             parent_run_id=parent_run_id,
             attributes={"usage": usage},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
@@ -2174,13 +2323,15 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        await self._run_context_registry.pop(run_id)
 
         await self._log(
             "LLM_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
@@ -2194,15 +2345,34 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
-        # Start latency tracking
-        await self._latency_tracker.start(run_id)
-
         metadata = kwargs.get("metadata") or {}
+        chain_name = (serialized or {}).get("name") or "chain"
 
         # Detect LangGraph node vs regular chain
         langgraph_node = metadata.get("langgraph_node")
         is_graph_root = self._is_langgraph_root_invocation(
             serialized, parent_run_id, metadata
+        )
+
+        # Optionally drop noisy framework-internal chains entirely (issue #1720).
+        if (
+            self.config.skip_internal_chain_events
+            and not is_graph_root
+            and not langgraph_node
+            and self._is_internal_chain_name(chain_name)
+        ):
+            self._mark_run_skipped(run_id)
+            return
+
+        # Start latency tracking
+        await self._latency_tracker.start(run_id)
+
+        # Register the metadata so on_chain_end / on_chain_error can recover it
+        # (langchain-core only forwards metadata to *_start callbacks). This
+        # fixes issue #1690 where agent / user_id / session_id were lost on
+        # end/error events.
+        await self._register_run_metadata(
+            run_id, parent_run_id, langgraph_node or chain_name, metadata
         )
 
         if is_graph_root:
@@ -2216,10 +2386,6 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             event_type = "NODE_STARTING"
             attributes = self._build_langgraph_attributes(
                 node_name=langgraph_node, metadata=metadata
-            )
-            # Register the node name for later retrieval
-            await self._run_context_registry.register(
-                run_id, langgraph_node, parent_run_id, metadata
             )
         else:
             event_type = "CHAIN_START"
@@ -2242,18 +2408,25 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        # If on_chain_start dropped this run as internal noise, drop the end too.
+        if self._take_run_skipped(run_id):
+            await self.trace_registry.end_run(run_id)
+            return
+
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
 
-        metadata = kwargs.get("metadata") or {}
+        # Recover metadata captured at on_chain_start (langchain-core does not
+        # propagate metadata to *_end callbacks, see issue #1690).
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Check if this was a LangGraph node
         context = await self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
 
-        if context or langgraph_node:
+        if langgraph_node or (context and context.name == langgraph_node):
             # This was a LangGraph node
-            node_name = context.name if context else langgraph_node
+            node_name = langgraph_node or (context.name if context else None)
             event_type = "NODE_COMPLETED"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
@@ -2289,11 +2462,10 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # Start latency tracking
         await self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
         # Register tool name for later retrieval in on_tool_end
         tool_name = serialized.get("name", "unknown_tool")
-        await self._run_context_registry.register(
-            run_id, tool_name, parent_run_id, kwargs.get("metadata")
-        )
+        await self._register_run_metadata(run_id, parent_run_id, tool_name, metadata)
 
         await self._log(
             "TOOL_STARTING",
@@ -2301,7 +2473,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             content={"tool": tool_name, "input": input_str},
             parent_run_id=parent_run_id,
             attributes={"tool_name": tool_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     async def on_tool_end(
@@ -2314,6 +2486,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Retrieve tool name from registry
         context = await self._run_context_registry.pop(run_id)
@@ -2325,7 +2498,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             content={"tool": tool_name, "result": output},
             parent_run_id=parent_run_id,
             attributes={"tool_name": tool_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
@@ -2340,6 +2513,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Retrieve tool name from registry
         context = await self._run_context_registry.pop(run_id)
@@ -2351,7 +2525,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             error=str(error),
             parent_run_id=parent_run_id,
             attributes={"tool_name": tool_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
@@ -2368,12 +2542,18 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # Start latency tracking
         await self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
+        retriever_name = (serialized or {}).get("name") or "retriever"
+        await self._register_run_metadata(
+            run_id, parent_run_id, retriever_name, metadata
+        )
+
         await self._log(
             "RETRIEVER_START",
             run_id,
             content=query,
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     async def on_retriever_end(
@@ -2386,6 +2566,8 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        await self._run_context_registry.pop(run_id)
 
         docs = [doc.model_dump() for doc in documents]
         await self._log(
@@ -2393,7 +2575,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             run_id,
             content=json.dumps(docs, default=str),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
@@ -2408,13 +2590,15 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        await self._run_context_registry.pop(run_id)
 
         await self._log(
             "RETRIEVER_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         await self.trace_registry.end_run(run_id)
@@ -2477,24 +2661,26 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        if self._take_run_skipped(run_id):
+            await self.trace_registry.end_run(run_id)
+            return
+
         # End latency tracking
         latency_measurement = await self._latency_tracker.end(run_id)
 
-        metadata = kwargs.get("metadata") or {}
+        metadata = await self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Check if this was a LangGraph node
         context = await self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
 
-        if context or langgraph_node:
-            # This was a LangGraph node
-            node_name = context.name if context else langgraph_node
+        if langgraph_node or (context and context.name == langgraph_node):
+            node_name = langgraph_node or (context.name if context else None)
             event_type = "NODE_ERROR"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
         elif parent_run_id is None and self.graph_name:
-            # This might be graph error (no parent, graph_name set)
             event_type = "GRAPH_ERROR"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
@@ -2597,6 +2783,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # New tracking components
         self._latency_tracker = LatencyTracker()
         self._run_context_registry = RunContextRegistry()
+        self._skipped_runs: set[uuid.UUID] = set()
+        self._skipped_runs_lock = threading.Lock()
 
         _ensure_dataset_exists(
             self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
@@ -2771,6 +2959,99 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         """Reset the execution order to 0."""
         self._execution_order_cv.set(0)
 
+    @staticmethod
+    def _is_internal_chain_name(name: Optional[str]) -> bool:
+        """Heuristically detect framework-internal LangGraph/LangChain chains."""
+        if not name:
+            return False
+        return any(pattern in name for pattern in _INTERNAL_CHAIN_NAME_PATTERNS)
+
+    @staticmethod
+    def _extract_token_usage(response: LLMResult) -> Optional[Dict[str, Any]]:
+        """Extract token usage from an LLMResult across provider conventions.
+
+        See ``AsyncBigQueryCallbackHandler._extract_token_usage`` for details.
+        """
+        if response.llm_output:
+            usage = response.llm_output.get("token_usage")
+            if usage:
+                return usage  # type: ignore[no-any-return]
+
+        if not response.generations or not response.generations[0]:
+            return None
+        gen = response.generations[0][0]
+        message = getattr(gen, "message", None)
+        if message is None:
+            return None
+
+        usage_metadata = getattr(message, "usage_metadata", None)
+        if usage_metadata:
+            normalized: Dict[str, Any] = {
+                "prompt_tokens": usage_metadata.get("input_tokens"),
+                "completion_tokens": usage_metadata.get("output_tokens"),
+                "total_tokens": usage_metadata.get("total_tokens"),
+            }
+            for extra_key in ("input_token_details", "output_token_details"):
+                if extra_key in usage_metadata:
+                    normalized[extra_key] = usage_metadata[extra_key]
+            return normalized
+
+        response_metadata = getattr(message, "response_metadata", None) or {}
+        for key in ("usage_metadata", "usage", "token_usage"):
+            value = response_metadata.get(key)
+            if value:
+                return value  # type: ignore[no-any-return]
+        return None
+
+    def _resolve_event_metadata(
+        self,
+        run_id: uuid.UUID,
+        kwargs_metadata: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Merge kwargs metadata with metadata captured at start time.
+
+        ``langchain-core`` only forwards ``metadata`` to ``*_start`` callbacks;
+        ``*_end`` and ``*_error`` callbacks receive bare ``run_id`` / ``tags``.
+        Without this helper, end/error events drop user-supplied keys like
+        ``session_id``, ``user_id``, and ``agent`` (issue #1690).
+        """
+        context = self._run_context_registry.get(run_id)
+        merged: Dict[str, Any] = (
+            dict(context.metadata) if context and context.metadata else {}
+        )
+        if kwargs_metadata:
+            for key, value in kwargs_metadata.items():
+                if value is not None:
+                    merged[key] = value
+        return merged
+
+    def _register_run_metadata(
+        self,
+        run_id: uuid.UUID,
+        parent_run_id: Optional[uuid.UUID],
+        name: str,
+        metadata: Optional[Dict[str, Any]],
+    ) -> None:
+        """Register a run so its metadata survives until ``*_end``/``*_error``."""
+        existing = self._run_context_registry.get(run_id)
+        if existing is None:
+            self._run_context_registry.register(run_id, name, parent_run_id, metadata)
+        elif metadata:
+            self._run_context_registry.update_metadata(run_id, metadata)
+
+    def _mark_run_skipped(self, run_id: uuid.UUID) -> None:
+        """Record that ``on_*_start`` did not emit an event for this run."""
+        with self._skipped_runs_lock:
+            self._skipped_runs.add(run_id)
+
+    def _take_run_skipped(self, run_id: uuid.UUID) -> bool:
+        """Return True (and forget) if ``on_*_start`` skipped this run."""
+        with self._skipped_runs_lock:
+            if run_id in self._skipped_runs:
+                self._skipped_runs.discard(run_id)
+                return True
+            return False
+
     def _ensure_started(self) -> None:
         if self._started:
             return
@@ -2866,7 +3147,15 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         metadata = metadata or {}
         session_id = metadata.get("session_id")
         user_id = metadata.get("user_id")
-        agent = metadata.get("agent")
+        # Sub-agent attribution: prefer explicit `agent`, else fall back to the
+        # active LangGraph node (each node is effectively a sub-agent), else
+        # the configured graph_name.
+        agent = (
+            metadata.get("agent")
+            or metadata.get("langgraph_node")
+            or metadata.get("checkpoint_ns")
+            or self.graph_name
+        )
 
         registry_trace_id = self.trace_registry.register_run(run_id, parent_run_id)
         trace_id = metadata.get("trace_id") or registry_trace_id or str(run_id)
@@ -2990,14 +3279,18 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # Start latency tracking
         self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
+        self._register_run_metadata(
+            run_id, parent_run_id, model_name or "llm", metadata
+        )
         self._log(
             "LLM_REQUEST",
             run_id,
             content={"prompts": prompts},
             parent_run_id=parent_run_id,
             attributes={"tags": tags, "model": model_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     def on_chat_model_start(
@@ -3013,7 +3306,11 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # Start latency tracking
         self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
         model_name = serialized.get("kwargs", {}).get("model") or serialized.get("name")
+        self._register_run_metadata(
+            run_id, parent_run_id, model_name or "chat_model", metadata
+        )
         flat_msgs = [m.model_dump() for sub in messages for m in sub]
         self._log(
             "LLM_REQUEST",
@@ -3021,7 +3318,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             content={"messages": flat_msgs},
             parent_run_id=parent_run_id,
             attributes={"tags": tags, "model": model_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     def on_llm_end(
@@ -3034,19 +3331,23 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        self._run_context_registry.pop(run_id)
 
         if response.generations and response.generations[0]:
             resp_text = response.generations[0][0].text
         else:
             resp_text = ""
-        usage = response.llm_output.get("token_usage") if response.llm_output else None
+        # Token usage tracking — modern Chat models emit usage on the AIMessage
+        # rather than the legacy llm_output dict (issue #1720).
+        usage = self._extract_token_usage(response)
         self._log(
             "LLM_RESPONSE",
             run_id,
             content=resp_text,
             parent_run_id=parent_run_id,
             attributes={"usage": usage},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
@@ -3060,15 +3361,31 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
-        # Start latency tracking
-        self._latency_tracker.start(run_id)
-
         metadata = kwargs.get("metadata") or {}
+        chain_name = (serialized or {}).get("name") or "chain"
 
         # Detect LangGraph node vs regular chain
         langgraph_node = metadata.get("langgraph_node")
         is_graph_root = self._is_langgraph_root_invocation(
             serialized, parent_run_id, metadata
+        )
+
+        if (
+            self.config.skip_internal_chain_events
+            and not is_graph_root
+            and not langgraph_node
+            and self._is_internal_chain_name(chain_name)
+        ):
+            self._mark_run_skipped(run_id)
+            return
+
+        # Start latency tracking
+        self._latency_tracker.start(run_id)
+
+        # Register metadata so on_chain_end / on_chain_error can recover it
+        # (issue #1690 - langchain-core only forwards metadata to *_start).
+        self._register_run_metadata(
+            run_id, parent_run_id, langgraph_node or chain_name, metadata
         )
 
         if is_graph_root:
@@ -3082,10 +3399,6 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             event_type = "NODE_STARTING"
             attributes = self._build_langgraph_attributes(
                 node_name=langgraph_node, metadata=metadata
-            )
-            # Register the node name for later retrieval
-            self._run_context_registry.register(
-                run_id, langgraph_node, parent_run_id, metadata
             )
         else:
             event_type = "CHAIN_START"
@@ -3108,24 +3421,25 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        if self._take_run_skipped(run_id):
+            self.trace_registry.end_run(run_id)
+            return
+
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
-
-        metadata = kwargs.get("metadata") or {}
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Check if this was a LangGraph node
         context = self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
 
-        if context or langgraph_node:
-            # This was a LangGraph node
-            node_name = context.name if context else langgraph_node
+        if langgraph_node or (context and context.name == langgraph_node):
+            node_name = langgraph_node or (context.name if context else None)
             event_type = "NODE_COMPLETED"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
         elif parent_run_id is None and self.graph_name:
-            # This might be graph end (no parent, graph_name set)
             event_type = "GRAPH_END"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
@@ -3151,24 +3465,25 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         parent_run_id: uuid.UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        if self._take_run_skipped(run_id):
+            self.trace_registry.end_run(run_id)
+            return
+
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
-
-        metadata = kwargs.get("metadata") or {}
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Check if this was a LangGraph node
         context = self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
 
-        if context or langgraph_node:
-            # This was a LangGraph node
-            node_name = context.name if context else langgraph_node
+        if langgraph_node or (context and context.name == langgraph_node):
+            node_name = langgraph_node or (context.name if context else None)
             event_type = "NODE_ERROR"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
         elif parent_run_id is None and self.graph_name:
-            # This might be graph error (no parent, graph_name set)
             event_type = "GRAPH_ERROR"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
@@ -3198,11 +3513,10 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # Start latency tracking
         self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
         # Register tool name for later retrieval in on_tool_end
         tool_name = serialized.get("name", "unknown_tool")
-        self._run_context_registry.register(
-            run_id, tool_name, parent_run_id, kwargs.get("metadata")
-        )
+        self._register_run_metadata(run_id, parent_run_id, tool_name, metadata)
 
         self._log(
             "TOOL_STARTING",
@@ -3210,7 +3524,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             content={"tool": tool_name, "input": input_str},
             parent_run_id=parent_run_id,
             attributes={"tool_name": tool_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     def on_tool_end(
@@ -3223,6 +3537,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Retrieve tool name from registry
         context = self._run_context_registry.pop(run_id)
@@ -3234,7 +3549,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             content={"tool": tool_name, "result": str(output)},
             parent_run_id=parent_run_id,
             attributes={"tool_name": tool_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
@@ -3249,6 +3564,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
 
         # Retrieve tool name from registry
         context = self._run_context_registry.pop(run_id)
@@ -3260,7 +3576,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             error=str(error),
             parent_run_id=parent_run_id,
             attributes={"tool_name": tool_name},
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
@@ -3327,12 +3643,16 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # Start latency tracking
         self._latency_tracker.start(run_id)
 
+        metadata = kwargs.get("metadata") or {}
+        retriever_name = (serialized or {}).get("name") or "retriever"
+        self._register_run_metadata(run_id, parent_run_id, retriever_name, metadata)
+
         self._log(
             "RETRIEVER_START",
             run_id,
             content=query,
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
         )
 
     def on_retriever_end(
@@ -3345,6 +3665,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        self._run_context_registry.pop(run_id)
 
         docs = [doc.model_dump() for doc in documents]
         self._log(
@@ -3352,7 +3674,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             run_id,
             content=json.dumps(docs, default=str),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
@@ -3367,13 +3689,15 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        self._run_context_registry.pop(run_id)
 
         self._log(
             "RETRIEVER_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)
@@ -3388,13 +3712,15 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     ) -> None:
         # End latency tracking
         latency_measurement = self._latency_tracker.end(run_id)
+        metadata = self._resolve_event_metadata(run_id, kwargs.get("metadata"))
+        self._run_context_registry.pop(run_id)
 
         self._log(
             "LLM_ERROR",
             run_id,
             error=str(error),
             parent_run_id=parent_run_id,
-            metadata=kwargs.get("metadata"),
+            metadata=metadata,
             latency_measurement=latency_measurement,
         )
         self.trace_registry.end_run(run_id)

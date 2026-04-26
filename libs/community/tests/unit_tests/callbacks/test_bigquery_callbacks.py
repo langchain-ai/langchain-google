@@ -10,13 +10,14 @@ from uuid import uuid4
 import pytest
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage
-from langchain_core.outputs import Generation, LLMResult
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.outputs import ChatGeneration, Generation, LLMResult
 
 from langchain_google_community.callbacks.bigquery_callback import (
     AsyncBigQueryCallbackHandler,
     AsyncTraceIdRegistry,
     BigQueryCallbackHandler,
+    BigQueryLoggerConfig,
     TraceIdRegistry,
 )
 
@@ -1448,3 +1449,378 @@ async def test_tool_name_tracking_async(
     end_call = calls[1][0][0]
     assert end_call["event_type"] == "TOOL_COMPLETED"
     assert end_call["attributes"]["tool_name"] == "calculator"
+
+
+# ==============================================================================
+# REGRESSION TESTS FOR ISSUE #1690
+# (Metadata persistence across CHAIN_END / CHAIN_ERROR events)
+# ==============================================================================
+
+
+def test_chain_end_preserves_metadata_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """CHAIN_END must carry agent / user_id / session_id from the start call.
+
+    langchain-core does not forward ``metadata`` to ``on_chain_end``; without
+    the start-time registry we'd lose it. See issue #1690.
+    """
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    metadata = {
+        "session_id": "test-session",
+        "user_id": "test-user",
+        "agent": "test-agent",
+    }
+
+    sync_handler.on_chain_start(
+        serialized={"name": "test_chain"},
+        inputs={"input": "hello"},
+        run_id=run_id,
+        metadata=metadata,
+    )
+    # langchain-core deliberately omits metadata from on_chain_end kwargs.
+    sync_handler.on_chain_end(outputs={"output": "ok"}, run_id=run_id)
+
+    calls = sync_handler.batch_processor.append.call_args_list
+    assert len(calls) == 2
+    start_row, end_row = calls[0][0][0], calls[1][0][0]
+
+    for row in (start_row, end_row):
+        assert row["session_id"] == "test-session"
+        assert row["user_id"] == "test-user"
+        assert row["agent"] == "test-agent"
+
+
+def test_chain_error_preserves_metadata_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """CHAIN_ERROR must also carry metadata captured at start (issue #1690)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    metadata = {
+        "session_id": "sess",
+        "user_id": "alice",
+        "agent": "react-agent",
+    }
+
+    sync_handler.on_chain_start(
+        serialized={"name": "test_chain"},
+        inputs={"input": "boom"},
+        run_id=run_id,
+        metadata=metadata,
+    )
+    sync_handler.on_chain_error(error=RuntimeError("nope"), run_id=run_id)
+
+    calls = sync_handler.batch_processor.append.call_args_list
+    assert len(calls) == 2
+    err_row = calls[1][0][0]
+    assert err_row["event_type"] == "CHAIN_ERROR"
+    assert err_row["session_id"] == "sess"
+    assert err_row["user_id"] == "alice"
+    assert err_row["agent"] == "react-agent"
+
+
+@pytest.mark.asyncio
+async def test_chain_end_preserves_metadata_async(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    metadata = {
+        "session_id": "s1",
+        "user_id": "u1",
+        "agent": "a1",
+    }
+
+    await handler.on_chain_start(
+        serialized={"name": "chain_async"},
+        inputs={"q": "hi"},
+        run_id=run_id,
+        metadata=metadata,
+    )
+    await handler.on_chain_end(outputs={"o": "yo"}, run_id=run_id)
+
+    calls = handler.async_batch_processor.append.call_args_list
+    assert len(calls) == 2
+    for row in (calls[0][0][0], calls[1][0][0]):
+        assert row["session_id"] == "s1"
+        assert row["user_id"] == "u1"
+        assert row["agent"] == "a1"
+
+
+def test_tool_end_preserves_metadata_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """TOOL_COMPLETED must keep session_id/user_id/agent (issue #1690)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    metadata = {"session_id": "s2", "user_id": "u2", "agent": "a2"}
+    sync_handler.on_tool_start(
+        serialized={"name": "calc"},
+        input_str="1+1",
+        run_id=run_id,
+        metadata=metadata,
+    )
+    sync_handler.on_tool_end(output="2", run_id=run_id)
+
+    end_row = sync_handler.batch_processor.append.call_args_list[1][0][0]
+    assert end_row["session_id"] == "s2"
+    assert end_row["user_id"] == "u2"
+    assert end_row["agent"] == "a2"
+
+
+def test_llm_end_preserves_metadata_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """LLM_RESPONSE must keep metadata captured at on_llm_start (issue #1690)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    metadata = {"session_id": "s3", "user_id": "u3", "agent": "a3"}
+    sync_handler.on_llm_start(
+        serialized={"name": "test_llm"},
+        prompts=["hi"],
+        run_id=run_id,
+        metadata=metadata,
+    )
+    sync_handler.on_llm_end(
+        LLMResult(generations=[[Generation(text="hello")]], llm_output={}),
+        run_id=run_id,
+    )
+
+    end_row = sync_handler.batch_processor.append.call_args_list[1][0][0]
+    assert end_row["session_id"] == "s3"
+    assert end_row["user_id"] == "u3"
+    assert end_row["agent"] == "a3"
+
+
+# ==============================================================================
+# REGRESSION TESTS FOR ISSUE #1720
+# (Token tracking, sub-agent attribution, event-noise filtering)
+# ==============================================================================
+
+
+def test_token_usage_extracted_from_legacy_llm_output(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Legacy ``llm_output['token_usage']`` is still picked up (issue #1720)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    response = LLMResult(
+        generations=[[Generation(text="ok")]],
+        llm_output={"token_usage": {"total_tokens": 42, "prompt_tokens": 30}},
+    )
+    sync_handler.on_llm_end(response, run_id=uuid4())
+
+    row = sync_handler.batch_processor.append.call_args_list[0][0][0]
+    assert row["attributes"]["usage"] == {
+        "total_tokens": 42,
+        "prompt_tokens": 30,
+    }
+
+
+def test_token_usage_extracted_from_chat_message_metadata(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Modern Chat models attach ``usage_metadata`` to the AIMessage; the
+    handler must surface it when ``llm_output`` is empty (issue #1720)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    msg = AIMessage(
+        content="hello there",
+        usage_metadata={
+            "input_tokens": 100,
+            "output_tokens": 25,
+            "total_tokens": 125,
+        },
+    )
+    response = LLMResult(
+        generations=[[ChatGeneration(message=msg)]],
+        llm_output=None,
+    )
+    sync_handler.on_llm_end(response, run_id=uuid4())
+
+    row = sync_handler.batch_processor.append.call_args_list[0][0][0]
+    usage = row["attributes"]["usage"]
+    assert usage is not None
+    assert usage["prompt_tokens"] == 100
+    assert usage["completion_tokens"] == 25
+    assert usage["total_tokens"] == 125
+
+
+def test_sub_agent_attribution_from_langgraph_node_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """When ``agent`` isn't set explicitly, the active LangGraph node fills the
+    ``agent`` column so multi-agent telemetry can be filtered per sub-agent
+    (issue #1720)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    metadata = {
+        "session_id": "s",
+        "user_id": "u",
+        "langgraph_node": "TheCritic",
+        "langgraph_step": 2,
+    }
+    sync_handler.on_chain_start(
+        serialized={"name": "TheCritic"},
+        inputs={"x": 1},
+        run_id=run_id,
+        metadata=metadata,
+    )
+    sync_handler.on_chain_end(outputs={"y": 2}, run_id=run_id)
+
+    calls = sync_handler.batch_processor.append.call_args_list
+    assert len(calls) == 2
+    for row in (calls[0][0][0], calls[1][0][0]):
+        assert row["agent"] == "TheCritic"
+
+
+def test_explicit_agent_metadata_overrides_langgraph_node(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Explicit ``agent`` always wins over the LangGraph-node fallback."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    sync_handler.on_chain_start(
+        serialized={"name": "x"},
+        inputs={},
+        run_id=uuid4(),
+        metadata={"agent": "PrimaryAgent", "langgraph_node": "TheCritic"},
+    )
+    row = sync_handler.batch_processor.append.call_args_list[0][0][0]
+    assert row["agent"] == "PrimaryAgent"
+
+
+def test_skip_internal_chain_events_drops_framework_chains(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``skip_internal_chain_events=True`` removes noisy framework chain events
+    (ChannelWrite, RunnableLambda, ...) from telemetry (issue #1720)."""
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(skip_internal_chain_events=True),
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    parent_run_id = uuid4()
+    internal_run_id = uuid4()
+
+    # An internal LangGraph chain must be silently dropped on both ends.
+    handler.on_chain_start(
+        serialized={"name": "ChannelWrite<messages>"},
+        inputs={"x": 1},
+        run_id=internal_run_id,
+        parent_run_id=parent_run_id,
+        metadata={},
+    )
+    handler.on_chain_end(outputs={"x": 2}, run_id=internal_run_id)
+
+    # A user-defined chain must still be emitted.
+    user_run_id = uuid4()
+    handler.on_chain_start(
+        serialized={"name": "MyCustomChain"},
+        inputs={"x": 1},
+        run_id=user_run_id,
+        parent_run_id=parent_run_id,
+        metadata={},
+    )
+    handler.on_chain_end(outputs={"x": 2}, run_id=user_run_id)
+
+    emitted = handler.batch_processor.append.call_args_list
+    assert len(emitted) == 2
+    for row in emitted:
+        # Only the user chain's events should have been recorded.
+        assert "ChannelWrite" not in (row[0][0]["content"] or {}).get("data", "")
+        assert row[0][0]["event_type"] in ("CHAIN_START", "CHAIN_END")
+
+
+def test_skip_internal_chain_events_preserves_langgraph_nodes(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """LangGraph node chains must NOT be skipped, even when their name matches
+    the internal pattern."""
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(skip_internal_chain_events=True),
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    run_id = uuid4()
+    handler.on_chain_start(
+        serialized={"name": "RunnableLambda"},  # matches internal pattern
+        inputs={},
+        run_id=run_id,
+        metadata={"langgraph_node": "TheMeteo"},  # ...but it's a node
+    )
+    handler.on_chain_end(outputs={}, run_id=run_id)
+
+    emitted = handler.batch_processor.append.call_args_list
+    assert len(emitted) == 2
+    assert emitted[0][0][0]["event_type"] == "NODE_STARTING"
+    assert emitted[1][0][0]["event_type"] == "NODE_COMPLETED"
+    assert emitted[1][0][0]["agent"] == "TheMeteo"
+
+
+def test_extract_token_usage_returns_none_for_empty_response() -> None:
+    """No usage anywhere → returns None (no spurious zeros)."""
+    response = LLMResult(generations=[[Generation(text="x")]], llm_output=None)
+    assert BigQueryCallbackHandler._extract_token_usage(response) is None
+
+
+def test_extract_token_usage_prefers_legacy_when_present() -> None:
+    """If ``llm_output['token_usage']`` is set, use it verbatim."""
+    msg = AIMessage(
+        content="x",
+        usage_metadata={"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+    )
+    response = LLMResult(
+        generations=[[ChatGeneration(message=msg)]],
+        llm_output={"token_usage": {"total_tokens": 99}},
+    )
+    assert BigQueryCallbackHandler._extract_token_usage(response) == {
+        "total_tokens": 99,
+    }
