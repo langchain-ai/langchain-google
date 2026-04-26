@@ -25,6 +25,7 @@ from langchain_google_vertexai._anthropic_utils import (
     _format_message_anthropic,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
+    _merge_messages,
     _thinking_in_params,
 )
 
@@ -1105,6 +1106,51 @@ def test_ai_message_empty_content_without_tool_calls() -> None:
         message_empty_list, project="test-project"
     )
     assert result_empty_list is None
+
+
+def test_tool_message_empty_content_produces_tool_result() -> None:
+    """Test that ToolMessage with content=[] still produces a tool_result block.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1722
+
+    Python's all() on an empty iterable returns True, which caused
+    ToolMessage(content=[]) to be treated as pre-formatted tool_result blocks
+    and converted to HumanMessage([]). The empty HumanMessage was then merged
+    into the next HumanMessage, silently dropping the tool_result.
+    """
+    messages = [
+        HumanMessage(content="Search for controls"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "Let me search."},
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "field_search",
+                    "input": {"query": "controls"},
+                },
+            ],
+        ),
+        ToolMessage(content=[], tool_call_id="call_1"),
+        HumanMessage(content="What did you find?"),
+    ]
+
+    merged = _merge_messages(messages)
+
+    # Find all tool_result blocks in the merged output
+    tool_results = [
+        block
+        for m in merged
+        if isinstance(m.content, list)
+        for block in m.content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+
+    assert len(tool_results) == 1, (
+        f"Expected 1 tool_result block, got {len(tool_results)}. "
+        "ToolMessage with empty content should still produce a tool_result."
+    )
+    assert tool_results[0]["tool_use_id"] == "call_1"
 
 
 def test_format_messages_tool_message_with_streaming_metadata() -> None:

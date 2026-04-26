@@ -439,7 +439,7 @@ def _merge_messages(
         curr = curr.model_copy(deep=True)
         if isinstance(curr, ToolMessage):
             # Check if already in tool_result format (backward compatibility)
-            if isinstance(curr.content, list) and all(
+            if isinstance(curr.content, list) and curr.content and all(
                 isinstance(block, dict) and block.get("type") == "tool_result"
                 for block in curr.content
             ):
