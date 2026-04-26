@@ -2367,6 +2367,17 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             # and trace continuity breaks across the skipped boundary).
             await self.trace_registry.register_run(run_id, parent_run_id)
             self._mark_run_skipped(run_id)
+            # Emit at DEBUG so operators can audit what the heuristic dropped
+            # (the patterns are best-effort; users can enable
+            # ``logging.getLogger(__name__).setLevel(logging.DEBUG)`` to see
+            # exactly which chains are being suppressed).
+            logger.debug(
+                "BigQueryCallbackHandler: skipped internal chain '%s' "
+                "(run_id=%s, parent_run_id=%s)",
+                chain_name,
+                run_id,
+                parent_run_id,
+            )
             return
 
         # Start latency tracking
@@ -3385,6 +3396,14 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             # skipped boundary).
             self.trace_registry.register_run(run_id, parent_run_id)
             self._mark_run_skipped(run_id)
+            # Audit signal — see the AsyncBigQueryCallbackHandler counterpart.
+            logger.debug(
+                "BigQueryCallbackHandler: skipped internal chain '%s' "
+                "(run_id=%s, parent_run_id=%s)",
+                chain_name,
+                run_id,
+                parent_run_id,
+            )
             return
 
         # Start latency tracking
