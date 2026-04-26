@@ -20,7 +20,7 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
@@ -214,7 +214,7 @@ class _GeminiGenerateContentKwargs(TypedDict):
     tool_config: ToolConfig | None
 
 
-def _validate_video_metadata(video_metadata: dict) -> None:
+def _validate_video_metadata(video_metadata: object) -> None:
     """Validate user-supplied video metadata before sending to Vertex AI.
 
     The Vertex API surfaces an opaque ``400 invalid argument`` when video
@@ -223,37 +223,65 @@ def _validate_video_metadata(video_metadata: dict) -> None:
     callers do not have to debug the underlying API response.
 
     Args:
-        video_metadata: Raw ``video_metadata`` dict from a media part. May
-            contain ``start_offset`` and ``end_offset`` as a number of
-            seconds, a ``{"seconds": int, "nanos": int}`` mapping, a
-            ``google.protobuf.duration_pb2.Duration`` instance, or a string
-            like ``"10s"``.
+        video_metadata: Raw ``video_metadata`` from a media part. Accepts
+            a ``Mapping`` (e.g. ``dict``) or a ``VideoMetadata`` proto-like
+            instance with ``start_offset``/``end_offset`` attributes. Each
+            offset may be a number of seconds, a ``{"seconds": int,
+            "nanos": int}`` mapping, a ``google.protobuf.duration_pb2.
+            Duration`` instance, or a string like ``"10s"``.
 
     Raises:
-        ValueError: If an offset is negative or ``start_offset`` is greater
-            than ``end_offset``.
+        ValueError: If an offset is negative, ``start_offset`` is greater
+            than ``end_offset``, or ``video_metadata`` is not a mapping or
+            proto-like object exposing offset fields.
     """
 
     def _to_seconds(value: object) -> float | None:
-        if value is None:
-            return None
-        if isinstance(value, bool):
+        if value is None or isinstance(value, bool):
             return None
         if isinstance(value, (int, float)):
             return float(value)
-        if isinstance(value, dict):
-            return float(value.get("seconds", 0)) + float(value.get("nanos", 0)) / 1e9
-        if hasattr(value, "seconds"):
-            return float(value.seconds) + float(getattr(value, "nanos", 0)) / 1e9
-        if isinstance(value, str) and value.endswith("s"):
+        if isinstance(value, str):
+            if not value.endswith("s"):
+                return None
             try:
                 return float(value[:-1])
-            except ValueError:
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, Mapping):
+            try:
+                return (
+                    float(value.get("seconds", 0)) + float(value.get("nanos", 0)) / 1e9
+                )
+            except (TypeError, ValueError):
+                return None
+        if hasattr(value, "seconds"):
+            try:
+                return float(value.seconds) + float(getattr(value, "nanos", 0)) / 1e9
+            except (TypeError, ValueError):
                 return None
         return None
 
-    start = _to_seconds(video_metadata.get("start_offset"))
-    end = _to_seconds(video_metadata.get("end_offset"))
+    if isinstance(video_metadata, Mapping):
+        raw_start = video_metadata.get("start_offset")
+        raw_end = video_metadata.get("end_offset")
+    elif hasattr(video_metadata, "start_offset") or hasattr(
+        video_metadata, "end_offset"
+    ):
+        # Proto-like object (e.g. ``VideoMetadata`` instance). Read fields
+        # via attribute access instead of ``.get`` so we don't regress
+        # callers that already pass a constructed proto.
+        raw_start = getattr(video_metadata, "start_offset", None)
+        raw_end = getattr(video_metadata, "end_offset", None)
+    else:
+        msg = (
+            "video_metadata must be a mapping or a VideoMetadata-like object "
+            f"with start_offset/end_offset, got {type(video_metadata).__name__}"
+        )
+        raise ValueError(msg)
+
+    start = _to_seconds(raw_start)
+    end = _to_seconds(raw_end)
 
     if start is not None and start < 0:
         msg = f"video_metadata.start_offset must be non-negative, got {start}s"
