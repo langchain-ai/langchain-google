@@ -585,9 +585,7 @@ def _maybe_upgrade_schema(
         return
 
     existing_field_names = {f.name for f in existing_table.schema}
-    added: List[Any] = [
-        f for f in target_schema if f.name not in existing_field_names
-    ]
+    added: List[Any] = [f for f in target_schema if f.name not in existing_field_names]
     if not added:
         existing_table.labels = {
             **existing_labels,
@@ -628,9 +626,7 @@ def _maybe_upgrade_schema(
         )
 
 
-def _create_analytics_views(
-    client: Any, view_prefix: str, full_table_id: str
-) -> None:
+def _create_analytics_views(client: Any, view_prefix: str, full_table_id: str) -> None:
     """CREATE OR REPLACE per-event-type analytics views.
 
     Mirrors ADK's auto-views: each view UNNESTs the JSON columns into typed
@@ -642,9 +638,7 @@ def _create_analytics_views(
     try:
         project, dataset, table = full_table_id.split(".")
     except ValueError:
-        logger.warning(
-            "Cannot create views — unexpected table id %r", full_table_id
-        )
+        logger.warning("Cannot create views — unexpected table id %r", full_table_id)
         return
     for event_type, columns in _EVENT_VIEW_DEFS.items():
         view_name = f"{view_prefix}_{_event_type_to_view_suffix(event_type)}"
@@ -2164,13 +2158,13 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             if metadata and "usage" in metadata:
                 content["usage"] = metadata["usage"]
 
-        elif event_type in ("TOOL_STARTING", "NODE_STARTING"):
+        elif event_type in ("TOOL_STARTING", "AGENT_STARTING"):
             if isinstance(raw_content, dict):
                 content.update(raw_content)
             else:
                 content["input"] = raw_content
 
-        elif event_type in ("TOOL_COMPLETED", "NODE_COMPLETED"):
+        elif event_type in ("TOOL_COMPLETED", "AGENT_COMPLETED"):
             if isinstance(raw_content, dict):
                 content.update(raw_content)
             else:
@@ -2520,9 +2514,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         _maybe_upgrade_schema(self.client, existing_table, target_schema)
 
     def _create_analytics_views(self, full_table_id: str) -> None:
-        _create_analytics_views(
-            self.client, self.config.view_prefix, full_table_id
-        )
+        _create_analytics_views(self.client, self.config.view_prefix, full_table_id)
 
     async def _log(
         self,
@@ -2888,12 +2880,12 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         if is_graph_root:
             # This is a graph root invocation
             self._reset_execution_order()
-            event_type = "GRAPH_START"
+            event_type = "INVOCATION_STARTING"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         elif langgraph_node:
             # This is a LangGraph node
             self._increment_execution_order()
-            event_type = "NODE_STARTING"
+            event_type = "AGENT_STARTING"
             attributes = self._build_langgraph_attributes(
                 node_name=langgraph_node, metadata=metadata
             )
@@ -2937,13 +2929,13 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         if langgraph_node or (context and context.name == langgraph_node):
             # This was a LangGraph node
             node_name = langgraph_node or (context.name if context else None)
-            event_type = "NODE_COMPLETED"
+            event_type = "AGENT_COMPLETED"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
         elif parent_run_id is None and self.graph_name:
             # This might be graph end (no parent, graph_name set)
-            event_type = "GRAPH_END"
+            event_type = "INVOCATION_COMPLETED"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
             event_type = "CHAIN_END"
@@ -3186,12 +3178,12 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
 
         if langgraph_node or (context and context.name == langgraph_node):
             node_name = langgraph_node or (context.name if context else None)
-            event_type = "NODE_ERROR"
+            event_type = "AGENT_ERROR"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
         elif parent_run_id is None and self.graph_name:
-            event_type = "GRAPH_ERROR"
+            event_type = "INVOCATION_ERROR"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
             event_type = "CHAIN_ERROR"
@@ -3224,7 +3216,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             metadata: Optional metadata to include in events.
 
         Returns:
-            AsyncGraphExecutionContext that emits GRAPH_START/GRAPH_END events.
+            AsyncGraphExecutionContext (emits INVOCATION_STARTING/INVOCATION_COMPLETED).
         """
         return AsyncGraphExecutionContext(self, graph_name, metadata)
 
@@ -3437,13 +3429,13 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             if metadata and "usage" in metadata:
                 content["usage"] = metadata["usage"]
 
-        elif event_type in ("TOOL_STARTING", "NODE_STARTING"):
+        elif event_type in ("TOOL_STARTING", "AGENT_STARTING"):
             if isinstance(raw_content, dict):
                 content.update(raw_content)
             else:
                 content["input"] = raw_content
 
-        elif event_type in ("TOOL_COMPLETED", "NODE_COMPLETED"):
+        elif event_type in ("TOOL_COMPLETED", "AGENT_COMPLETED"):
             if isinstance(raw_content, dict):
                 content.update(raw_content)
             else:
@@ -3700,9 +3692,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         _maybe_upgrade_schema(self.client, existing_table, target_schema)
 
     def _create_analytics_views(self, full_table_id: str) -> None:
-        _create_analytics_views(
-            self.client, self.config.view_prefix, full_table_id
-        )
+        _create_analytics_views(self.client, self.config.view_prefix, full_table_id)
 
     def _log(
         self,
@@ -4018,12 +4008,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         if is_graph_root:
             # This is a graph root invocation
             self._reset_execution_order()
-            event_type = "GRAPH_START"
+            event_type = "INVOCATION_STARTING"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         elif langgraph_node:
             # This is a LangGraph node
             self._increment_execution_order()
-            event_type = "NODE_STARTING"
+            event_type = "AGENT_STARTING"
             attributes = self._build_langgraph_attributes(
                 node_name=langgraph_node, metadata=metadata
             )
@@ -4062,12 +4052,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
 
         if langgraph_node or (context and context.name == langgraph_node):
             node_name = langgraph_node or (context.name if context else None)
-            event_type = "NODE_COMPLETED"
+            event_type = "AGENT_COMPLETED"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
         elif parent_run_id is None and self.graph_name:
-            event_type = "GRAPH_END"
+            event_type = "INVOCATION_COMPLETED"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
             event_type = "CHAIN_END"
@@ -4106,12 +4096,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
 
         if langgraph_node or (context and context.name == langgraph_node):
             node_name = langgraph_node or (context.name if context else None)
-            event_type = "NODE_ERROR"
+            event_type = "AGENT_ERROR"
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
         elif parent_run_id is None and self.graph_name:
-            event_type = "GRAPH_ERROR"
+            event_type = "INVOCATION_ERROR"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
             event_type = "CHAIN_ERROR"
@@ -4368,7 +4358,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             metadata: Optional metadata to include in events.
 
         Returns:
-            GraphExecutionContext that emits GRAPH_START/GRAPH_END events.
+            GraphExecutionContext (emits INVOCATION_STARTING/INVOCATION_COMPLETED).
         """
         return GraphExecutionContext(self, graph_name, metadata)
 
@@ -4382,15 +4372,15 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
 
 
 class GraphExecutionContext:
-    """Context manager for wrapping graph execution with GRAPH_START/GRAPH_END events.
+    """Emits INVOCATION_STARTING/INVOCATION_COMPLETED for a graph run.
 
     Usage:
         with handler.graph_context("my_graph") as ctx:
             # Graph execution happens here
             result = graph.invoke(inputs)
 
-    This will emit GRAPH_START when entering and GRAPH_END when exiting.
-    If an exception occurs, GRAPH_ERROR will be emitted instead of GRAPH_END.
+    Emits INVOCATION_STARTING on enter and INVOCATION_COMPLETED on exit.
+    On exception, INVOCATION_ERROR is emitted instead of INVOCATION_COMPLETED.
     """
 
     def __init__(
@@ -4413,7 +4403,7 @@ class GraphExecutionContext:
         self._original_graph_name: Optional[str] = None
 
     def __enter__(self) -> "GraphExecutionContext":
-        """Enter the context and emit GRAPH_START event."""
+        """Enter the context and emit INVOCATION_STARTING event."""
         self._run_id = uuid.uuid4()
         self._original_graph_name = self.handler.graph_name
         self.handler.graph_name = self.graph_name
@@ -4421,7 +4411,7 @@ class GraphExecutionContext:
         self.handler._latency_tracker.start(self._run_id)
 
         self.handler._log(
-            "GRAPH_START",
+            "INVOCATION_STARTING",
             self._run_id,
             content=json.dumps({"graph_name": self.graph_name}, default=str),
             attributes=self.handler._build_langgraph_attributes(metadata=self.metadata),
@@ -4435,16 +4425,16 @@ class GraphExecutionContext:
         exc_val: Optional[BaseException],
         exc_tb: Any,
     ) -> None:
-        """Exit the context and emit GRAPH_END or GRAPH_ERROR event."""
+        """Exit the context and emit INVOCATION_COMPLETED or INVOCATION_ERROR event."""
         if self._run_id is None:
             return
 
         latency_measurement = self.handler._latency_tracker.end(self._run_id)
 
         if exc_val is not None:
-            # An exception occurred - emit GRAPH_ERROR
+            # An exception occurred - emit INVOCATION_ERROR
             self.handler._log(
-                "GRAPH_ERROR",
+                "INVOCATION_ERROR",
                 self._run_id,
                 error=str(exc_val),
                 attributes=self.handler._build_langgraph_attributes(
@@ -4454,9 +4444,9 @@ class GraphExecutionContext:
                 latency_measurement=latency_measurement,
             )
         else:
-            # Normal completion - emit GRAPH_END
+            # Normal completion - emit INVOCATION_COMPLETED
             self.handler._log(
-                "GRAPH_END",
+                "INVOCATION_COMPLETED",
                 self._run_id,
                 content=json.dumps({"graph_name": self.graph_name}, default=str),
                 attributes=self.handler._build_langgraph_attributes(
@@ -4483,8 +4473,8 @@ class AsyncGraphExecutionContext:
             # Graph execution happens here
             result = await graph.ainvoke(inputs)
 
-    This will emit GRAPH_START when entering and GRAPH_END when exiting.
-    If an exception occurs, GRAPH_ERROR will be emitted instead of GRAPH_END.
+    Emits INVOCATION_STARTING on enter and INVOCATION_COMPLETED on exit.
+    On exception, INVOCATION_ERROR is emitted instead of INVOCATION_COMPLETED.
     """
 
     def __init__(
@@ -4507,7 +4497,7 @@ class AsyncGraphExecutionContext:
         self._original_graph_name: Optional[str] = None
 
     async def __aenter__(self) -> "AsyncGraphExecutionContext":
-        """Enter the context and emit GRAPH_START event."""
+        """Enter the context and emit INVOCATION_STARTING event."""
         self._run_id = uuid.uuid4()
         self._original_graph_name = self.handler.graph_name
         self.handler.graph_name = self.graph_name
@@ -4515,7 +4505,7 @@ class AsyncGraphExecutionContext:
         await self.handler._latency_tracker.start(self._run_id)
 
         await self.handler._log(
-            "GRAPH_START",
+            "INVOCATION_STARTING",
             self._run_id,
             content=json.dumps({"graph_name": self.graph_name}, default=str),
             attributes=self.handler._build_langgraph_attributes(metadata=self.metadata),
@@ -4529,16 +4519,16 @@ class AsyncGraphExecutionContext:
         exc_val: Optional[BaseException],
         exc_tb: Any,
     ) -> None:
-        """Exit the context and emit GRAPH_END or GRAPH_ERROR event."""
+        """Exit the context and emit INVOCATION_COMPLETED or INVOCATION_ERROR event."""
         if self._run_id is None:
             return
 
         latency_measurement = await self.handler._latency_tracker.end(self._run_id)
 
         if exc_val is not None:
-            # An exception occurred - emit GRAPH_ERROR
+            # An exception occurred - emit INVOCATION_ERROR
             await self.handler._log(
-                "GRAPH_ERROR",
+                "INVOCATION_ERROR",
                 self._run_id,
                 error=str(exc_val),
                 attributes=self.handler._build_langgraph_attributes(
@@ -4548,9 +4538,9 @@ class AsyncGraphExecutionContext:
                 latency_measurement=latency_measurement,
             )
         else:
-            # Normal completion - emit GRAPH_END
+            # Normal completion - emit INVOCATION_COMPLETED
             await self.handler._log(
-                "GRAPH_END",
+                "INVOCATION_COMPLETED",
                 self._run_id,
                 content=json.dumps({"graph_name": self.graph_name}, default=str),
                 attributes=self.handler._build_langgraph_attributes(

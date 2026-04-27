@@ -1306,8 +1306,8 @@ def test_context_manager_emits_events(
     assert sync_handler.batch_processor.append.call_count == 2
 
     calls = sync_handler.batch_processor.append.call_args_list
-    assert calls[0][0][0]["event_type"] == "GRAPH_START"
-    assert calls[1][0][0]["event_type"] == "GRAPH_END"
+    assert calls[0][0][0]["event_type"] == "INVOCATION_STARTING"
+    assert calls[1][0][0]["event_type"] == "INVOCATION_COMPLETED"
 
 
 def test_context_manager_handles_errors(
@@ -1329,8 +1329,8 @@ def test_context_manager_handles_errors(
     assert sync_handler.batch_processor.append.call_count == 2
 
     calls = sync_handler.batch_processor.append.call_args_list
-    assert calls[0][0][0]["event_type"] == "GRAPH_START"
-    assert calls[1][0][0]["event_type"] == "GRAPH_ERROR"
+    assert calls[0][0][0]["event_type"] == "INVOCATION_STARTING"
+    assert calls[1][0][0]["event_type"] == "INVOCATION_ERROR"
     assert "Test error" in calls[1][0][0]["error_message"]
 
 
@@ -1351,8 +1351,8 @@ async def test_async_context_manager_emits_events(
     assert handler.async_batch_processor.append.call_count == 2
 
     calls = handler.async_batch_processor.append.call_args_list
-    assert calls[0][0][0]["event_type"] == "GRAPH_START"
-    assert calls[1][0][0]["event_type"] == "GRAPH_END"
+    assert calls[0][0][0]["event_type"] == "INVOCATION_STARTING"
+    assert calls[1][0][0]["event_type"] == "INVOCATION_COMPLETED"
 
 
 @pytest.mark.asyncio
@@ -1375,8 +1375,8 @@ async def test_async_context_manager_handles_errors(
     assert handler.async_batch_processor.append.call_count == 2
 
     calls = handler.async_batch_processor.append.call_args_list
-    assert calls[0][0][0]["event_type"] == "GRAPH_START"
-    assert calls[1][0][0]["event_type"] == "GRAPH_ERROR"
+    assert calls[0][0][0]["event_type"] == "INVOCATION_STARTING"
+    assert calls[1][0][0]["event_type"] == "INVOCATION_ERROR"
 
 
 # ==============================================================================
@@ -1800,8 +1800,8 @@ def test_skip_internal_chain_events_preserves_langgraph_nodes(
 
     emitted = handler.batch_processor.append.call_args_list
     assert len(emitted) == 2
-    assert emitted[0][0][0]["event_type"] == "NODE_STARTING"
-    assert emitted[1][0][0]["event_type"] == "NODE_COMPLETED"
+    assert emitted[0][0][0]["event_type"] == "AGENT_STARTING"
+    assert emitted[1][0][0]["event_type"] == "AGENT_COMPLETED"
     assert emitted[1][0][0]["agent"] == "TheMeteo"
 
 
