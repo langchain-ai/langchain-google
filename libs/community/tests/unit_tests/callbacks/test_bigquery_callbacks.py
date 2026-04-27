@@ -1960,3 +1960,233 @@ async def test_skipped_internal_chain_preserves_trace_continuity_async(
     )
     assert llm_row["trace_id"] == str(root_run_id)
     assert llm_row["trace_id"] != str(skipped_run_id)
+
+
+# ==============================================================================
+# ADK PARITY: ATTRIBUTE ENRICHMENT
+# ==============================================================================
+
+
+def test_attributes_enriched_with_root_agent_name(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``attributes.root_agent_name`` mirrors the handler's ``graph_name``.
+
+    Matches ADK's ``_enrich_attributes`` so dashboards can group by top-level
+    agent without users having to set ``metadata['agent']`` themselves.
+    """
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        graph_name="MyTopAgent",
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    handler.on_chain_start(serialized={"name": "x"}, inputs={}, run_id=uuid4())
+    row = handler.batch_processor.append.call_args_list[0].args[0]
+    assert row["attributes"]["root_agent_name"] == "MyTopAgent"
+
+
+def test_attributes_enriched_with_custom_tags(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Static ``custom_tags`` from config land on every event row."""
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(
+            custom_tags={"env": "staging", "agent_role": "sales"},
+        ),
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    handler.on_chain_start(serialized={"name": "x"}, inputs={}, run_id=uuid4())
+    row = handler.batch_processor.append.call_args_list[0].args[0]
+    assert row["attributes"]["custom_tags"] == {
+        "env": "staging",
+        "agent_role": "sales",
+    }
+
+
+def test_attributes_session_metadata_can_be_disabled(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``log_session_metadata=False`` suppresses the passthrough dump."""
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(log_session_metadata=False),
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    handler.on_chain_start(
+        serialized={"name": "x"},
+        inputs={},
+        run_id=uuid4(),
+        metadata={"thread_id": "t1", "extra": "y"},
+    )
+    row = handler.batch_processor.append.call_args_list[0].args[0]
+    assert "session_metadata" not in (row["attributes"] or {})
+
+
+def test_attributes_session_metadata_excludes_promoted_keys(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``session_metadata`` only carries keys we don't already promote.
+
+    ``session_id`` / ``user_id`` / ``langgraph_node`` are surfaced as
+    first-class columns (or in the langgraph attribute block), so the
+    session_metadata dump must not duplicate them.
+    """
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    handler.on_chain_start(
+        serialized={"name": "x"},
+        inputs={},
+        run_id=uuid4(),
+        metadata={
+            "session_id": "s1",
+            "user_id": "u1",
+            "langgraph_node": "TheCritic",
+            "thread_id": "t1",
+            "customer_id": "c-42",
+        },
+    )
+    row = handler.batch_processor.append.call_args_list[0].args[0]
+    session_meta = row["attributes"]["session_metadata"]
+    assert session_meta == {"thread_id": "t1", "customer_id": "c-42"}
+
+
+def test_llm_request_attributes_capture_llm_config_and_tools(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Mirrors ADK's per-LLM-request capture so dashboards can slice by
+    temperature / available tools."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    sync_handler.on_llm_start(
+        serialized={
+            "name": "gemini-flash",
+            "kwargs": {
+                "model": "gemini-2.5-flash",
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "tools": [
+                    {"name": "get_weather"},
+                    {"function": {"name": "critique"}},
+                ],
+            },
+        },
+        prompts=["hi"],
+        run_id=uuid4(),
+    )
+    row = sync_handler.batch_processor.append.call_args_list[0].args[0]
+    assert row["attributes"]["llm_config"] == {"temperature": 0.2, "top_p": 0.9}
+    assert row["attributes"]["tools"] == ["get_weather", "critique"]
+
+
+def test_llm_response_attributes_capture_model_version_and_usage(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """ADK parity: ``model_version`` + raw ``usage_metadata`` (incl. cached
+    tokens for context_cache_hit_rate) land on LLM_RESPONSE attributes."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    msg = AIMessage(
+        content="hi",
+        usage_metadata={
+            "input_tokens": 100,
+            "output_tokens": 25,
+            "total_tokens": 125,
+            "cached_content_token_count": 30,
+        },
+        response_metadata={
+            "model_version": "gemini-2.5-flash-001",
+            "cache_metadata": {"cached": True},
+        },
+    )
+    response = LLMResult(
+        generations=[[ChatGeneration(message=msg)]],
+        llm_output=None,
+    )
+    sync_handler.on_llm_end(response, run_id=uuid4())
+    attrs = sync_handler.batch_processor.append.call_args_list[0].args[0]["attributes"]
+    assert attrs["model_version"] == "gemini-2.5-flash-001"
+    assert attrs["usage_metadata"]["cached_content_token_count"] == 30
+    assert attrs["cache_metadata"] == {"cached": True}
+
+
+def test_content_formatter_hook_runs_before_parsing(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``config.content_formatter`` lets users redact / coerce content
+    before the parser sees it. Mirrors ADK's content_formatter hook."""
+    seen: list[tuple[Any, str]] = []
+
+    def redact(content: Any, event_type: str) -> Any:
+        seen.append((content, event_type))
+        if isinstance(content, str):
+            return "[REDACTED]"
+        return content
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(content_formatter=redact),
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    handler.on_text("hello world", run_id=uuid4())
+
+    assert seen and seen[0][1] == "TEXT"
+    row = handler.batch_processor.append.call_args_list[0].args[0]
+    assert "[REDACTED]" in (row["content"] or {}).get("summary", "")
+
+
+def test_flush_method_exists_on_both_handlers(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``flush()`` lets callers ensure durability between requests without
+    tearing the handler down."""
+    assert callable(getattr(sync_handler, "flush", None))
+    sync_handler.flush(timeout=0.1)  # No queued rows; should be a quick no-op.
+
+
+@pytest.mark.asyncio
+async def test_async_flush_method_exists(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    assert callable(getattr(handler, "flush", None))
+    await handler.flush(timeout=0.1)

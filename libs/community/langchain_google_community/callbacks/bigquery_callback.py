@@ -53,6 +53,51 @@ _GRPC_INTERNAL = 13
 _GRPC_UNAVAILABLE = 14
 _DEFAULT_TRACE_ID = "langchain-bq-agent-analytics"
 
+# Bumped whenever ``_get_bigquery_events_schema`` adds a new field. Stored as
+# a label on the events table so ``auto_schema_upgrade`` can short-circuit
+# once a given table has already been migrated to the current schema.
+_SCHEMA_VERSION = "2026-04-27.1"
+_SCHEMA_VERSION_LABEL_KEY = "langchain_bq_schema_version"
+
+
+def _safe_callback(func: Callable) -> Callable:
+    """Decorator that swallows exceptions from a handler callback.
+
+    Telemetry is never allowed to break the agent. The original exception is
+    logged at ERROR with the callback name so operators can still notice it.
+    """
+    if asyncio.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:  # noqa: BLE001 — analytics must not throw
+                logger.error(
+                    "BigQueryCallbackHandler.%s suppressed an exception: %s",
+                    func.__name__,
+                    e,
+                    exc_info=True,
+                )
+                return None
+
+        return async_wrapper
+
+    @functools.wraps(func)
+    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001 — analytics must not throw
+            logger.error(
+                "BigQueryCallbackHandler.%s suppressed an exception: %s",
+                func.__name__,
+                e,
+                exc_info=True,
+            )
+            return None
+
+    return sync_wrapper
+
 
 def _recursive_smart_truncate(obj: Any, max_len: int) -> tuple[Any, bool]:
     """Recursively truncates string values within a dict or list."""
@@ -396,6 +441,133 @@ _INTERNAL_CHAIN_NAME_PATTERNS: tuple[str, ...] = (
 )
 
 
+# Per-event-type analytics view definitions. Each entry is the SELECT-list for
+# a CREATE OR REPLACE VIEW that unnests JSON columns into typed top-level
+# columns. Mirrors ADK's _EVENT_VIEW_DEFS, adapted for our event vocabulary.
+# Event-type keys here use the ADK-aligned names (INVOCATION_*, AGENT_*); see
+# ``BigQueryCallbackHandler._EVENT_TYPE_TO_VIEW_SUFFIX`` for the
+# table-name slug used in the view (e.g. ``v_llm_request``).
+_EVENT_VIEW_DEFS: dict[str, list[str]] = {
+    "USER_MESSAGE_RECEIVED": [],
+    "INVOCATION_STARTING": [],
+    "INVOCATION_COMPLETED": [
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "INVOCATION_ERROR": [
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "AGENT_STARTING": [
+        "JSON_VALUE(attributes, '$.langgraph.node_name') AS node_name",
+        "JSON_VALUE(attributes, '$.langgraph.step') AS step",
+    ],
+    "AGENT_COMPLETED": [
+        "JSON_VALUE(attributes, '$.langgraph.node_name') AS node_name",
+        "JSON_VALUE(attributes, '$.langgraph.step') AS step",
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "AGENT_ERROR": [
+        "JSON_VALUE(attributes, '$.langgraph.node_name') AS node_name",
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "LLM_REQUEST": [
+        "JSON_VALUE(attributes, '$.model') AS model",
+        "content AS request_content",
+        "JSON_QUERY(attributes, '$.llm_config') AS llm_config",
+        "JSON_QUERY(attributes, '$.tools') AS tools",
+    ],
+    "LLM_RESPONSE": [
+        "JSON_QUERY(content, '$.response') AS response",
+        (
+            "CAST(JSON_VALUE(attributes, '$.usage.prompt_tokens') AS INT64) "
+            "AS usage_prompt_tokens"
+        ),
+        (
+            "CAST(JSON_VALUE(attributes, '$.usage.completion_tokens') AS INT64) "
+            "AS usage_completion_tokens"
+        ),
+        (
+            "CAST(JSON_VALUE(attributes, '$.usage.total_tokens') AS INT64) "
+            "AS usage_total_tokens"
+        ),
+        (
+            "CAST(JSON_VALUE(attributes, "
+            "'$.usage_metadata.cached_content_token_count') AS INT64) "
+            "AS usage_cached_tokens"
+        ),
+        (
+            "SAFE_DIVIDE("
+            "CAST(JSON_VALUE(attributes, "
+            "'$.usage_metadata.cached_content_token_count') AS INT64), "
+            "CAST(JSON_VALUE(attributes, '$.usage.prompt_tokens') AS INT64)"
+            ") AS context_cache_hit_rate"
+        ),
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+        (
+            "CAST(JSON_VALUE(latency_ms, '$.time_to_first_token_ms') AS INT64) "
+            "AS ttft_ms"
+        ),
+        "JSON_VALUE(attributes, '$.model_version') AS model_version",
+        "JSON_QUERY(attributes, '$.usage_metadata') AS usage_metadata",
+        "JSON_QUERY(attributes, '$.cache_metadata') AS cache_metadata",
+    ],
+    "LLM_ERROR": [
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "TOOL_STARTING": [
+        "JSON_VALUE(content, '$.tool') AS tool_name",
+        "JSON_QUERY(content, '$.input') AS tool_args",
+    ],
+    "TOOL_COMPLETED": [
+        "JSON_VALUE(content, '$.tool') AS tool_name",
+        "JSON_QUERY(content, '$.result') AS tool_result",
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "TOOL_ERROR": [
+        "JSON_VALUE(content, '$.tool') AS tool_name",
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "RETRIEVER_START": [
+        "content AS query",
+    ],
+    "RETRIEVER_END": [
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+    "RETRIEVER_ERROR": [
+        "CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms",
+    ],
+}
+
+
+_VIEW_SQL_TEMPLATE = """\
+CREATE OR REPLACE VIEW `{project}.{dataset}.{view_name}` AS
+SELECT
+  timestamp,
+  event_type,
+  agent,
+  session_id,
+  invocation_id,
+  user_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  status,
+  error_message,
+  is_truncated,
+  JSON_VALUE(attributes, '$.root_agent_name') AS root_agent_name,
+  JSON_QUERY(attributes, '$.custom_tags') AS custom_tags,
+  JSON_QUERY(attributes, '$.session_metadata') AS session_metadata{extra_columns}
+FROM
+  `{project}.{dataset}.{table}`
+WHERE
+  event_type = '{event_type}'
+"""
+
+
+def _event_type_to_view_suffix(event_type: str) -> str:
+    """``LLM_REQUEST`` -> ``llm_request`` (lower-snake for view names)."""
+    return event_type.lower()
+
+
 @dataclass
 class BigQueryLoggerConfig:
     enabled: bool = True
@@ -419,6 +591,40 @@ class BigQueryLoggerConfig:
     are not LangGraph nodes, root invocations, or recognizable user-defined
     chains. Reduces noise in multi-agent LangGraph deployments where many
     framework-internal chains (ChannelWrite, RunnableLambda, Branch, ...) fire."""
+
+    # --- ADK parity: enrichment, schema evolution, analytics views ---
+    custom_tags: dict[str, Any] = field(default_factory=dict)
+    """Static key-value pairs attached to every event under ``attributes.custom_tags``.
+    Useful for tagging deployments / cohorts (e.g. ``{"env": "staging",
+    "agent_role": "sales"}``)."""
+
+    log_session_metadata: bool = True
+    """When True, dump the user-supplied RunnableConfig metadata (minus keys
+    already projected onto first-class columns) into ``attributes.session_metadata``.
+    Mirrors ADK's session_metadata enrichment so dashboards can correlate by
+    deployment-specific keys (gchat thread-id, customer_id, ...)."""
+
+    content_formatter: Optional[Callable[[Any, str], Any]] = None
+    """Optional hook ``(raw_content, event_type) -> formatted`` invoked before
+    content parsing. Use to redact PII or coerce custom payloads to dict/str
+    before they hit the parser."""
+
+    auto_schema_upgrade: bool = True
+    """When True, additively ALTER TABLE ADD COLUMN any new fields that future
+    versions of this handler add to the schema. Gated by a
+    ``langchain_bq_schema_version`` table label so the diff runs at most once
+    per schema version. Never drops or renames columns."""
+
+    create_views: bool = True
+    """When True, automatically CREATE OR REPLACE per-event-type analytics
+    views beside the events table. Each view unnests the JSON columns into
+    typed top-level columns (``v_llm_response.usage_total_tokens`` instead of
+    ``JSON_VALUE(attributes, '$.usage.total_tokens')``)."""
+
+    view_prefix: str = "v"
+    """Prefix for auto-created view names. ``"v"`` produces views like
+    ``v_llm_request``, ``v_tool_completed``. Set per-table when several handler
+    instances share one dataset to avoid collisions."""
 
 
 # ==============================================================================
@@ -1887,6 +2093,50 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         """Reset the execution order to 0."""
         self._execution_order_cv.set(0)
 
+    def _enrich_attributes(
+        self,
+        base: Optional[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Augment per-event ``attributes`` with the ADK-parity enrichments.
+
+        Adds:
+          - ``root_agent_name`` (from handler's ``graph_name``)
+          - ``custom_tags`` (static, from config)
+          - ``session_metadata`` (passthrough of user-supplied metadata, minus
+            keys we already promote to first-class columns) — gated by
+            ``config.log_session_metadata``.
+
+        Preserves any keys already present in ``base`` (callback-supplied
+        attributes win over enrichment).
+        """
+        attrs: Dict[str, Any] = dict(base) if base else {}
+        if self.graph_name and "root_agent_name" not in attrs:
+            attrs["root_agent_name"] = self.graph_name
+        if self.config.custom_tags and "custom_tags" not in attrs:
+            attrs["custom_tags"] = dict(self.config.custom_tags)
+        if (
+            self.config.log_session_metadata
+            and metadata
+            and "session_metadata" not in attrs
+        ):
+            promoted = {
+                "session_id",
+                "user_id",
+                "agent",
+                "trace_id",
+                "langgraph_node",
+                "langgraph_step",
+                "langgraph_triggers",
+                "langgraph_path",
+                "langgraph_checkpoint_ns",
+                "checkpoint_ns",
+            }
+            session_meta = {k: v for k, v in metadata.items() if k not in promoted}
+            if session_meta:
+                attrs["session_metadata"] = session_meta
+        return attrs
+
     @staticmethod
     def _is_internal_chain_name(name: Optional[str]) -> bool:
         """Heuristically detect framework-internal LangGraph/LangChain chains."""
@@ -1951,6 +2201,92 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             if value:
                 return value  # type: ignore[no-any-return]
         return None
+
+    @staticmethod
+    def _extract_llm_request_attributes(
+        serialized: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Pull `llm_config` and `tools` out of the serialized LLM payload.
+
+        Mirrors ADK's ``before_model_callback`` enrichment so dashboards can
+        slice on temperature / top_p / response_schema / available tools.
+        """
+        attrs: Dict[str, Any] = {}
+        kwargs_dict: Dict[str, Any] = (serialized or {}).get("kwargs", {}) or {}
+        config_keys = (
+            "temperature",
+            "top_p",
+            "top_k",
+            "candidate_count",
+            "max_output_tokens",
+            "stop_sequences",
+            "presence_penalty",
+            "frequency_penalty",
+            "response_mime_type",
+            "response_schema",
+            "seed",
+            "response_logprobs",
+            "logprobs",
+        )
+        llm_config = {
+            key: kwargs_dict[key]
+            for key in config_keys
+            if key in kwargs_dict and kwargs_dict[key] is not None
+        }
+        if llm_config:
+            attrs["llm_config"] = llm_config
+
+        # `tools` may live as a list of names or as bound tool dicts.
+        tools_value = kwargs_dict.get("tools")
+        if isinstance(tools_value, (list, tuple)) and tools_value:
+            tool_names: List[str] = []
+            for item in tools_value:
+                name = None
+                if isinstance(item, dict):
+                    name = item.get("name") or (item.get("function") or {}).get("name")
+                else:
+                    name = getattr(item, "name", None)
+                if name:
+                    tool_names.append(str(name))
+            if tool_names:
+                attrs["tools"] = tool_names
+        return attrs
+
+    @staticmethod
+    def _extract_llm_response_metadata(
+        response: LLMResult,
+    ) -> Dict[str, Any]:
+        """Pull ``model_version``, raw ``usage_metadata``, and
+        ``cache_metadata`` out of a chat-model ``LLMResult``.
+
+        Returns an empty dict when the response shape doesn't carry any of
+        these (e.g. legacy completion LLMs).
+        """
+        attrs: Dict[str, Any] = {}
+        if not response.generations or not response.generations[0]:
+            return attrs
+        gen = response.generations[0][0]
+        message = getattr(gen, "message", None)
+        if message is None:
+            return attrs
+
+        response_metadata = getattr(message, "response_metadata", None) or {}
+        model_version = response_metadata.get("model_version") or response_metadata.get(
+            "model_name"
+        )
+        if model_version:
+            attrs["model_version"] = model_version
+
+        # Surface the full usage_metadata dict alongside the normalized
+        # tokens so analytics views can compute context_cache_hit_rate.
+        usage_metadata = getattr(message, "usage_metadata", None)
+        if isinstance(usage_metadata, dict) and usage_metadata:
+            attrs["usage_metadata"] = dict(usage_metadata)
+
+        cache_metadata = response_metadata.get("cache_metadata")
+        if cache_metadata:
+            attrs["cache_metadata"] = cache_metadata
+        return attrs
 
     async def _resolve_event_metadata(
         self,
@@ -2109,6 +2445,16 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         trace_id = metadata.get("trace_id") or registry_trace_id or str(run_id)
         span_id = str(run_id)
 
+        # Optional user hook to redact / coerce raw content before parsing.
+        if self.config.content_formatter is not None and content is not None:
+            try:
+                content = self.config.content_formatter(content, event_type)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "content_formatter raised, falling back to raw content: %s",
+                    e,
+                )
+
         parser = _LangChainContentParser(
             self.offloader,
             trace_id,
@@ -2178,6 +2524,8 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         elif latency:
             latency_ms_value = {"total_ms": latency}
 
+        attributes = self._enrich_attributes(attributes, metadata)
+
         row = {
             "timestamp": datetime.now(timezone.utc),
             "event_type": event_type,
@@ -2216,6 +2564,26 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         finally:
             self._is_shutting_down = False
 
+    async def flush(self, timeout: float = 5.0) -> None:
+        """Block until queued rows have been written to BigQuery.
+
+        Useful between request boundaries when callers want to ensure each
+        invocation's events are durable before returning to the user. Does
+        NOT shut the handler down; subsequent events keep working.
+        """
+        if self.async_batch_processor is None:
+            return
+        # Drain whatever is currently in the queue.
+        try:
+            await asyncio.wait_for(
+                self.async_batch_processor._queue.join(),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "BigQueryCallbackHandler.flush timed out after %.1fs", timeout
+            )
+
     async def __aenter__(self) -> "AsyncBigQueryCallbackHandler":
         await self._ensure_started()
         return self
@@ -2243,12 +2611,14 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         await self._register_run_metadata(
             run_id, parent_run_id, model_name or "llm", metadata
         )
+        attrs: Dict[str, Any] = {"tags": tags, "model": model_name}
+        attrs.update(self._extract_llm_request_attributes(serialized))
         await self._log(
             "LLM_REQUEST",
             run_id,
             content={"prompts": prompts},
             parent_run_id=parent_run_id,
-            attributes={"tags": tags, "model": model_name},
+            attributes=attrs,
             metadata=metadata,
         )
 
@@ -2272,12 +2642,14 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         )
         # Serialize messages safely for parsing
         flat_msgs = [m.model_dump() for sub in messages for m in sub]
+        attrs: Dict[str, Any] = {"tags": tags, "model": model_name}
+        attrs.update(self._extract_llm_request_attributes(serialized))
         await self._log(
             "LLM_REQUEST",
             run_id,
             content={"messages": flat_msgs},
             parent_run_id=parent_run_id,
-            attributes={"tags": tags, "model": model_name},
+            attributes=attrs,
             metadata=metadata,
         )
 
@@ -2302,12 +2674,14 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # Token usage tracking — modern Chat models emit usage on the AIMessage
         # rather than the legacy llm_output dict (issue #1720).
         usage = self._extract_token_usage(response)
+        attrs: Dict[str, Any] = {"usage": usage}
+        attrs.update(self._extract_llm_response_metadata(response))
         await self._log(
             "LLM_RESPONSE",
             run_id,
             content=resp_text,
             parent_run_id=parent_run_id,
-            attributes={"usage": usage},
+            attributes=attrs,
             metadata=metadata,
             latency_measurement=latency_measurement,
         )
@@ -2975,6 +3349,52 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         """Reset the execution order to 0."""
         self._execution_order_cv.set(0)
 
+    def _enrich_attributes(
+        self,
+        base: Optional[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Augment per-event ``attributes`` with the ADK-parity enrichments.
+
+        Adds:
+          - ``root_agent_name`` (from handler's ``graph_name``)
+          - ``custom_tags`` (static, from config)
+          - ``session_metadata`` (passthrough of user-supplied metadata, minus
+            keys we already promote to first-class columns) — gated by
+            ``config.log_session_metadata``.
+
+        Preserves any keys already present in ``base`` (callback-supplied
+        attributes win over enrichment).
+        """
+        attrs: Dict[str, Any] = dict(base) if base else {}
+        if self.graph_name and "root_agent_name" not in attrs:
+            attrs["root_agent_name"] = self.graph_name
+        if self.config.custom_tags and "custom_tags" not in attrs:
+            attrs["custom_tags"] = dict(self.config.custom_tags)
+        if (
+            self.config.log_session_metadata
+            and metadata
+            and "session_metadata" not in attrs
+        ):
+            # Drop keys we already project onto top-level columns so the dump
+            # doesn't double up the same data in two places.
+            promoted = {
+                "session_id",
+                "user_id",
+                "agent",
+                "trace_id",
+                "langgraph_node",
+                "langgraph_step",
+                "langgraph_triggers",
+                "langgraph_path",
+                "langgraph_checkpoint_ns",
+                "checkpoint_ns",
+            }
+            session_meta = {k: v for k, v in metadata.items() if k not in promoted}
+            if session_meta:
+                attrs["session_metadata"] = session_meta
+        return attrs
+
     @staticmethod
     def _is_internal_chain_name(name: Optional[str]) -> bool:
         """Heuristically detect framework-internal LangGraph/LangChain chains."""
@@ -3016,6 +3436,15 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             if value:
                 return value  # type: ignore[no-any-return]
         return None
+
+    # Aliases of the async-handler enrichment helpers — they don't depend on
+    # any handler state, so the sync class just delegates.
+    _extract_llm_request_attributes = staticmethod(
+        AsyncBigQueryCallbackHandler._extract_llm_request_attributes
+    )
+    _extract_llm_response_metadata = staticmethod(
+        AsyncBigQueryCallbackHandler._extract_llm_response_metadata
+    )
 
     def _resolve_event_metadata(
         self,
@@ -3175,6 +3604,16 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         trace_id = metadata.get("trace_id") or registry_trace_id or str(run_id)
         span_id = str(run_id)
 
+        # Optional user hook to redact / coerce raw content before parsing.
+        if self.config.content_formatter is not None and content is not None:
+            try:
+                content = self.config.content_formatter(content, event_type)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "content_formatter raised, falling back to raw content: %s",
+                    e,
+                )
+
         parser = _SyncLangChainContentParser(
             self.offloader,
             trace_id,
@@ -3242,6 +3681,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         elif latency:
             latency_ms_value = {"total_ms": latency}
 
+        attributes = self._enrich_attributes(attributes, metadata)
+
         row = {
             "timestamp": datetime.now(timezone.utc),
             "event_type": event_type,
@@ -3280,6 +3721,20 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         finally:
             self._is_shutting_down = False
 
+    def flush(self, timeout: float = 5.0) -> None:
+        """Block until queued rows have been written to BigQuery.
+
+        Useful between request boundaries when callers want each invocation's
+        events to be durable before returning. Does NOT shut the handler
+        down; subsequent events keep working.
+        """
+        if self.batch_processor is None:
+            return
+        try:
+            self.batch_processor._queue.join()  # respects daemon worker timing
+        except Exception as e:  # noqa: BLE001 — flush must never raise
+            logger.warning("BigQueryCallbackHandler.flush error: %s", e)
+
     def on_llm_start(
         self,
         serialized: Dict[str, Any],
@@ -3298,12 +3753,14 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._register_run_metadata(
             run_id, parent_run_id, model_name or "llm", metadata
         )
+        attrs: Dict[str, Any] = {"tags": tags, "model": model_name}
+        attrs.update(self._extract_llm_request_attributes(serialized))
         self._log(
             "LLM_REQUEST",
             run_id,
             content={"prompts": prompts},
             parent_run_id=parent_run_id,
-            attributes={"tags": tags, "model": model_name},
+            attributes=attrs,
             metadata=metadata,
         )
 
@@ -3326,12 +3783,14 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             run_id, parent_run_id, model_name or "chat_model", metadata
         )
         flat_msgs = [m.model_dump() for sub in messages for m in sub]
+        attrs: Dict[str, Any] = {"tags": tags, "model": model_name}
+        attrs.update(self._extract_llm_request_attributes(serialized))
         self._log(
             "LLM_REQUEST",
             run_id,
             content={"messages": flat_msgs},
             parent_run_id=parent_run_id,
-            attributes={"tags": tags, "model": model_name},
+            attributes=attrs,
             metadata=metadata,
         )
 
@@ -3355,12 +3814,14 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # Token usage tracking — modern Chat models emit usage on the AIMessage
         # rather than the legacy llm_output dict (issue #1720).
         usage = self._extract_token_usage(response)
+        attrs: Dict[str, Any] = {"usage": usage}
+        attrs.update(self._extract_llm_response_metadata(response))
         self._log(
             "LLM_RESPONSE",
             run_id,
             content=resp_text,
             parent_run_id=parent_run_id,
-            attributes={"usage": usage},
+            attributes=attrs,
             metadata=metadata,
             latency_measurement=latency_measurement,
         )
