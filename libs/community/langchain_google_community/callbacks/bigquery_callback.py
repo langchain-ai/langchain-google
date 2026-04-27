@@ -56,7 +56,9 @@ _DEFAULT_TRACE_ID = "langchain-bq-agent-analytics"
 # Bumped whenever ``_get_bigquery_events_schema`` adds a new field. Stored as
 # a label on the events table so ``auto_schema_upgrade`` can short-circuit
 # once a given table has already been migrated to the current schema.
-_SCHEMA_VERSION = "2026-04-27.1"
+# Constraint: BigQuery label values are restricted to ``[a-z0-9_-]{0,63}``,
+# so use only lowercase, digits, underscores, and hyphens.
+_SCHEMA_VERSION = "2026-04-27_v1"
 _SCHEMA_VERSION_LABEL_KEY = "langchain_bq_schema_version"
 
 
