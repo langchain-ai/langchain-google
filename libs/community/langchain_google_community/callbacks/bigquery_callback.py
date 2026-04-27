@@ -1249,7 +1249,7 @@ class _AsyncBatchProcessor:
 
     async def _batch_writer(self) -> None:
         while not self._shutdown or not self._queue.empty():
-            batch = []
+            batch: list[dict[str, Any]] = []
             try:
                 if self._shutdown:
                     try:
@@ -1262,20 +1262,38 @@ class _AsyncBatchProcessor:
                             self._queue.get(), timeout=self.flush_interval
                         )
                     )
-                self._queue.task_done()
 
                 while len(batch) < self.batch_size:
                     try:
                         batch.append(self._queue.get_nowait())
-                        self._queue.task_done()
                     except asyncio.QueueEmpty:
                         break
 
-                if batch:
-                    await self._write_rows_with_retry(batch)
+                # ``task_done`` is intentionally called only AFTER the write
+                # attempt completes (success or give-up). ``flush()`` waits on
+                # ``_queue.join()`` and would otherwise return while a batch
+                # is still in flight.
+                try:
+                    if batch:
+                        await self._write_rows_with_retry(batch)
+                finally:
+                    for _ in batch:
+                        self._queue.task_done()
             except asyncio.TimeoutError:
+                # Nothing was dequeued — no items to ack.
                 continue
             except asyncio.CancelledError:
+                # If the inner finally already ran, ``batch`` is still the
+                # local list; the task_done calls there were balanced. If we
+                # were cancelled before reaching the inner try, ``batch`` may
+                # have items we dequeued but never wrote — drain those acks
+                # so flush() callers don't hang on shutdown.
+                for _ in batch:
+                    try:
+                        self._queue.task_done()
+                    except ValueError:
+                        # Already acked in the inner finally.
+                        break
                 logger.info("Batch writer task cancelled.")
                 break
             except Exception as e:
@@ -1462,7 +1480,7 @@ class _BatchProcessor:
     def _batch_writer(self) -> None:
         """The background thread's main loop for batching and writing."""
         while not self._shutdown or not self._queue.empty():
-            batch = []
+            batch: list[dict[str, Any]] = []
             try:
                 if self._shutdown:
                     try:
@@ -1471,17 +1489,21 @@ class _BatchProcessor:
                         break
                 else:
                     batch.append(self._queue.get(timeout=self.flush_interval))
-                self._queue.task_done()
 
                 while len(batch) < self.batch_size:
                     try:
                         batch.append(self._queue.get_nowait())
-                        self._queue.task_done()
                     except Empty:
                         break
 
-                if batch:
-                    self._write_rows_with_retry(batch)
+                # task_done() runs only AFTER the write attempt — flush()
+                # blocks on _queue.join() and must wait for in-flight batches.
+                try:
+                    if batch:
+                        self._write_rows_with_retry(batch)
+                finally:
+                    for _ in batch:
+                        self._queue.task_done()
             except Empty:
                 continue
             except Exception as e:
@@ -3853,16 +3875,35 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             self._is_shutting_down = False
 
     def flush(self, timeout: float = 5.0) -> None:
-        """Block until queued rows have been written to BigQuery.
+        """Block until queued rows have been written to BigQuery, or timeout.
 
         Useful between request boundaries when callers want each invocation's
         events to be durable before returning. Does NOT shut the handler
-        down; subsequent events keep working.
+        down; subsequent events keep working. Logs a warning and returns
+        without raising if ``timeout`` elapses with rows still in flight.
+
+        ``queue.Queue.join()`` does not accept a timeout, so we replicate its
+        condition-variable wait pattern explicitly using the queue's
+        ``all_tasks_done`` Condition (de facto stable across CPython
+        versions; the same attribute ``Queue.join`` itself uses).
         """
         if self.batch_processor is None:
             return
         try:
-            self.batch_processor._queue.join()  # respects daemon worker timing
+            q = self.batch_processor._queue
+            deadline = time.monotonic() + timeout
+            with q.all_tasks_done:
+                while q.unfinished_tasks:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        logger.warning(
+                            "BigQueryCallbackHandler.flush timed out after "
+                            "%.1fs with %d row(s) still pending",
+                            timeout,
+                            q.unfinished_tasks,
+                        )
+                        return
+                    q.all_tasks_done.wait(timeout=remaining)
         except Exception as e:  # noqa: BLE001 — flush must never raise
             logger.warning("BigQueryCallbackHandler.flush error: %s", e)
 

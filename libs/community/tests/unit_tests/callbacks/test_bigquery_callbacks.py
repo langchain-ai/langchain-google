@@ -2352,3 +2352,101 @@ def test_create_view_failure_does_not_raise(
         table_id="test_table",
     )
     handler._ensure_started()
+
+
+# ==============================================================================
+# FLUSH() DURABILITY GUARANTEES
+# ==============================================================================
+
+
+def test_sync_flush_waits_for_in_flight_write_to_complete(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``flush()`` must not return while a batch is still being written.
+
+    Regression for the bug where ``task_done()`` fired immediately after
+    ``get()`` (before ``_write_rows_with_retry``), so ``_queue.join()``
+    returned while the in-flight batch was still in the middle of its write.
+    """
+    import threading
+    import time as _time
+
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+
+    write_started = threading.Event()
+    write_completed = threading.Event()
+
+    def slow_write(rows: Any) -> None:
+        write_started.set()
+        # Simulate a real BigQuery RTT — non-trivial enough that a buggy
+        # flush() would return well before this completes.
+        _time.sleep(0.3)
+        write_completed.set()
+
+    sync_handler.batch_processor._write_rows_with_retry = slow_write  # type: ignore[method-assign]
+
+    sync_handler.batch_processor.append({"event_type": "TEST"})
+
+    assert write_started.wait(timeout=2.0), "writer never picked up the row"
+    assert not write_completed.is_set(), "test arrived too late; write already finished"
+
+    sync_handler.flush(timeout=5.0)
+    assert write_completed.is_set(), "flush() returned while write was still in flight"
+
+
+def test_sync_flush_honors_timeout(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``flush(timeout)`` must return after at most ``timeout`` seconds even
+    if the write never completes. Previously the timeout argument was
+    accepted but ignored (``Queue.join()`` blocks unconditionally)."""
+    import threading
+    import time as _time
+
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+
+    block = threading.Event()  # never set — write hangs forever
+
+    def hanging_write(rows: Any) -> None:
+        block.wait()
+
+    sync_handler.batch_processor._write_rows_with_retry = hanging_write  # type: ignore[method-assign]
+    sync_handler.batch_processor.append({"event_type": "TEST"})
+
+    start = _time.monotonic()
+    sync_handler.flush(timeout=0.3)
+    elapsed = _time.monotonic() - start
+
+    # Generous upper bound to account for thread scheduling on busy CI.
+    assert elapsed < 2.0, f"flush ignored timeout (took {elapsed:.2f}s)"
+    block.set()  # let the worker exit cleanly for fixture teardown
+
+
+@pytest.mark.asyncio
+async def test_async_flush_waits_for_in_flight_write_to_complete(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Async equivalent of the durability guard — flush() must wait for the
+    real ``_write_rows_with_retry`` coroutine to finish, not just for the
+    queue to be drained."""
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+
+    write_completed = asyncio.Event()
+
+    async def slow_write(rows: Any) -> None:
+        await asyncio.sleep(0.3)
+        write_completed.set()
+
+    handler.async_batch_processor._write_rows_with_retry = slow_write  # type: ignore[method-assign]
+    await handler.async_batch_processor.append({"event_type": "TEST"})
+
+    await handler.flush(timeout=5.0)
+    assert write_completed.is_set(), (
+        "async flush() returned while write was still in flight"
+    )
