@@ -1273,26 +1273,32 @@ class _AsyncBatchProcessor:
                 # attempt completes (success or give-up). ``flush()`` waits on
                 # ``_queue.join()`` and would otherwise return while a batch
                 # is still in flight.
+                #
+                # The inner finally clears ``batch`` after acking so that an
+                # asyncio.CancelledError propagating out doesn't cause the
+                # outer except below to ack the same rows twice. Without the
+                # clear, a cancellation mid-write would silently decrement the
+                # accounting for some *other* queued row (``task_done`` only
+                # raises ValueError when ``unfinished_tasks`` is already 0,
+                # not when there's an unrelated row still in the queue).
                 try:
                     if batch:
                         await self._write_rows_with_retry(batch)
                 finally:
                     for _ in batch:
                         self._queue.task_done()
+                    batch.clear()
             except asyncio.TimeoutError:
                 # Nothing was dequeued — no items to ack.
                 continue
             except asyncio.CancelledError:
-                # If the inner finally already ran, ``batch`` is still the
-                # local list; the task_done calls there were balanced. If we
-                # were cancelled before reaching the inner try, ``batch`` may
-                # have items we dequeued but never wrote — drain those acks
-                # so flush() callers don't hang on shutdown.
+                # ``batch`` here only contains rows that were dequeued but
+                # never reached the inner try — the inner finally clears the
+                # list once it acks. So this loop is safe from double-ack.
                 for _ in batch:
                     try:
                         self._queue.task_done()
                     except ValueError:
-                        # Already acked in the inner finally.
                         break
                 logger.info("Batch writer task cancelled.")
                 break

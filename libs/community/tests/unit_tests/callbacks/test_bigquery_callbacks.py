@@ -2450,3 +2450,66 @@ async def test_async_flush_waits_for_in_flight_write_to_complete(
     assert write_completed.is_set(), (
         "async flush() returned while write was still in flight"
     )
+
+
+@pytest.mark.asyncio
+async def test_async_cancellation_during_write_does_not_double_ack(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Cancellation mid-write must not corrupt queue accounting.
+
+    Regression for the bug where the inner finally acked the in-flight
+    batch and then the outer ``except CancelledError`` re-acked the same
+    rows. The duplicate ack only raised ``ValueError`` if
+    ``unfinished_tasks`` was already 0 — otherwise it silently decremented
+    a different queued row's accounting, leaving ``unfinished_tasks`` and
+    ``qsize()`` out of sync.
+
+    Setup: 2 rows enqueued (default ``batch_size=1``). The worker dequeues
+    row 1 and starts a slow write while row 2 sits in the queue. We cancel
+    the worker mid-write and assert the queue accounting is consistent
+    afterwards.
+    """
+    bp = handler.async_batch_processor
+    if bp is None:
+        raise ValueError("Batch processor not initialized")
+
+    write_started = asyncio.Event()
+    block = asyncio.Event()  # never set — write hangs until cancelled
+
+    async def slow_write(rows: Any) -> None:
+        write_started.set()
+        await block.wait()
+
+    bp._write_rows_with_retry = slow_write  # type: ignore[method-assign]
+
+    await bp.append({"event_type": "ROW1"})
+    await bp.append({"event_type": "ROW2"})
+
+    await asyncio.wait_for(write_started.wait(), timeout=2.0)
+
+    # Pre-cancellation snapshot: row 2 is still queued, both rows
+    # accounted for as unfinished. ``_unfinished_tasks`` is the CPython
+    # internal counter ``asyncio.Queue.join`` itself reads — de facto
+    # stable but not in the type stubs.
+    unfinished = lambda q: q._unfinished_tasks  # type: ignore[attr-defined]  # noqa: E731
+    assert bp._queue.qsize() == 1
+    assert unfinished(bp._queue) == 2
+
+    assert bp._worker_task is not None
+    bp._worker_task.cancel()
+    try:
+        await bp._worker_task
+    except asyncio.CancelledError:
+        pass
+
+    # Post-cancellation: row 1's ack happened in the inner finally; row 2
+    # was never dequeued, so it must still be accounted for. The buggy
+    # version would have left unfinished_tasks at 0 here.
+    assert bp._queue.qsize() == 1, "row 2 should still be enqueued"
+    assert unfinished(bp._queue) == 1, (
+        "queue accounting corrupted: unfinished_tasks="
+        f"{unfinished(bp._queue)}, expected 1 "
+        "(row 2 should still be unfinished)"
+    )
