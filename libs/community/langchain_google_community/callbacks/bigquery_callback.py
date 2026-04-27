@@ -568,6 +568,109 @@ def _event_type_to_view_suffix(event_type: str) -> str:
     return event_type.lower()
 
 
+def _maybe_upgrade_schema(
+    client: Any, existing_table: Any, target_schema: List[Any]
+) -> None:
+    """Additively ALTER TABLE ADD COLUMN any new fields in target_schema.
+
+    Skipped when the table's ``langchain_bq_schema_version`` label already
+    equals ``_SCHEMA_VERSION``. Never drops, renames, or retypes columns —
+    only ADD COLUMN. Failures log and continue (analytics never breaks the
+    agent).
+    """
+    if client is None:
+        return
+    existing_labels = getattr(existing_table, "labels", None) or {}
+    if existing_labels.get(_SCHEMA_VERSION_LABEL_KEY) == _SCHEMA_VERSION:
+        return
+
+    existing_field_names = {f.name for f in existing_table.schema}
+    added: List[Any] = [
+        f for f in target_schema if f.name not in existing_field_names
+    ]
+    if not added:
+        existing_table.labels = {
+            **existing_labels,
+            _SCHEMA_VERSION_LABEL_KEY: _SCHEMA_VERSION,
+        }
+        try:
+            client.update_table(existing_table, ["labels"])
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "Could not refresh schema-version label on %s: %s",
+                existing_table.table_id,
+                e,
+            )
+        return
+
+    new_schema = list(existing_table.schema) + added
+    existing_table.schema = new_schema
+    existing_table.labels = {
+        **existing_labels,
+        _SCHEMA_VERSION_LABEL_KEY: _SCHEMA_VERSION,
+    }
+    try:
+        client.update_table(existing_table, ["schema", "labels"])
+        logger.info(
+            "BigQueryCallbackHandler: added %d column(s) to %s: %s",
+            len(added),
+            existing_table.table_id,
+            [f.name for f in added],
+        )
+    except Exception as e:  # noqa: BLE001
+        # Common cause: REQUIRED column added to existing table — BigQuery
+        # rejects that. We never add REQUIRED columns post-creation, so this
+        # is a safety net rather than the expected path.
+        logger.warning(
+            "Schema upgrade for %s failed: %s. Continuing with existing schema.",
+            existing_table.table_id,
+            e,
+        )
+
+
+def _create_analytics_views(
+    client: Any, view_prefix: str, full_table_id: str
+) -> None:
+    """CREATE OR REPLACE per-event-type analytics views.
+
+    Mirrors ADK's auto-views: each view UNNESTs the JSON columns into typed
+    top-level columns so analytics queries don't have to spell
+    ``JSON_VALUE(...)`` every time.
+    """
+    if client is None:
+        return
+    try:
+        project, dataset, table = full_table_id.split(".")
+    except ValueError:
+        logger.warning(
+            "Cannot create views — unexpected table id %r", full_table_id
+        )
+        return
+    for event_type, columns in _EVENT_VIEW_DEFS.items():
+        view_name = f"{view_prefix}_{_event_type_to_view_suffix(event_type)}"
+        extra = ""
+        if columns:
+            extra = ",\n  " + ",\n  ".join(columns)
+        sql = _VIEW_SQL_TEMPLATE.format(
+            project=project,
+            dataset=dataset,
+            view_name=view_name,
+            table=table,
+            event_type=event_type,
+            extra_columns=extra,
+        )
+        try:
+            client.query(sql).result()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "Could not create view %s.%s.%s: %s",
+                project,
+                dataset,
+                view_name,
+                e,
+            )
+
+
 @dataclass
 class BigQueryLoggerConfig:
     enabled: bool = True
@@ -2395,14 +2498,31 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         if self.client is None:
             raise ValueError("BigQuery client is not initialized.")
         try:
-            self.client.get_table(table_id)
+            existing = self.client.get_table(table_id)
+            if self.config.auto_schema_upgrade:
+                self._maybe_upgrade_schema(existing, schema)
+            if self.config.create_views:
+                self._create_analytics_views(table_id)
         except self.cloud_exceptions.NotFound:
             tbl = self.bigquery.Table(table_id, schema=schema)
             tbl.time_partitioning = self.bigquery.TimePartitioning(
                 type_=self.bigquery.TimePartitioningType.DAY, field="timestamp"
             )
             tbl.clustering_fields = self.config.clustering_fields
+            tbl.labels = {_SCHEMA_VERSION_LABEL_KEY: _SCHEMA_VERSION}
             self.client.create_table(tbl)
+            if self.config.create_views:
+                self._create_analytics_views(table_id)
+
+    def _maybe_upgrade_schema(
+        self, existing_table: Any, target_schema: List[Any]
+    ) -> None:
+        _maybe_upgrade_schema(self.client, existing_table, target_schema)
+
+    def _create_analytics_views(self, full_table_id: str) -> None:
+        _create_analytics_views(
+            self.client, self.config.view_prefix, full_table_id
+        )
 
     async def _log(
         self,
@@ -3556,14 +3676,33 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         if self.client is None:
             raise ValueError("BigQuery client is not initialized.")
         try:
-            self.client.get_table(table_id)
+            existing = self.client.get_table(table_id)
+            if self.config.auto_schema_upgrade:
+                self._maybe_upgrade_schema(existing, schema)
+            if self.config.create_views:
+                self._create_analytics_views(table_id)
         except self.cloud_exceptions.NotFound:
             tbl = self.bigquery.Table(table_id, schema=schema)
             tbl.time_partitioning = self.bigquery.TimePartitioning(
                 type_=self.bigquery.TimePartitioningType.DAY, field="timestamp"
             )
             tbl.clustering_fields = self.config.clustering_fields
+            tbl.labels = {_SCHEMA_VERSION_LABEL_KEY: _SCHEMA_VERSION}
             self.client.create_table(tbl)
+            if self.config.create_views:
+                self._create_analytics_views(table_id)
+
+    # The async and sync handlers do BigQuery DDL identically — both
+    # delegate to the module-level helpers below.
+    def _maybe_upgrade_schema(
+        self, existing_table: Any, target_schema: List[Any]
+    ) -> None:
+        _maybe_upgrade_schema(self.client, existing_table, target_schema)
+
+    def _create_analytics_views(self, full_table_id: str) -> None:
+        _create_analytics_views(
+            self.client, self.config.view_prefix, full_table_id
+        )
 
     def _log(
         self,

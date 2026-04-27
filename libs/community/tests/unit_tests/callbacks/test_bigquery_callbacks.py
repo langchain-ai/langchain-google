@@ -2190,3 +2190,165 @@ async def test_async_flush_method_exists(
 ) -> None:
     assert callable(getattr(handler, "flush", None))
     await handler.flush(timeout=0.1)
+
+
+# ==============================================================================
+# ADK PARITY: AUTO SCHEMA UPGRADE
+# ==============================================================================
+
+
+def test_new_table_gets_schema_version_label(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Tables created by the handler carry the schema-version label so the
+    auto-upgrade path can short-circuit on subsequent runs."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        _SCHEMA_VERSION,
+        _SCHEMA_VERSION_LABEL_KEY,
+    )
+
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_bq_client.get_table.side_effect = mock_bigquery_clients[
+        "mock_cloud_exceptions"
+    ].NotFound("missing")
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+    )
+    handler._ensure_started()
+
+    create_call = mock_bq_client.create_table.call_args
+    assert create_call is not None
+    created_table = create_call.args[0]
+    assert created_table.labels == {_SCHEMA_VERSION_LABEL_KEY: _SCHEMA_VERSION}
+
+
+def test_auto_schema_upgrade_skipped_when_label_matches(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Existing tables already on the current schema version don't get
+    ALTER TABLE'd a second time (idempotent fast-path)."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        _SCHEMA_VERSION,
+        _SCHEMA_VERSION_LABEL_KEY,
+    )
+
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    existing = MagicMock()
+    existing.labels = {_SCHEMA_VERSION_LABEL_KEY: _SCHEMA_VERSION}
+    existing.schema = []
+    mock_bq_client.get_table.return_value = existing
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(create_views=False),
+    )
+    handler._ensure_started()
+
+    mock_bq_client.update_table.assert_not_called()
+
+
+def test_auto_schema_upgrade_disabled_skips_alter(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``auto_schema_upgrade=False`` opts out entirely."""
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    existing = MagicMock()
+    existing.labels = {}
+    existing.schema = []
+    mock_bq_client.get_table.return_value = existing
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(auto_schema_upgrade=False, create_views=False),
+    )
+    handler._ensure_started()
+
+    mock_bq_client.update_table.assert_not_called()
+
+
+# ==============================================================================
+# ADK PARITY: AUTO-CREATE ANALYTICS VIEWS
+# ==============================================================================
+
+
+def test_auto_create_views_emits_one_query_per_event_type(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``create_views=True`` issues one CREATE OR REPLACE VIEW per event
+    type, prefixed with ``view_prefix``."""
+    from langchain_google_community.callbacks.bigquery_callback import (
+        _EVENT_VIEW_DEFS,
+    )
+
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_bq_client.get_table.side_effect = mock_bigquery_clients[
+        "mock_cloud_exceptions"
+    ].NotFound("missing")
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(view_prefix="vstaging"),
+    )
+    handler._ensure_started()
+
+    sql_calls = [c.args[0] for c in mock_bq_client.query.call_args_list]
+    assert len(sql_calls) == len(_EVENT_VIEW_DEFS)
+    assert all("CREATE OR REPLACE VIEW" in s for s in sql_calls)
+    assert any("vstaging_llm_request" in s for s in sql_calls)
+    assert any("vstaging_tool_completed" in s for s in sql_calls)
+
+
+def test_create_views_disabled_skips_query_calls(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """``create_views=False`` opts out cleanly — no SQL is issued."""
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_bq_client.get_table.side_effect = mock_bigquery_clients[
+        "mock_cloud_exceptions"
+    ].NotFound("missing")
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        config=BigQueryLoggerConfig(create_views=False),
+    )
+    handler._ensure_started()
+
+    mock_bq_client.query.assert_not_called()
+
+
+def test_create_view_failure_does_not_raise(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """If ``CREATE OR REPLACE VIEW`` fails (permissions, syntax, …) the
+    handler logs and continues — analytics must never break the agent."""
+    mock_bq_client = mock_bigquery_clients["mock_bq_client"]
+    mock_bq_client.get_table.side_effect = mock_bigquery_clients[
+        "mock_cloud_exceptions"
+    ].NotFound("missing")
+    call_count = {"n": 0}
+
+    def failing_query(*args: Any, **kwargs: Any) -> Any:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise RuntimeError("boom — insufficient permissions")
+        return MagicMock()
+
+    mock_bq_client.query.side_effect = failing_query
+
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+    )
+    handler._ensure_started()
