@@ -3,8 +3,8 @@
 
 This example demonstrates:
 - LangGraph agent with realistic tool calls
-- NODE_STARTING/NODE_COMPLETED event tracking
-- GRAPH_START/GRAPH_END via context manager
+- AGENT_STARTING/AGENT_COMPLETED event tracking (one per LangGraph node)
+- INVOCATION_STARTING/INVOCATION_COMPLETED via the graph_context() manager
 - Tool name tracking across callbacks
 - Execution order tracking
 - Full latency measurements with component breakdown
