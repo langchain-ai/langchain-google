@@ -2853,7 +2853,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, response: GenerationResponse
     ) -> ChatResult:
         generations = []
-        usage = proto.Message.to_dict(response.usage_metadata)
+        usage = proto.Message.to_dict(
+            response.usage_metadata, use_integers_for_enums=False
+        )
         lc_usage = _get_usage_metadata_gemini(usage)
         logprobs = self.logprobs if isinstance(self.logprobs, (int, bool)) else False
         for candidate in response.candidates:
@@ -2890,7 +2892,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         prev_total_usage: UsageMetadata | None = None,
     ) -> tuple[ChatGenerationChunk, UsageMetadata | None]:
         # return an empty completion message if there's no candidates
-        usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
+        usage_metadata = proto.Message.to_dict(
+            response_chunk.usage_metadata, use_integers_for_enums=False
+        )
 
         # Gather langchain (standard) usage metadata
         # Note: some models (e.g., gemini-1.5-pro with image inputs) return
