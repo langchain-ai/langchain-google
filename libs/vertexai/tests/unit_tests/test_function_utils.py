@@ -848,3 +848,31 @@ def test_union_nullable_types() -> None:
     assert "required_field" in gapic_schema.required
     assert "optional_primitive" not in gapic_schema.required
     assert "optional_complex" not in gapic_schema.required
+
+
+def test_multi_type_optional_union() -> None:
+    """Optional unions with 2+ non-null members keep `anyOf` and drop the null
+    branch.
+
+    Regression test for #1527: `str | int | None` previously emitted a
+    `{"type": "null"}` member that gapic rejected with
+    `Invalid enum value NULL for enum type ...v1beta1.Type`.
+    """
+
+    class Config(BaseModel):
+        name: str | int | None = None
+
+    schema = Config.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    name_property = result["properties"]["name"]
+    assert "anyOf" in name_property
+    assert {c["type"] for c in name_property["anyOf"]} == {"STRING", "INTEGER"}
+    assert all(c["type"] != "NULL" for c in name_property["anyOf"])
+    assert "name" not in result.get("required", [])
+
+    # Round-trip through gapic to confirm the protobuf accepts it.
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    assert "name" not in gapic_schema.required
+    assert len(gapic_schema.properties["name"].any_of) == 2
