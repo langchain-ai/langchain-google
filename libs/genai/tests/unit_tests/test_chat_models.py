@@ -22,8 +22,18 @@ from google.genai.types import (
     GenerateContentResponseUsageMetadata,
     Language,
     Part,
-    ThinkingLevel,
 )
+
+try:
+    from google.genai.types import ThinkingLevel
+except ImportError:
+    from enum import Enum
+
+    class ThinkingLevel(str, Enum):
+        NOT_SET = "NOT_SET"
+        LOW = "LOW"
+        HIGH = "HIGH"
+
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
@@ -3413,8 +3423,8 @@ def test_with_structured_output_json_schema_alias() -> None:
     assert structured_llm_dict is not None
 
 
-def test_response_json_schema_parameter() -> None:
-    """Test that `response_json_schema` is properly set via `bind`."""
+def test_response_schema_parameter() -> None:
+    """Test that `response_schema` is properly set via `bind`."""
 
     class TestModel(BaseModel):
         name: str
@@ -3431,16 +3441,16 @@ def test_response_json_schema_parameter() -> None:
     }
 
     llm_with_json_schema = llm.bind(
-        response_mime_type="application/json", response_json_schema=schema_dict
+        response_mime_type="application/json", response_schema=schema_dict
     )
     bound_kwargs = cast("Any", llm_with_json_schema).kwargs
     assert bound_kwargs["response_mime_type"] == "application/json"
-    assert bound_kwargs["response_json_schema"] == schema_dict
+    assert bound_kwargs["response_schema"] == schema_dict
 
 
-def test_response_json_schema_param_mapping() -> None:
+def test_response_schema_param_mapping() -> None:
     """Test both `response_schema` and `response_json_schema` map correctly to
-    `response_json_schema` in `GenerationConfig`."""
+    `response_schema` in `GenerationConfig`."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
     )
@@ -3451,20 +3461,20 @@ def test_response_json_schema_param_mapping() -> None:
         "required": ["name"],
     }
 
-    # Test response_schema parameter maps to response_json_schema in gen_config
+    # Test response_schema parameter maps to response_schema in gen_config
     gen_config_1 = llm._prepare_params(
         stop=None, response_mime_type="application/json", response_schema=schema_dict
     )
-    assert gen_config_1.response_json_schema == schema_dict
+    assert gen_config_1.response_schema == schema_dict
 
-    # Test response_json_schema parameter maps directly to response_json_schema in
+    # Test response_json_schema parameter maps directly to response_schema in
     # gen_config
     gen_config_2 = llm._prepare_params(
         stop=None,
         response_mime_type="application/json",
         response_json_schema=schema_dict,
     )
-    assert gen_config_2.response_json_schema == schema_dict
+    assert gen_config_2.response_schema == schema_dict
 
     # Test that response_json_schema takes precedence over response_schema
     different_schema = {
@@ -3480,7 +3490,7 @@ def test_response_json_schema_param_mapping() -> None:
         response_json_schema=different_schema,
     )
     assert (
-        gen_config_3.response_json_schema == different_schema
+        gen_config_3.response_schema == different_schema
     )  # response_json_schema takes precedence
 
 
@@ -3534,7 +3544,7 @@ def test_ref_preservation() -> None:
     structured = llm.with_structured_output(RecursiveModel, method="json_schema")
     llm = cast("Any", structured).first
 
-    schema = llm.kwargs["response_json_schema"]
+    schema = llm.kwargs["response_schema"]
 
     assert "$defs" in schema, "json_schema should preserve $defs definitions"
     assert schema == raw_schema, "json_schema should preserve raw schema exactly"
@@ -3649,7 +3659,7 @@ def test_union_schema_support() -> None:
 
     llm = cast("Any", structured).first
 
-    assert "response_json_schema" in llm.kwargs
+    assert "response_schema" in llm.kwargs
 
 
 def test_response_schema_mime_type_validation() -> None:
@@ -4878,7 +4888,7 @@ def test_openai_style_response_format_json_object() -> None:
     # Should convert to response_mime_type="application/json"
     # (default is "text/plain")
     assert config.response_mime_type == "application/json"
-    assert config.response_json_schema is None
+    assert config.response_schema is None
 
 
 def test_openai_style_response_format_json_schema() -> None:
@@ -4908,9 +4918,9 @@ def test_openai_style_response_format_json_schema() -> None:
     )
     config = request["config"]
 
-    # Should convert to response_mime_type + response_json_schema
+    # Should convert to response_mime_type + response_schema
     assert config.response_mime_type == "application/json"
-    assert config.response_json_schema == schema
+    assert config.response_schema == schema
 
 
 def test_openai_style_response_format_with_strict() -> None:
@@ -4939,7 +4949,7 @@ def test_openai_style_response_format_with_strict() -> None:
     config = request["config"]
 
     assert config.response_mime_type == "application/json"
-    assert config.response_json_schema == schema
+    assert config.response_schema == schema
 
 
 def test_openai_style_response_format_explicit_params_take_precedence() -> None:
@@ -4968,7 +4978,7 @@ def test_openai_style_response_format_explicit_params_take_precedence() -> None:
     config = request["config"]
 
     # Explicit params should take precedence over response_format
-    assert config.response_json_schema == explicit_schema
+    assert config.response_schema == explicit_schema
 
 
 def test_openai_style_bind_with_response_format() -> None:
