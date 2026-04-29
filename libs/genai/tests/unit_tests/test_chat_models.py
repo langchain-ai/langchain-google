@@ -3439,8 +3439,12 @@ def test_response_json_schema_parameter() -> None:
 
 
 def test_response_json_schema_param_mapping() -> None:
-    """Test both `response_schema` and `response_json_schema` map correctly to
-    `response_json_schema` in `GenerationConfig`."""
+    """Test `response_schema` and `response_json_schema` map correctly.
+
+    `response_schema` bypasses GenerationConfig and goes directly to
+    GenerateContentConfig (via _prepare_request). `response_json_schema`
+    goes through GenerationConfig as before.
+    """
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
     )
@@ -3451,14 +3455,22 @@ def test_response_json_schema_param_mapping() -> None:
         "required": ["name"],
     }
 
-    # Test response_schema parameter maps to response_json_schema in gen_config
+    # response_schema bypasses GenerationConfig — _prepare_params ignores it
     gen_config_1 = llm._prepare_params(
         stop=None, response_mime_type="application/json", response_schema=schema_dict
     )
-    assert gen_config_1.response_json_schema == schema_dict
+    assert gen_config_1.response_json_schema is None
 
-    # Test response_json_schema parameter maps directly to response_json_schema in
-    # gen_config
+    # response_schema is routed through _prepare_request to GenerateContentConfig
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+    request_1 = llm._prepare_request(
+        messages,
+        response_mime_type="application/json",
+        response_schema=schema_dict,
+    )
+    assert request_1["config"].response_schema is not None
+
+    # response_json_schema maps to response_json_schema in gen_config
     gen_config_2 = llm._prepare_params(
         stop=None,
         response_mime_type="application/json",
@@ -3466,22 +3478,23 @@ def test_response_json_schema_param_mapping() -> None:
     )
     assert gen_config_2.response_json_schema == schema_dict
 
-    # Test that response_json_schema takes precedence over response_schema
+    # response_json_schema takes precedence over response_schema
     different_schema = {
         "type": "object",
         "properties": {"age": {"type": "integer"}},
         "required": ["age"],
     }
 
-    gen_config_3 = llm._prepare_params(
-        stop=None,
+    request_3 = llm._prepare_request(
+        messages,
         response_mime_type="application/json",
         response_schema=schema_dict,
         response_json_schema=different_schema,
     )
     assert (
-        gen_config_3.response_json_schema == different_schema
+        request_3["config"].response_json_schema == different_schema
     )  # response_json_schema takes precedence
+    assert request_3["config"].response_schema is None
 
 
 def test_with_struct_out() -> None:
@@ -3534,7 +3547,7 @@ def test_ref_preservation() -> None:
     structured = llm.with_structured_output(RecursiveModel, method="json_schema")
     llm = cast("Any", structured).first
 
-    schema = llm.kwargs["response_json_schema"]
+    schema = llm.kwargs["response_schema"]
 
     assert "$defs" in schema, "json_schema should preserve $defs definitions"
     assert schema == raw_schema, "json_schema should preserve raw schema exactly"
@@ -3649,7 +3662,7 @@ def test_union_schema_support() -> None:
 
     llm = cast("Any", structured).first
 
-    assert "response_json_schema" in llm.kwargs
+    assert "response_schema" in llm.kwargs
 
 
 def test_response_schema_mime_type_validation() -> None:
@@ -3659,13 +3672,14 @@ def test_response_schema_mime_type_validation() -> None:
     )
 
     schema = {"type": "object", "properties": {"field": {"type": "string"}}}
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
 
-    # Test response_schema validation - error happens during _prepare_params
+    # Test response_schema validation - error happens during _prepare_request
     with pytest.raises(
         ValueError, match=r"JSON schema structured output is only supported when"
     ):
-        llm._prepare_params(
-            stop=None, response_schema=schema, response_mime_type="text/plain"
+        llm._prepare_request(
+            messages, response_schema=schema, response_mime_type="text/plain"
         )
 
     # Test that binding succeeds (validation happens later during generation)
