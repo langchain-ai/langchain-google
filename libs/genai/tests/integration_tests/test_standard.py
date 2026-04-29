@@ -13,7 +13,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
 _FLASH_MODEL = "gemini-3-flash-preview"
-_PRO_MODEL = "gemini-3-pro-preview"
+_PRO_MODEL = "gemini-3.1-pro-preview"
 
 
 def _has_multimodal_secrets() -> bool:

@@ -474,6 +474,13 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations([src_4])[0]
     assert result == src_4
 
+    # google_search with search_types (image search grounding)
+    src_4b: dict[str, Any] = {"google_search": {"search_types": {"image_search": {}}}}
+    result = convert_to_genai_function_declarations([src_4b])[0]
+    assert result.google_search is not None
+    assert result.google_search.search_types is not None
+    assert result.google_search.search_types.image_search is not None
+
     src_5 = Tool(computer_use={})
     result = convert_to_genai_function_declarations([src_5])[0]
     assert result == src_5

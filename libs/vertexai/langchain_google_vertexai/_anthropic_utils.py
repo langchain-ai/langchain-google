@@ -1,6 +1,6 @@
 import base64
 import re
-import urllib
+import urllib.parse
 import warnings
 from collections.abc import Callable, Sequence
 from typing import (
@@ -187,62 +187,7 @@ def _format_message_anthropic(
                         new_block[copy_attr] = block[copy_attr]
 
                 if block["type"] == "image":
-                    if "url" in block:
-                        url = block["url"]
-                        if url.startswith("data:"):
-                            # Data URI
-                            formatted_block = {
-                                "type": "image",
-                                "source": _format_image(url, project),
-                            }
-                        else:
-                            formatted_block = {
-                                "type": "image",
-                                "source": {"type": "url", "url": url},
-                            }
-                    elif "base64" in block:
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": block["mime_type"],
-                                "data": block["base64"],
-                            },
-                        }
-                    elif "file_id" in block:
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "file",
-                                "file_id": block["file_id"],
-                            },
-                        }
-                    # Backward compatibility for langchain < 1.X
-                    # where source_type was used
-                    elif "data" in block and block.get("source_type", None) == "base64":
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": block["mime_type"],
-                                "data": block["data"],
-                            },
-                        }
-                    elif "id" in block and block.get("source_type", None) == "id":
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "file",
-                                "file_id": block["id"],
-                            },
-                        }
-                    else:
-                        msg = (
-                            "Image content blocks must have either 'url', 'base64', "
-                            "'file_id', 'id' or 'data' field."
-                        )
-                        raise ValueError(msg)
-                    content.append(formatted_block)
+                    content.append(_format_image_content_block(block, project))
                     continue
 
                 if block["type"] == "text":
@@ -275,6 +220,20 @@ def _format_message_anthropic(
                     )
                     continue
 
+                if block["type"] == "reasoning":
+                    # LC_OUTPUT_VERSION=v1 standardizes thinking blocks as
+                    # "reasoning" type. Convert back to Anthropic-native
+                    # "thinking" format before sending to the API.
+                    thinking_block: dict[str, Any] = {"type": "thinking"}
+                    if "reasoning" in block:
+                        thinking_block["thinking"] = block["reasoning"]
+                    if signature := block.get("extras", {}).get("signature"):
+                        thinking_block["signature"] = signature
+                    if "cache_control" in block:
+                        thinking_block["cache_control"] = block["cache_control"]
+                    content.append(thinking_block)
+                    continue
+
                 if block["type"] == "image_url":
                     # convert format
                     source = _format_image(block["image_url"]["url"], project)
@@ -297,7 +256,7 @@ def _format_message_anthropic(
 
                 content.append(block)
     else:
-        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable, unused-ignore]
+        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable]  # noqa: E501
         raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
@@ -322,10 +281,10 @@ def _format_messages_anthropic(
     formatted_messages: list[dict] = []
 
     merged_messages = _merge_messages(messages)
-    for i, message in enumerate(merged_messages):
+    for message in merged_messages:
         if message.type == "system":
-            if i != 0:
-                msg = "System message must be at beginning of message list."
+            if system_messages is not None:
+                msg = "Received multiple non-consecutive system messages."
                 raise ValueError(msg)
             fm = _format_message_anthropic(message, project)
             if fm:
@@ -336,6 +295,21 @@ def _format_messages_anthropic(
         if not fm:
             continue
         formatted_messages.append(fm)
+
+    # Anthropic treats a trailing assistant message as a "prefill" and rejects
+    # requests whose final content ends with whitespace. Mirror langchain-anthropic
+    # and rstrip only the last text block of the last assistant message.
+    if formatted_messages and formatted_messages[-1]["role"] == "assistant":
+        content = formatted_messages[-1]["content"]
+        if isinstance(content, str):
+            formatted_messages[-1]["content"] = content.rstrip()
+        elif (
+            isinstance(content, list)
+            and content
+            and isinstance(content[-1], dict)
+            and content[-1].get("type") == "text"
+        ):
+            content[-1]["text"] = content[-1]["text"].rstrip()
 
     return system_messages, formatted_messages
 
@@ -362,6 +336,64 @@ def convert_to_anthropic_tool(
     )
 
 
+def _format_image_content_block(block: dict, project: str | None = None) -> dict:
+    """Convert a LangChain image content block to Anthropic wire format.
+
+    LangChain image blocks use `{"type": "image", "base64": ..., "mime_type": ...}`
+    but Anthropic expects `{"type": "image", "source": {"type": "base64", ...}}`.
+
+    Raises:
+        ValueError: If block has no recognized image data field.
+    """
+    if "source" in block:
+        return block
+    if "base64" in block:
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": block["mime_type"],
+                "data": block["base64"],
+            },
+        }
+    if "url" in block:
+        url = block["url"]
+        if url.startswith("data:"):
+            return {
+                "type": "image",
+                "source": _format_image(url, project),
+            }
+        return {
+            "type": "image",
+            "source": {"type": "url", "url": url},
+        }
+    if "file_id" in block:
+        return {
+            "type": "image",
+            "source": {"type": "file", "file_id": block["file_id"]},
+        }
+    # Backward compatibility for langchain < 1.X
+    if "data" in block and block.get("source_type") == "base64":
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": block["mime_type"],
+                "data": block["data"],
+            },
+        }
+    if "id" in block and block.get("source_type") == "id":
+        return {
+            "type": "image",
+            "source": {"type": "file", "file_id": block["id"]},
+        }
+    msg = (
+        "Image content blocks must have either 'url', 'base64', "
+        "'file_id', 'id' or 'data' field."
+    )
+    raise ValueError(msg)
+
+
 def _clean_content_block(block: Any) -> Any:
     """Remove streaming metadata fields from content blocks.
 
@@ -377,10 +409,13 @@ def _clean_content_block(block: Any) -> Any:
     if not isinstance(block, dict):
         return block
 
+    # Convert LangChain image blocks to Anthropic wire format
+    if block.get("type") == "image":
+        return _format_image_content_block(block)
+
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
-    # Remove known streaming metadata fields
     keys_to_remove = {"index", "partial_json", "caller"}
 
     # The id field is required for tool_use blocks and some image blocks,
@@ -417,10 +452,16 @@ def _merge_messages(
     for curr in messages:
         curr = curr.model_copy(deep=True)
         if isinstance(curr, ToolMessage):
-            # Check if already in tool_result format (backward compatibility)
-            if isinstance(curr.content, list) and all(
-                isinstance(block, dict) and block.get("type") == "tool_result"
-                for block in curr.content
+            # Check if already in tool_result format (backward compatibility).
+            # The `and curr.content` guard prevents `all()` from returning True
+            # on an empty list, which would silently drop the tool_result (#1722).
+            if (
+                isinstance(curr.content, list)
+                and curr.content
+                and all(
+                    isinstance(block, dict) and block.get("type") == "tool_result"
+                    for block in curr.content
+                )
             ):
                 # Already formatted - just convert to HumanMessage and clean content
                 cleaned_content = _clean_content(curr.content)
@@ -451,16 +492,21 @@ def _merge_messages(
                     curr = curr.model_copy(deep=True)
                     curr.content = cleaned_content
         last = merged[-1] if merged else None
-        if isinstance(last, HumanMessage) and isinstance(curr, HumanMessage):
-            if isinstance(last.content, str):
-                new_content: list = [{"type": "text", "text": last.content}]
+        if any(
+            all(isinstance(m, c) for m in (curr, last))
+            for c in (SystemMessage, HumanMessage)
+        ):
+            if isinstance(cast("BaseMessage", last).content, str):
+                new_content: list = [
+                    {"type": "text", "text": cast("BaseMessage", last).content}
+                ]
             else:
-                new_content = last.content
+                new_content = cast("list", cast("BaseMessage", last).content)
             if isinstance(curr.content, str):
                 new_content.append({"type": "text", "text": curr.content})
             else:
                 new_content.extend(curr.content)
-            last.content = new_content
+            merged[-1] = curr.model_copy(update={"content": new_content})
         else:
             merged.append(curr)
     return merged

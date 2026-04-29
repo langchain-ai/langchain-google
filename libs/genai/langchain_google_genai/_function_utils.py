@@ -477,8 +477,8 @@ def _convert_pydantic_to_genai_function(
     schema_for_params.pop("description", None)
     parameters = _dict_to_genai_schema(schema_for_params)
     return types.FunctionDeclaration(
-        name=tool_name if tool_name else schema.get("title"),
-        description=tool_description if tool_description else schema.get("description"),
+        name=tool_name or schema.get("title"),
+        description=tool_description or schema.get("description"),
         parameters=parameters,
     )
 

@@ -27,7 +27,7 @@ class RecordDog(BaseModel):
 
 @pytest.mark.release
 def test_create_structured_runnable() -> None:
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
     prompt = ChatPromptTemplate.from_template(
         "You are a world class algorithm for recording entities.\nMake calls to the "
         "relevant function to record the entities in the following input:\n {input}\n"
@@ -40,7 +40,7 @@ def test_create_structured_runnable() -> None:
 
 @pytest.mark.release
 def test_create_structured_runnable_with_prompt() -> None:
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, temperature=0)
     prompt = ChatPromptTemplate.from_template(
         "Describe a random {class} and mention their name, {attr} and favorite food"
     )
@@ -76,7 +76,7 @@ def test_reflection() -> None:
         def normalized_score(self) -> float:
             return self.score / 10.0
 
-    llm = ChatVertexAI(model_name=_DEFAULT_MODEL_NAME)
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
 
     prompt = ChatPromptTemplate.from_messages(
         [

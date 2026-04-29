@@ -16,6 +16,9 @@ For full documentation, see the [API reference](https://reference.langchain.com/
 
 For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Google Docs](https://docs.langchain.com/oss/python/integrations/providers/google).
 
+> [!TIP]
+> For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
+
 ## 📕 Releases & Versioning
 
 See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.

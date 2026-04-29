@@ -205,7 +205,7 @@ class ImageBytesLoader:
             ValueError: If there are more than one `Blob` matching the URI.
         """
         gcs_client = self._storage_client
-        blob = storage.Blob.from_string(gcs_uri, gcs_client)
+        blob = storage.Blob.from_uri(gcs_uri, gcs_client)
         blob.reload(client=gcs_client)
         return blob
 

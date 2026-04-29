@@ -54,6 +54,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
@@ -130,16 +131,36 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+class GoogleContextOverflowError(ClientError, ContextOverflowError):
+    """ClientError raised when input exceeds Google's context limit."""
+
+
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
-    """Convert `ClientError` to `ChatGoogleGenerativeAIError` with descriptive message.
+    """Convert `ClientError` to a more specific exception when possible.
+
+    Raises `GoogleContextOverflowError` (a `ContextOverflowError` subclass)
+    when the error indicates that the input exceeded the model's token limit,
+    so that upstream middleware (e.g. `SummarizationMiddleware`) can catch it
+    and fall back to context compaction.
 
     Args:
         e: The `ClientError` exception to handle.
         request: The request dict containing model info.
 
     Raises:
-        ChatGoogleGenerativeAIError: Always raised with formatted error message.
+        GoogleContextOverflowError: When the error indicates a context overflow.
+        ChatGoogleGenerativeAIError: For all other client errors.
     """
+    error_str = str(e)
+    if (
+        "exceeds the maximum number of tokens allowed" in error_str
+        or "token limit" in error_str.lower()
+    ):
+        raise GoogleContextOverflowError(
+            code=e.code,
+            response_json=e.details,
+            response=e.response,
+        ) from e
     model_name = request.get("model", "unknown")
     msg = f"Error calling model '{model_name}' ({e.status}): {e}"
     raise ChatGoogleGenerativeAIError(msg) from e
@@ -180,6 +201,86 @@ def _is_gemini_25_model(model_name: str) -> bool:
         return False
     model_name = model_name.lower().replace("models/", "")
     return "gemini-2.5" in model_name
+
+
+def _validate_video_metadata(video_metadata: object) -> None:
+    """Validate user-supplied video metadata before sending to the API.
+
+    The Gemini API surfaces an opaque `500 Internal error` when video
+    offsets are negative or `start_offset` exceeds `end_offset`. This
+    helper checks the obvious cases up front and raises a clearer error
+    so callers do not have to debug the underlying API response.
+
+    Args:
+        video_metadata: Raw `video_metadata` from a media part. Accepts
+            a `Mapping` (e.g. `dict`) keyed by either `start_offset`/
+            `end_offset` or their camelCase aliases, or a `VideoMetadata`
+            Pydantic instance. Each offset may be a duration string like
+            `"10s"`, a number of seconds, or a `{"seconds": int, "nanos":
+            int}` mapping.
+
+    Raises:
+        ValueError: If an offset is negative, `start_offset` is greater
+            than `end_offset`, or `video_metadata` is not a mapping or
+            object exposing offset fields.
+    """
+
+    def _to_seconds(value: object) -> float | None:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            if not value.endswith("s"):
+                return None
+            try:
+                return float(value[:-1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, Mapping):
+            mapping = cast("Mapping[str, Any]", value)
+            try:
+                return (
+                    float(mapping.get("seconds", 0))
+                    + float(mapping.get("nanos", 0)) / 1e9
+                )
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    if isinstance(video_metadata, Mapping):
+        mapping = cast("Mapping[str, Any]", video_metadata)
+        raw_start = mapping.get("start_offset", mapping.get("startOffset"))
+        raw_end = mapping.get("end_offset", mapping.get("endOffset"))
+    elif hasattr(video_metadata, "start_offset") or hasattr(
+        video_metadata, "end_offset"
+    ):
+        # Pydantic `VideoMetadata` instance — read fields via attribute
+        # access so callers passing a constructed model don't regress.
+        raw_start = getattr(video_metadata, "start_offset", None)
+        raw_end = getattr(video_metadata, "end_offset", None)
+    else:
+        msg = (
+            "video_metadata must be a mapping or a VideoMetadata-like object "
+            f"with start_offset/end_offset, got {type(video_metadata).__name__}"
+        )
+        raise ValueError(msg)
+
+    start = _to_seconds(raw_start)
+    end = _to_seconds(raw_end)
+
+    if start is not None and start < 0:
+        msg = f"video_metadata.start_offset must be non-negative, got {start}s"
+        raise ValueError(msg)
+    if end is not None and end < 0:
+        msg = f"video_metadata.end_offset must be non-negative, got {end}s"
+        raise ValueError(msg)
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"video_metadata.start_offset ({start}s) must not exceed "
+            f"video_metadata.end_offset ({end}s)"
+        )
+        raise ValueError(msg)
 
 
 def _convert_to_parts(
@@ -338,6 +439,7 @@ def _convert_to_parts(
                         msg = f"Media part must have either data or file_uri: {part}"
                         raise ValueError(msg)
                     if "video_metadata" in part:
+                        _validate_video_metadata(part["video_metadata"])
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part_kwargs["video_metadata"] = metadata
 
@@ -563,7 +665,7 @@ def _get_ai_message_tool_messages_parts(
 #     pass
 #
 # model = ChatGoogleGenerativeAI(
-#     model="gemini-3-pro-preview"
+#     model="gemini-3.1-pro-preview"
 # ).bind_tools([generate_placeholder_thoughts])
 #
 # response = model.invoke("Generate a placeholder tool invocation.")
@@ -885,9 +987,7 @@ def _parse_response_candidate(
     # Use model_name_for_content if provided, otherwise fall back to model_name.
     # This ensures consistent content format across all streaming chunks while
     # only including model_name in response_metadata for the final chunk.
-    effective_model_name = (
-        model_name_for_content if model_name_for_content else model_name
-    )
+    effective_model_name = model_name_for_content or model_name
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
     for part in parts:
@@ -1215,6 +1315,11 @@ def _response_to_result(
                     and grounding_metadata["web_search_queries"] is None
                 ):
                     grounding_metadata["web_search_queries"] = []
+                if (
+                    "image_search_queries" in grounding_metadata
+                    and grounding_metadata["image_search_queries"] is None
+                ):
+                    grounding_metadata["image_search_queries"] = []
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
         except AttributeError:
@@ -1281,7 +1386,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", api_key="...")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", api_key="...")
         ```
 
         **For Vertex AI Platform with API key**:
@@ -1293,10 +1398,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         # Or explicitly:
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             api_key="...",
             project="your-project-id",
             vertexai=True,
@@ -1358,7 +1463,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         model.invoke("Write me a ballad about LangChain")
         ```
 
@@ -1385,7 +1490,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             response_metadata={
                 "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
                 "finish_reason": "STOP",
-                "model_name": "gemini-3-pro-preview",
+                "model_name": "gemini-3.1-pro-preview",
                 "safety_ratings": [],
                 "model_provider": "google_genai",
             },
@@ -1764,7 +1869,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         message = HumanMessage(
             content=[
@@ -1842,7 +1947,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             thinking_level="low",  # For faster, lower-latency responses
         )
         ```
@@ -1859,7 +1964,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             include_thoughts=True,
         )
         ai_msg = model.invoke("How many 'r's are in the word 'strawberry'?")
@@ -1886,7 +1991,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         response = model.invoke(
             "When is the next total solar eclipse in US?",
             tools=[{"google_search": {}}],
@@ -1897,7 +2002,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Alternatively, you can bind the tool to the model for easier reuse across calls:
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         model_with_search = model.bind_tools([{"google_search": {}}])
         response = model_with_search.invoke(
@@ -1920,7 +2025,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         model_with_code_interpreter = model.bind_tools([{"code_execution": {}}])
         response = model_with_code_interpreter.invoke("Use Python to calculate 3^3.")
@@ -1984,7 +2089,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             safety_settings={
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             },
@@ -2028,7 +2133,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 file = client.files.get(name=file.name)
 
             # Create cache
-            model = "gemini-3-pro-preview"
+            model = "gemini-3.1-pro-preview"
             cache = client.caches.create(
                 model=model,
                 config=types.CreateCachedContentConfig(
@@ -2085,7 +2190,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     ],
                 )
             ]
-            model = "gemini-3-pro-preview"
+            model = "gemini-3.1-pro-preview"
             cache = client.caches.create(
                 model=model,
                 config=CreateCachedContentConfig(
@@ -2119,7 +2224,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         {
-            "model_name": "gemini-3-pro-preview",
+            "model_name": "gemini-3.1-pro-preview",
             "model_provider": "google_genai",
             "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
             "finish_reason": "STOP",
@@ -2331,7 +2436,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         self.default_metadata = tuple(additional_headers.items())
 
         _, user_agent = get_user_agent("ChatGoogleGenerativeAI")
-        headers = {"User-Agent": user_agent, **additional_headers}
+        headers = {"user-agent": user_agent, **additional_headers}
 
         google_api_key = None
         if not self.credentials:
@@ -3246,7 +3351,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Example:
             ```python
-            llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             num_tokens = llm.get_num_tokens("Hello, world!")
             print(num_tokens)
             # -> 4
@@ -3308,7 +3413,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 age: int
 
 
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             structured_model = model.with_structured_output(
                 Person,
                 method="json_schema",
@@ -3331,7 +3436,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 steps: list[str]
 
 
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             structured_model = model.with_structured_output(
                 Recipe, method="json_schema"
             )
@@ -3344,7 +3449,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ```
 
             ```python title="Using with dict schema"
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
             schema = {
                 "type": "object",

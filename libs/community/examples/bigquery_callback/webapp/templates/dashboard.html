@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangGraph Agent Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .card { @apply bg-white rounded-lg shadow-md p-6; }
+        .stat-card { @apply bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6 border border-gray-100; }
+        .event-row { @apply px-4 py-3 hover:bg-gray-50 transition-colors; }
+        .status-ok { @apply text-green-600 bg-green-100 px-2 py-1 rounded-full text-xs font-medium; }
+        .status-error { @apply text-red-600 bg-red-100 px-2 py-1 rounded-full text-xs font-medium; }
+        .event-badge { @apply px-2 py-1 rounded text-xs font-medium; }
+        .llm-event { @apply bg-blue-100 text-blue-800; }
+        .tool-event { @apply bg-purple-100 text-purple-800; }
+        .graph-event { @apply bg-green-100 text-green-800; }
+        .chain-event { @apply bg-yellow-100 text-yellow-800; }
+        .node-event { @apply bg-indigo-100 text-indigo-800; }
+        .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .live-dot { @apply w-2 h-2 bg-green-500 rounded-full inline-block mr-2; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="text-2xl font-bold">LangGraph Agent Analytics</div>
+                    <span class="bg-white/20 px-3 py-1 rounded-full text-sm">
+                        <span class="live-dot pulse"></span>Live
+                    </span>
+                </div>
+                <div class="flex items-center space-x-4 text-sm">
+                    <span class="opacity-75">{{ project_id }}.{{ dataset_id }}.{{ table_id }}</span>
+                    <span id="last-update" class="bg-white/20 px-3 py-1 rounded-full">
+                        Last update: --
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Summary Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+            <div class="stat-card">
+                <div class="text-sm text-gray-500 font-medium">Total Events</div>
+                <div class="text-3xl font-bold text-gray-900" id="stat-total-events">--</div>
+                <div class="text-xs text-gray-400 mt-1">Today</div>
+            </div>
+            <div class="stat-card">
+                <div class="text-sm text-gray-500 font-medium">Sessions</div>
+                <div class="text-3xl font-bold text-indigo-600" id="stat-sessions">--</div>
+                <div class="text-xs text-gray-400 mt-1">Active today</div>
+            </div>
+            <div class="stat-card">
+                <div class="text-sm text-gray-500 font-medium">Users</div>
+                <div class="text-3xl font-bold text-purple-600" id="stat-users">--</div>
+                <div class="text-xs text-gray-400 mt-1">Unique</div>
+            </div>
+            <div class="stat-card">
+                <div class="text-sm text-gray-500 font-medium">LLM Calls</div>
+                <div class="text-3xl font-bold text-blue-600" id="stat-llm-calls">--</div>
+                <div class="text-xs text-gray-400 mt-1">Requests</div>
+            </div>
+            <div class="stat-card">
+                <div class="text-sm text-gray-500 font-medium">Tool Calls</div>
+                <div class="text-3xl font-bold text-green-600" id="stat-tool-calls">--</div>
+                <div class="text-xs text-gray-400 mt-1">Invocations</div>
+            </div>
+            <div class="stat-card">
+                <div class="text-sm text-gray-500 font-medium">Avg Latency</div>
+                <div class="text-3xl font-bold text-orange-600" id="stat-avg-latency">--</div>
+                <div class="text-xs text-gray-400 mt-1">ms (LLM)</div>
+            </div>
+        </div>
+
+        <!-- Error Rate Banner -->
+        <div id="error-banner" class="mb-6 hidden">
+            <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-red-700">
+                            <span class="font-medium">Errors Detected:</span>
+                            <span id="error-count">0</span> errors today
+                            (<span id="error-rate">0</span>% error rate)
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Live Event Stream -->
+            <div class="lg:col-span-2 bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-gray-900">
+                        <span class="live-dot pulse"></span>
+                        Live Event Stream
+                    </h2>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="toggleAutoScroll()" id="auto-scroll-btn" class="text-sm px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full hover:bg-indigo-200">
+                            Auto-scroll: ON
+                        </button>
+                        <button onclick="clearEvents()" class="text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                <div id="event-stream" class="h-96 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-400">
+                        Waiting for events...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Activity -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Agent Activity</h2>
+                </div>
+                <div class="p-6">
+                    <canvas id="agent-chart" height="280"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Event Distribution -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Event Distribution</h2>
+                </div>
+                <div class="p-6">
+                    <canvas id="event-dist-chart" height="250"></canvas>
+                </div>
+            </div>
+
+            <!-- Latency Trend -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Latency Trend (Last Hour)</h2>
+                </div>
+                <div class="p-6">
+                    <canvas id="latency-chart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tool Usage & Sessions -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Tool Usage -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Tool Usage</h2>
+                </div>
+                <div class="p-6">
+                    <div id="tool-usage-table" class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider">
+                                    <th class="pb-3">Tool</th>
+                                    <th class="pb-3">Agent</th>
+                                    <th class="pb-3 text-right">Calls</th>
+                                    <th class="pb-3 text-right">Avg Latency</th>
+                                    <th class="pb-3 text-right">Errors</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tool-usage-body" class="divide-y divide-gray-100">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Sessions -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Recent Sessions</h2>
+                </div>
+                <div class="p-6">
+                    <div id="sessions-table" class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider">
+                                    <th class="pb-3">Session</th>
+                                    <th class="pb-3">Agent</th>
+                                    <th class="pb-3 text-right">LLM</th>
+                                    <th class="pb-3 text-right">Tools</th>
+                                    <th class="pb-3 text-right">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sessions-body" class="divide-y divide-gray-100">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Analytics -->
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div class="bg-gray-50 px-6 py-4 border-b">
+                <h2 class="text-lg font-semibold text-gray-900">User Engagement</h2>
+            </div>
+            <div class="p-6">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead>
+                            <tr class="text-left text-xs text-gray-500 uppercase tracking-wider">
+                                <th class="pb-3">User</th>
+                                <th class="pb-3 text-right">Sessions</th>
+                                <th class="pb-3 text-right">Agents Used</th>
+                                <th class="pb-3 text-right">LLM Queries</th>
+                                <th class="pb-3 text-right">Tool Interactions</th>
+                                <th class="pb-3 text-right">Avg Response (ms)</th>
+                                <th class="pb-3 text-right">Errors</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-body" class="divide-y divide-gray-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t py-4 mt-8">
+        <div class="max-w-7xl mx-auto px-4 text-center text-sm text-gray-500">
+            LangGraph Agent Analytics Dashboard | Powered by BigQuery
+        </div>
+    </footer>
+
+    <script>
+        // Configuration
+        const REFRESH_INTERVAL = 5000; // 5 seconds
+        let autoScroll = true;
+        let charts = {};
+        let eventSource = null;
+
+        // Event type colors
+        const eventTypeColors = {
+            'LLM_REQUEST': '#3B82F6',
+            'LLM_RESPONSE': '#2563EB',
+            'TOOL_STARTING': '#8B5CF6',
+            'TOOL_COMPLETED': '#7C3AED',
+            'GRAPH_START': '#10B981',
+            'GRAPH_END': '#059669',
+            'NODE_STARTING': '#6366F1',
+            'NODE_COMPLETED': '#4F46E5',
+            'CHAIN_START': '#F59E0B',
+            'CHAIN_END': '#D97706',
+            'TEXT': '#6B7280'
+        };
+
+        // Agent colors
+        const agentColors = [
+            '#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899'
+        ];
+
+        // Initialize charts
+        function initCharts() {
+            // Event Distribution Chart
+            const eventDistCtx = document.getElementById('event-dist-chart').getContext('2d');
+            charts.eventDist = new Chart(eventDistCtx, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right' }
+                    }
+                }
+            });
+
+            // Agent Activity Chart
+            const agentCtx = document.getElementById('agent-chart').getContext('2d');
+            charts.agent = new Chart(agentCtx, {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // Latency Trend Chart
+            const latencyCtx = document.getElementById('latency-chart').getContext('2d');
+            charts.latency = new Chart(latencyCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Avg Latency (ms)',
+                            data: [],
+                            borderColor: '#3B82F6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'P95 Latency (ms)',
+                            data: [],
+                            borderColor: '#EF4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            fill: false,
+                            tension: 0.4,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        // Fetch and update summary stats
+        async function updateSummary() {
+            try {
+                const response = await fetch('/api/summary');
+                const data = await response.json();
+
+                document.getElementById('stat-total-events').textContent =
+                    (data.total_events || 0).toLocaleString();
+                document.getElementById('stat-sessions').textContent =
+                    (data.total_sessions || 0).toLocaleString();
+                document.getElementById('stat-users').textContent =
+                    (data.unique_users || 0).toLocaleString();
+                document.getElementById('stat-llm-calls').textContent =
+                    (data.llm_requests || 0).toLocaleString();
+                document.getElementById('stat-tool-calls').textContent =
+                    (data.tool_invocations || 0).toLocaleString();
+                document.getElementById('stat-avg-latency').textContent =
+                    data.avg_llm_latency_ms ? Math.round(data.avg_llm_latency_ms).toLocaleString() : '--';
+
+                // Update error banner
+                const errorBanner = document.getElementById('error-banner');
+                if (data.total_errors > 0) {
+                    errorBanner.classList.remove('hidden');
+                    document.getElementById('error-count').textContent = data.total_errors;
+                    document.getElementById('error-rate').textContent = data.error_rate_pct || '0';
+                } else {
+                    errorBanner.classList.add('hidden');
+                }
+
+                document.getElementById('last-update').textContent =
+                    'Last update: ' + new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Error fetching summary:', error);
+            }
+        }
+
+        // Fetch and update event distribution
+        async function updateEventDistribution() {
+            try {
+                const response = await fetch('/api/events/distribution');
+                const data = await response.json();
+
+                const labels = data.map(d => d.event_type);
+                const values = data.map(d => d.count);
+                const colors = labels.map(l => eventTypeColors[l] || '#6B7280');
+
+                charts.eventDist.data.labels = labels;
+                charts.eventDist.data.datasets[0].data = values;
+                charts.eventDist.data.datasets[0].backgroundColor = colors;
+                charts.eventDist.update();
+            } catch (error) {
+                console.error('Error fetching event distribution:', error);
+            }
+        }
+
+        // Fetch and update agent activity
+        async function updateAgentActivity() {
+            try {
+                const response = await fetch('/api/events/by-agent');
+                const data = await response.json();
+
+                const labels = data.map(d => d.agent || 'Unknown');
+
+                charts.agent.data.labels = labels;
+                charts.agent.data.datasets = [
+                    {
+                        label: 'LLM Calls',
+                        data: data.map(d => d.llm_calls),
+                        backgroundColor: '#3B82F6'
+                    },
+                    {
+                        label: 'Tool Calls',
+                        data: data.map(d => d.tool_calls),
+                        backgroundColor: '#8B5CF6'
+                    },
+                    {
+                        label: 'Errors',
+                        data: data.map(d => d.errors),
+                        backgroundColor: '#EF4444'
+                    }
+                ];
+                charts.agent.update();
+            } catch (error) {
+                console.error('Error fetching agent activity:', error);
+            }
+        }
+
+        // Fetch and update latency trend
+        async function updateLatencyTrend() {
+            try {
+                const response = await fetch('/api/latency/trend');
+                const data = await response.json();
+
+                charts.latency.data.labels = data.map(d => d.minute.split(' ')[1]);
+                charts.latency.data.datasets[0].data = data.map(d => d.avg_latency_ms);
+                charts.latency.data.datasets[1].data = data.map(d => d.p95_latency_ms);
+                charts.latency.update();
+            } catch (error) {
+                console.error('Error fetching latency trend:', error);
+            }
+        }
+
+        // Fetch and update tool usage
+        async function updateToolUsage() {
+            try {
+                const response = await fetch('/api/tools/usage');
+                const data = await response.json();
+
+                const tbody = document.getElementById('tool-usage-body');
+                tbody.innerHTML = data.slice(0, 10).map(row => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 font-medium text-gray-900">${row.tool_name || '--'}</td>
+                        <td class="py-2 text-gray-600">${row.agent || '--'}</td>
+                        <td class="py-2 text-right">${row.call_count}</td>
+                        <td class="py-2 text-right">${row.avg_latency_ms ? Math.round(row.avg_latency_ms) : '--'}</td>
+                        <td class="py-2 text-right ${row.error_count > 0 ? 'text-red-600 font-medium' : ''}">${row.error_count}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error fetching tool usage:', error);
+            }
+        }
+
+        // Fetch and update sessions
+        async function updateSessions() {
+            try {
+                const response = await fetch('/api/sessions/recent?limit=10');
+                const data = await response.json();
+
+                const tbody = document.getElementById('sessions-body');
+                tbody.innerHTML = data.map(row => `
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="viewSession('${row.session_id}')">
+                        <td class="py-2 font-mono text-xs text-gray-600">${(row.session_id || '').slice(0, 20)}...</td>
+                        <td class="py-2 text-gray-900">${row.agent || '--'}</td>
+                        <td class="py-2 text-right">${row.llm_calls || 0}</td>
+                        <td class="py-2 text-right">${row.tool_calls || 0}</td>
+                        <td class="py-2 text-right">
+                            <span class="${row.status === 'Success' ? 'status-ok' : 'status-error'}">${row.status}</span>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error fetching sessions:', error);
+            }
+        }
+
+        // Fetch and update users
+        async function updateUsers() {
+            try {
+                const response = await fetch('/api/users/engagement');
+                const data = await response.json();
+
+                const tbody = document.getElementById('users-body');
+                tbody.innerHTML = data.map(row => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 font-medium text-gray-900">${row.user_id || '--'}</td>
+                        <td class="py-2 text-right">${row.total_sessions || 0}</td>
+                        <td class="py-2 text-right">${row.agents_used || 0}</td>
+                        <td class="py-2 text-right">${row.total_queries || 0}</td>
+                        <td class="py-2 text-right">${row.tool_interactions || 0}</td>
+                        <td class="py-2 text-right">${row.avg_response_time_ms ? Math.round(row.avg_response_time_ms) : '--'}</td>
+                        <td class="py-2 text-right ${row.errors_encountered > 0 ? 'text-red-600 font-medium' : ''}">${row.errors_encountered || 0}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
+        }
+
+        // Event badge class helper
+        function getEventBadgeClass(eventType) {
+            if (eventType.startsWith('LLM')) return 'llm-event';
+            if (eventType.startsWith('TOOL')) return 'tool-event';
+            if (eventType.startsWith('GRAPH')) return 'graph-event';
+            if (eventType.startsWith('CHAIN')) return 'chain-event';
+            if (eventType.startsWith('NODE')) return 'node-event';
+            return 'bg-gray-100 text-gray-800';
+        }
+
+        // Add event to stream
+        function addEventToStream(event) {
+            const stream = document.getElementById('event-stream');
+
+            // Remove placeholder if present
+            if (stream.querySelector('.text-center')) {
+                stream.innerHTML = '';
+            }
+
+            const eventDiv = document.createElement('div');
+            eventDiv.className = 'event-row border-b border-gray-100 fade-in';
+            eventDiv.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <span class="event-badge ${getEventBadgeClass(event.event_type)}">${event.event_type}</span>
+                        <span class="text-sm text-gray-600">${event.agent || '--'}</span>
+                        ${event.tool_name ? `<span class="text-sm text-purple-600 font-medium">${event.tool_name}</span>` : ''}
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        ${event.latency_ms ? `<span class="text-sm text-gray-500">${event.latency_ms}ms</span>` : ''}
+                        <span class="${event.status === 'OK' ? 'status-ok' : 'status-error'}">${event.status || 'OK'}</span>
+                        <span class="text-xs text-gray-400">${event.timestamp}</span>
+                    </div>
+                </div>
+            `;
+
+            stream.insertBefore(eventDiv, stream.firstChild);
+
+            // Keep only last 100 events
+            while (stream.children.length > 100) {
+                stream.removeChild(stream.lastChild);
+            }
+
+            if (autoScroll) {
+                stream.scrollTop = 0;
+            }
+        }
+
+        // Start SSE stream
+        function startEventStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource('/api/events/stream');
+
+            eventSource.addEventListener('events', (e) => {
+                const events = JSON.parse(e.data);
+                events.forEach(addEventToStream);
+            });
+
+            eventSource.addEventListener('error', (e) => {
+                console.error('SSE error:', e);
+                // Reconnect after 5 seconds
+                setTimeout(startEventStream, 5000);
+            });
+        }
+
+        // Load initial events
+        async function loadInitialEvents() {
+            try {
+                const response = await fetch('/api/events/recent?limit=30');
+                const events = await response.json();
+                events.reverse().forEach(addEventToStream);
+            } catch (error) {
+                console.error('Error loading initial events:', error);
+            }
+        }
+
+        // Toggle auto-scroll
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.getElementById('auto-scroll-btn');
+            btn.textContent = `Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`;
+            btn.className = autoScroll
+                ? 'text-sm px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full hover:bg-indigo-200'
+                : 'text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200';
+        }
+
+        // Clear events
+        function clearEvents() {
+            const stream = document.getElementById('event-stream');
+            stream.innerHTML = '<div class="text-center py-8 text-gray-400">Waiting for events...</div>';
+        }
+
+        // View session details
+        function viewSession(sessionId) {
+            window.open(`/session/${sessionId}`, '_blank');
+        }
+
+        // Update all data
+        async function updateAll() {
+            await Promise.all([
+                updateSummary(),
+                updateEventDistribution(),
+                updateAgentActivity(),
+                updateLatencyTrend(),
+                updateToolUsage(),
+                updateSessions(),
+                updateUsers()
+            ]);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCharts();
+            await loadInitialEvents();
+            await updateAll();
+            startEventStream();
+
+            // Refresh data periodically
+            setInterval(updateAll, REFRESH_INTERVAL);
+        });
+    </script>
+</body>
+</html>
