@@ -296,18 +296,20 @@ def _format_messages_anthropic(
             continue
         formatted_messages.append(fm)
 
-    # --- FIX: Sanitize trailing whitespace in prefill (last assistant msg) ---
-    if formatted_messages:
-        last_msg = formatted_messages[-1]
-        if last_msg["role"] == "assistant":
-            if isinstance(last_msg.get("content"), list):
-                for block in last_msg["content"]:
-                    if isinstance(block, dict):
-                        b_type = block.get("type")
-                        if b_type == "text" and "text" in block:
-                            block["text"] = block["text"].rstrip()
-                        elif b_type == "thinking" and "thinking" in block:
-                            block["thinking"] = block["thinking"].rstrip()
+    # Anthropic treats a trailing assistant message as a "prefill" and rejects
+    # requests whose final content ends with whitespace. Mirror langchain-anthropic
+    # and rstrip only the last text block of the last assistant message.
+    if formatted_messages and formatted_messages[-1]["role"] == "assistant":
+        content = formatted_messages[-1]["content"]
+        if isinstance(content, str):
+            formatted_messages[-1]["content"] = content.rstrip()
+        elif (
+            isinstance(content, list)
+            and content
+            and isinstance(content[-1], dict)
+            and content[-1].get("type") == "text"
+        ):
+            content[-1]["text"] = content[-1]["text"].rstrip()
 
     return system_messages, formatted_messages
 
