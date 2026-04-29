@@ -13,11 +13,12 @@ Usage:
     python populate_sample_data.py
 """
 
+from __future__ import annotations
+
 import os
 import random
 import time
-from datetime import datetime
-from typing import Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.tools import tool
@@ -31,6 +32,9 @@ from langchain_google_community.callbacks.bigquery_callback import (
     BigQueryLoggerConfig,
 )
 
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
+
 # Configuration
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "test-project-0728-467323")
 DATASET_ID = os.environ.get("BQ_DATASET_ID", "agent_analytics")
@@ -42,6 +46,7 @@ AGENTS = ["finance_assistant", "travel_planner", "customer_support"]
 
 class AgentState(TypedDict):
     """State for the agent."""
+
     messages: Annotated[list[BaseMessage], add_messages]
 
 
@@ -88,13 +93,19 @@ def get_weather(city: str) -> str:
 def convert_currency(amount: float, from_currency: str, to_currency: str) -> str:
     """Convert an amount from one currency to another."""
     rates_to_usd = {
-        "USD": 1.0, "EUR": 1.08, "GBP": 1.27, "JPY": 0.0067,
-        "CNY": 0.14, "CAD": 0.74, "AUD": 0.65, "CHF": 1.12,
+        "USD": 1.0,
+        "EUR": 1.08,
+        "GBP": 1.27,
+        "JPY": 0.0067,
+        "CNY": 0.14,
+        "CAD": 0.74,
+        "AUD": 0.65,
+        "CHF": 1.12,
     }
     from_curr = from_currency.upper().strip()
     to_curr = to_currency.upper().strip()
     if from_curr not in rates_to_usd or to_curr not in rates_to_usd:
-        return f"Unknown currency"
+        return "Unknown currency"
     usd_amount = amount * rates_to_usd[from_curr]
     result = usd_amount / rates_to_usd[to_curr]
     return f"{amount:,.2f} {from_curr} = {result:,.2f} {to_curr}"
@@ -104,9 +115,15 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> str
 def calculate(expression: str) -> str:
     """Evaluate a mathematical expression safely."""
     import math
+
     try:
         expr = expression.replace("^", "**")
-        allowed_names = {"sqrt": math.sqrt, "sin": math.sin, "cos": math.cos, "pi": math.pi}
+        allowed_names = {
+            "sqrt": math.sqrt,
+            "sin": math.sin,
+            "cos": math.cos,
+            "pi": math.pi,
+        }
         result = eval(expr, {"__builtins__": {}}, allowed_names)
         return f"Result: {result}"
     except Exception as e:
@@ -147,7 +164,7 @@ def process_refund(order_id: str, reason: str) -> str:
     return f"Refund processed for order {order_id}. Reason: {reason}. Refund ID: {refund_id}. Amount: ${amount}"
 
 
-def create_agent(agent_type: str) -> StateGraph:
+def create_agent(agent_type: str) -> CompiledStateGraph:
     """Create an agent based on type."""
     if agent_type == "finance_assistant":
         tools = [get_stock_price, convert_currency, calculate]
@@ -179,7 +196,9 @@ def create_agent(agent_type: str) -> StateGraph:
     workflow.add_node("agent", agent_node)
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"tools": "tools", END: END}
+    )
     workflow.add_edge("tools", "agent")
 
     return workflow.compile()
@@ -216,7 +235,7 @@ SAMPLE_QUERIES = {
 
 
 def run_scenario(
-    agent: StateGraph,
+    agent: CompiledStateGraph,
     handler: BigQueryCallbackHandler,
     query: str,
     session_id: str,
@@ -250,7 +269,7 @@ def run_scenario(
             print(f"  Error: {e}")
 
 
-def main():
+def main() -> None:
     """Populate sample data for analytics demo."""
     print("=" * 60)
     print("Populating Sample Data for LangGraph Analytics Demo")
@@ -266,7 +285,7 @@ def main():
     # Run multiple scenarios for each agent type
     scenario_count = 0
     for agent_name in AGENTS:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Agent: {agent_name}")
         print("=" * 60)
 
@@ -294,7 +313,7 @@ def main():
 
         handler.shutdown()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Done! Created {scenario_count} scenarios across {len(AGENTS)} agents.")
     print("=" * 60)
 

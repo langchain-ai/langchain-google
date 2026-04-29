@@ -24,7 +24,6 @@ Usage:
 import asyncio
 import json
 import os
-from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Optional
 
 from fastapi import FastAPI, Query, Request
@@ -77,7 +76,7 @@ def run_query(sql: str) -> list[dict[str, Any]]:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
+async def dashboard(request: Request) -> HTMLResponse:
     """Main dashboard page."""
     return templates.TemplateResponse(
         "dashboard.html",
@@ -91,7 +90,7 @@ async def dashboard(request: Request):
 
 
 @app.get("/session/{session_id}", response_class=HTMLResponse)
-async def session_detail(request: Request, session_id: str):
+async def session_detail(request: Request, session_id: str) -> HTMLResponse:
     """Session detail page."""
     return templates.TemplateResponse(
         "session_detail.html",
@@ -108,7 +107,7 @@ async def session_detail(request: Request, session_id: str):
 
 
 @app.get("/api/summary")
-async def get_summary():
+async def get_summary() -> dict[str, Any]:
     """Get overall summary statistics."""
     sql = f"""
     SELECT
@@ -130,7 +129,7 @@ async def get_summary():
 
 
 @app.get("/api/summary/hourly")
-async def get_hourly_summary():
+async def get_hourly_summary() -> dict[str, Any]:
     """Get summary stats for the last hour."""
     sql = f"""
     SELECT
@@ -152,7 +151,9 @@ async def get_hourly_summary():
 
 
 @app.get("/api/events/recent")
-async def get_recent_events(limit: int = Query(default=50, le=200)):
+async def get_recent_events(
+    limit: int = Query(default=50, le=200),
+) -> list[dict[str, Any]]:
     """Get most recent events."""
     sql = f"""
     SELECT
@@ -173,7 +174,7 @@ async def get_recent_events(limit: int = Query(default=50, le=200)):
 
 
 @app.get("/api/events/stream")
-async def stream_events(request: Request):
+async def stream_events(request: Request) -> EventSourceResponse:
     """Server-Sent Events stream for real-time updates."""
 
     async def event_generator() -> AsyncGenerator[dict, None]:
@@ -219,7 +220,11 @@ async def stream_events(request: Request):
             try:
                 events = run_query(sql)
                 if events:
-                    last_timestamp = events[-1]["timestamp"] if last_timestamp else events[0]["timestamp"]
+                    last_timestamp = (
+                        events[-1]["timestamp"]
+                        if last_timestamp
+                        else events[0]["timestamp"]
+                    )
                     yield {"event": "events", "data": json.dumps(events)}
             except Exception as e:
                 yield {"event": "error", "data": json.dumps({"error": str(e)})}
@@ -235,7 +240,7 @@ async def stream_events(request: Request):
 
 
 @app.get("/api/events/distribution")
-async def get_event_distribution():
+async def get_event_distribution() -> list[dict[str, Any]]:
     """Get event type distribution."""
     sql = f"""
     SELECT
@@ -251,7 +256,7 @@ async def get_event_distribution():
 
 
 @app.get("/api/events/by-agent")
-async def get_events_by_agent():
+async def get_events_by_agent() -> list[dict[str, Any]]:
     """Get event counts by agent."""
     sql = f"""
     SELECT
@@ -277,7 +282,7 @@ async def get_events_by_agent():
 
 
 @app.get("/api/tools/usage")
-async def get_tool_usage():
+async def get_tool_usage() -> list[dict[str, Any]]:
     """Get tool usage statistics."""
     sql = f"""
     SELECT
@@ -298,7 +303,7 @@ async def get_tool_usage():
 
 
 @app.get("/api/tools/heatmap")
-async def get_tool_heatmap():
+async def get_tool_heatmap() -> list[dict[str, Any]]:
     """Get tool usage heatmap data (agent x tool matrix)."""
     sql = f"""
     SELECT
@@ -321,7 +326,7 @@ async def get_tool_heatmap():
 
 
 @app.get("/api/latency/by-event-type")
-async def get_latency_by_event_type():
+async def get_latency_by_event_type() -> list[dict[str, Any]]:
     """Get latency statistics by event type."""
     sql = f"""
     SELECT
@@ -343,7 +348,7 @@ async def get_latency_by_event_type():
 
 
 @app.get("/api/latency/trend")
-async def get_latency_trend():
+async def get_latency_trend() -> list[dict[str, Any]]:
     """Get latency trend over time."""
     sql = f"""
     SELECT
@@ -362,7 +367,7 @@ async def get_latency_trend():
 
 
 @app.get("/api/latency/hourly")
-async def get_hourly_latency():
+async def get_hourly_latency() -> list[dict[str, Any]]:
     """Get hourly latency pattern."""
     sql = f"""
     SELECT
@@ -387,7 +392,7 @@ async def get_hourly_latency():
 
 
 @app.get("/api/errors/summary")
-async def get_error_summary():
+async def get_error_summary() -> list[dict[str, Any]]:
     """Get error summary."""
     sql = f"""
     SELECT
@@ -406,7 +411,9 @@ async def get_error_summary():
 
 
 @app.get("/api/errors/recent")
-async def get_recent_errors(limit: int = Query(default=20, le=100)):
+async def get_recent_errors(
+    limit: int = Query(default=20, le=100),
+) -> list[dict[str, Any]]:
     """Get recent errors."""
     sql = f"""
     SELECT
@@ -426,7 +433,7 @@ async def get_recent_errors(limit: int = Query(default=20, le=100)):
 
 
 @app.get("/api/errors/rate")
-async def get_error_rate():
+async def get_error_rate() -> list[dict[str, Any]]:
     """Get error rate over time."""
     sql = f"""
     SELECT
@@ -448,7 +455,9 @@ async def get_error_rate():
 
 
 @app.get("/api/sessions/recent")
-async def get_recent_sessions(limit: int = Query(default=20, le=100)):
+async def get_recent_sessions(
+    limit: int = Query(default=20, le=100),
+) -> list[dict[str, Any]]:
     """Get recent sessions."""
     sql = f"""
     SELECT
@@ -473,7 +482,7 @@ async def get_recent_sessions(limit: int = Query(default=20, le=100)):
 
 
 @app.get("/api/sessions/{session_id}/timeline")
-async def get_session_timeline(session_id: str):
+async def get_session_timeline(session_id: str) -> list[dict[str, Any]]:
     """Get detailed timeline for a session."""
     sql = f"""
     SELECT
@@ -493,7 +502,7 @@ async def get_session_timeline(session_id: str):
 
 
 @app.get("/api/sessions/{session_id}/conversation")
-async def get_session_conversation(session_id: str):
+async def get_session_conversation(session_id: str) -> list[dict[str, Any]]:
     """Reconstruct conversation for a session."""
     sql = f"""
     SELECT
@@ -516,7 +525,7 @@ async def get_session_conversation(session_id: str):
 
 
 @app.get("/api/users/engagement")
-async def get_user_engagement():
+async def get_user_engagement() -> list[dict[str, Any]]:
     """Get user engagement metrics."""
     sql = f"""
     SELECT
@@ -537,7 +546,7 @@ async def get_user_engagement():
 
 
 @app.get("/api/users/agent-preference")
-async def get_user_agent_preference():
+async def get_user_agent_preference() -> list[dict[str, Any]]:
     """Get user-agent preference matrix."""
     sql = f"""
     SELECT
@@ -561,7 +570,7 @@ async def get_user_agent_preference():
 
 
 @app.get("/api/timeseries/activity")
-async def get_activity_timeseries():
+async def get_activity_timeseries() -> list[dict[str, Any]]:
     """Get activity time series (events per minute)."""
     sql = f"""
     SELECT
@@ -578,7 +587,7 @@ async def get_activity_timeseries():
 
 
 @app.get("/api/timeseries/hourly-pattern")
-async def get_hourly_pattern():
+async def get_hourly_pattern() -> list[dict[str, Any]]:
     """Get hourly activity pattern."""
     sql = f"""
     SELECT
@@ -600,7 +609,7 @@ async def get_hourly_pattern():
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, Any]:
     """Health check endpoint."""
     try:
         # Quick query to verify BigQuery connection

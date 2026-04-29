@@ -19,10 +19,12 @@ Usage:
     python langgraph_agent_example.py
 """
 
+from __future__ import annotations
+
 import os
 import random
 from datetime import datetime
-from typing import Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict, cast
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.tools import tool
@@ -35,6 +37,9 @@ from langchain_google_community.callbacks.bigquery_callback import (
     BigQueryCallbackHandler,
     BigQueryLoggerConfig,
 )
+
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
 
 # Configuration - Update these for your environment
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "test-project-0728-467323")
@@ -134,9 +139,10 @@ def get_weather(city: str) -> str:
     city_lower = city.lower().strip()
     if city_lower in weather_data:
         data = weather_data[city_lower]
+        temp_c = cast(int, data["temp"])
         return (
             f"Weather in {city.title()}:\n"
-            f"  Temperature: {data['temp']}°C ({data['temp'] * 9 // 5 + 32}°F)\n"
+            f"  Temperature: {temp_c}°C ({temp_c * 9 // 5 + 32}°F)\n"
             f"  Condition: {data['condition']}\n"
             f"  Humidity: {data['humidity']}%\n"
             f"  Wind: {data['wind']}"
@@ -219,7 +225,7 @@ def calculate(expression: str) -> str:
         # Only allow safe characters
         allowed_chars = set("0123456789+-*/().  sqrtcosintanlogexpabsroundpie")
         if not all(c in allowed_chars for c in expr.lower()):
-            return f"Error: Expression contains invalid characters"
+            return "Error: Expression contains invalid characters"
 
         result = eval(expr, {"__builtins__": {}}, allowed_names)
         if isinstance(result, float):
@@ -265,7 +271,7 @@ def generate_random_number(min_val: int, max_val: int) -> str:
     return f"Random number between {min_val} and {max_val}: {result}"
 
 
-def create_agent() -> StateGraph:
+def create_agent() -> CompiledStateGraph:
     """Create the LangGraph ReAct agent with Gemini 3 Flash.
 
     Returns:
@@ -325,7 +331,7 @@ def create_agent() -> StateGraph:
 
 
 def run_agent(
-    agent: StateGraph,
+    agent: CompiledStateGraph,
     handler: BigQueryCallbackHandler,
     query: str,
     session_id: str,

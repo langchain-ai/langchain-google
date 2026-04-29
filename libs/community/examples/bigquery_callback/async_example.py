@@ -16,9 +16,11 @@ Usage:
     python async_example.py
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
-from typing import Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.tools import tool
@@ -31,6 +33,9 @@ from langchain_google_community.callbacks.bigquery_callback import (
     AsyncBigQueryCallbackHandler,
     BigQueryLoggerConfig,
 )
+
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
 
 # Configuration - Update these for your environment
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "test-project-0728-467323")
@@ -77,7 +82,7 @@ def async_calculator(expression: str) -> str:
         return f"Error: {e}"
 
 
-def create_async_agent() -> StateGraph:
+def create_async_agent() -> CompiledStateGraph:
     """Create an async LangGraph agent."""
     tools = [async_search, async_calculator]
 
@@ -106,14 +111,16 @@ def create_async_agent() -> StateGraph:
     workflow.add_node("agent", agent_node)
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"tools": "tools", END: END}
+    )
     workflow.add_edge("tools", "agent")
 
     return workflow.compile()
 
 
 async def run_single_query(
-    agent: StateGraph,
+    agent: CompiledStateGraph,
     handler: AsyncBigQueryCallbackHandler,
     query: str,
     session_id: str,
@@ -142,7 +149,10 @@ async def run_single_query(
         )
 
         final_message = result["messages"][-1]
-        return final_message.content if isinstance(final_message, AIMessage) else str(final_message)
+        if isinstance(final_message, AIMessage):
+            content = final_message.content
+            return content if isinstance(content, str) else str(content)
+        return str(final_message)
 
 
 async def main() -> None:
@@ -196,8 +206,7 @@ async def main() -> None:
 
     # Run queries concurrently
     tasks = [
-        run_single_query(agent, handler, query, session)
-        for query, session in queries
+        run_single_query(agent, handler, query, session) for query, session in queries
     ]
 
     print("Running 3 queries concurrently...")
