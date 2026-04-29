@@ -57,7 +57,7 @@ resource "google_cloudbuild_trigger" "cloudbuild_trigger" {
       name       = "python:$${_PYTHON_VERSION}"
       args       = ["-c", local.cloudbuild_config]
       entrypoint = "bash"
-      env        = concat(["PROJECT_ID=$PROJECT_ID"], [for env_name, env_value in var.cloudbuild_env_vars : "${env_name}=$_${env_name}"])
+      env        = concat(["PROJECT_ID=$PROJECT_ID", "CI=true"], [for env_name, env_value in var.cloudbuild_env_vars : "${env_name}=$_${env_name}"])
       secret_env = keys(var.cloudbuild_secret_vars)
     }
 
