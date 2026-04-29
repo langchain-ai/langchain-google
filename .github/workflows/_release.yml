@@ -330,7 +330,13 @@ jobs:
           GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
           GOOGLE_VERTEX_AI_WEB_CREDENTIALS: ${{ secrets.GOOGLE_VERTEX_AI_WEB_CREDENTIALS }}
           LANGCHAIN_TESTS_USER_AGENT: ${{ secrets.LANGCHAIN_TESTS_USER_AGENT }}
-        run: make integration_tests
+        # `--release`/`--extended` opt in to tests gated by the matching
+        # markers in each package's tests/conftest.py (e.g.
+        # libs/community/tests/conftest.py). Without these, integration tests
+        # decorated with those markers are collect-skipped silently — community
+        # and genai use `extended`, vertexai uses both. The Makefiles thread
+        # EXTRA_PYTEST_ARGS through to pytest.
+        run: make integration_tests EXTRA_PYTEST_ARGS="--release --extended"
         working-directory: ${{ inputs.working-directory }}
 
       - name: Get minimum versions
