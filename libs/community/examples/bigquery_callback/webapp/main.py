@@ -24,7 +24,6 @@ Usage:
 import asyncio
 import json
 import os
-from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Optional
 
 from fastapi import FastAPI, Query, Request
@@ -219,7 +218,11 @@ async def stream_events(request: Request):
             try:
                 events = run_query(sql)
                 if events:
-                    last_timestamp = events[-1]["timestamp"] if last_timestamp else events[0]["timestamp"]
+                    last_timestamp = (
+                        events[-1]["timestamp"]
+                        if last_timestamp
+                        else events[0]["timestamp"]
+                    )
                     yield {"event": "events", "data": json.dumps(events)}
             except Exception as e:
                 yield {"event": "error", "data": json.dumps({"error": str(e)})}

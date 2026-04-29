@@ -219,7 +219,7 @@ def calculate(expression: str) -> str:
         # Only allow safe characters
         allowed_chars = set("0123456789+-*/().  sqrtcosintanlogexpabsroundpie")
         if not all(c in allowed_chars for c in expr.lower()):
-            return f"Error: Expression contains invalid characters"
+            return "Error: Expression contains invalid characters"
 
         result = eval(expr, {"__builtins__": {}}, allowed_names)
         if isinstance(result, float):

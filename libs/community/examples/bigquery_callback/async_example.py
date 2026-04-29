@@ -106,7 +106,9 @@ def create_async_agent() -> StateGraph:
     workflow.add_node("agent", agent_node)
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"tools": "tools", END: END}
+    )
     workflow.add_edge("tools", "agent")
 
     return workflow.compile()
@@ -142,7 +144,11 @@ async def run_single_query(
         )
 
         final_message = result["messages"][-1]
-        return final_message.content if isinstance(final_message, AIMessage) else str(final_message)
+        return (
+            final_message.content
+            if isinstance(final_message, AIMessage)
+            else str(final_message)
+        )
 
 
 async def main() -> None:
@@ -196,8 +202,7 @@ async def main() -> None:
 
     # Run queries concurrently
     tasks = [
-        run_single_query(agent, handler, query, session)
-        for query, session in queries
+        run_single_query(agent, handler, query, session) for query, session in queries
     ]
 
     print("Running 3 queries concurrently...")
