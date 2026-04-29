@@ -50,6 +50,7 @@ from langchain_google_vertexai.chat_models import (
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
+    _validate_video_metadata,
 )
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 from tests.integration_tests.conftest import (
@@ -353,6 +354,112 @@ def test_init_client_with_custom_model_kwargs() -> None:
 
     default_params = llm._default_params
     assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
+
+
+@pytest.mark.parametrize(
+    ("model_name", "expected_max_tokens"),
+    [
+        ("claude-sonnet-4-5", 64000),
+        ("claude-sonnet-4-5-20250929", 64000),
+        ("claude-opus-4-0", 32000),
+        ("claude-opus-4-5", 64000),
+        ("claude-opus-4-6", 128000),
+        ("claude-3-5-sonnet-20241022", 8192),
+        ("claude-3-7-sonnet-20250219", 64000),
+        ("claude-haiku-4-5", 64000),
+        ("claude-3-opus-20240229", 4096),
+    ],
+)
+def test_anthropic_vertex_model_aware_max_tokens(
+    model_name: str, expected_max_tokens: int
+) -> None:
+    """Test that max_output_tokens defaults are model-aware."""
+    llm = ChatAnthropicVertex(
+        model_name=model_name,
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == expected_max_tokens
+    assert llm._default_params["max_tokens"] == expected_max_tokens
+
+
+def test_anthropic_vertex_unknown_model_fallback() -> None:
+    """Test that unknown model names fall back to 4096."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-unknown-future-model",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_explicit_max_tokens_override() -> None:
+    """Test that explicitly set max_output_tokens is not overridden."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+        max_output_tokens=2048,
+    )
+    assert llm.max_output_tokens == 2048
+
+
+def test_anthropic_vertex_explicit_max_tokens_alias_override() -> None:
+    """Test that max_tokens alias also prevents override."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+        max_tokens=512,
+    )
+    assert llm.max_output_tokens == 512
+
+
+def test_anthropic_vertex_no_model_falls_back() -> None:
+    """No model_name → still get the fallback default (avoids `max_tokens=None`)."""
+    llm = ChatAnthropicVertex(
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_model_alias_resolves_profile() -> None:
+    """`model=` alias should resolve the same profile as `model_name=`."""
+    llm = ChatAnthropicVertex(
+        model="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 64000
+
+
+def test_anthropic_profiles_smoke() -> None:
+    """Auto-generated `_PROFILES` is importable, non-empty, and well-shaped."""
+    from langchain_google_vertexai.data.anthropic._profiles import _PROFILES
+
+    assert _PROFILES
+    sample = next(iter(_PROFILES.values()))
+    assert "max_output_tokens" in sample
+
+
+def test_anthropic_vertex_profile_missing_max_output_tokens(
+    monkeypatch: Any,
+) -> None:
+    """Profile entry exists but lacks `max_output_tokens` → fallback to 4096."""
+    from langchain_google_vertexai import model_garden
+
+    monkeypatch.setitem(
+        model_garden._ANTHROPIC_PROFILES,  # noqa: SLF001
+        "claude-test-no-output-key",
+        {"name": "Test"},
+    )
+    llm = ChatAnthropicVertex(
+        model_name="claude-test-no-output-key",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
 
 
 def test_profile() -> None:
@@ -996,6 +1103,130 @@ def test_python_literal_inputs() -> None:
 
     for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
         _ = llm._prepare_request_gemini([HumanMessage(input_string)])
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}},
+        {"start_offset": {"seconds": 0}, "end_offset": {"seconds": 0}},
+        {"start_offset": 0, "end_offset": 10},
+        {"start_offset": "1s", "end_offset": "5s"},
+        {},
+        {"end_offset": {"seconds": 5}},
+        {"start_offset": {"seconds": 1}},
+    ],
+)
+def test_validate_video_metadata_accepts_valid_offsets(
+    video_metadata: dict,
+) -> None:
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    ("video_metadata", "expected_substring"),
+    [
+        (
+            {"start_offset": {"seconds": -1}, "end_offset": {"seconds": 5}},
+            "start_offset must be non-negative",
+        ),
+        (
+            {"start_offset": {"seconds": 0}, "end_offset": {"seconds": -1}},
+            "end_offset must be non-negative",
+        ),
+        (
+            {"start_offset": {"seconds": 10}, "end_offset": {"seconds": 5}},
+            "must not exceed",
+        ),
+        (
+            {"start_offset": "5s", "end_offset": "1s"},
+            "must not exceed",
+        ),
+    ],
+)
+def test_validate_video_metadata_rejects_invalid_offsets(
+    video_metadata: dict, expected_substring: str
+) -> None:
+    with pytest.raises(ValueError, match=expected_substring):
+        _validate_video_metadata(video_metadata)
+
+
+def test_parse_chat_history_gemini_video_offset_validation() -> None:
+    """Invalid video offsets should raise ValueError before reaching the API."""
+    bad_part = {
+        "type": "media",
+        "mime_type": "video/mp4",
+        "file_uri": "gs://example-bucket/clip.mp4",
+        "video_metadata": {
+            "start_offset": {"seconds": 30},
+            "end_offset": {"seconds": 5},
+        },
+    }
+    history: list[BaseMessage] = [HumanMessage(content=[bad_part])]
+    image_bytes_loader = ImageBytesLoader()
+    with pytest.raises(ValueError, match="must not exceed"):
+        _parse_chat_history_gemini(
+            history=history,
+            imageBytesLoader=image_bytes_loader,
+        )
+
+
+def test_validate_video_metadata_accepts_proto_instance() -> None:
+    """`VideoMetadata` proto instances should validate via attribute access."""
+    from google.cloud.aiplatform_v1beta1.types import VideoMetadata
+
+    valid = VideoMetadata(
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}}
+    )
+    _validate_video_metadata(valid)
+
+
+def test_validate_video_metadata_rejects_invalid_proto_instance() -> None:
+    """Proto instances with bad offsets must raise the same clear ValueError."""
+    from google.cloud.aiplatform_v1beta1.types import VideoMetadata
+
+    bad = VideoMetadata({"start_offset": {"seconds": 30}, "end_offset": {"seconds": 5}})
+    with pytest.raises(ValueError, match="must not exceed"):
+        _validate_video_metadata(bad)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        "not a mapping",
+        12345,
+        ["seq", "of", "things"],
+        object(),
+    ],
+)
+def test_validate_video_metadata_rejects_non_mapping_input(
+    video_metadata: object,
+) -> None:
+    """Non-mapping, non-proto input must surface a clear ValueError instead
+    of an opaque `AttributeError` from a missing `.get` method."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `float(None)` would TypeError without the guard.
+        {"start_offset": {"seconds": None, "nanos": None}},
+        # `float('abc')` would ValueError without the guard.
+        {"start_offset": {"seconds": "abc"}},
+        # Garbage string with the `s` suffix.
+        {"start_offset": "abcs"},
+    ],
+)
+def test_validate_video_metadata_tolerates_unparseable_values(
+    video_metadata: dict,
+) -> None:
+    """Permissive `_to_seconds` returns `None` for unparseable shapes so
+    only true validation failures (negative offsets, start > end) raise."""
+    # Should not raise -- unparseable values are treated as "not present"
+    # and the proto constructor will surface a clearer error if needed.
+    _validate_video_metadata(video_metadata)
 
 
 @pytest.mark.parametrize(
@@ -2111,6 +2342,36 @@ def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> 
         call_kwargs = mock_generate.call_args.kwargs
         # When timeout=None is explicitly passed, it uses None (not constructor default)
         assert call_kwargs.get("timeout") is None
+
+
+def test_gemini_response_to_chat_result_emits_string_modality() -> None:
+    """`response_metadata["usage_metadata"]` exposes modality as a string (#1053)."""
+    from vertexai.generative_models._generative_models import GenerationResponse
+
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    response = GenerationResponse.from_dict(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "hi"}], "role": "model"},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 4,
+                "candidates_token_count": 1,
+                "total_token_count": 5,
+                "prompt_tokens_details": [{"modality": 1, "token_count": 4}],
+                "candidates_tokens_details": [{"modality": 1, "token_count": 1}],
+            },
+        }
+    )
+    result = llm._gemini_response_to_chat_result(response)
+    generation_info = result.generations[0].generation_info
+    assert generation_info is not None
+    usage = generation_info["usage_metadata"]
+    assert usage["prompt_tokens_details"][0]["modality"] == "TEXT"
+    assert usage["candidates_tokens_details"][0]["modality"] == "TEXT"
 
 
 def test_get_num_tokens_from_messages(clear_prediction_client_cache: Any) -> None:
