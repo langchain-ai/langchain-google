@@ -1,7 +1,9 @@
+import json
 import os
 from importlib import metadata
 from typing import Any
 
+from google.oauth2 import service_account
 from langchain_core.utils import from_env, secret_from_env
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from typing_extensions import Self
@@ -165,7 +167,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         your API key and project.
     """
 
-    credentials: Any = None
+    credentials: Any = Field(default=None, exclude=True)
     """Custom credentials for Vertex AI authentication.
 
     When provided, forces Vertex AI backend (regardless of API key presence in
@@ -193,6 +195,51 @@ class _BaseGoogleGenerativeAI(BaseModel):
             project="my-project-id",
         )
         ```
+    """
+
+    credentials_info: SecretStr | None = Field(default=None, repr=False)
+    """Service account JSON for Vertex AI authentication.
+
+    Use this field instead of `credentials` when you need serialization support.
+
+    Accepts the JSON content of a service account key file as a string. The credentials
+    object will be automatically reconstructed during deserialization.
+
+    !!! warning "Security"
+
+        This field contains sensitive information including private keys. It is stored
+        as `SecretStr` to prevent accidental exposure in logs or console output.
+
+    !!! example "Using `credentials_info` for serialization"
+
+        ```python
+        # Read service account JSON
+        with open("service-account.json") as f:
+            credentials_json = f.read()
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            credentials_info=credentials_json,
+            project="my-project-id",
+        )
+
+        # Serialization now works
+        from langchain_core.load import dumps, loads
+
+        serialized = dumps(llm)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_CREDENTIALS_JSON": credentials_json},
+        )
+        ```
+    """
+
+    credentials_scopes: list[str] | None = Field(default=None)
+    """OAuth2 scopes for credentials reconstruction.
+
+    Used when reconstructing credentials from `credentials_info` during deserialization.
+
+    If not provided, defaults to `['https://www.googleapis.com/auth/cloud-platform']`.
     """
 
     vertexai: bool | None = Field(default=None)
@@ -517,6 +564,44 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """
 
     @model_validator(mode="after")
+    def _reconstruct_credentials_from_info(self) -> Self:
+        """Reconstruct credentials from `credentials_info` during deserialization.
+
+        This validator runs after initialization to reconstruct a credentials object
+        from the serialized `credentials_info` field. This enables proper
+        deserialization of models that were serialized with service account
+        credentials.
+        """
+        # Only reconstruct if we have credentials_info but no credentials
+        if self.credentials is None and self.credentials_info is not None:
+            try:
+                # Parse the credentials info from SecretStr
+                info_str = self.credentials_info.get_secret_value()
+                info_dict = json.loads(info_str)
+
+                # Determine scopes to use
+                scopes = self.credentials_scopes or [
+                    "https://www.googleapis.com/auth/cloud-platform"
+                ]
+
+                # Reconstruct the credentials
+                credentials = service_account.Credentials.from_service_account_info(  # type: ignore[no-untyped-call]
+                    info_dict, scopes=scopes
+                )
+
+                # Set the credentials
+                object.__setattr__(self, "credentials", credentials)
+
+            except (ImportError, json.JSONDecodeError, ValueError) as e:
+                msg = (
+                    f"Failed to reconstruct credentials from credentials_info: {e}. "
+                    "Ensure credentials_info is a valid JSON service account key."
+                )
+                raise ValueError(msg) from e
+
+        return self
+
+    @model_validator(mode="after")
     def _resolve_project_from_credentials(self) -> Self:
         """Extract project from credentials if not explicitly set.
 
@@ -566,10 +651,11 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     @property
     def lc_secrets(self) -> dict[str, str]:
-        # Either could contain the API key
+        # API key or service account credentials
         return {
             "google_api_key": "GOOGLE_API_KEY",
             "gemini_api_key": "GEMINI_API_KEY",
+            "credentials_info": "GOOGLE_CREDENTIALS_JSON",
         }
 
     @property
