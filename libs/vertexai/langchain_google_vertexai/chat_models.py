@@ -2853,8 +2853,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, response: GenerationResponse
     ) -> ChatResult:
         generations = []
-        usage = _convert_modality_to_string(
-            proto.Message.to_dict(response.usage_metadata)
+        usage = proto.Message.to_dict(
+            response.usage_metadata, use_integers_for_enums=False
         )
         lc_usage = _get_usage_metadata_gemini(usage)
         logprobs = self.logprobs if isinstance(self.logprobs, (int, bool)) else False
@@ -2892,8 +2892,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         prev_total_usage: UsageMetadata | None = None,
     ) -> tuple[ChatGenerationChunk, UsageMetadata | None]:
         # return an empty completion message if there's no candidates
-        usage_metadata = _convert_modality_to_string(
-            proto.Message.to_dict(response_chunk.usage_metadata)
+        usage_metadata = proto.Message.to_dict(
+            response_chunk.usage_metadata, use_integers_for_enums=False
         )
 
         # Gather langchain (standard) usage metadata
@@ -2939,49 +2939,6 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message=message,
             generation_info=generation_info,
         ), total_lc_usage
-
-
-def _convert_modality_to_string(usage_dict: dict) -> dict:
-    """Convert modality integer values to human-readable strings in usage metadata.
-
-    The proto.Message.to_dict() method converts enum values to integers.
-    This function converts those integers back to their string representations
-    for better readability in the response metadata.
-
-    Args:
-        usage_dict: The usage metadata dictionary from proto.Message.to_dict()
-
-    Returns:
-        The same dictionary with modality values converted to strings.
-    """
-    modality_map = {
-        0: "MODALITY_UNSPECIFIED",
-        1: "TEXT",
-        2: "IMAGE",
-        3: "VIDEO",
-        4: "AUDIO",
-        5: "DOCUMENT",
-    }
-
-    def convert_token_details(details_list: list) -> list:
-        """Convert modality in a list of token detail dicts."""
-        for detail in details_list:
-            if "modality" in detail and isinstance(detail["modality"], int):
-                detail["modality"] = modality_map.get(
-                    detail["modality"], f"UNKNOWN({detail['modality']})"
-                )
-        return details_list
-
-    # Convert modality in all token detail fields
-    for key in [
-        "prompt_tokens_details",
-        "candidates_tokens_details",
-        "cache_tokens_details",
-    ]:
-        if key in usage_dict and usage_dict[key]:
-            convert_token_details(usage_dict[key])
-
-    return usage_dict
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:
