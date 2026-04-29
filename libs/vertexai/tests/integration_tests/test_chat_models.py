@@ -312,7 +312,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
     """Test multimodal input with base64 encoded media content (video, audio, image)."""
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, rate_limiter=RATE_LIMITER)
     storage_client = storage.Client()
-    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    blob = storage.Blob.from_uri(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     media_message = {
         "type": "media",
@@ -356,7 +356,7 @@ def test_multimodal_media_inline_base64_template() -> None:
         "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
     )
     mime_type = "audio/mp3"
-    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    blob = storage.Blob.from_uri(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     chain = prompt_template | llm
     output = chain.invoke({"media_base64": media_base64, "mime_type": mime_type})
@@ -385,7 +385,7 @@ def test_multimodal_media_inline_base64_agent() -> None:
         "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
     )
     mime_type = "audio/mp3"
-    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    blob = storage.Blob.from_uri(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     media_message = {
         "type": "media",
@@ -412,7 +412,7 @@ def test_audio_timestamp() -> None:
 
     file_uri = "gs://cloud-samples-data/generative-ai/audio/pixel.mp3"
     mime_type = "audio/mp3"
-    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    blob = storage.Blob.from_uri(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     media_message = {
         "type": "media",
@@ -439,7 +439,7 @@ def test_parse_history_gemini_multimodal_FC() -> None:
         "gs://cloud-samples-data/generative-ai/audio/audio_summary_clean_energy.mp3"
     )
     mime_type = "audio/mp3"
-    blob = storage.Blob.from_string(file_uri, client=storage_client)
+    blob = storage.Blob.from_uri(file_uri, client=storage_client)
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     media_message = {
         "type": "media",
