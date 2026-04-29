@@ -113,6 +113,9 @@ select = [
     "I", # isort
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"examples/**" = ["E501"]
+
 [tool.mypy]
 disallow_untyped_defs = "True"
 ignore_missing_imports = "True"
