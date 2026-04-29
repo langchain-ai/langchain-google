@@ -324,8 +324,8 @@ def convert_to_anthropic_tool(
 def _format_image_content_block(block: dict, project: str | None = None) -> dict:
     """Convert a LangChain image content block to Anthropic wire format.
 
-    LangChain image blocks use ``{"type": "image", "base64": ..., "mime_type": ...}``
-    but Anthropic expects ``{"type": "image", "source": {"type": "base64", ...}}``.
+    LangChain image blocks use `{"type": "image", "base64": ..., "mime_type": ...}`
+    but Anthropic expects `{"type": "image", "source": {"type": "base64", ...}}`.
 
     Raises:
         ValueError: If block has no recognized image data field.
