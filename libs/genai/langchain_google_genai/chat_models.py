@@ -908,6 +908,8 @@ def _parse_response_candidate(
     # only including model_name in response_metadata for the final chunk.
     effective_model_name = model_name_for_content or model_name
 
+    saw_thinking_block = False
+
     parts = response_candidate.content.parts or [] if response_candidate.content else []
     for part in parts:
         text: str | None = None
@@ -941,6 +943,7 @@ def _parse_response_candidate(
             if thought_sig:
                 thinking_message["signature"] = thought_sig
             content = _append_to_content(content, thinking_message)
+            saw_thinking_block = True
         elif (
             (text is not None and text)  # text part with non-empty string
             or (part.text is not None and thought_sig)  # text part w/ thought sig
@@ -948,19 +951,11 @@ def _parse_response_candidate(
             text_block: dict[str, Any] = {"type": "text", "text": text or ""}
             if thought_sig:
                 text_block["extras"] = {"signature": thought_sig}
-            if thought_sig or _is_gemini_3_or_later(effective_model_name or ""):
-                # append blocks if there's a signature or new Gemini model
-                content = _append_to_content(content, text_block)
-            elif isinstance(content, list) and any(
-                isinstance(item, dict) and item.get("type") == "thinking"
-                for item in content
-            ):
-                # if there's thinking blocks, keep content as dicts
+            if isinstance(content, list) or saw_thinking_block or thought_sig:
                 content = _append_to_content(content, text_block)
             else:
-                # otherwise, append text
+                # otherwise, keep plain text responses as strings
                 content = _append_to_content(content, text or "")
-
         if hasattr(part, "executable_code") and part.executable_code is not None:
             if part.executable_code.code and part.executable_code.language:
                 code_id = str(uuid.uuid4())  # Generate ID if not present, needed later
@@ -1036,10 +1031,26 @@ def _parse_response_candidate(
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
+
+            fc_id = getattr(part.function_call, "id", None)
+            fc_index = getattr(part.function_call, "index", None)
+
+            if fc_id is not None:
+                function_call["id"] = fc_id
+            if fc_index is not None:
+                function_call["index"] = fc_index
+
             additional_kwargs["function_call"] = function_call
 
-            tool_call_id = function_call.get("id", str(uuid.uuid4()))
             if streaming:
+                tool_call_id = function_call.get("id")
+                if tool_call_id is None:
+                    if function_call.get("index") is not None:
+                        tool_name = function_call["name"]
+                        tool_index = function_call["index"]
+                        tool_call_id = f"{tool_name}_{tool_index}"
+                    else:
+                        tool_call_id = f"{function_call['name']}_0"
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
@@ -1049,6 +1060,7 @@ def _parse_response_candidate(
                     )
                 )
             else:
+                tool_call_id = function_call.get("id", str(uuid.uuid4()))
                 try:
                     tool_call_dict = parse_tool_calls(
                         [{"function": function_call}],
@@ -1083,7 +1095,6 @@ def _parse_response_candidate(
                     if isinstance(thought_sig, bytes)
                     else thought_sig
                 )
-
     if content is None:
         if _is_gemini_3_or_later(effective_model_name or ""):
             content = []
@@ -1213,6 +1224,11 @@ def _response_to_result(
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
+
+        # inject Gemini provider response id in `response_metadata`
+        gemini_response_id = getattr(response, "response_id", None)
+        if gemini_response_id:
+            message.response_metadata["id"] = gemini_response_id
 
         try:
             if candidate.grounding_metadata:
@@ -1412,6 +1428,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "model_name": "gemini-3.1-pro-preview",
                 "safety_ratings": [],
                 "model_provider": "google_genai",
+                "id": "SgTkaaD7J6fH-sAPkrqhcA",
             },
             id="lc_run--63a04ced-6b63-4cf6-86a1-c32fa565938e-0",
             usage_metadata={
@@ -1444,7 +1461,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         AIMessageChunk(
             content="J",
-            response_metadata={"finish_reason": "STOP", "safety_ratings": []},
+            response_metadata={
+                "finish_reason": "STOP",
+                "safety_ratings": [],
+                "id": "SgTkaaD7J6fH-sAPkrqhcB",
+            },
             id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
             usage_metadata={
                 "input_tokens": 18,
@@ -1478,6 +1499,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                         "blocked": False,
                     },
                 ],
+                "id": "SgTkaaD7J6fH-sAPkrqhcC",
             },
             id="run-e905f4f4-58cb-4a10-a960-448a2bb649e3",
             usage_metadata={
@@ -1526,6 +1548,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                         "blocked": False,
                     },
                 ],
+                "id": "SgTkaaD7J6fH-sAPkrqhcD",
             },
             id="run-3ce13a42-cd30-4ad7-a684-f1f0b37cdeec",
             usage_metadata={
@@ -2169,6 +2192,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     "blocked": False,
                 },
             ],
+            "id": "SgTkaaD7J6fH-sAPkrqhcE",
         }
         ```
     """  # noqa: E501
