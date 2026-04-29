@@ -1635,3 +1635,64 @@ def test_format_messages_anthropic_multiple_non_consecutive_system_raises() -> N
     ]
     with pytest.raises(ValueError, match="multiple non-consecutive system messages"):
         _format_messages_anthropic(messages, project="test-project")
+
+
+def test_format_messages_anthropic_strips_trailing_assistant_string_whitespace() -> (
+    None
+):
+    """Trailing assistant ``str`` content must be ``rstrip`` (#1514)."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(content="Pong  \n\t"),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["role"] == "assistant"
+    assert formatted[-1]["content"] == [{"type": "text", "text": "Pong"}]
+
+
+def test_format_messages_anthropic_strips_trailing_assistant_last_text_block() -> None:
+    """Only the final text block of the trailing assistant message is stripped."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "first  "},
+                {"type": "text", "text": "last \t"},
+            ]
+        ),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["content"] == [
+        {"type": "text", "text": "first  "},
+        {"type": "text", "text": "last"},
+    ]
+
+
+def test_format_messages_anthropic_does_not_strip_non_trailing_assistant() -> None:
+    """Whitespace in non-trailing assistant messages is preserved."""
+    messages = [
+        HumanMessage(content="Hi"),
+        AIMessage(content="Hello "),
+        HumanMessage(content="Continue"),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[1]["role"] == "assistant"
+    assert formatted[1]["content"] == [{"type": "text", "text": "Hello "}]
+
+
+def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
+    """A trailing ``thinking`` block is left untouched (signature-sensitive)."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(
+            content=[
+                {
+                    "type": "thinking",
+                    "thinking": "considering...  ",
+                    "signature": "abc",
+                }
+            ]
+        ),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["content"][0]["thinking"] == "considering...  "
