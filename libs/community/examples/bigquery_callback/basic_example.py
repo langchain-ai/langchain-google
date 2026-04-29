@@ -45,7 +45,7 @@ def main() -> None:
     handler = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config,
     )
 
@@ -130,7 +130,7 @@ def main() -> None:
     print(f"""
     SELECT timestamp, event_type, status,
            JSON_EXTRACT_SCALAR(latency_ms, '$.total_ms') as latency_ms
-    FROM `{PROJECT_ID}.{DATASET_ID}.agent_events_v2`
+    FROM `{PROJECT_ID}.{DATASET_ID}.agent_events`
     WHERE DATE(timestamp) = CURRENT_DATE()
     ORDER BY timestamp DESC
     LIMIT 20;

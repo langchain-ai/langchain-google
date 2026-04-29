@@ -100,7 +100,7 @@ def main() -> None:
     handler1 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config1,
     )
 
@@ -122,7 +122,7 @@ def main() -> None:
     handler2 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config2,
     )
 
@@ -144,7 +144,7 @@ def main() -> None:
     handler3 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config3,
     )
 
@@ -173,7 +173,7 @@ def main() -> None:
     handler4 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config4,
     )
 
@@ -200,7 +200,7 @@ def main() -> None:
     handler5 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config5,
     )
 
@@ -226,7 +226,7 @@ def main() -> None:
     handler6 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config6,
     )
 
@@ -245,7 +245,7 @@ def main() -> None:
     handler7 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config7,
     )
 
@@ -263,7 +263,7 @@ SELECT
     session_id,
     event_type,
     COUNT(*) as event_count
-FROM `{PROJECT_ID}.{DATASET_ID}.agent_events_v2`
+FROM `{PROJECT_ID}.{DATASET_ID}.agent_events`
 WHERE DATE(timestamp) = CURRENT_DATE()
   AND agent = 'filtering_example'
 GROUP BY session_id, event_type

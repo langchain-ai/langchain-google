@@ -392,7 +392,7 @@ def main() -> None:
     handler = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config,
         graph_name="finance_assistant",
     )
@@ -472,7 +472,7 @@ SELECT
     JSON_EXTRACT_SCALAR(attributes, '$.tool_name') as tool_name,
     JSON_EXTRACT_SCALAR(latency_ms, '$.total_ms') as latency_ms,
     status
-FROM `{PROJECT_ID}.{DATASET_ID}.agent_events_v2`
+FROM `{PROJECT_ID}.{DATASET_ID}.agent_events`
 WHERE DATE(timestamp) = CURRENT_DATE()
   AND agent = 'gemini3_agent'
 ORDER BY timestamp DESC

@@ -36,7 +36,7 @@ from sse_starlette.sse import EventSourceResponse
 # Configuration
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "test-project-0728-467323")
 DATASET_ID = os.environ.get("BQ_DATASET_ID", "agent_analytics")
-TABLE_ID = os.environ.get("BQ_TABLE_ID", "agent_events_v2")
+TABLE_ID = os.environ.get("BQ_TABLE_ID", "agent_events")
 FULL_TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 
 # Initialize FastAPI app
@@ -339,7 +339,7 @@ async def get_latency_by_event_type() -> list[dict[str, Any]]:
         MAX(CAST(JSON_EXTRACT_SCALAR(latency_ms, '$.total_ms') AS INT64)) as max_latency_ms
     FROM `{FULL_TABLE_ID}`
     WHERE DATE(timestamp) = CURRENT_DATE()
-      AND event_type IN ('LLM_RESPONSE', 'TOOL_COMPLETED', 'GRAPH_END')
+      AND event_type IN ('LLM_RESPONSE', 'TOOL_COMPLETED', 'INVOCATION_COMPLETED')
       AND JSON_EXTRACT_SCALAR(latency_ms, '$.total_ms') IS NOT NULL
     GROUP BY event_type, agent
     ORDER BY avg_latency_ms DESC
@@ -468,7 +468,7 @@ async def get_recent_sessions(
         FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(timestamp)) as end_time,
         COUNTIF(event_type = 'LLM_REQUEST') as llm_calls,
         COUNTIF(event_type = 'TOOL_STARTING') as tool_calls,
-        MAX(CASE WHEN event_type = 'GRAPH_END'
+        MAX(CASE WHEN event_type = 'INVOCATION_COMPLETED'
             THEN CAST(JSON_EXTRACT_SCALAR(latency_ms, '$.total_ms') AS INT64) END) as total_latency_ms,
         COUNTIF(status = 'ERROR') as errors,
         CASE WHEN COUNTIF(status = 'ERROR') > 0 THEN 'Failed' ELSE 'Success' END as status
