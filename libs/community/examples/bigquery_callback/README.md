@@ -180,7 +180,7 @@ with `auto_schema_upgrade=False`.
 | `event_denylist` | If set, these `event_type`s are skipped. | `None` |
 | `skip_internal_chain_events` | Drop `CHAIN_*` events emitted by framework-internal chains (preserves trace continuity for child events). | `False` |
 | `max_content_length` | Per-text-block truncation threshold. | `512000` |
-| `table_id` | Events table name. | `"agent_events_v2"` |
+| `table_id` | Events table name. | `"agent_events"` |
 | `clustering_fields` | BigQuery clustering fields. | `["event_type", "agent", "user_id"]` |
 | `log_multi_modal_content` | Include the per-part `content_parts` array. | `True` |
 | `retry_config` | Retry policy for the BigQuery Storage Write API. | `RetryConfig()` |
@@ -246,7 +246,7 @@ SELECT timestamp, event_type, session_id,
        JSON_VALUE(attributes, '$.tool_name') AS tool_name,
        CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS latency_ms,
        status
-FROM `PROJECT.DATASET.agent_events_v2`
+FROM `PROJECT.DATASET.agent_events`
 WHERE DATE(timestamp) = CURRENT_DATE()
 ORDER BY timestamp DESC
 LIMIT 100;
@@ -258,7 +258,7 @@ LIMIT 100;
 
 ```sql
 SELECT event_type, COUNT(*) AS n
-FROM `PROJECT.DATASET.agent_events_v2`
+FROM `PROJECT.DATASET.agent_events`
 WHERE DATE(timestamp) = CURRENT_DATE()
 GROUP BY 1
 ORDER BY 2 DESC;
@@ -298,7 +298,7 @@ All events emitted within one user turn share a `trace_id`:
 ```sql
 SELECT timestamp, event_type, agent, span_id, parent_span_id,
        JSON_VALUE(content, '$.summary') AS summary
-FROM `PROJECT.DATASET.agent_events_v2`
+FROM `PROJECT.DATASET.agent_events`
 WHERE trace_id = '<trace_id from any row>'
 ORDER BY timestamp;
 ```

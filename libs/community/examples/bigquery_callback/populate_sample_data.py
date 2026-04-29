@@ -273,7 +273,7 @@ def main():
         handler = BigQueryCallbackHandler(
             project_id=PROJECT_ID,
             dataset_id=DATASET_ID,
-            table_id="agent_events_v2",
+            table_id="agent_events",
             config=config,
             graph_name=agent_name,
         )

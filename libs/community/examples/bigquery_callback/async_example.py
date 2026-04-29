@@ -162,7 +162,7 @@ async def main() -> None:
     handler = AsyncBigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config,
         graph_name="async_agent",
     )
@@ -220,7 +220,7 @@ SELECT
     event_type,
     JSON_EXTRACT_SCALAR(latency_ms, '$.total_ms') as latency_ms,
     timestamp
-FROM `{PROJECT_ID}.{DATASET_ID}.agent_events_v2`
+FROM `{PROJECT_ID}.{DATASET_ID}.agent_events`
 WHERE DATE(timestamp) = CURRENT_DATE()
   AND agent = 'async_example'
 ORDER BY timestamp DESC

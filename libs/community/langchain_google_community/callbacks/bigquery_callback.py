@@ -673,7 +673,7 @@ class BigQueryLoggerConfig:
     event_allowlist: list[str] | None = None
     event_denylist: list[str] | None = None
     max_content_length: int = 500 * 1024
-    table_id: str = "agent_events_v2"
+    table_id: str = "agent_events"
     clustering_fields: list[str] = field(
         default_factory=lambda: ["event_type", "agent", "user_id"]
     )

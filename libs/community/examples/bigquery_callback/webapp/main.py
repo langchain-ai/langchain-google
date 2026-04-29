@@ -37,7 +37,7 @@ from sse_starlette.sse import EventSourceResponse
 # Configuration
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "test-project-0728-467323")
 DATASET_ID = os.environ.get("BQ_DATASET_ID", "agent_analytics")
-TABLE_ID = os.environ.get("BQ_TABLE_ID", "agent_events_v2")
+TABLE_ID = os.environ.get("BQ_TABLE_ID", "agent_events")
 FULL_TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 
 # Initialize FastAPI app
