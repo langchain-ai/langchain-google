@@ -187,63 +187,7 @@ def _format_message_anthropic(
                         new_block[copy_attr] = block[copy_attr]
 
                 if block["type"] == "image":
-                    # Fixes KeyError by checking keys directly instead of source_type
-                    if "url" in block:
-                        url = block["url"]
-                        if url.startswith("data:"):
-                            # Data URI
-                            formatted_block = {
-                                "type": "image",
-                                "source": _format_image(url, project),
-                            }
-                        else:
-                            formatted_block = {
-                                "type": "image",
-                                "source": {"type": "url", "url": url},
-                            }
-                    elif "base64" in block:
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": block["mime_type"],
-                                "data": block["base64"],
-                            },
-                        }
-                    elif "file_id" in block:
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "file",
-                                "file_id": block["file_id"],
-                            },
-                        }
-                    # Backward compatibility for langchain < 1.X
-                    # where source_type was used
-                    elif "data" in block and block.get("source_type", None) == "base64":
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": block["mime_type"],
-                                "data": block["data"],
-                            },
-                        }
-                    elif "id" in block and block.get("source_type", None) == "id":
-                        formatted_block = {
-                            "type": "image",
-                            "source": {
-                                "type": "file",
-                                "file_id": block["id"],
-                            },
-                        }
-                    else:
-                        msg = (
-                            "Image content blocks must have either 'url', 'base64', "
-                            "'file_id', 'id' or 'data' field."
-                        )
-                        raise ValueError(msg)
-                    content.append(formatted_block)
+                    content.append(_format_image_content_block(block, project))
                     continue
 
                 if block["type"] == "text":
