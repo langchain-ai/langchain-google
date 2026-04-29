@@ -1,6 +1,6 @@
 import base64
 import re
-import urllib
+import urllib.parse
 import warnings
 from collections.abc import Callable, Sequence
 from typing import (
@@ -256,7 +256,7 @@ def _format_message_anthropic(
 
                 content.append(block)
     else:
-        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable, unused-ignore]
+        msg = "Message should be a str, list of str or list of dicts"  # type: ignore[unreachable]  # noqa: E501
         raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
@@ -296,6 +296,21 @@ def _format_messages_anthropic(
             continue
         formatted_messages.append(fm)
 
+    # Anthropic treats a trailing assistant message as a "prefill" and rejects
+    # requests whose final content ends with whitespace. Mirror langchain-anthropic
+    # and rstrip only the last text block of the last assistant message.
+    if formatted_messages and formatted_messages[-1]["role"] == "assistant":
+        content = formatted_messages[-1]["content"]
+        if isinstance(content, str):
+            formatted_messages[-1]["content"] = content.rstrip()
+        elif (
+            isinstance(content, list)
+            and content
+            and isinstance(content[-1], dict)
+            and content[-1].get("type") == "text"
+        ):
+            content[-1]["text"] = content[-1]["text"].rstrip()
+
     return system_messages, formatted_messages
 
 
@@ -324,8 +339,8 @@ def convert_to_anthropic_tool(
 def _format_image_content_block(block: dict, project: str | None = None) -> dict:
     """Convert a LangChain image content block to Anthropic wire format.
 
-    LangChain image blocks use ``{"type": "image", "base64": ..., "mime_type": ...}``
-    but Anthropic expects ``{"type": "image", "source": {"type": "base64", ...}}``.
+    LangChain image blocks use `{"type": "image", "base64": ..., "mime_type": ...}`
+    but Anthropic expects `{"type": "image", "source": {"type": "base64", ...}}`.
 
     Raises:
         ValueError: If block has no recognized image data field.
@@ -401,7 +416,6 @@ def _clean_content_block(block: Any) -> Any:
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
     # 'partial_json' - added during streaming for incremental JSON parsing
-    # Remove known streaming metadata fields
     keys_to_remove = {"index", "partial_json", "caller"}
 
     # The id field is required for tool_use blocks and some image blocks,
@@ -438,10 +452,16 @@ def _merge_messages(
     for curr in messages:
         curr = curr.model_copy(deep=True)
         if isinstance(curr, ToolMessage):
-            # Check if already in tool_result format (backward compatibility)
-            if isinstance(curr.content, list) and all(
-                isinstance(block, dict) and block.get("type") == "tool_result"
-                for block in curr.content
+            # Check if already in tool_result format (backward compatibility).
+            # The `and curr.content` guard prevents `all()` from returning True
+            # on an empty list, which would silently drop the tool_result (#1722).
+            if (
+                isinstance(curr.content, list)
+                and curr.content
+                and all(
+                    isinstance(block, dict) and block.get("type") == "tool_result"
+                    for block in curr.content
+                )
             ):
                 # Already formatted - just convert to HumanMessage and clean content
                 cleaned_content = _clean_content(curr.content)
