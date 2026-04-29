@@ -438,7 +438,9 @@ def _merge_messages(
     for curr in messages:
         curr = curr.model_copy(deep=True)
         if isinstance(curr, ToolMessage):
-            # Check if already in tool_result format (backward compatibility)
+            # Check if already in tool_result format (backward compatibility).
+            # The `and curr.content` guard prevents `all()` from returning True
+            # on an empty list, which would silently drop the tool_result (#1722).
             if (
                 isinstance(curr.content, list)
                 and curr.content

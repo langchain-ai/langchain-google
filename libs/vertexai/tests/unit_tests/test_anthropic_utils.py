@@ -1114,9 +1114,10 @@ def test_tool_message_empty_content_produces_tool_result() -> None:
     Regression test for https://github.com/langchain-ai/langchain-google/issues/1722
 
     Python's all() on an empty iterable returns True, which caused
-    ToolMessage(content=[]) to be treated as pre-formatted tool_result blocks
-    and converted to HumanMessage([]). The empty HumanMessage was then merged
-    into the next HumanMessage, silently dropping the tool_result.
+    ToolMessage(content=[]) to be misclassified as pre-formatted tool_result
+    blocks. The resulting empty HumanMessage was merged into the next
+    HumanMessage, silently dropping the tool_result and producing a payload
+    that the Anthropic API rejects.
     """
     messages = [
         HumanMessage(content="Search for controls"),
@@ -1137,7 +1138,6 @@ def test_tool_message_empty_content_produces_tool_result() -> None:
 
     merged = _merge_messages(messages)
 
-    # Find all tool_result blocks in the merged output
     tool_results = [
         block
         for m in merged
@@ -1151,6 +1151,43 @@ def test_tool_message_empty_content_produces_tool_result() -> None:
         "ToolMessage with empty content should still produce a tool_result."
     )
     assert tool_results[0]["tool_use_id"] == "call_1"
+
+
+def test_tool_message_empty_content_with_error_status() -> None:
+    """ToolMessage(content=[], status='error') propagates is_error correctly.
+
+    Locks in that the empty-content path still routes through the wrapping
+    branch, which sets `is_error: True` from `status='error'`. Guards against
+    a future refactor that reorders the empty-list guard above the status
+    check.
+    """
+    messages = [
+        AIMessage(
+            content=[
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "search",
+                    "input": {"q": "x"},
+                },
+            ],
+        ),
+        ToolMessage(content=[], tool_call_id="call_1", status="error"),
+    ]
+
+    merged = _merge_messages(messages)
+
+    tool_results = [
+        block
+        for m in merged
+        if isinstance(m.content, list)
+        for block in m.content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+
+    assert len(tool_results) == 1
+    assert tool_results[0]["tool_use_id"] == "call_1"
+    assert tool_results[0].get("is_error") is True
 
 
 def test_format_messages_tool_message_with_streaming_metadata() -> None:
