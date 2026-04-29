@@ -8,6 +8,11 @@ on:
         required: true
         type: string
         description: "From which folder this pipeline executes"
+      allow-integration-test-failures:
+        required: false
+        type: boolean
+        default: false
+        description: "Allow the integration tests step to fail without failing the release (use sparingly, e.g. when transient GCP quota or API-key issues outside our control affect the community package)"
   workflow_dispatch:
     inputs:
       working-directory:
@@ -25,6 +30,11 @@ on:
         type: boolean
         default: false
         description: "Release from a non-master branch (danger!) - Only use for hotfixes"
+      allow-integration-test-failures:
+        required: false
+        type: boolean
+        default: false
+        description: "Allow the integration tests step to fail without failing the release (use sparingly, e.g. when transient GCP quota or API-key issues outside our control affect the community package)"
 
 permissions:
   contents: read
@@ -313,6 +323,7 @@ jobs:
           credentials_json: "${{ secrets.GOOGLE_CREDENTIALS }}"
 
       - name: Run integration tests
+        continue-on-error: ${{ inputs.allow-integration-test-failures }}
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GOOGLE_SEARCH_API_KEY: ${{ secrets.GOOGLE_SEARCH_API_KEY }}
