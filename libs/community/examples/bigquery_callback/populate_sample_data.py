@@ -13,10 +13,12 @@ Usage:
     python populate_sample_data.py
 """
 
+from __future__ import annotations
+
 import os
 import random
 import time
-from typing import Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.tools import tool
@@ -29,6 +31,9 @@ from langchain_google_community.callbacks.bigquery_callback import (
     BigQueryCallbackHandler,
     BigQueryLoggerConfig,
 )
+
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
 
 # Configuration
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "test-project-0728-467323")
@@ -159,7 +164,7 @@ def process_refund(order_id: str, reason: str) -> str:
     return f"Refund processed for order {order_id}. Reason: {reason}. Refund ID: {refund_id}. Amount: ${amount}"
 
 
-def create_agent(agent_type: str) -> StateGraph:
+def create_agent(agent_type: str) -> CompiledStateGraph:
     """Create an agent based on type."""
     if agent_type == "finance_assistant":
         tools = [get_stock_price, convert_currency, calculate]
@@ -230,7 +235,7 @@ SAMPLE_QUERIES = {
 
 
 def run_scenario(
-    agent: StateGraph,
+    agent: CompiledStateGraph,
     handler: BigQueryCallbackHandler,
     query: str,
     session_id: str,
@@ -264,7 +269,7 @@ def run_scenario(
             print(f"  Error: {e}")
 
 
-def main():
+def main() -> None:
     """Populate sample data for analytics demo."""
     print("=" * 60)
     print("Populating Sample Data for LangGraph Analytics Demo")

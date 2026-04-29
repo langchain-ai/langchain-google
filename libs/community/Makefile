@@ -1,4 +1,4 @@
-.PHONY: all format lint test tests integration_tests docker_tests help extended_tests
+.PHONY: all format lint lint_diff lint_package lint_tests lint_examples test tests integration_tests docker_tests help extended_tests
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -38,8 +38,10 @@ lint_diff format_diff: PYTHON_FILES=$(shell git diff --relative=libs/community -
 lint_package: PYTHON_FILES=langchain_google_community
 lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test
+lint_examples: PYTHON_FILES=examples
+lint_examples: MYPY_CACHE=.mypy_cache_examples
 
-lint lint_diff lint_package lint_tests:
+lint lint_diff lint_package lint_tests lint_examples:
 	./scripts/lint_imports.sh
 	[ "$(PYTHON_FILES)" = "" ] || uv run --all-groups ruff check $(PYTHON_FILES)
 	[ "$(PYTHON_FILES)" = "" ] || uv run --all-groups ruff format $(PYTHON_FILES) --diff
