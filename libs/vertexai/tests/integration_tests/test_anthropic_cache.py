@@ -8,14 +8,6 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
-# `claude-sonnet-4-6` is not yet enabled for the `us-east5` integration-test
-# project; xfail in CI until provisioning lands so unrelated PRs aren't blocked.
-pytestmark = pytest.mark.xfail(
-    bool(os.getenv("CI")),
-    reason="claude-sonnet-4-6 not enabled in us-east5 for the CI test project",
-    strict=False,
-)
-
 
 @pytest.mark.extended
 def test_anthropic_system_cache() -> None:
